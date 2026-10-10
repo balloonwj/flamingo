@@ -499,14 +499,13 @@ void CompareScaledTree(const DuiControl& base, const DuiControl& scaled, int dpi
     }
 }
 
-// 造一个各页都有内容可排的模型：mock 数据，且公告与敏感词都标记为已加载。
+// 造一个各页都有内容可排的模型：mock 数据，且公告标记为已加载。
 GroupManageModel MakeFullMockModel()
 {
     GroupManageModel model;
     FillMockData(model);
     model.m_myRole = kRoleOwner;
     model.m_announcementsLoaded  = true;
-    model.m_sensitiveWordsLoaded = true;
     return model;
 }
 
@@ -544,7 +543,7 @@ TEST_CASE("DP2 顶栏、导航与每个页面在 125% 下都是 100% 的等比�
 
     const int trees[] = { kTreeHeader, kTreeNav,
                           kPageMembers, kPageApproval, kPageMute, kPageBasicInfo,
-                          kPagePerms, kPageDanger, kPageSensitive, kPageAnnouncement };
+                          kPagePerms, kPageDanger, kPageAnnouncement };
     for (size_t t = 0; t < sizeof(trees) / sizeof(trees[0]); ++t)
     {
         INFO("tree=" << trees[t]);
@@ -1186,8 +1185,7 @@ TEST_CASE("NV4 危险项无论选中与否图标与文字都是红色，选中�
 // =====================================================================
 // PG 组：内容区最大宽度与页面标题块
 //
-//   设计稿里基本信息、群权限、危险区域三页的内容限宽，其余页铺满（管理词库是群权限
-//   的子页，按群权限处理）。限宽值按设计稿实测（约 600~650 设计稿像素）折算为 560。
+//   设计稿里基本信息、群权限、危险区域三页的内容限宽，其余页铺满。限宽值按设计稿实测（约 600~650 设计稿像素）折算为 560。
 //   各页标题与副标题紧挨着排成一块，块下与正文之间留出明显的距离。
 //   本组固定在 96 DPI 下排版。
 // =====================================================================
@@ -1210,12 +1208,12 @@ const int kMaxTitleSubtitleGap  = 6;
 const int kMinSubtitleContentGap = 12;
 
 // 限宽页与铺满页。
-const int kWidthLimitedPages[] = { kPageBasicInfo, kPagePerms, kPageDanger, kPageSensitive };
+const int kWidthLimitedPages[] = { kPageBasicInfo, kPagePerms, kPageDanger };
 const int kFullWidthPages[]    = { kPageMembers, kPageApproval, kPageMute, kPageAnnouncement };
 
 // 有副标题的页面。
 const int kPagesWithSubtitle[] = { kPageApproval, kPageMute, kPagePerms, kPageDanger,
-                                   kPageAnnouncement, kPageSensitive };
+                                   kPageAnnouncement };
 
 // 按 96 DPI 构建某页并排版在指定宽度的内容区里。
 std::unique_ptr<DuiControl> LayoutPageAt96(int pageId, int width)
@@ -1476,7 +1474,7 @@ const COLORREF kComboArrowExpected = RGB(0x66, 0x66, 0x66);
 
 // 所有页面。
 const int kAllPages[] = { kPageMembers, kPageApproval, kPageMute, kPageBasicInfo,
-                          kPagePerms, kPageDanger, kPageSensitive, kPageAnnouncement };
+                          kPagePerms, kPageDanger, kPageAnnouncement };
 
 // 一次遍历收集到的各类表单控件。
 struct FormControls
@@ -1551,8 +1549,9 @@ TEST_CASE("FC2 每一页的输入框与搜索框都换成了群管理窗的样�
     FormControls fc;
     CollectAllPages(trees, fc);
 
-    //各页合计应有输入框：搜索框 1 + 基本信息 2 + 公告 2 + 管理词库 1
-    const size_t kMinInputs = 6;
+    //各页合计应有输入框：搜索框 1 + 基本信息 2 + 公告 2（原先还有管理词库页 1 个，
+    //随群级敏感词于 2026-10-02 删除）
+    const size_t kMinInputs = 5;
     REQUIRE(fc.m_inputs.size() >= kMinInputs);
     for (size_t i = 0; i < fc.m_inputs.size(); ++i)
     {
@@ -1567,8 +1566,9 @@ TEST_CASE("FC3 开关打开为品牌橙、关闭为暖灰", "[groupmanage][form]
     FormControls fc;
     CollectAllPages(trees, fc);
 
-    //禁言页 1 个 + 群权限页 4 个
-    const size_t kMinSwitches = 5;
+    //禁言页 1 个 + 群权限页 3 个（群权限页原先还有「消息敏感词过滤」开关，随群级敏感词
+    //于 2026-10-02 删除）
+    const size_t kMinSwitches = 4;
     REQUIRE(fc.m_switches.size() >= kMinSwitches);
     for (size_t i = 0; i < fc.m_switches.size(); ++i)
     {
@@ -2052,11 +2052,11 @@ TEST_CASE("LL9 三个页面的提示行排版后都占到真实尺寸", "[groupm
 
 namespace {
 
-// 群权限页上全部表单控件的 ctrl id：两个下拉框与四个开关。
+// 群权限页上全部表单控件的 ctrl id：两个下拉框与三个开关。
 const UINT kPermsFormIds[] =
 {
     kIdComboJoinMethod, kIdComboAtAllScope,
-    kIdSwitchHistory, kIdSwitchInvite, kIdSwitchWelcome, kIdSwitchSensitive,
+    kIdSwitchHistory, kIdSwitchInvite, kIdSwitchWelcome,
 };
 
 const size_t kPermsFormIdCount = sizeof(kPermsFormIds) / sizeof(kPermsFormIds[0]);
@@ -2124,7 +2124,7 @@ TEST_CASE("LL11 群资料加载失败时，基本信息页只有失败提示", "
 
 TEST_CASE("LL12 群权限页按群资料的加载状态显示提示或表单", "[groupmanage][layout][loadstate]")
 {
-    //未加载：只有加载提示，两个下拉框与四个开关一个都没有
+    //未加载：只有加载提示，两个下拉框与三个开关一个都没有
     {
         const GroupManageModel model = MakeJustOpenedModel();
         std::unique_ptr<DuiControl> page = LayoutLoadPageAt96(kPagePerms, model);
@@ -2158,6 +2158,61 @@ TEST_CASE("LL12 群权限页按群资料的加载状态显示提示或表单", "
         CHECK(CountPermsFormControls(*page) == kPermsFormIdCount);
         CHECK(page->FindCtrlById(kIdLoadPending) == nullptr);
         CHECK(page->FindCtrlById(kIdLoadFailed) == nullptr);
+    }
+}
+
+namespace {
+
+/**
+ *  递归收集一棵控件树里全部按钮的文字。
+ *    node：起点控件（借用，可为 NULL）；
+ *    out： [出参] 按钮文字，按深度优先顺序追加。
+ */
+void CollectButtonTexts(DuiControl* node, std::vector<CString>& out)
+{
+    if (node == NULL)
+    {
+        return;
+    }
+    DuiButton* btn = dynamic_cast<DuiButton*>(node);
+    if (btn != NULL)
+    {
+        out.push_back(btn->GetText());
+    }
+    const std::vector<std::unique_ptr<DuiControl> >& kids = node->Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        CollectButtonTexts(kids[i].get(), out);
+    }
+}
+
+} // anonymous namespace
+
+TEST_CASE("LL14 群权限页不再有敏感词开关与「管理词库」按钮", "[groupmanage][layout][loadstate]")
+{
+    //群级敏感词已于 2026-10-02 删除，群权限页原先的「消息敏感词过滤」一行（开关 +
+    //「管理词库」按钮）随之去掉。设置行的标题是本模块私有的文字控件，测试读不到它的
+    //文字，故从两方面核对：表单控件恰好是两个下拉框与三个开关（多出一行残留的开关，
+    //无论它用什么控件编号都会被数出来）；页面上没有任何按钮的文字涉及敏感词或词库。
+    GroupManageModel model = MakeJustOpenedModel();
+    model.m_groupInfoState = kLoadDone;
+    std::unique_ptr<DuiControl> page = LayoutLoadPageAt96(kPagePerms, model);
+    REQUIRE(page != nullptr);
+
+    FormControls fc;
+    CollectFormControls(page.get(), false, fc);
+    const size_t kExpectedCombos   = 2;   //加群方式、谁能 @ 全体成员
+    const size_t kExpectedSwitches = 3;   //新成员查看历史消息、成员邀请好友加群、入群欢迎语
+    CHECK(fc.m_combos.size() == kExpectedCombos);
+    CHECK(fc.m_switches.size() == kExpectedSwitches);
+
+    std::vector<CString> texts;
+    CollectButtonTexts(page.get(), texts);
+    for (size_t i = 0; i < texts.size(); ++i)
+    {
+        INFO("button #" << i);
+        CHECK(texts[i].Find(_T("敏感词")) < 0);
+        CHECK(texts[i].Find(_T("词库")) < 0);
     }
 }
 
@@ -2459,4 +2514,82 @@ TEST_CASE("GMS7 关键词变化时只重建搜索栏以下的部分：搜索框�
     DuiControl* empty = page->FindCtrlById(kIdMemberSearchEmpty);
     REQUIRE(empty != nullptr);
     CHECK(empty->GetRect().bottom - empty->GetRect().top > 0);
+}
+
+// =====================================================================
+// NM-C4：禁言管理页的「仅通知模式」一行（原称全员禁言，docs/群管理接入方案.md §14）
+// =====================================================================
+
+TEST_CASE("NM-C4 禁言管理页的「仅通知模式」单独一行：标题、说明与开关互不重叠", "[notifyonly][groupmanage][layout]")
+{
+    GroupManageModel model = MakeJustOpenedModel();
+    model.m_membersState = kLoadDone;
+    model.m_groupInfoState = kLoadDone;
+    model.m_muteAll = true;
+    std::unique_ptr<DuiControl> page = LayoutLoadPageAt96(kPageMute, model);
+    REQUIRE(page != nullptr);
+
+    DuiControl* title = page->FindCtrlById(kIdNotifyOnlyTitle);
+    DuiControl* desc = page->FindCtrlById(kIdNotifyOnlyDesc);
+    DuiControl* sw = page->FindCtrlById(kIdSwitchMuteAll);
+    REQUIRE(title != nullptr);
+    REQUIRE(desc != nullptr);
+    REQUIRE(sw != nullptr);
+
+    const RECT rt = title->GetRect();
+    const RECT rd = desc->GetRect();
+    const RECT rs = sw->GetRect();
+    //标题在说明上方，两者都在开关左边，三者都有面积
+    CHECK(RectHeight(rt) > 0);
+    CHECK(RectHeight(rd) > 0);
+    CHECK(RectWidth(rs) > 0);
+    CHECK(rt.bottom <= rd.top);
+    CHECK(rt.right <= rs.left);
+    CHECK(rd.right <= rs.left);
+    //说明一行的宽度放得下简体中文的全文（25 个字，按 12 像素字号估算约 300 像素）
+    CHECK(RectWidth(rd) >= 300);
+
+    //这一行在「禁言管理」标题行下面、「添加禁言成员」按钮上面
+    DuiControl* add = page->FindCtrlById(kIdBtnAddMute);
+    REQUIRE(add != nullptr);
+    CHECK(rs.bottom <= add->GetRect().top);
+}
+
+TEST_CASE("RQ1 加群申请没有填验证消息时显示「未填写验证消息」，不再显示一对空引号", "[groupmanage][layout]")
+{
+    //2026-10-08 实测：链接申请经审批的那张卡片上，验证消息那一行只剩一对空引号
+    bool placeholder = true;
+    CHECK(RequestMessageLineText(CString(L"我是新来的"), &placeholder) == CString(L"“我是新来的”"));
+    CHECK_FALSE(placeholder);
+    CHECK(RequestMessageLineText(CString(), &placeholder) == CString(L"未填写验证消息"));
+    CHECK(placeholder);
+    //只有空白（半角、全角空格、制表符、换行）也算没填
+    CHECK(RequestMessageLineText(CString(L" \x3000\t\r\n"), &placeholder) == CString(L"未填写验证消息"));
+    CHECK(placeholder);
+    //出参可以不要
+    CHECK(RequestMessageLineText(CString(L"你好"), NULL) == CString(L"“你好”"));
+
+    //审批页实际建出的卡片：没填的那张显示占位文字，页面上任何地方都不出现「“”」
+    GroupManageModel model = MakeJustOpenedModel();
+    model.m_requestsState = kLoadDone;
+    AddLoadTestRequest(model, L"张勇");
+    AddLoadTestRequest(model, L"李四");
+    model.m_requests[1].message = L"请通过";
+    std::unique_ptr<DuiControl> page = LayoutLoadPageAt96(kPageApproval, model);
+    REQUIRE(page != nullptr);
+    std::vector<CString> texts;
+    CollectPageTexts(page.get(), texts);
+    REQUIRE_FALSE(texts.empty());
+    bool hasPlaceholder = false;
+    bool hasQuoted = false;
+    for (size_t i = 0; i < texts.size(); ++i)
+    {
+        CHECK(texts[i] != CString(L"“”"));
+        if (texts[i] == CString(L"未填写验证消息"))
+            hasPlaceholder = true;
+        if (texts[i] == CString(L"“请通过”"))
+            hasQuoted = true;
+    }
+    CHECK(hasPlaceholder);
+    CHECK(hasQuoted);
 }

@@ -10,12 +10,14 @@
 #include "stdafx.h"
 #include "HistoryContentView.h"
 
+#include <map>      // std::map：按控件高度截断时按行上沿归并各行的下沿
 #include <string>
 
 #include "../BalloonChatWnd/ChatFaceTag.h"          // kFaceDisplayPx
 #include "../BalloonChatWnd/ChatTextSelection.h"    // SelLayout / BuildSelectionRects / CharIndexFromPoint
 #include "../../App/CustomMsgDef.h"                        // WM_CHAT_OPEN_LINK（点链接后请宿主窗打开）
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"      // GetHost()->m_hWnd（投消息给宿主窗）
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonhistory {
 
@@ -56,6 +58,7 @@ HistoryContentView::HistoryContentView()
     , m_fontPx(kHistoryContentDefaultFontPx)
     , m_expanded(false)
     , m_singleLine(false)
+    , m_fitToHeight(false)
     , m_measuredWidth(-1)
     , m_measuredExpanded(false)
     , m_measuredHeight(0)
@@ -126,7 +129,8 @@ void HistoryContentView::RebuildLinks()
     m_links.clear();
     if (balloonchatwnd::ChatLinkOptionEnabled())
     {
-        m_links = balloonchatwnd::DetectLinks(balloonchatwnd::BuildFlatText(m_segs));
+        //屏幕共享的分享链接（第 25 期）在消息记录窗里点了也无法加入，不识别
+        m_links = balloonchatwnd::DetectLinks(balloonchatwnd::BuildFlatText(m_segs), true, false);
     }
     //上一份内容的排版模型对新内容无意义，先作废，等下次绘制重建。
     m_charLayoutValid = false;
@@ -160,6 +164,17 @@ void HistoryContentView::SetSingleLine(bool singleLine)
     m_singleLine = singleLine;
     //行数上限变了，量出来的高度与"要不要展开链接"都要重算。
     InvalidateMeasureCache();
+    Invalidate();
+}
+
+void HistoryContentView::SetFitToHeight(bool fit)
+{
+    if (m_fitToHeight == fit)
+    {
+        return;
+    }
+    m_fitToHeight = fit;
+    //只影响绘制时的行数上限，测量缓存不受影响
     Invalidate();
 }
 
@@ -208,7 +223,7 @@ void HistoryContentView::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         return;
     }
 
-    const int maxLines = EffectiveMaxLines();
+    int maxLines = EffectiveMaxLines();
     const int faceSize = EffectiveFaceSize();
 
     //每次绘制都自己排一趟版，建出字符级排版模型：拖选随时可能发生，鼠标事件里没有
@@ -222,6 +237,13 @@ void HistoryContentView::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     {
         //排版引擎按<u>当前选进 hdc 的字体</u>做测量，故必须先选字体再排版。
         oldFont = (HFONT)::SelectObject(hdc, font);
+        //按控件高度截断：先不限行数排一趟，数出控件高度能完整容下几行，再按这个行数排版与绘制
+        if (m_fitToHeight && !m_singleLine)
+        {
+            std::vector<balloonchatwnd::InlinePlaced> all;
+            balloonchatwnd::LayoutInlineContent(hdc, m_segs, availW, faceSize, &all, kNoLineLimit, NULL);
+            maxLines = CountLinesFittingHeight(all, rc.bottom - rc.top);
+        }
         balloonchatwnd::LayoutInlineContent(hdc, m_segs, availW, faceSize,
                                             &placed, maxLines, &truncated);
 
@@ -561,7 +583,42 @@ HFONT HistoryContentView::CreateContentFont() const
     return ::CreateFontW(-m_fontPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                          DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
                          CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                         L"Microsoft YaHei");
+                         i18n::UiFontName());
+}
+
+int HistoryContentView::CountLinesFittingHeight(const std::vector<balloonchatwnd::InlinePlaced>& placed,
+                                                int availHeight)
+{
+    //每一行的上沿相同；行的下沿取该行各项 bottom 的最大值（含表情的行比纯文字行高）
+    std::map<int, int> lineBottoms;
+    for (size_t i = 0; i < placed.size(); ++i)
+    {
+        std::map<int, int>::iterator it = lineBottoms.find(placed[i].rc.top);
+        if (it == lineBottoms.end())
+        {
+            lineBottoms[placed[i].rc.top] = placed[i].rc.bottom;
+        }
+        else if (placed[i].rc.bottom > it->second)
+        {
+            it->second = placed[i].rc.bottom;
+        }
+    }
+    int fitting = 0;
+    for (std::map<int, int>::const_iterator it = lineBottoms.begin(); it != lineBottoms.end(); ++it)
+    {
+        if (it->second > availHeight)
+        {
+            break;
+        }
+        ++fitting;
+    }
+    //全部放得下：不限行数，不画省略号
+    if (fitting == static_cast<int>(lineBottoms.size()))
+    {
+        return kNoLineLimit;
+    }
+    //一行都放不下时仍画第一行（会被控件下缘截掉一部分），不让正文整片空白
+    return (fitting > 0) ? fitting : kSingleLineMaxLines;
 }
 
 int HistoryContentView::EffectiveMaxLines() const

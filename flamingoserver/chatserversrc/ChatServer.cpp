@@ -18,9 +18,13 @@
 #include "EmployeeManager.h"
 #include "GroupProtocol.h"
 #include "GroupManager.h"
-//平台公告推送：报文编解码 + 受众匹配（消息盒子，见 docs/消息盒子接入方案.md）。
+//平台公告推送：报文编解码 + 受众匹配（公告中心，见 docs/公告中心接入方案.md）。
 #include "AnnouncementProtocol.h"
 #include "AnnouncementManager.h"
+#include "AdminLinkServer.h"        //管理控制台的在线名单：连接断开时通知
+#include "MessageManager.h"          //postMessageAs：落库与判重
+#include "MessageProtocol.h"         //postMessageAs：buildStoredContent / buildMessageNotify
+#include "BotRules.h"                //getMergedPresence：bot::MergePresence
 
 ChatServer::ChatServer()
 {
@@ -158,7 +162,35 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
     if (offlineSession)
     {
         offlineSession->cleanupFolderTransferOnOffline();
+        //文件共享：本连接提供的共享变为暂不可用、涉及本连接的访问会话全部结束（同样不受 isSessionValid
+        //约束：被顶号踢下线的旧连接若正提供着共享，它的在线提供状态也要清掉）
+        offlineSession->cleanupFileShareOnOffline();
+        //屏幕共享：若这是本用户最后一个登录态的连接，观看者按离开处理、发起人进入宽限期。同样不受
+        //isSessionValid 约束：被顶号的旧会话 userid 已清零，该函数内部会直接跳过
+        offlineSession->cleanupScreenShareOnOffline();
+        //通话：若这是本用户最后一个登录态的连接，他参与的通话进入掉线宽限期，超时由 main.cpp 的周期任务结束。
+        //同样不受 isSessionValid 约束：被顶号的旧会话 userid 已清零，该函数内部会直接跳过
+        offlineSession->cleanupCallOnOffline();
+        //群通话：若这是本用户最后一个登录态的连接，振铃中的人从房间移除、已加入的人进入掉线宽限期；同样不受
+        //isSessionValid 约束，被顶号的旧会话 userid 已清零，该函数内部会直接跳过
+        offlineSession->cleanupGroupCallOnOffline();
+        //远程桌面：与一对一通话相同，若这是本用户最后一个登录态的连接，他参与的远程桌面会话进入掉线宽限期，
+        //超时由 main.cpp 的周期任务结束；同样不受 isSessionValid 约束
+        offlineSession->cleanupRemoteDesktopOnOffline();
+        //P2P：移除本连接的登记，结束它参与的 P2P 会话并给对端推 2305。同样不受 isSessionValid 约束：
+        //被顶号踢下线的旧连接若登记过，也要按连接标识清掉
+        offlineSession->cleanupP2POnOffline();
+        //密聊：移除本连接的报到登记，进行中的密聊对方转为「只能查看」、它发起的邀请作废。同样不受 isSessionValid
+        //约束：按连接标识清理，被顶号踢下线的旧连接若报到过也要清掉（docs/密聊方案.md 4.3）
+        offlineSession->cleanupSecretOnOffline();
+        //帖子群：撤销本连接的「正在查看」登记（docs/帖子群方案.md 6.1 的 2713）
+        offlineSession->cleanupThreadWatchOnOffline();
     }
+
+    //解锁后：管理控制台的在线名单（AdminLinkServer）少了这台设备。只记下 userid，由管理端口的推送线程
+    //按会话表重算此人剩余的设备，所以同一账号还有别的设备在线时不会被当成离线
+    if (disconnectedUserId != 0)
+        Singleton<AdminLinkServer>::Instance().onUserOnlineChanged(disconnectedUserId);
 
     //解锁后：向同企业的在线同事广播本用户离线（presence=0），让其联系人树/会话列表上该用户
     //的状态点实时变灰。与登录上线广播对称。无企业归属（如平台超管）时跳过 —— 企业版里
@@ -311,6 +343,8 @@ int32_t ChatServer::kickUserSessions(int64_t userId, int32_t clientTypeFilter, i
         diagMsg = "account disabled";
     else if (reason == kickout_reason_account_deleted)
         diagMsg = "account deleted";
+    else if (reason == kickout_reason_password_reset_by_admin)
+        diagMsg = "password reset by admin";
 
     char kickoutBody[128] = { 0 };
     snprintf(kickoutBody, sizeof(kickoutBody),
@@ -358,7 +392,8 @@ void ChatServer::broadcastToEnterprise(int64_t enterpriseId, uint16_t cmd,
     {
         if (!s || s->getUserId() == 0)
             continue;
-        //跳过发起者自己：其客户端联系人树不含自己，收到也无意义
+        //跳过调用方指定的用户（如在线状态变更跳过发起者本人：本人的在线状态由其客户端自己维护）；
+        //excludeUserId 为 0 时不跳过任何人
         if (excludeUserId != 0 && s->getUserId() == excludeUserId)
             continue;
         //只推给属于该企业的在线用户
@@ -459,6 +494,21 @@ void ChatServer::collectOnlineUserIds(std::vector<int32_t>& outUserIds)
     outUserIds.assign(unique.begin(), unique.end());
 }
 
+//按公告内容组一条「已发布」推送项。发布与重新推送共用：收到推送的人都还没读过它，read 取 0。
+static AnnouncementPushItem MakePublishedPushItem(const AnnouncementInfo& info)
+{
+    AnnouncementPushItem item;
+    item.announcementId = info.announcementId;
+    item.title          = info.title;
+    item.body           = info.body;
+    item.severity       = info.severity;
+    item.senderName     = info.senderName;
+    item.pinned         = info.pinned;
+    item.sentTime       = AnnouncementProtocol::dateTimeToMs(info.sentTime);
+    item.read           = 0;
+    return item;
+}
+
 void ChatServer::broadcastAnnouncementPublished(int64_t announcementId)
 {
     if (announcementId <= 0)
@@ -497,22 +547,62 @@ void ChatServer::broadcastAnnouncementPublished(int64_t announcementId)
     if (hits.empty())
         return;
 
-    AnnouncementPushItem item;
-    item.announcementId = info.announcementId;
-    item.title          = info.title;
-    item.body           = info.body;
-    item.severity       = info.severity;
-    item.senderName     = info.senderName;
-    item.pinned         = info.pinned;
-    item.sentTime       = AnnouncementProtocol::dateTimeToMs(info.sentTime);
     //刚发布的公告，收到推送的人必然还没读过。
-    item.read           = 0;
+    const AnnouncementPushItem item = MakePublishedPushItem(info);
 
     std::string notifyBody = AnnouncementProtocol::buildAnnouncementNotify(
         announcement_change_published, item);
 
     std::vector<int64_t> targets(hits.begin(), hits.end());
     pushToUsers(targets, cmd_announcement_notify, notifyBody);
+}
+
+int32_t ChatServer::repushAnnouncement(int64_t announcementId, int32_t& outPushedCount)
+{
+    //与 AdminApiCodes.h 的 error_code_unknown 同值，理由同 recallAnnouncementAndNotify。
+    const int32_t ANNOUNCEMENT_ERR_UNKNOWN = 1;
+
+    outPushedCount = 0;
+
+    //只有已发布的公告可以重新推送；草稿与已撤回的返回 140，由 HttpSession 原样回给控制台。
+    const int32_t code = Singleton<AnnouncementManager>::Instance().checkRepushable(announcementId);
+    if (code != error_code_ok)
+        return code;
+
+    AnnouncementInfo info;
+    if (!Singleton<AnnouncementManager>::Instance().getAnnouncement(announcementId, info))
+    {
+        LOGE("repush announcement failed: announcement not found, announcementid: %lld",
+             (long long)announcementId);
+        return ANNOUNCEMENT_ERR_UNKNOWN;
+    }
+
+    std::vector<int32_t> onlineUsers;
+    collectOnlineUserIds(onlineUsers);
+
+    //从在线用户里筛出受众中还没读过的人；没人在线或都读过时推送人数为 0，仍算成功。
+    std::vector<int32_t> hits;
+    if (!onlineUsers.empty())
+    {
+        Singleton<AnnouncementManager>::Instance().filterUnreadAudienceAmong(
+            announcementId, onlineUsers, hits);
+    }
+
+    LOGI("repush announcement, announcementid: %lld, online: %u, unread matched: %u",
+         (long long)announcementId, static_cast<unsigned>(onlineUsers.size()),
+         static_cast<unsigned>(hits.size()));
+
+    if (!hits.empty())
+    {
+        const AnnouncementPushItem item = MakePublishedPushItem(info);
+        std::string notifyBody = AnnouncementProtocol::buildAnnouncementNotify(
+            announcement_change_published, item);
+        std::vector<int64_t> targets(hits.begin(), hits.end());
+        pushToUsers(targets, cmd_announcement_notify, notifyBody);
+    }
+
+    outPushedCount = static_cast<int32_t>(hits.size());
+    return error_code_ok;
 }
 
 int32_t ChatServer::recallAnnouncementAndNotify(int64_t announcementId)
@@ -527,7 +617,7 @@ int32_t ChatServer::recallAnnouncementAndNotify(int64_t announcementId)
 
     //先筛受众，再撤回 —— 顺序不能反。受众筛选只认「已发布」的公告，而撤回会把状态
     //改成「已撤回」，先撤后筛的话一个受众都筛不到，客户端那边就永远收不到撤回通知、
-    //消息盒子里留着一条已经作废的公告。
+    //公告中心里留着一条已经作废的公告。
     std::vector<int32_t> onlineUsers;
     collectOnlineUserIds(onlineUsers);
 
@@ -684,4 +774,89 @@ int32_t ChatServer::getUserClientTypeByUserId(int32_t userid)
         return clientType;
 
     return CLIENT_TYPE_UNKOWN;
+}
+
+int64_t ChatServer::postMessageAs(int32_t ctype, int32_t fromUserId, int64_t targetId, int32_t msgtype,
+                                  const std::string& contentJson, const std::string& clientMsgId)
+{
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+    //判重：同一发送者的同一 clientmsgid 只写一次（机器人按触发消息、定时分钟生成 clientmsgid）
+    if (!clientMsgId.empty())
+    {
+        const int64_t exist = msgMgr.getMsgIdByClientId(fromUserId, clientMsgId);
+        if (exist > 0)
+        {
+            LOGI("postMessageAs: duplicate clientmsgid, from: %d, msgid: %lld", fromUserId, (long long)exist);
+            return exist;
+        }
+    }
+
+    //服务端发出的消息不带顶层 @ 与引用；content 里的 at 字段原样保留，客户端据此显示 @ 提醒
+    std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(contentJson, noMentions, false, "");
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * 1000;
+    const int64_t msgId = msgMgr.saveMessage(clientMsgId, ctype, fromUserId, static_cast<int32_t>(targetId), msgtype,
+                                             stored, nowMs);
+    if (msgId == 0)
+    {
+        LOGE("postMessageAs: save failed, from: %d, ctype: %d, target: %lld", fromUserId, ctype, (long long)targetId);
+        return 0;
+    }
+
+    MessageRecord rec;
+    rec.msgid = msgId;
+    rec.clientmsgid = clientMsgId;
+    rec.ctype = ctype;
+    rec.from = fromUserId;
+    rec.to = targetId;
+    rec.msgtype = msgtype;
+    rec.content = contentJson;
+    rec.mentionall = false;
+    rec.timestamp = nowMs;
+    rec.recalled = false;
+
+    if (ctype == conversation_group)
+    {
+        std::vector<GroupMemberRecord> members;
+        Singleton<GroupManager>::Instance().getGroupMembers(targetId, members);
+        std::vector<int64_t> ids;
+        ids.reserve(members.size());
+        for (size_t i = 0; i < members.size(); ++i)
+            ids.push_back(members[i].userid);
+        pushToUsers(ids, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, targetId));
+    }
+    else
+    {
+        //单聊：每一方看到的会话 id 是「另一个人」；发送者自己的其它设备也要收到
+        std::vector<int64_t> sender(1, static_cast<int64_t>(fromUserId));
+        pushToUsers(sender, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, targetId));
+        std::vector<int64_t> receiver(1, targetId);
+        pushToUsers(receiver, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, fromUserId));
+    }
+    LOGI("postMessageAs ok, from: %d, ctype: %d, target: %lld, msgtype: %d, msgid: %lld", fromUserId, ctype,
+         (long long)targetId, msgtype, (long long)msgId);
+    return msgId;
+}
+
+void ChatServer::broadcastBotsChanged(int64_t enterpriseId)
+{
+    if (enterpriseId <= 0)
+        return;
+    //groupid 为 "0"：本企业的全部群
+    broadcastToEnterprise(enterpriseId, cmd_group_bots_changed_notify, "{\"groupid\":\"0\"}", 0);
+}
+
+int32_t ChatServer::getMergedPresence(int32_t userid)
+{
+    std::vector<int> presences;
+    {
+        std::lock_guard<std::mutex> guard(m_sessionMutex);
+        for (std::list<std::shared_ptr<ChatSession> >::const_iterator it = m_sessions.begin(); it != m_sessions.end();
+             ++it)
+        {
+            if ((*it)->getUserId() == userid)
+                presences.push_back((*it)->getUserStatus());
+        }
+    }
+    return bot::MergePresence(presences);
 }

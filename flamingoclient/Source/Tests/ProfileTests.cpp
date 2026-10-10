@@ -8,6 +8,8 @@
  *            重复；查看态与编辑态各建一棵树。
  *    P9-P14  ProfileModel 数据模型：默认值、各字段读写、状态越界忽略、
  *            "编辑提交"语义（setter 改值后 getter 可见）。
+ *    P15     两态客户区按设计尺寸排得下底部按钮。
+ *    P16-P17 性别：模型存中文规范值，下拉框按序号对应，显示文字随界面语言（2026-10-04）。
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 / 操作模型 + 断言。
@@ -20,7 +22,9 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonProfile/ProfileLayout.h"
+#include "LayoutFitCheck.h"                 // layoutfit::MeasureAt：按设计尺寸排得下的检查
 #include "../UI/BalloonProfile/ProfileModel.h"
+#include "../Common/I18n/I18n.h"   // P17：模拟英文界面
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
@@ -263,4 +267,102 @@ TEST_CASE("P14 ProfileStatusText / ProfileStatusColor 边界正确", "[profile][
 
     // 在线状态点为绿色（设计稿 #22C55E）。
     CHECK(ProfileStatusColor(kProfileStatusOnline) == RGB(0x22, 0xC5, 0x5E));
+}
+
+// P15：两态的内容区按设计宽度与 ProfileBodyHeight 算出的高度排版后，要完整容下各自底部的两个
+// 按钮，且按钮没有被压扁。窗口高度是这个内容高度加上 kProfileTitleBarHeight。
+TEST_CASE("P15 两态客户区按设计宽度与 ProfileBodyHeight 排版后排得下底部按钮", "[profile][layoutfit]")
+{
+    const bool modes[] = { false, false, true, true };
+    const UINT btns[]  = { (UINT)kIdBtnClose, (UINT)kIdBtnEdit, (UINT)kIdBtnCancel, (UINT)kIdBtnSave };
+    for (size_t i = 0; i < sizeof(btns) / sizeof(btns[0]); ++i)
+    {
+        INFO("editMode = " << modes[i] << ", button id = " << btns[i]);
+        const int contentH = ProfileBodyHeight(modes[i]);
+        std::unique_ptr<DuiControl> root = BuildProfileBody(modes[i]);
+        REQUIRE(root != nullptr);
+        const layoutfit::FitResult r = layoutfit::MeasureAt(root.get(), btns[i], kProfileWindowWidth, contentH);
+        REQUIRE(r.m_found);
+        INFO("button bottom = " << r.m_bottom << ", content height = " << contentH
+             << ", height = " << r.m_height << ", roomy height = " << r.m_roomyHeight
+             << ", bottom gap = " << r.m_bottomGap << ", roomy bottom gap = " << r.m_roomyBottomGap);
+        CHECK(r.m_bottom <= contentH);
+        CHECK(r.m_height == r.m_roomyHeight);
+        CHECK(r.m_bottomGap == r.m_roomyBottomGap);
+    }
+}
+
+TEST_CASE("P16 性别规范值、下拉框序号与显示文字的对应", "[profile][model]")
+{
+    //序号与规范值互逆，顺序与下拉框一致
+    CHECK(ProfileGenderValueAt(0) == CString(_T("女")));
+    CHECK(ProfileGenderValueAt(1) == CString(_T("男")));
+    CHECK(ProfileGenderValueAt(2) == CString(_T("保密")));
+    for (int i = 0; i < kProfileGenderCount; ++i)
+    {
+        CHECK(ProfileGenderIndex(ProfileGenderValueAt(i)) == i);
+    }
+    //越界序号、不是规范值的取值
+    CHECK(ProfileGenderValueAt(-1).IsEmpty());
+    CHECK(ProfileGenderValueAt(kProfileGenderCount).IsEmpty());
+    CHECK(ProfileGenderIndex(_T("Female")) == -1);
+    CHECK(ProfileGenderIndex(_T("")) == -1);
+    //简体中文界面：显示文字就是规范值；不是规范值的原样显示
+    CHECK(ProfileGenderText(_T("男")) == CString(_T("男")));
+    CHECK(ProfileGenderText(_T("其他")) == CString(_T("其他")));
+}
+
+namespace {
+
+//P17 用的宿主查找函数：只认识三个性别选项，其余返回 NULL（表示没有译文）
+const wchar_t* FakeGenderHost(const wchar_t* context, const wchar_t* source)
+{
+    if (context != NULL)
+        return NULL;
+    if (wcscmp(source, L"女") == 0)
+        return L"Female";
+    if (wcscmp(source, L"男") == 0)
+        return L"Male";
+    if (wcscmp(source, L"保密") == 0)
+        return L"Prefer not to say";
+    return NULL;
+}
+
+//用例结束时把 i18n 模块恢复为未初始化（简体中文），不影响后面的用例
+struct ScopedGenderI18nReset
+{
+    ScopedGenderI18nReset()
+    {
+        i18n::ResetForTest();
+    }
+    ~ScopedGenderI18nReset()
+    {
+        i18n::ResetForTest();
+    }
+};
+
+} // namespace
+
+TEST_CASE("P17 英文界面：性别显示译文，下拉框选项为译文且序号仍对应规范值", "[profile][model]")
+{
+    ScopedGenderI18nReset reset;
+    i18n::InitFromHost(&FakeGenderHost, L"en-US", L"Segoe UI");
+    REQUIRE_FALSE(i18n::IsSourceLanguage());
+
+    //查看态的显示文字
+    CHECK(ProfileGenderText(_T("女")) == CString(_T("Female")));
+    CHECK(ProfileGenderText(_T("保密")) == CString(_T("Prefer not to say")));
+    //规范值与序号不随界面语言变化：写回模型的仍是中文
+    CHECK(ProfileGenderIndex(_T("男")) == 1);
+    CHECK(ProfileGenderValueAt(1) == CString(_T("男")));
+
+    //编辑态下拉框的选项是译文，顺序与规范值一致
+    std::unique_ptr<DuiControl> editRoot = BuildProfileBody(true);
+    REQUIRE(editRoot);
+    DuiComboBox* gender = dynamic_cast<DuiComboBox*>(editRoot->FindCtrlById(kIdEditGender));
+    REQUIRE(gender != nullptr);
+    REQUIRE(gender->GetCount() == kProfileGenderCount);
+    CHECK(gender->GetItemText(0) == CString(_T("Female")));
+    CHECK(gender->GetItemText(1) == CString(_T("Male")));
+    CHECK(gender->GetItemText(2) == CString(_T("Prefer not to say")));
 }

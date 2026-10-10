@@ -152,3 +152,8 @@ std::string FileProtocol::buildSimpleResponse(int code, const std::string& msg)
     root["msg"]  = msg;
     return writeCompact(root);
 }
+
+bool FileProtocol::isNameCheckedScene(int scene)
+{
+    return scene == file_scene_chat_file || scene == file_scene_group_file;
+}

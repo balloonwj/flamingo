@@ -1,5 +1,6 @@
 ﻿#include "stdafx.h"
 #include "MessageLogger.h"
+#include "../I18n/I18n.h"   // TR：界面文字的多语言查找
 
 void CloneStr(const wchar_t* src, wchar_t** dest, UINT* destlen)
 {
@@ -66,7 +67,7 @@ void CMessageLogger::SetMsgLogFileName(LPCTSTR lpszFileName)
 		m_hMutex = ::CreateMutex(NULL, FALSE, strMutexName.c_str());
 		if (NULL == m_hMutex)	// 创建互斥量失败
 		{
-			::MessageBox(NULL, _T("创建互斥量失败！"), _T("提示"), 0);
+			::MessageBox(NULL, TR(L"创建互斥量失败！"), TR(L"提示"), 0);
 			return;
 		}
 	}

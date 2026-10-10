@@ -13,6 +13,7 @@
 
 #include "../../Session/UserSessionData.h"   // g_szHomePath
 #include "../../net/UserCachePath.h" // net::UserCacheDir / SanitizeAccountForPath
+#include "../../Common/I18n/I18n.h"   // TR / TRF：界面文字的多语言查找
 
 namespace balloonauth {
 
@@ -27,15 +28,14 @@ bool ConfirmRemoveAccount(HWND hParent, const CString& account, bool& outDeleteL
 {
     outDeleteLocal = false;
 
-    CString content;
-    content.Format(_T("账号「%s」将从本机的登录记录中移除，下次打开登录窗口不再出现在下拉列表里。\n\n")
-                   _T("这不会影响服务器上的账号本身，你仍然可以重新输入它来登录。"),
-                   (LPCTSTR)account);
+    std::wstring content = TRF(L"账号「{0}」将从本机的登录记录中移除，下次打开登录窗口不再出现在下拉列表里。\n\n"
+                               L"这不会影响服务器上的账号本身，你仍然可以重新输入它来登录。",
+                               (LPCTSTR)account);
 
     //自定义按钮：把危险动作写在按钮上（"删除账号"），比笼统的"确定"更难误点。
     TASKDIALOG_BUTTON buttons[1];
     buttons[0].nButtonID     = kBtnIdDelete;
-    buttons[0].pszButtonText = _T("删除账号");
+    buttons[0].pszButtonText = TR(L"删除账号");
 
     TASKDIALOGCONFIG cfg;
     ::ZeroMemory(&cfg, sizeof(cfg));
@@ -43,15 +43,15 @@ bool ConfirmRemoveAccount(HWND hParent, const CString& account, bool& outDeleteL
     cfg.hwndParent         = hParent;
     cfg.dwFlags            = TDF_POSITION_RELATIVE_TO_WINDOW | TDF_ALLOW_DIALOG_CANCELLATION;
     cfg.dwCommonButtons    = TDCBF_CANCEL_BUTTON;
-    cfg.pszWindowTitle     = _T("删除登录账号");
+    cfg.pszWindowTitle     = TR(L"删除登录账号");
     cfg.pszMainIcon        = TD_WARNING_ICON;
-    cfg.pszMainInstruction = _T("确定要删除这个账号吗？");
-    cfg.pszContent         = content;
+    cfg.pszMainInstruction = TR(L"确定要删除这个账号吗？");
+    cfg.pszContent         = content.c_str();
     cfg.pButtons           = buttons;
     cfg.cButtons           = ARRAYSIZE(buttons);
     cfg.nDefaultButton     = IDCANCEL;   //默认落在"取消"上，回车不会误删
     //勾选项默认不勾：多数人只想让下拉列表干净点，不是要清历史。
-    cfg.pszVerificationText = _T("同时删除该账号在本机的聊天记录与缓存（不可恢复）");
+    cfg.pszVerificationText = TR(L"同时删除该账号在本机的聊天记录与缓存（不可恢复）");
 
     int pressed = 0;
     BOOL verified = FALSE;

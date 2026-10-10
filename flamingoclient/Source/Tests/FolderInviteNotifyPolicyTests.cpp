@@ -21,6 +21,7 @@
 #include <string>
 
 #include "../UI/BalloonMain/FolderInviteNotifyPolicy.h"
+#include "../net/Protocol.h"   // enum conversation_notify_mode
 
 using namespace balloonmain;
 
@@ -47,11 +48,8 @@ TEST_CASE("FIN1 预览文字为类型占位加文件夹名", "[folderinvite]")
     CHECK(BuildFolderInviteDigest(name) == std::string(kPrefixUtf8) + name);
 }
 
-TEST_CASE("FIN2 预览前缀与导出的常量一致", "[folderinvite]")
-{
-    //调用方（主面板）与本模块共用同一份前缀常量，两处不会各写一份。
-    CHECK(std::string(kFolderInviteDigestPrefix) == std::string(kPrefixUtf8));
-}
+//FIN2（导出的前缀常量与期望字节一致）已于 2026-10-03 删除：多语言改造后预览文字经 TR8 取译文，
+//模块不再导出前缀常量
 
 TEST_CASE("FIN3 文件夹名为空时不留悬空空格", "[folderinvite]")
 {
@@ -89,27 +87,27 @@ TEST_CASE("FIN7 自己发起的邀请一律不记未读", "[folderinvite]")
 // FIN8~FIN11 —— 托盘闪烁 / 提示音判定
 // =====================================================================
 
-TEST_CASE("FIN8 窗口没开且非自己发起且未免打扰时才提醒", "[folderinvite]")
+TEST_CASE("FIN8 窗口没开且非自己发起且允许提醒时才提醒", "[folderinvite]")
 {
-    CHECK(ShouldNotifyFolderInvite(false, false, false));
+    CHECK(ShouldNotifyFolderInvite(false, false, notify_mode_allow));
 }
 
 TEST_CASE("FIN9 聊天窗已经打开时不提醒", "[folderinvite]")
 {
     //窗口开着时邀请气泡已渲染进去，再闪托盘属于重复打扰。
-    CHECK_FALSE(ShouldNotifyFolderInvite(true, false, false));
+    CHECK_FALSE(ShouldNotifyFolderInvite(true, false, notify_mode_allow));
 }
 
 TEST_CASE("FIN10 自己发起的邀请不提醒", "[folderinvite]")
 {
     //否则闪的是自己的头像，单击还打开与自己的会话。
-    CHECK_FALSE(ShouldNotifyFolderInvite(false, true, false));
+    CHECK_FALSE(ShouldNotifyFolderInvite(false, true, notify_mode_allow));
 }
 
-TEST_CASE("FIN11 会话设了免打扰时不提醒", "[folderinvite]")
+TEST_CASE("FIN11 会话设成接收消息但不提醒时不提醒", "[folderinvite]")
 {
-    //免打扰只压提醒、不压未读：未读仍由 ShouldCountFolderInviteAsUnread 单独判定，
-    //这里一并断言两者互不影响。
-    CHECK_FALSE(ShouldNotifyFolderInvite(false, false, true));
+    //接收不提醒只压提醒、不压未读：未读仍由 ShouldCountFolderInviteAsUnread 单独判定，
+    //这里一并断言两者互不影响。其余模式的判定见 NotifyModeTests 的 NMPL10。
+    CHECK_FALSE(ShouldNotifyFolderInvite(false, false, notify_mode_silent));
     CHECK(ShouldCountFolderInviteAsUnread(false, false));
 }

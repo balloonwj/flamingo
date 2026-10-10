@@ -22,6 +22,8 @@
 #include "../../net/IUProtocolData.h"   // CLoginResult / LOGIN_FAILED 等
 #include "../../net/IUSocket.h"         // CIUSocket
 #include "../../net/LoginProtocolClient.h"  // v2 登录应答解析
+#include "../../net/LoginResultFill.h"      // FillLoginResultFromResponse：登录应答写进 CLoginResult
+#include "../../net/SystemTipText.h"        // SetSystemTipSelfUserId：系统提示涉及本人时写「你」
 #include "../BalloonRegister/BalloonRegisterWindow.h"        // 新版注册窗口（“注册账号”链接）
 #include "../BalloonNetSettings/BalloonNetSettingsWindow.h"  // 新版网络设置窗口（“网络设置”链接）
 #include "../../Feature/Update/UpdateManager.h"          // 登录前检查更新
@@ -31,6 +33,9 @@
 #include "BalloonLoginLayout.h"      // BuildLoginBody / ValidateLoginInput / CtrlId
 #include "AccountRemoval.h"          // 删除历史账号的二次确认与本地数据清理
 #include "AuthBanner.h"              // AuthBanner（顶部 Banner，回填用户名 + 可点击状态胶囊）
+#include "LoginAccountAvatar.h"      // 账号下拉列表每行的头像、姓名（2026-10-04 起）
+#include "../BalloonMain/AvatarSpec.h"   // avatar_kind_image：照片头像
+#include "../../net/ImageTransfer.h"     // AvatarCacheFilePathForFileId：照片头像在本机的缓存路径
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -42,6 +47,9 @@
 #include "../BalloonMain/MainPanelIcons.h"       // kIconOnline（实心圆点图标）
 #include "../BalloonMain/PopupMenuPlacement.h"   // ClampPopupMenuToWorkArea（菜单不越屏）
 #include "../../Common/Graphics/ImageEx.h"             // CImageEx（菜单图标位图）
+#include "../../Common/I18n/I18n.h"                    // TR：界面文字的多语言查找
+#include "../../App/AppRestart.h"                      // 改了界面语言后「立即重启」
+#include "../../App/BrandText.h"                       // g_strAppTitle：重启提示里的产品名称
 #include <vector>
 
 // ---- 文件作用域常量 -----------------------------------------------------
@@ -51,12 +59,25 @@ using balloonauth::kLoginWindowWidth;
 using balloonauth::kLoginWindowHeight;
 using balloonauth::kLoginTitleBarHeight;
 
-// 账号下拉浮层一次最多显示几行。DuiComboBox 的行高默认 22 逻辑像素，故 20 行约
-// 442 像素高 —— 在 768 高的屏幕上，从账号框（约在窗口顶部往下 254 处）往下弹也
-// 落得进桌面工作区。取这个上限只是兜底；账号真多到装不下时该让浮层能滚，而滚动
-// 要改 balloonui 的 DuiComboBoxPopup（它既没接滚轮消息、也不夹取落点），按项目
-// 约定须先与用户对齐后再动。
-static const int kAccountComboMaxRows = 20;
+// 账号下拉浮层一次最多显示几行。2026-10-04 起每行带头像，行高为 balloonauth::kAccountRowHeight
+// （40 像素），11 行约 442 像素高，与原来 20 行 22 像素时相当 —— 在 768 高的屏幕上，从账号框（约在
+// 窗口顶部往下 254 处）往下弹也落得进桌面工作区。账号更多时浮层可以滚动（DuiComboBoxPopup 已接滚轮），
+// 落点也会被限制在工作区内。
+static const int kAccountComboMaxRows = 11;
+
+// 照片头像在本机的路径（2026-10-04 起，账号下拉列表与大头像用）：头像类型为照片、照片已下载到本机
+// （<数据根目录>Users\<账号>\Avatar\<文件 id>）时返回路径，否则返回空串。照片只在登录状态下由主面板
+// 下载，登录窗不发起下载。
+//   account：账号名；info：该账号在本机账号列表里的记录，可为 NULL。
+static std::wstring LocalPhotoPath(const CString& account, const LOGIN_ACCOUNT_INFO* info)
+{
+    if (info == NULL || info->nFaceType != balloonmain::avatar_kind_image || info->szCustomFace[0] == '\0')
+        return std::wstring();
+    const std::wstring path = net::ImageTransfer::AvatarCacheFilePathForFileId((LPCTSTR)account, info->szCustomFace);
+    if (path.empty() || ::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+        return std::wstring();
+    return path;
+}
 
 // WM_SYSCOMMAND 的命令码在低 4 位保留作内部用途，取命令需与此掩码相与。
 static const WPARAM kSysCommandMask = 0xFFF0;
@@ -102,6 +123,7 @@ CBalloonLoginDlg::CBalloonLoginDlg(CFlamingoClient* pFMGClient)
     , m_pAutoLogin(NULL)
     , m_pBanner(NULL)
     , m_pStatusProgress(NULL)
+    , m_pLanguageLink(NULL)
     , m_dwMarqueeTimerId(0)
     , m_loginPresence(kMyPresenceOnline)   // 默认在线；由头像下状态胶囊菜单覆盖
     , m_preLoginUpdateChecked(false)
@@ -184,22 +206,21 @@ INT_PTR CBalloonLoginDlg::DoModal(HWND hWndParent, LPARAM /*dwInitParam*/)
 
     // 创建无边框 DUI 顶层窗口。WS_THICKFRAME 须保留 —— DuiFrameWindow 靠
     // WM_NCCALCSIZE 抠掉系统 chrome，但需要它维持 Aero snap / 最大化动画。
-    if (Create(hWndParent, CWindow::rcDefault, _T("Flamingo"),
+    // 窗口文字取产品名称（g_strAppTitle）：标题栏本身透明不显示文字，但任务栏与 Alt+Tab 显示它。
+    if (Create(hWndParent, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
-        LOG_ERROR(_T("登录窗口 Create 失败。"));
+        LOG_ERROR(_T("login window: Create failed."));
         m_modalRunning = false;
         return IDCANCEL;
     }
 
     ConfigureFrame();
     InitLoginUi();
-    //按精确尺寸设置窗口大小，不能用 ResizeClient：它按 WS_OVERLAPPEDWINDOW 用
-    //AdjustWindowRectEx 再叠加一圈系统标题栏与边框，而 DuiFrameWindow 在 WM_NCCALCSIZE
-    //里把非客户区整个并入了客户区，叠加的部分全变成客户区。实测 120 DPI 下窗口成了
-    //398×609（2026-09-30），多出的高度在链接行上方留下一大块空白，且随 DPI 变化。
-    SetWindowPos(NULL, 0, 0, kLoginWindowWidth, kLoginWindowHeight,
-                 SWP_NOZORDER | SWP_NOMOVE | SWP_NOACTIVATE);
+    //按精确尺寸设置窗口大小。DuiFrameWindow::ResizeClient 设的就是整窗尺寸（客户区即整个
+    //窗口）；2026-10-02 之前继承的是 ATL 版本，会按 WS_OVERLAPPEDWINDOW 再叠加一圈系统
+    //标题栏与边框，120 DPI 下窗口成了 398×609。
+    ResizeClient(kLoginWindowWidth, kLoginWindowHeight);
     CenterWindow();
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -265,6 +286,10 @@ void CBalloonLoginDlg::ConfigureFrame()
 {
     // 标题栏：透明、无标题文字、白色 min/close glyph、无最大化按钮。
     SetTitle(_T(""));
+    // SetTitle 会把系统窗口文字一并清空（见 DuiFrameWindow::SetTitle）。透明标题栏不显示文字，
+    // 但任务栏与 Alt+Tab 显示的是系统窗口文字，这里单独设回产品名称；标题栏控件另存一份文字，
+    // 不受影响。
+    ::SetWindowText(m_hWnd, g_strAppTitle.c_str());
     SetTitleBarHeight(kLoginTitleBarHeight);
     SetTitleBarTransparent(true);
     SetCaptionGlyphColor(RGB(255, 255, 255));
@@ -333,16 +358,16 @@ void CBalloonLoginDlg::UpdateBannerUserName(const CString& account)
     // 一个字符都会走到这里，无谓刷日志。
     if (displayName != account)
     {
-        LOG_INFO(_T("登录窗切到账号 %s，头像下方显示姓名 %s。"),
+        LOG_INFO(_T("login window: switched to account %s, name shown under the avatar: %s."),
                  (LPCTSTR)account, (LPCTSTR)displayName);
     }
 
-    // 头像底色随账号变化：账号在历史登录列表里（= 曾登录成功过）则按账号
-    // 稳定取色，使不同账号头像可凭颜色区分；未登录过 / 账号为空则用默认
-    // 橙色方块。判定"是否登录过"直接查历史账号列表（登录成功才会被 Add）。
-    bool bKnownAccount = (lpAccount != NULL);
-    m_pBanner->SetAvatarColor(
-        balloonauth::ChooseBannerAvatarColor(account, bKnownAccount));
+    // 大头像画当前账号的头像（2026-10-04 起，与账号下拉列表同一口径，见 LoginAccountAvatar.h）：
+    // 照片已下载到本机时画照片；否则画字形，底色规则与原来相同 —— 曾登录成功过（在历史账号列表里）
+    // 的账号按账号稳定取色，没登录过的用默认橙色方块。账号为空时不画字形。
+    const balloonauth::LoginAvatarSpec spec =
+        balloonauth::ResolveLoginAvatar(account, lpAccount, LocalPhotoPath(account, lpAccount));
+    m_pBanner->SetAvatar(account.IsEmpty() ? _T("") : (LPCTSTR)spec.m_glyph, spec.m_color, spec.m_photoPath.c_str());
 }
 
 // =======================================================================
@@ -356,7 +381,7 @@ void CBalloonLoginDlg::InitLoginUi()
     if (!root)
     {
         // 内嵌 XML 为编译期常量、形态固定，正常情况下不会解析失败。
-        LOG_ERROR(_T("BuildLoginBody 返回空 —— 登录窗客户区未能构建。"));
+        LOG_ERROR(_T("login window: BuildLoginBody returned null, the client area could not be built."));
         return;
     }
     SetClientContent(std::move(root));
@@ -364,7 +389,7 @@ void CBalloonLoginDlg::InitLoginUi()
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
     {
-        LOG_ERROR(_T("SetClientContent 之后 GetClientContent 仍为空。"));
+        LOG_ERROR(_T("login window: GetClientContent is still null after SetClientContent."));
         return;
     }
 
@@ -383,6 +408,16 @@ void CBalloonLoginDlg::InitLoginUi()
         content->FindCtrlById(balloonauth::kIdLoginBanner));
     m_pStatusProgress = dynamic_cast<balloonwjui::DuiProgressBar*>(
         content->FindCtrlById(balloonauth::kIdStatusProgress));
+
+    // 横幅左下角的产品名称与标语取 flamingo.ini 的配置（启动时已读入这两个全局变量）
+    if (m_pBanner != NULL)
+    {
+        m_pBanner->SetTitleText(g_strAppTitle.c_str());
+        m_pBanner->SetSloganText(g_strAppSlogan.c_str());
+    }
+
+    // 底部的界面语言链接：语言包存在时显示当前语言的名称，不存在时隐藏
+    InitLanguageLink(content);
 
     // 状态区平时照样占位，只是不显示文字与进度条（登录中、失败时布局不跳动）
     balloonauth::ApplyLoginStatusView(content, balloonauth::kLoginStatusIdle, NULL);
@@ -454,10 +489,12 @@ LRESULT CBalloonLoginDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         case balloonauth::kIdLinkNetwork:
             OnNetworkClicked();
             return 0;
+        //界面语言链接：弹出语言菜单
+        case balloonauth::kIdLinkLanguage:
+            ShowLanguageMenu();
+            return 0;
         case balloonauth::kIdLinkForgotPwd:
-            // 服务端无找回密码接口 —— 暂以提示占位。
-            ::MessageBox(m_hWnd, _T("该功能暂未开放。"), _T("提示"),
-                         MB_OK | MB_ICONINFORMATION);
+            OnForgotPasswordClicked();
             return 0;
         default:
             break;
@@ -618,12 +655,12 @@ void CBalloonLoginDlg::OnLoginClicked(bool byAutoLogin)
     balloonauth::LoginInputResult vr = balloonauth::ValidateLoginInput(account, password);
     if (vr == balloonauth::kLoginInputNoAccount)
     {
-        ::MessageBox(m_hWnd, _T("请输入账号！"), _T("提示"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, TR(L"请输入账号或手机号！"), TR(L"提示"), MB_OK | MB_ICONINFORMATION);
         return;
     }
     if (vr == balloonauth::kLoginInputNoPassword)
     {
-        ::MessageBox(m_hWnd, _T("请输入密码！"), _T("提示"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, TR(L"请输入密码！"), TR(L"提示"), MB_OK | MB_ICONINFORMATION);
         return;
     }
 
@@ -642,7 +679,7 @@ void CBalloonLoginDlg::OnLoginClicked(bool byAutoLogin)
     if (m_lpFMGClient != NULL)
         m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount = m_stAccountInfo.szUser;
 
-    LOG_INFO(_T("登录窗发起登录 (account=%s)."), m_stAccountInfo.szUser);
+    LOG_INFO(_T("login window: login started (account=%s)."), m_stAccountInfo.szUser);
 
     //先检查更新，查出可用新版本就把登录拦在这里。整个进程只查一次：用户点过「稍后」
     //之后再点登录不该又被拦一遍，否则永远登不进去。
@@ -668,6 +705,21 @@ void CBalloonLoginDlg::OnLoginClicked(bool byAutoLogin)
     //旧写法是发起后立刻 EndModal、失败时再由 StartLogin 重建一个登录窗，两者时序
     //稍有交错就会撞上 ATL 的 m_hWnd 断言——那个隐患也随之消掉了。
     DoLogin();
+}
+
+void CBalloonLoginDlg::OnForgotPasswordClicked()
+{
+    // 企业版没有自助找回密码：密码由企业管理员在 FlamingoAdmin 里重置，这里只告诉用户去找管理员。
+    // 平时就地显示在状态区（不弹窗）；正在登录时状态区显示着「正在登录…」，改为弹提示框。
+    const bool logining = (m_loginProgress.phase() == auth::login_phase_logining);
+    const LPCTSTR hint = TR(L"请联系企业管理员重置密码。");
+    LOG_INFO("login window: forgot password clicked, logining=%d.", (int)logining);
+    if (balloonauth::ChooseForgotPasswordHintPlace(logining) == balloonauth::kForgotPwdHintMessageBox)
+    {
+        ::MessageBox(m_hWnd, hint, TR(L"忘记密码"), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    balloonauth::ApplyLoginStatusView(GetClientContent(), balloonauth::kLoginStatusMessage, hint);
 }
 
 void CBalloonLoginDlg::ShowLoginStatusMenu()
@@ -719,31 +771,137 @@ void CBalloonLoginDlg::ShowLoginStatusMenu()
     m_loginPresence = targetPresence;
     m_pBanner->SetPresence(m_loginPresence);
     m_pBanner->Invalidate();
-    LOG_INFO(_T("登录窗选择在线状态 presence=%d."), m_loginPresence);
+    LOG_INFO(_T("login window: presence chosen, presence=%d."), m_loginPresence);
+}
+
+void CBalloonLoginDlg::InitLanguageLink(balloonwjui::DuiControl* content)
+{
+    m_pLanguageLink = dynamic_cast<balloonwjui::DuiButton*>(content->FindCtrlById(balloonauth::kIdLinkLanguage));
+    if (m_pLanguageLink == NULL)
+        return;
+
+    std::wstring dllPath = std::wstring(g_szHomePath) + FLAMINGO_LANG_DLL_NAME;
+    if (i18n::ListPackLanguages(dllPath, m_packLanguages))
+    {
+        //链接文字是当前生效语言自己的写法，任何界面语言下用户都认得出来
+        std::wstring name = i18n::GetLanguageDisplayName(m_packLanguages, i18n::GetLanguage());
+        m_pLanguageLink->SetText(name.c_str());
+        return;
+    }
+
+    //语言包不存在：隐藏链接，并让它所在的那一行重新分配宽度（SetVisible 不会触发重排，见开发约定文档 UI 约定第 5 条）
+    m_pLanguageLink->SetVisible(false);
+    balloonwjui::DuiControl* row = m_pLanguageLink->GetParent();
+    if (row != NULL)
+        row->ForceLayout(row->GetRect());
+    LOG_INFO("login window: language pack not available, the language link is hidden.");
+}
+
+void CBalloonLoginDlg::ShowLanguageMenu()
+{
+    if (m_pLanguageLink == NULL || m_packLanguages.empty())
+        return;
+
+    //菜单项 id 从 1 起编，0 留给「未选中」（TrackPopup 在失焦 / ESC 时返回 0）
+    const UINT kLanguageMenuIdBase = 1;
+    //菜单底边与链接顶边的间隙（像素）
+    const int kLanguageMenuGapPx = 4;
+
+    std::vector<i18n::LanguageChoice> choices = i18n::BuildLanguageChoices(m_packLanguages);
+    std::wstring iniPath = std::wstring(g_szHomePath) + L"config\\flamingo.ini";
+    int current = i18n::FindLanguageChoice(choices, i18n::ReadConfiguredLanguage(iniPath));
+
+    balloonwjui::DuiMenu menu;
+    for (size_t i = 0; i < choices.size(); ++i)
+        menu.AppendChecked(kLanguageMenuIdBase + (UINT)i, choices[i].m_name.c_str(), (int)i == current);
+
+    //链接在窗口底部，菜单向上弹：左对齐链接左边、底边落在链接顶边上方；再夹进显示器工作区兜底
+    const RECT& rcLink = m_pLanguageLink->GetRect();
+    SIZE menuSize = menu.MeasureSize();
+    POINT tl = { rcLink.left, rcLink.top - kLanguageMenuGapPx };
+    ::ClientToScreen(m_hWnd, &tl);
+    tl.y -= menuSize.cy;
+    POINT pos = balloonmain::ClampPopupMenuToWorkArea(tl, menuSize);
+
+    UINT chosen = menu.TrackPopup(pos.x, pos.y, m_hWnd);   // 同步阻塞
+    if (chosen < kLanguageMenuIdBase || chosen >= kLanguageMenuIdBase + (UINT)choices.size())
+        return;   // 未选中（失焦 / ESC）
+    int index = (int)(chosen - kLanguageMenuIdBase);
+    if (index == current)
+        return;
+
+    const std::wstring code = choices[(size_t)index].m_code;
+    if (!i18n::WriteConfiguredLanguage(iniPath, code))
+    {
+        LOG_ERROR("login window: failed to save the ui language (error %u).", (unsigned)::GetLastError());
+        ::MessageBox(m_hWnd, TR(L"保存设置失败，请检查程序目录是否可写。"), g_strAppTitle.c_str(),
+                     MB_OK | MB_ICONWARNING);
+        return;
+    }
+    LOG_INFO("login window: ui language set to %s, current language %s.",
+             code.empty() ? "follow-system" : EncodeUtil::UnicodeToUtf8(code).c_str(),
+             EncodeUtil::UnicodeToUtf8(i18n::GetLanguage()).c_str());
+
+    //下次启动得到的语言与当前一样时不必重启
+    if (!i18n::LanguageChangeNeedsRestart(code, ::GetUserDefaultUILanguage()))
+        return;
+
+    std::wstring prompt = TRF(L"界面语言将在重新启动 {0} 后生效。是否立即重启？", g_strAppTitle);
+    if (::MessageBox(m_hWnd, prompt.c_str(), g_strAppTitle.c_str(), MB_YESNO | MB_ICONQUESTION) != IDYES)
+    {
+        LOG_INFO("login window: restart for the language change postponed by the user.");
+        return;
+    }
+    if (!apprestart::LaunchRestart())
+    {
+        LOG_ERROR("login window: failed to launch the new instance (error %lu).", ::GetLastError());
+        return;
+    }
+    //与点右上角关闭按钮相同：关闭登录窗，随即退出整个程序；新进程会等本进程退出后再继续
+    LOG_INFO("login window: new instance launched, closing for the language change.");
+    PostMessage(WM_CLOSE);
 }
 
 void CBalloonLoginDlg::OnRegisterClicked()
 {
-    // 打开新版注册窗口（balloonui 两步流程），模态于登录窗。
+    // 打开新版注册窗口（balloonui 两步流程），模态于登录窗。2026-10-07 起登录窗与注册窗之间
+    // 以「翻转」过渡切换：打开时登录窗翻到背面变成注册窗（登录窗隐藏且禁用），返回时再翻回来。
     CBalloonRegisterWindow regDlg(m_lpFMGClient);
-    if (regDlg.DoModal(m_hWnd) != IDOK)
+    const INT_PTR result = regDlg.RunModalFromLogin(*this);
+    bool filled = false;
+    if (result == IDOK)
+    {
+        // 先把账号、密码填进（此刻还隐藏着的）登录窗，再翻回来：翻转画面里就是填好的登录窗
+        filled = ApplyRegisteredAccount(regDlg.RegisteredAccount(), regDlg.RegisteredPassword());
+    }
+    else
     {
         // 用户中途放弃或注册未成功，登录框保持原样。
-        return;
+        LOG_INFO("login window: register window closed without a new account (result=%d).", (int)result);
     }
+    regDlg.ReturnToLogin();
 
+    // 账号与密码都已就位，焦点落到密码框：用户想核对或改密码时不必再点一下，直接就能编辑。
+    // 放在翻回登录窗之后：之前登录窗还是隐藏、禁用的，取不到键盘焦点。
+    if (filled && m_pPasswordEdit != NULL)
+    {
+        m_pPasswordEdit->SetFocus();
+    }
+}
+
+bool CBalloonLoginDlg::ApplyRegisteredAccount(const CString& registeredAccount, const CString& registeredPassword)
+{
     // 注册成功：登录账号是服务端自动生成的、用户没有手输过，密码则是他刚在
     // 注册窗里设的，两样都替他填进登录框，省得再照着完成页一个字符一个字符敲。
     // 具体回填成什么样由纯函数 MakePostRegisterFill 决定（可单测，见
     // Tests/BalloonLoginLayoutTests.cpp 的 PR 组用例）。
     const balloonauth::PostRegisterFill fill =
-        balloonauth::MakePostRegisterFill(regDlg.RegisteredAccount(),
-                                          regDlg.RegisteredPassword());
+        balloonauth::MakePostRegisterFill(registeredAccount, registeredPassword);
     if (!fill.m_shouldFill)
     {
-        // 理论上不会发生：DoModal 返回 IDOK 就意味着服务端已下发账号。
-        LOG_ERROR(_T("注册返回成功但账号为空，无法回填登录框。"));
-        return;
+        // 理论上不会发生：注册窗返回 IDOK 就意味着服务端已下发账号。
+        LOG_ERROR(_T("login window: registration succeeded but the account is empty, cannot fill the login box."));
+        return false;
     }
     const CString& account = fill.m_account;
 
@@ -766,6 +924,10 @@ void CBalloonLoginDlg::OnRegisterClicked()
         if (bAdded && m_pAccountCombo != NULL)
         {
             nComboCount = m_pAccountCombo->AddString(account) + 1;
+            // 新注册的账号还没有头像信息：画账号首字，与下拉列表里其它还没登录过新版本的账号一致
+            const balloonauth::LoginAvatarSpec spec =
+                balloonauth::ResolveLoginAvatar(account, m_pLoginAccountList->Find(account), std::wstring());
+            m_pAccountCombo->SetItemIcon(nComboCount - 1, m_avatarBitmaps.GetBitmap(spec, balloonauth::kAccountAvatarPx));
         }
 
         BOOL bSaved = FALSE;
@@ -776,7 +938,7 @@ void CBalloonLoginDlg::OnRegisterClicked()
             bSaved = m_pLoginAccountList->SaveFile(strFileName.c_str());
         }
 
-        LOG_INFO(_T("注册账号入历史列表: account=%s, 入列=%d, 落盘=%d, 列表条数=%d, 下拉项数=%d."),
+        LOG_INFO(_T("login window: registered account added to history: account=%s, added=%d, saved=%d, list size=%d, combo items=%d."),
                  (LPCTSTR)account, (int)bAdded, (int)bSaved,
                  m_pLoginAccountList->GetCount(), nComboCount);
     }
@@ -784,7 +946,7 @@ void CBalloonLoginDlg::OnRegisterClicked()
     {
         // 走到这里说明要么登录窗没拿到历史账号列表（指针为空），要么这个账号
         // 已经在列表里了 —— 两种情形下拉列表里都不会新增一项，日志记下是哪种。
-        LOG_INFO(_T("注册账号未入历史列表: account=%s, 列表指针空=%d, 已存在=%d."),
+        LOG_INFO(_T("login window: registered account not added to history: account=%s, list null=%d, already exists=%d."),
                  (LPCTSTR)account, (int)(m_pLoginAccountList == NULL),
                  (int)(m_pLoginAccountList != NULL
                        && m_pLoginAccountList->Find(account) != NULL));
@@ -828,16 +990,10 @@ void CBalloonLoginDlg::OnRegisterClicked()
     // 同样补了这一步。
     UpdateBannerUserName(account);
 
-    // 账号与密码都已就位，焦点仍落到密码框：用户想核对或改密码时不必再点一下，
-    // 直接就能编辑。
-    if (m_pPasswordEdit != NULL)
-    {
-        m_pPasswordEdit->SetFocus();
-    }
-
     // 密码不进日志，只记"填没填上"，便于日后仅凭日志判断这条路径是否走到。
-    LOG_INFO(_T("注册成功，已把账号 %s 回填到登录框，密码框已回填=%d。"),
+    LOG_INFO(_T("login window: registration succeeded, account %s filled into the login box, password filled=%d."),
              (LPCTSTR)account, (int)(!fill.m_password.IsEmpty()));
+    return true;
 }
 
 void CBalloonLoginDlg::OnNetworkClicked()
@@ -880,7 +1036,7 @@ bool CBalloonLoginDlg::StartPreLoginUpdateCheck()
     //false = 只查不下。要不要下载由用户在升级窗里决定。
     update::UpdateManager::GetInstance().CheckAndDownload(false);
 
-    LOG_INFO(_T("登录前检查更新：已发起，登录暂缓。"));
+    LOG_INFO(_T("login window: pre-login update check started, login deferred."));
     return true;
 }
 
@@ -988,7 +1144,7 @@ void CBalloonLoginDlg::EnterLoginingUi()
     //旁边塞不下第二个，而登录期间再点「登录」本来也没有意义。
     if (m_pLoginButton != NULL)
     {
-        m_pLoginButton->SetText(UI_LOGIN_BTN_CANCEL);
+        m_pLoginButton->SetText(TR(UI_LOGIN_BTN_CANCEL));
         m_pLoginButton->SetEnabled(true);
         m_pLoginButton->Invalidate();
     }
@@ -998,7 +1154,7 @@ void CBalloonLoginDlg::EnterLoginingUi()
 
     //显示「正在登录…」与进度条；该函数内部会重排状态区，进度条才拿得到正确的矩形
     balloonauth::ApplyLoginStatusView(GetClientContent(), balloonauth::kLoginStatusLogining,
-                                      UI_LOGIN_STATUS_LOGINING);
+                                      TR(UI_LOGIN_STATUS_LOGINING));
 
     //DuiProgressBar 的 marquee 不自驱动，相位得由调用方按固定间隔推进
     if (m_dwMarqueeTimerId == 0)
@@ -1017,7 +1173,7 @@ void CBalloonLoginDlg::LeaveLoginingUi(PCTSTR pszMessage)
 
     if (m_pLoginButton != NULL)
     {
-        m_pLoginButton->SetText(UI_LOGIN_BTN_LOGIN);
+        m_pLoginButton->SetText(TR(UI_LOGIN_BTN_LOGIN));
         m_pLoginButton->SetEnabled(true);
         m_pLoginButton->Invalidate();
     }
@@ -1044,12 +1200,12 @@ void CBalloonLoginDlg::SetLoginButtonChecking(bool checking)
 
     if (checking)
     {
-        m_pLoginButton->SetText(_T("正在检查更新..."));
+        m_pLoginButton->SetText(TR(L"正在检查更新..."));
         m_pLoginButton->SetEnabled(false);
     }
     else
     {
-        m_pLoginButton->SetText(_T("登 录"));
+        m_pLoginButton->SetText(TR(UI_LOGIN_BTN_LOGIN));
         m_pLoginButton->SetEnabled(true);
     }
     m_pLoginButton->Invalidate();
@@ -1069,7 +1225,7 @@ LRESULT CBalloonLoginDlg::OnPreLoginUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*
     SetLoginButtonChecking(false);
 
     const bool hasUsableUpdate = pResult->m_hasUpdate && pResult->m_packageUsable;
-    LOG_INFO(_T("登录前检查更新结果：transportOk=%d, code=%d, hasUpdate=%d, usable=%d, forced=%d。"),
+    LOG_INFO(_T("login window: pre-login update check result: transportOk=%d, code=%d, hasUpdate=%d, usable=%d, forced=%d."),
              pResult->m_transportOk ? 1 : 0, pResult->m_code,
              pResult->m_hasUpdate ? 1 : 0, pResult->m_packageUsable ? 1 : 0,
              pResult->m_forced ? 1 : 0);
@@ -1101,7 +1257,7 @@ LRESULT CBalloonLoginDlg::OnUpdateLoginContinue(UINT /*uMsg*/, WPARAM /*wParam*/
                                                 LPARAM /*lParam*/, BOOL& bHandled)
 {
     bHandled = TRUE;
-    LOG_INFO(_T("用户关闭升级窗，继续被拦下的登录。"));
+    LOG_INFO(_T("login window: update window closed by the user, resuming the deferred login."));
     //同上：不再立即关窗，理由见 OnPreLoginUpdateResult 里的说明。
     DoLogin();
     return 0;
@@ -1115,22 +1271,12 @@ void CBalloonLoginDlg::PopulateAccountCombo()
     // 历史账号填入下拉列表。
     if (m_pLoginAccountList != NULL)
     {
-        int nCount = m_pLoginAccountList->GetCount();
-        for (int i = 0; i < nCount; ++i)
-        {
-            LOGIN_ACCOUNT_INFO* lpAccount = m_pLoginAccountList->GetAccountInfo(i);
-            if (lpAccount != NULL)
-                m_pAccountCombo->AddString(lpAccount->szUser);
-        }
+        // 每项的文字是账号；浮层里该行左侧是头像、右侧是姓名（2026-10-04 起，见 LoginAccountAvatar.h）
+        int nCount = balloonauth::FillAccountCombo(m_pAccountCombo, m_pLoginAccountList, m_avatarBitmaps, &LocalPhotoPath);
+        LOG_INFO("login window: %d history accounts filled into the account combo with avatars.", nCount);
 
-        // 让浮层一次显示得下所有账号。DuiComboBox 默认只显示 8 行（m_maxVisible），
-        // 超出的项虽然在列表里、却顶不进浮层的可视高度 —— 而浮层内部那个 DuiListBox
-        // 收不到滚轮消息（DuiComboBoxPopup 的消息映射里没有 WM_MOUSEWHEEL，焦点又在
-        // 浮层窗口自己身上），于是第 9 个往后的账号根本够不着。本机登录过十几个账号
-        // 是常事，新账号又总是排在最后，正好全落在够不着的区间里。
-        //
-        // 上限 kAccountComboMaxRows 是防止账号特别多时浮层高得掉出屏幕 —— 真到那一天
-        // 得让浮层能滚，而那要改 balloonui，须先与用户对齐。
+        // 让浮层尽量一次显示得下所有账号（DuiComboBox 默认只显示 8 行）；上限 kAccountComboMaxRows
+        // 防止账号特别多时浮层过高，超出的部分用滚轮滚动。
         const int nRows = (nCount < kAccountComboMaxRows) ? nCount : kAccountComboMaxRows;
         if (nRows > 0)
         {
@@ -1210,7 +1356,7 @@ void CBalloonLoginDlg::PersistCheckStateForCurrentAccount()
     const tstring strFileName =
         Hootina::CPath::GetAppPath() + _T("Users\\LoginAccountList.dat");
     const BOOL bSaved = m_pLoginAccountList->SaveFile(strFileName.c_str());
-    LOG_INFO(_T("登录窗勾选项就地落盘: account=%s, 记住密码=%d, 自动登录=%d, 落盘=%d."),
+    LOG_INFO(_T("login window: check boxes saved: account=%s, remember password=%d, auto login=%d, saved=%d."),
              (LPCTSTR)account, (int)bRemember, (int)bAuto, (int)bSaved);
 }
 
@@ -1266,12 +1412,16 @@ void CBalloonLoginDlg::RemoveAccountFromHistory(int comboIndex)
     // 一致，故按名字回查历史列表拿真正的下标。查不到说明两边已经不同步，
     // 那就只把下拉项摘掉、不动文件。
     int listIndex = -1;
+    // 本地数据目录名：下拉项显示的是登录时输入的原文（可能是手机号或大小写不同的账号），
+    // 而 Users\<账号>\ 按服务端返回的规范账号建，须从历史记录里取；查不到记录时只能按原文
+    CString dataAccount = account;
     for (int i = 0; i < m_pLoginAccountList->GetCount(); ++i)
     {
         LOGIN_ACCOUNT_INFO* lpInfo = m_pLoginAccountList->GetAccountInfo(i);
         if (lpInfo != NULL && account.Compare(lpInfo->szUser) == 0)
         {
             listIndex = i;
+            dataAccount = LoginAccountDataName(lpInfo);
             break;
         }
     }
@@ -1294,20 +1444,20 @@ void CBalloonLoginDlg::RemoveAccountFromHistory(int comboIndex)
         const tstring strFileName =
             Hootina::CPath::GetAppPath() + _T("Users\\LoginAccountList.dat");
         const BOOL bSaved = m_pLoginAccountList->SaveFile(strFileName.c_str());
-        LOG_INFO(_T("删除历史账号: account=%s, 列表下标=%d, 落盘=%d, 剩余条数=%d."),
+        LOG_INFO(_T("login window: history account removed: account=%s, index=%d, saved=%d, remaining=%d."),
                  (LPCTSTR)account, listIndex, (int)bSaved, m_pLoginAccountList->GetCount());
     }
     else
     {
-        LOG_INFO(_T("删除历史账号: account=%s 不在历史列表里，仅从下拉框摘除。"),
+        LOG_INFO(_T("login window: account %s is not in the history list, removed from the combo only."),
                  (LPCTSTR)account);
     }
 
     if (bAlsoDeleteLocalData)
     {
-        const bool bWiped = balloonauth::DeleteAccountLocalData(account);
-        LOG_INFO(_T("删除历史账号的本地数据: account=%s, 结果=%d."),
-                 (LPCTSTR)account, (int)bWiped);
+        const bool bWiped = balloonauth::DeleteAccountLocalData(dataAccount);
+        LOG_INFO(_T("login window: local data of the removed account deleted: account=%s, data folder=%s, result=%d."),
+                 (LPCTSTR)account, (LPCTSTR)dataAccount, (int)bWiped);
     }
 
     // 被删的正是当前显示的那个账号时，界面得换一个人 —— 否则账号框里还留着
@@ -1431,23 +1581,10 @@ UINT CBalloonLoginDlg::LoginThreadProc(void* pParam)
             {
                 pLoginResult->m_LoginResultCode = LOGIN_SUCCESS;
                 pLoginResult->m_uAccountID = (UINT)resp.userid;
-                strcpy_s(pLoginResult->m_szAccountName, ARRAYSIZE(pLoginResult->m_szAccountName),
-                         resp.profile.username.c_str());
-                strcpy_s(pLoginResult->m_szNickName, ARRAYSIZE(pLoginResult->m_szNickName),
-                         resp.profile.nickname.c_str());
-                pLoginResult->m_nFace = resp.profile.facetype;
-                pLoginResult->m_nGender = resp.profile.gender;
-                pLoginResult->m_nBirthday = resp.profile.birthday;
-                strcpy_s(pLoginResult->m_szSignature, ARRAYSIZE(pLoginResult->m_szSignature),
-                         resp.profile.signature.c_str());
-                strcpy_s(pLoginResult->m_szAddress, ARRAYSIZE(pLoginResult->m_szAddress),
-                         resp.profile.address.c_str());
-                strcpy_s(pLoginResult->m_szCustomFace, ARRAYSIZE(pLoginResult->m_szCustomFace),
-                         resp.profile.customface.c_str());
-                strcpy_s(pLoginResult->m_szPhoneNumber, ARRAYSIZE(pLoginResult->m_szPhoneNumber),
-                         resp.profile.phonenumber.c_str());
-                strcpy_s(pLoginResult->m_szMail, ARRAYSIZE(pLoginResult->m_szMail),
-                         resp.profile.mail.c_str());
+                //系统提示涉及本人时写「你」：须在收取线程解析任何业务帧之前设好
+                net::SetSystemTipSelfUserId((int64_t)resp.userid);
+                //userid、账号、本人资料与功能开关：与重连线程共用同一份拷贝（net/LoginResultFill.h）
+                net::FillLoginResultFromResponse(resp, *pLoginResult);
             }
             else if (resp.code == kLoginRespCodeUnregistered)
                 pLoginResult->m_LoginResultCode = LOGIN_UNREGISTERED;

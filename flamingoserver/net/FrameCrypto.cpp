@@ -755,4 +755,146 @@ frame_security_result processInboundFrame(ServerHandshake& handshake,
     return frame_security_ok;
 }
 
+//==================== PeerClientHandshake ====================
+//移植自 flamingoclient/Source/net/FrameCrypto.cpp 的 ClientHandshake，线上格式两边必须一致
+
+PeerClientHandshake::PeerClientHandshake()
+    : m_state(state_init)
+{
+    sodium_memzero(m_pk, sizeof(m_pk));
+    sodium_memzero(m_sk, sizeof(m_sk));
+    sodium_memzero(m_nonce, sizeof(m_nonce));
+}
+
+PeerClientHandshake::~PeerClientHandshake()
+{
+    //一次性密钥用完即擦
+    sodium_memzero(m_sk, sizeof(m_sk));
+}
+
+std::string PeerClientHandshake::buildClientHello()
+{
+    if (m_state != state_init)
+        return std::string();
+
+    //本次连接专用的一次性密钥对：即便身份私钥日后泄露，也解不开已录下的会话
+    crypto_kx_keypair(m_pk, m_sk);
+    randombytes_buf(m_nonce, sizeof(m_nonce));
+
+    Json::Value root;
+    root["ver"]    = (int)HANDSHAKE_VERSION;
+    root["cpk"]    = toBase64(m_pk, KX_PUBLICKEY_BYTES);
+    root["cnonce"] = toBase64(m_nonce, HANDSHAKE_NONCE_BYTES);
+
+    m_state = state_wait_server;
+    return writeCompact(root);
+}
+
+bool PeerClientHandshake::onServerHello(const std::string& responseBody, const unsigned char* serverPubKey,
+                                        std::string& errOut)
+{
+    if (m_state != state_wait_server)
+    {
+        errOut = "unexpected ServerHello at this handshake stage";
+        return false;
+    }
+    if (serverPubKey == NULL)
+    {
+        errOut = "peer server public key is not available";
+        return false;
+    }
+
+    Json::Value root;
+    if (!parseJson(responseBody, root))
+    {
+        errOut = "ServerHello is not valid JSON";
+        return false;
+    }
+    const int code = root.isMember("code") && root["code"].isInt() ? root["code"].asInt() : -1;
+    if (code != 0)
+    {
+        errOut = "peer server rejected the handshake";
+        return false;
+    }
+
+    unsigned char serverPk[KX_PUBLICKEY_BYTES] = { 0 };
+    unsigned char serverNonce[HANDSHAKE_NONCE_BYTES] = { 0 };
+    unsigned char signature[IDENTITY_SIGNATURE_BYTES] = { 0 };
+    unsigned char streamHeader[STREAM_HEADER_BYTES] = { 0 };
+    if (!fromBase64Exact(jsonString(root, "spk"), KX_PUBLICKEY_BYTES, serverPk))
+    {
+        errOut = "ServerHello field 'spk' is missing or malformed";
+        return false;
+    }
+    if (!fromBase64Exact(jsonString(root, "snonce"), HANDSHAKE_NONCE_BYTES, serverNonce))
+    {
+        errOut = "ServerHello field 'snonce' is missing or malformed";
+        return false;
+    }
+    if (!fromBase64Exact(jsonString(root, "sig"), IDENTITY_SIGNATURE_BYTES, signature))
+    {
+        errOut = "ServerHello field 'sig' is missing or malformed";
+        return false;
+    }
+    if (!fromBase64Exact(jsonString(root, "shdr"), STREAM_HEADER_BYTES, streamHeader))
+    {
+        errOut = "ServerHello field 'shdr' is missing or malformed";
+        return false;
+    }
+
+    //验签：不通过说明对端不是预期的服务器，必须断开，不降级为明文
+    const std::string transcript = buildTranscript(
+        HANDSHAKE_VERSION, m_pk, m_nonce, serverPk, serverNonce, streamHeader);
+    if (crypto_sign_verify_detached(signature, (const unsigned char*)transcript.data(), transcript.size(),
+                                    serverPubKey) != 0)
+    {
+        errOut = "peer server signature verification failed (different server_key or MITM)";
+        return false;
+    }
+
+    //导出会话密钥：主动连接的一方用 client 版，本端 tx 与对端 rx 是同一把
+    unsigned char rxKey[KX_SESSIONKEY_BYTES] = { 0 };
+    unsigned char txKey[KX_SESSIONKEY_BYTES] = { 0 };
+    const int kxRet = crypto_kx_client_session_keys(rxKey, txKey, m_pk, m_sk, serverPk);
+    sodium_memzero(m_sk, sizeof(m_sk));
+    if (kxRet != 0)
+    {
+        sodium_memzero(rxKey, sizeof(rxKey));
+        sodium_memzero(txKey, sizeof(txKey));
+        errOut = "peer server public key rejected by key exchange";
+        return false;
+    }
+
+    const std::string peerHeader((const char*)streamHeader, STREAM_HEADER_BYTES);
+    const bool recvOk = m_cipher.initReceiver(rxKey, peerHeader);
+    sodium_memzero(rxKey, sizeof(rxKey));
+    if (!recvOk)
+    {
+        sodium_memzero(txKey, sizeof(txKey));
+        errOut = "failed to init receiver stream";
+        return false;
+    }
+    const bool sendOk = m_cipher.initSender(txKey, m_streamHeader);
+    sodium_memzero(txKey, sizeof(txKey));
+    if (!sendOk)
+    {
+        errOut = "failed to init sender stream";
+        return false;
+    }
+
+    m_state = state_wait_send;
+    return true;
+}
+
+std::string PeerClientHandshake::buildClientStreamHeader()
+{
+    if (m_state != state_wait_send || m_streamHeader.size() != STREAM_HEADER_BYTES)
+        return std::string();
+
+    Json::Value root;
+    root["chdr"] = toBase64((const unsigned char*)m_streamHeader.data(), m_streamHeader.size());
+    m_state = state_done;
+    return writeCompact(root);
+}
+
 } // namespace net

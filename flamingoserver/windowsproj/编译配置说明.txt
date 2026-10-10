@@ -1,26 +1,37 @@
 ﻿服务端 Windows 侧的编译配置说明
 ================================
 
-维护中的配置有三个，其余配置（Release|Win32）没有人维护，不要用：
+只有两个配置，都是 64 位：
 
-    Debug|Win32     产物在 windowsproj\                 32 位调试版，历史上的默认配置
-    Debug|x64       产物在 windowsproj\x64\Debug\       64 位调试版
-    Release|x64     产物在 windowsproj\x64\Release\     64 位发布版
+    Debug|x64       产物在 windowsproj\x64\Debug\       调试版
+    Release|x64     产物在 windowsproj\x64\Release\     发布版
 
-两个架构的产物放在各自的目录里，互不覆盖，可以同时存在。
+中间文件放在 windowsproj\<工程名>\x64\<配置名>\ 下。两个配置的产物与中间文件
+各在各的目录里，互不覆盖，可以同时存在。
+
+32 位配置（Debug|Win32、Release|Win32）已于 2026-10-09 删除，服务端不再提供
+32 位版本；早先 Debug|Win32 把产物直接输出到 windowsproj\ 下，那里如果还有
+chatserver.exe 之类的文件，都是删除之前留下的旧产物。
 
 第三方依赖
 ----------
 
-依赖库是编译好的静态库，随仓库一起提交，放在 flamingoserver\deps 下：
+协议加密用的 libsodium 是编译好的静态库，随仓库一起提交，放在 deps\libsodium 下，
+chatserver / fileserver / imgserver / Tests 四个工程都链。目录层级是
+lib\$(Platform)\$(Configuration)\，与 MSBuild 的宏同名，所以工程里一行设置就覆盖两个配置。
+来源与重编方法见 deps\README.txt。
 
-    deps\libsodium           协议加密用，四个工程都链
-    deps\mariadb-connector   MySQL 客户端，只有 chatserver 链
+MySQL 客户端 MariaDB Connector/C 3.4.9 从源码编译（2026-10-09 起）：上游源码在
+..\mariadb-connector-c-3.4.9（裁剪后入库，不要改动其中的文件），由静态库工程
+mariadbclient.vcxproj 编出 mariadbclient.lib，chatserver 与 Tests 以工程引用的方式链接它。
+上游在配置阶段生成的三个文件与编译清单在 ..\mariadbclient\config\x64 下，升级方法见
+..\mariadbclient\README.txt。
 
-目录层级是 lib\$(Platform)\$(Configuration)\，与 MSBuild 的宏同名，所以工程里
-一行设置就覆盖四个配置。两个库都是静态链接，**运行期不需要携带任何第三方 DLL**。
-早先那份 32 位的 mysql-5.1.73-win32 已经删除，Win32 与 x64 现在统一用
-MariaDB Connector/C 3.4.9。库的来源与重编方法见 deps\README.txt。
+zlib 用 ..\zlib1.3.2（官方原样文件），各工程直接编译它的源文件；连接器也用这一份，
+不编译它自带的 zlib，所以每个程序里只有一份 zlib。
+
+所有依赖都是静态链接，**运行期不需要携带任何第三方 DLL**。早先那份 32 位的
+mysql-5.1.73-win32 已经删除。
 
 改动工程文件时有两条必须守住
 ----------------------------
@@ -29,7 +40,7 @@ MariaDB Connector/C 3.4.9。库的来源与重编方法见 deps\README.txt。
 （见 base\Platform.h），不是 MSVC 自带的 _WIN32，x64 配置漏掉它会走进 POSIX 分支，
 一编就是满屏错误。
 
-二是每个配置都要有 SODIUM_STATIC，并且运行库（RuntimeLibrary）必须是静态 CRT
+二是每个链接 libsodium 的工程（mariadbclient.vcxproj 不链接，不需要）的每个配置都要有 SODIUM_STATIC，并且运行库（RuntimeLibrary）必须是静态 CRT
 （Debug 为 MultiThreadedDebug、Release 为 MultiThreaded）。前者不写，
 sodium\export.h 会把接口声明成 __declspec(dllimport)，链接静态库时符号对不上；
 后者不一致，进程里会出现两份 CRT，各有各的堆，属于早晚出事的搭法。

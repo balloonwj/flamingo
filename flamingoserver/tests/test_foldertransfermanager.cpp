@@ -26,6 +26,7 @@
 #include "doctest.h"
 #include "../chatserversrc/FolderTransferManager.h"
 #include "../chatserversrc/Protocol.h"      // enum folder_transfer_state / enum error_code
+#include "../chatserversrc/FolderTransferProtocol.h"   // enum folder_transfer_kind（单文件直传会话）
 #include "../utils/RelayToken.h"
 #include "../base/Singleton.h"
 
@@ -1303,4 +1304,180 @@ TEST_CASE("FTM22 会话不存在 / 已销毁 / 非终态时的终结判定")
     CHECK_FALSE(mgr.finishAttempt(sid3, 1, folder_state_failed, 3000 + retentionMs));
 
     mgr.removeSession(sid3);
+}
+
+// ======================= 2026-10-04 单聊单文件 P2P 直传会话 =======================
+// 方案见 docs/单聊文件P2P直传与P2P徽章方案.md：直传会话与文件夹传输共用会话表，但不占文件夹传输的
+// 每用户与整台服务器名额（它不用 fileserver 中转），另按 directfilemaxperuser 限额；邀请超时取 directfileinvitetimeout。
+
+namespace {
+
+//直传会话的规模：一个文件、没有目录
+FolderTransferScale makeDirectScale()
+{
+    FolderTransferScale scale;
+    scale.folderName = "quote.xlsx";
+    scale.totalDirs  = 0;
+    scale.totalFiles = 1;
+    scale.totalSize  = 4096;
+    scale.kind       = folder_kind_file;
+    return scale;
+}
+
+//测试用的直传邀请超时（毫秒）= 5 分钟，与配置项默认值一致
+const int64_t kTestDirectTimeoutMs = 5 * 60 * 1000;
+//用例里的起始时间（Unix 毫秒），取值无关紧要
+const int64_t kDirectT0 = 1790000000000LL;
+//三个测试用户
+const int64_t kDirectUserA = 7001;
+const int64_t kDirectUserB = 7002;
+const int64_t kDirectUserC = 7003;
+
+//把单例里本组用例建的会话全部删掉，避免影响其它用例
+void removeDirectUsersSessions(FolderTransferManager& mgr)
+{
+    const int64_t users[] = { kDirectUserA, kDirectUserB, kDirectUserC };
+    for (size_t i = 0; i < sizeof(users) / sizeof(users[0]); ++i)
+    {
+        std::vector<FolderTransferSessionInfo> found;
+        mgr.findSessionsByUser(users[i], found);
+        for (size_t j = 0; j < found.size(); ++j)
+            mgr.removeSession(found[j].sessionid);
+    }
+}
+
+} // namespace
+
+TEST_CASE("FTM23 直传会话不占文件夹传输的每用户与整台服务器名额")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    removeDirectUsersSessions(mgr);
+    //文件夹传输：每人 1 笔、整台服务器 1 笔
+    mgr.configure(kTestRelayKey, kTestRelayHost, kTestRelayPort, kTestLanes,
+                  kLooseMaxFiles, kLooseMaxSize, 1, 1, kTestInviteTimeoutMs, kTestRetryWindowMs);
+    mgr.configureDirectFile(kTestDirectTimeoutMs, 10);
+
+    //A 先发起一笔直传：文件夹名额不受影响
+    const std::string direct = mgr.createSession(kDirectUserA, kDirectUserB, makeDirectScale(), kDirectT0);
+    CHECK(mgr.getUserSessionCount(kDirectUserA) == 0);
+    CHECK_FALSE(mgr.isServerBusy());
+    CHECK(mgr.checkInvite(kDirectUserA, kDirectUserB, 1, 1) == error_code_ok);
+
+    //再建一笔文件夹传输：A 的文件夹名额与整台服务器名额都满了，但直传仍可发起
+    mgr.createSession(kDirectUserA, kDirectUserC, makeScale(1, 1), kDirectT0);
+    CHECK(mgr.getUserSessionCount(kDirectUserA) == 1);
+    CHECK(mgr.checkInvite(kDirectUserA, kDirectUserC, 1, 1) == error_code_folder_busy);
+    CHECK(mgr.isServerBusy());
+    CHECK(mgr.checkDirectFileInvite(kDirectUserA, kDirectUserC) == error_code_ok);
+
+    //按用户反查仍返回两种会话（掉线收尾要用）
+    std::vector<FolderTransferSessionInfo> found;
+    CHECK(mgr.findSessionsByUser(kDirectUserA, found) == 2);
+    CHECK(mgr.getActiveSessionCount() >= 2);
+
+    removeDirectUsersSessions(mgr);
+    (void)direct;
+    configureLoose(mgr);
+}
+
+TEST_CASE("FTM24 直传的每人上限：发送方或接收方的直传会话数到顶即拒绝，只数直传会话")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    removeDirectUsersSessions(mgr);
+    configureLoose(mgr);
+    mgr.configureDirectFile(kTestDirectTimeoutMs, 2);
+    CHECK(mgr.getDirectFileMaxPerUser() == 2);
+
+    mgr.createSession(kDirectUserA, kDirectUserB, makeDirectScale(), kDirectT0);
+    CHECK(mgr.checkDirectFileInvite(kDirectUserA, kDirectUserC) == error_code_ok);
+    mgr.createSession(kDirectUserA, kDirectUserB, makeDirectScale(), kDirectT0);
+    //A 已有 2 笔：作发送方被拒
+    CHECK(mgr.checkDirectFileInvite(kDirectUserA, kDirectUserC) == error_code_folder_busy);
+    //B 已有 2 笔：作接收方同样被拒
+    CHECK(mgr.checkDirectFileInvite(kDirectUserC, kDirectUserB) == error_code_folder_busy);
+    //文件夹传输会话不计入直传名额
+    mgr.createSession(kDirectUserC, kDirectUserA, makeScale(1, 1), kDirectT0);
+    mgr.createSession(kDirectUserC, kDirectUserA, makeScale(1, 1), kDirectT0);
+    CHECK(mgr.checkDirectFileInvite(kDirectUserC, kDirectUserA + 100) == error_code_ok);
+
+    removeDirectUsersSessions(mgr);
+    configureLoose(mgr);
+}
+
+TEST_CASE("FTM25 邀请超时按种类：直传取 directfileinvitetimeout，文件夹传输仍取 folderinvitetimeout")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    removeDirectUsersSessions(mgr);
+    configureLoose(mgr);
+    mgr.configureDirectFile(kTestDirectTimeoutMs, 10);
+    const std::string direct = mgr.createSession(kDirectUserA, kDirectUserB, makeDirectScale(), kDirectT0);
+    const std::string folder = mgr.createSession(kDirectUserA, kDirectUserB, makeScale(1, 1), kDirectT0);
+
+    std::vector<FolderTransferSessionInfo> timedOut;
+    std::vector<FolderTransferSessionInfo> expired;
+    //5 分钟差 1 毫秒：都没超时
+    mgr.tick(kDirectT0 + kTestDirectTimeoutMs - 1, timedOut, expired);
+    CHECK(timedOut.empty());
+    //满 5 分钟：只有直传超时
+    mgr.tick(kDirectT0 + kTestDirectTimeoutMs, timedOut, expired);
+    REQUIRE(timedOut.size() == 1);
+    CHECK(timedOut[0].sessionid == direct);
+    CHECK(timedOut[0].kind == folder_kind_file);
+    FolderTransferSessionInfo info;
+    CHECK(mgr.getSession(folder, info));
+    //满 30 分钟：文件夹传输也超时
+    timedOut.clear();
+    mgr.tick(kDirectT0 + kTestInviteTimeoutMs, timedOut, expired);
+    REQUIRE(timedOut.size() == 1);
+    CHECK(timedOut[0].sessionid == folder);
+
+    removeDirectUsersSessions(mgr);
+    configureLoose(mgr);
+}
+
+TEST_CASE("FTM26 会话记下种类：createSession 按规模里的 kind 建会话，getSession 取回")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    removeDirectUsersSessions(mgr);
+    configureLoose(mgr);
+    const std::string direct = mgr.createSession(kDirectUserA, kDirectUserB, makeDirectScale(), kDirectT0);
+    const std::string folder = mgr.createSession(kDirectUserA, kDirectUserB, makeScale(1, 1), kDirectT0);
+    FolderTransferSessionInfo info;
+    REQUIRE(mgr.getSession(direct, info));
+    CHECK(info.kind == folder_kind_file);
+    CHECK(info.folderName == "quote.xlsx");
+    CHECK(info.totalFiles == 1);
+    REQUIRE(mgr.getSession(folder, info));
+    CHECK(info.kind == folder_kind_folder);
+    removeDirectUsersSessions(mgr);
+}
+
+TEST_CASE("FTM27 configureDirectFile：小于 1 的配置取默认值（5 分钟、10 笔）")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    mgr.configureDirectFile(0, 0);
+    CHECK(mgr.getDirectFileInviteTimeoutMs() == FolderTransferManager::kDefaultDirectFileInviteTimeoutMs);
+    CHECK(mgr.getDirectFileMaxPerUser() == FolderTransferManager::kDefaultDirectFileMaxPerUser);
+    CHECK(FolderTransferManager::kDefaultDirectFileInviteTimeoutMs == 5 * 60 * 1000);
+    mgr.configureDirectFile(1234, 3);
+    CHECK(mgr.getDirectFileInviteTimeoutMs() == 1234);
+    CHECK(mgr.getDirectFileMaxPerUser() == 3);
+    mgr.configureDirectFile(kTestDirectTimeoutMs, FolderTransferManager::kDefaultDirectFileMaxPerUser);
+}
+
+TEST_CASE("FTM28 终结闸门接受「已改为离线发送」(9)：直传响铃中改为离线发送时照常推送并销毁")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    removeDirectUsersSessions(mgr);
+    configureLoose(mgr);
+    const std::string sid = mgr.createSession(kDirectUserA, kDirectUserB, makeDirectScale(), kDirectT0);
+    CHECK(mgr.finishAttempt(sid, 1, folder_state_to_offline, kDirectT0 + 1));
+    FolderTransferSessionInfo info;
+    REQUIRE(mgr.getSession(sid, info));
+    CHECK(info.state == folder_state_to_offline);
+    //重复终结照样被挡下
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_to_offline, kDirectT0 + 2));
+    //越界取值仍然拒绝
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_to_offline + 1, kDirectT0 + 3));
+    removeDirectUsersSessions(mgr);
 }

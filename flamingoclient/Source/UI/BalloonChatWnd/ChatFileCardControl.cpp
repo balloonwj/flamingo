@@ -159,6 +159,8 @@ void ChatFileCardControl::PostAction(int action)
     d->fileId      = m_msg.fileFileId;
     d->md5         = m_msg.fileMd5;
     d->sizeBytes   = m_msg.fileSizeBytes;
+    d->direct      = m_msg.fileDirect;
+    d->directSessionId = m_msg.fileDirectSessionId;
     if (!::PostMessage(hwnd, WM_CHAT_FILE_ACTION, 0, (LPARAM)d))
     {
         delete d;

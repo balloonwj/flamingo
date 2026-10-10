@@ -124,7 +124,7 @@ bool DepartmentManager::loadFromDb()
     //2. 加载所有在职成员，连 t_user 取展示字段；在线状态不在此填充（由处理器应答时补齐）。
     QueryResult* pMemberResult = pConn->query(
         "SELECT m.f_dept_id, m.f_user_id, m.f_position, m.f_is_primary, m.f_member_order, "
-        "u.f_username, u.f_nickname, u.f_facetype, u.f_customface, u.f_employee_no "
+        "u.f_username, u.f_nickname, u.f_facetype, u.f_customface, u.f_employee_no, u.f_status "
         "FROM t_department_member m JOIN t_user u ON m.f_user_id = u.f_user_id "
         "WHERE m.f_status = 0 ORDER BY m.f_member_order, m.f_user_id");
     if (pMemberResult != NULL)
@@ -146,6 +146,7 @@ bool DepartmentManager::loadFromDb()
             m.facetype    = pRow[7].getInt32();
             m.customface  = pRow[8].getString();
             m.employeeno  = pRow[9].getString();
+            m.accountstatus = pRow[10].getInt32();
 
             //把成员挂到所属部门下；部门集合不大，线性查找即可。
             for (size_t i = 0; i < depts.size(); ++i)
@@ -313,6 +314,27 @@ void DepartmentManager::getOrgStructure(int64_t enterpriseId, std::vector<dept::
         if (m_cachedDepts[i].enterpriseid == enterpriseId)
             outDepts.push_back(m_cachedDepts[i]);
     }
+}
+
+void DepartmentManager::updateCachedMemberAccountStatus(int64_t userId, int32_t accountStatus)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    //同一用户可能兼属多个部门，全部更新
+    int touched = 0;
+    for (size_t i = 0; i < m_cachedDepts.size(); ++i)
+    {
+        std::vector<dept::DepartmentMember>& members = m_cachedDepts[i].members;
+        for (size_t k = 0; k < members.size(); ++k)
+        {
+            if (members[k].userid == userId)
+            {
+                members[k].accountstatus = accountStatus;
+                ++touched;
+            }
+        }
+    }
+    LOGI("updateCachedMemberAccountStatus, userid: %lld, accountstatus: %d, member entries: %d",
+         (long long)userId, accountStatus, touched);
 }
 
 void DepartmentManager::updateCachedMemberAvatar(int64_t userId, int32_t facetype, const std::string& customface)

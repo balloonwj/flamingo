@@ -25,22 +25,42 @@
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify
 #include "../../App/CustomMsgDef.h"                        // WM_VIEW_CHAT_IMAGE（双击图片打开看图窗）
 #include "FontSettingPopup.h"                       // 字体设置浮层（成员需完整类型；含 net::TextFont）
-#include "FaceImagePickerPopup.h"                   // Bin/Face 图片表情浮层（成员需完整类型）
+#include "FaceImagePickerPopup.h"                   // 程序目录/Face 图片表情浮层（成员需完整类型）
 #include "GroupFileLibrary.h"                       // 群文件库（边栏「群文件」面板的数据模型，成员需完整类型）
 #include "GroupFileUploadTracker.h"                 // 群文件「正在上传」行跟踪器（成员需完整类型）
+#include "GroupFileChatPoster.h"                    // 发送录像等：上传群文件后在群里发文件消息（2026-10-05）
 #include "GroupAtDropdown.h"                        // @ 成员选择浮层（成员需完整类型）
 #include "GroupMentionModel.h"                      // MentionCandidate（成员需完整类型）
 #include "ChatDropController.h"                     // 拖文件进窗口发送（成员需完整类型）
 #include "ChatHistoryPaging.h"                      // HistoryPagingState（向上翻页，成员需完整类型）
+#include "ChatMarkdown.h"                           // MarkdownEarlySendTracker（成员需完整类型）
 #include "../../net/GroupProtocolClient.h"             // net::GroupAnnouncementItem（成员需完整类型）
 #include "../../Common/Util/PerfStopWatch.h"           // 打开窗口到首屏历史渲染完成的计时（成员需完整类型）
 #include "GroupSenderRefresh.h"                        // GroupSenderRender（发送者显示信息的解析与刷新）
+#include "GroupMemberPanelKit.h"                       // GroupMemberRowInfo（成员显示信息，成员需完整类型）与成员列表的共用步骤
 #include "ChatMessageList.h"                           // WM_CHAT_DELETE_REQUEST（消息映射里要用到消息号）
+#include "ChatRelayCard.h"                             // IRelayNameResolver（接龙卡片名字解析的嵌套实现类）
+#include "ChatSendBumpQueue.h"                         // 发送后待冒泡的队列（成员需完整类型）
+#include "../BalloonCard/RelayComposeDlg.h"            // 「发起接龙」窗口（成员需完整类型）
+#include "../BalloonGroupManage/BalloonAnnouncePopupDlg.h"   // 点群公告卡片打开的公告详情窗（成员需完整类型）
+#include "GroupQaEditDialog.h"                         // 「新建问答」「修改问答」对话框（成员需完整类型）
+#include "BotCardWindow.h"                             // 机器人资料卡小窗（成员需完整类型）
+#include "../../net/GroupQaProtocolClient.h"           // net::GroupQaItem / GroupQaResult（成员需完整类型）
+#include "../../net/BotProtocolClient.h"              // net::GroupBotInfo / GroupBotsResult（机器人列表成员需完整类型）
+#include "../../Session/UserSessionData.h"             // FMG_MSG_MEMO_CHANGED（消息映射里要用到消息号）
+#include "../../net/ContactsProtocolClient.h"          // net::ContactItem（选择备忘提醒对象的候选人）
+#include <memory>
 
 #include <map>
 #include <vector>
 #include <string>
 #include <stdint.h>
+#include "VoiceRecordSession.h"   // 录音会话与录音条（语音消息第 3b、6g 步，成员需完整类型）
+#include "../BalloonCode/CodeComposeWindow.h"   // 「发送代码」窗口与它交回结果的消息
+#include "ChatCodeMessage.h"                    // kMsgChatCodePaste（消息映射里要用到消息号）
+
+class CCreateGroupDlg;     // 选人对话框（群通话选人用，定义在 BalloonMain/CreateGroupDlg.h）；成员以 unique_ptr 持有，析构在 .cpp 里
+class GroupCallPickSink;   // 群通话选人结果的接收方，定义在 BalloonGroupChatWindow.cpp
 
 class CFlamingoClient;
 
@@ -55,7 +75,8 @@ namespace net { struct MessageNotify; struct GroupMembersResult; struct SyncMess
 // 输入框控件的前置声明。消息列表控件 ChatMessageList 的完整定义已随上面的 ChatMessageList.h
 // 包含进来（消息映射要用它定义的 WM_CHAT_DELETE_REQUEST），这里的前置声明保留、不影响编译。
 namespace balloonchatwnd {
-class ChatInputRichEdit; class ChatMessageList; }
+class ChatInputRichEdit; class ChatMessageList; struct VoicePlayedQuery; struct ChatFileActionData;
+class GroupMemberItem; }   // 成员侧栏的一行，完整定义经 GroupMemberPanelKit.h 包含
 
 /**
  *  CBalloonGroupChatWindow
@@ -65,7 +86,9 @@ class ChatInputRichEdit; class ChatMessageList; }
  *  主消息循环统一泵送。
  */
 class CBalloonGroupChatWindow : public balloonwjui::DuiFrameWindow,
-                                public balloonchatwnd::IChatDropSink
+                                public balloonchatwnd::IChatDropSink,
+                                public balloonvoice::IVoicePlayListener,
+                                public balloonchatwnd::IVoiceRecordSessionHost
 {
 public:
     /**
@@ -121,6 +144,124 @@ public:
     int64_t GetGroupId() const { return m_groupId; }
 
     /**
+     *  请本窗口发起一次截图（主面板收到截图全局快捷键、且前台正是本窗口时调用）。
+     *  只投递 kDoScreenshotMsg，等当前消息处理完再由本窗口发起，效果与点工具栏剪刀相同。
+     *  @param fullScreen true=选区直接为鼠标所在的整块显示器（截取全屏）
+     */
+    void RequestScreenshot(bool fullScreen);
+
+    /**
+     *  某个共享的状态变了（主面板收到文件共享宿主的通知后逐窗转来）：把本群里这个共享的卡片就地重填。
+     *    shareId：共享 id；state / reason：新状态与原因（share_state 及其原因）。
+     *  @return 重填了的卡片张数
+     */
+    int OnShareCardStateChanged(long long shareId, int state, int reason);
+
+    /**
+     *  设置头部文件共享按钮上的角标（主面板收到本群可用共享的个数后转来，2026-10-03 起）。
+     *    count：本群里可用的共享个数；0 时角标消失。
+     */
+    void SetShareBadgeCount(int count);
+
+    // 头部文件共享按钮上角标的数字（单元测试用）；没有角标或找不到按钮时为 0
+    int GetShareBadgeCount();
+
+    /**
+     *  本群的屏幕共享状态变了（主面板收到 FlamingoMedia.dll 的回报后转来）：本群里的屏幕共享卡片按屏幕共享中心
+     *  记录的最新状态就地重填（正在共享、已结束）。
+     *  @return 重填了的卡片张数
+     */
+    int OnScreenShareStatusChanged();
+
+    /**
+     *  发起人在共享中改了标题与描述（第 15 期，cmd_screenshare_info_notify，由主面板改写本地库之后调用）：
+     *  列表里那张共享卡片换成新的标题与描述并重画。卡片尚未加载进当前视图时安静忽略，下次从服务端取回的已是新内容。
+     *  @param msgid       那张卡片的服务器 msgid
+     *  @param contentJson 改写后的卡片 content 原文
+     *  @return 列表里找到并刷新了这张卡片返回 true
+     */
+    bool OnScreenShareInfoChanged(int64_t msgid, const std::string& contentJson);
+
+    /**
+     *  把一个本地文件传到本群的群文件（录屏完成后的「发送给 某某」，主面板转来；与工具栏「文件」按钮同一条路），
+     *  上传成功后再在群里发一条文件消息（2026-10-05 起，见 SendUploadedFileMessage），群成员在聊天里就能看到。
+     *  离线时提示并放弃。
+     *  @param path 文件完整路径
+     */
+    void SendLocalFile(const std::wstring& path);
+
+    /**
+     *  把一张本地图片按群图片消息发出（2026-10-07：屏幕共享标注「保存为图片」后的「发送到本会话」，主面板转来）。
+     *  与选图、截图发送走同一条 SendImageFile 链路。
+     *  @param path 图片完整路径
+     */
+    void SendLocalImage(const std::wstring& path);
+
+    /**
+     *  以普通文字消息发到本群（屏幕共享第 25 期：主持人「发送邀请到…」把分享链接发到选中的会话）。
+     *  与输入框里点「发送」一样有乐观气泡、回执与会话冒泡，但不带正在引用的消息与 @ 提醒，也不清掉输入框与引用条。
+     *  @param text 要发的文字；为空时什么也不做
+     */
+    void SendPlainText(const std::wstring& text);
+
+    /**
+     *  发送一条快捷回复（发送按钮 ▾ 菜单里点了它，docs/快捷回复方案.md §3.3）：先做与发送键相同的在线检查，
+     *  再按输入框的规则把原文编码成发送正文，经 SendPlainText 发出。输入框、待发引用与 @ 都不动。
+     *    reply：快捷回复原文；为空时什么都不做。
+     */
+    void SendQuickReply(const CString& reply);
+
+    /**
+     *  把 Markdown 编辑器里的一篇文档作为 content.format = "markdown" 的文字消息发到本群（主面板转来，
+     *  docs/Markdown消息方案.md 第 11.3 节）：生成卡片形式的乐观气泡、登记回执后的会话冒泡；不带 @。
+     *  体积与在线状态由编辑器先检查。
+     *  @param sourceUtf8 源文本（UTF-8，换行为 \n），非空
+     *  @return 已发出返回 true；窗口未绑定群或源文本为空时返回 false
+     */
+    bool SendMarkdownDocument(const std::string& sourceUtf8);
+
+    /**
+     *  按屏幕共享中心记录的本群状态刷新头部下方的屏幕共享横幅：有进行中的共享就显示「某某 正在共享屏幕，点击加入 ›」
+     *  （本人在共享时写「你正在共享屏幕」），没有就收起；显隐变化后重排。开窗时与状态变化时调用。
+     */
+    void RefreshScreenShareBanner();
+
+    /**
+     *  本群的群通话状态变了（主面板收到 FlamingoMedia.dll 的回报后转来，docs/群音视频通话方案.md 6.3）：刷新群通话横幅，
+     *  本群里的群通话卡片按群通话中心记录的最新状态就地重填（进行中的人数、已结束）。
+     *  @return 重填了的卡片张数
+     */
+    int OnGroupCallStatusChanged();
+
+    /**
+     *  群通话结束时服务端改写了通话卡片（由主面板改写本地库之后调用）：列表里那张卡片按新内容重填（显示时长、去掉按钮）。
+     *  卡片尚未加载进当前视图时安静忽略，下次从本地库或服务端取回的已是新内容。
+     *  @param msgid       那张卡片的服务器 msgid
+     *  @param contentJson 改写后的卡片 content 原文
+     *  @return 列表里找到并刷新了这张卡片返回 true
+     */
+    bool OnGroupCallCardChanged(int64_t msgid, const std::string& contentJson);
+
+    /**
+     *  按群通话中心记录的本群状态刷新头部下方的群通话横幅：有进行中的群通话就显示「群语音通话进行中 · N 人，点击加入 ›」，
+     *  没有就收起；显隐变化后重排。开窗时与状态变化时调用。
+     */
+    void RefreshGroupCallBanner();
+
+    /**
+     *  群通话窗的「邀请成员」（FlamingoMedia.dll 经主面板请求）：以本群成员去掉 exclude 里的人为候选弹出选人框，
+     *  确认后经群通话中心追加邀请。成员列表还没加载（主面板刚为此打开本窗口）时先记下请求，成员表到达后再弹出。
+     *  @param exclude 已在通话里的人（已加入或振铃中）
+     */
+    void OpenGroupCallInvitePicker(const std::vector<int64_t>& exclude);
+
+    /**
+     *  某个成员在本群里的角色（群通话窗据此决定显不显示「成员管理」）。
+     *  @return 0 成员、1 管理员、2 群主；成员资料还没加载或不是成员时为 -1
+     */
+    int GetMemberRole(int64_t userId) const;
+
+    /**
      *  在窗口顶部居中弹出一条轻量提示，几秒后自动消失（与拖放文件的跳过提示共用同一个
      *  提示条）。主面板用它提示「已转发」这类不需要用户确认的结果。
      *    text：提示文字，调用期间有效。
@@ -129,11 +270,20 @@ public:
 
     /**
      *  某条群消息被撤回：把消息区里对应的气泡就地变成居中提示行。
-     *  由主面板收到 cmd_message_recalled_notify 推送后路由进来。
-     *  @param msgid   被撤消息的服务器 msgid；本窗口没有该条时安静忽略
-     *  @param tipText 提示文案（见 balloonchat::BuildRecallTipText）
+     *  由主面板收到 cmd_message_recalled_notify 推送后路由进来。撤回者是本人、被撤的是本人发出的文字类消息时，
+     *  提示行在 5 分钟内带「编辑」（docs/撤回后重新编辑方案.md），并启动到期定时器。
+     *  @param msgid        被撤消息的服务器 msgid；本窗口没有该条时安静忽略
+     *  @param tipText      提示文案（见 balloonchat::BuildRecallTipText）
+     *  @param recalledByMe 撤回者是否本人（群主、管理员撤回别人的消息时为 false 或撤回者不是消息发送人，都不给「编辑」）
+     *  @param nowMs        撤回推送到达的时间（Unix 毫秒）
+     *  @return 生成了「编辑」时返回快照 JSON，由主面板存进本机库；否则返回空串
      */
-    void OnMessageRecalled(long long msgid, const CString& tipText);
+    std::string OnMessageRecalled(long long msgid, const CString& tipText, bool recalledByMe, long long nowMs);
+
+    /**
+     *  系统设置里改了「发送消息快捷键」（BUG-119）：按新的发送键刷新左下角提示与输入框占位文字。
+     */
+    void OnSendModeChanged();
 
     /**
      *  移除本群里已被本人删除的消息行。收到 cmd_messages_deleted_notify（单条形式）后由
@@ -143,12 +293,21 @@ public:
     void OnMessagesDeleted(const std::vector<long long>& msgids);
 
     /**
-     *  丢弃当前列表，重新拉取最新一页历史。按时间范围清理本地记录之后由主面板调用：
-     *  区间可能盖住列表里任意多行，逐行移除不如整页重载 —— 效果等同于重新打开本窗口。
+     *  丢弃当前列表，重新拉取最新一页历史。按时间范围清理、或本人清空了本会话的聊天记录之后
+     *  由主面板调用：被删的消息可能是列表里任意多行，逐行移除不如整页重载 —— 效果等同于重新
+     *  打开本窗口。
      *  应答照常经 OnHistoryMessages 按"首屏"处理（先清空再渲染）。调试入口（没有群）
      *  下什么都不做。
      */
     void ReloadLatestMessages();
+
+    /**
+     *  本窗口的消息列表里有没有 msgids 中的任何一条。按改写序号同步之后，主面板据此决定要不要
+     *  重新加载最新一页：被改写的消息不在当前视图里时不打乱用户的滚动位置。
+     *  @param msgids 消息 msgid
+     *  @return 至少有一条正在列表里返回 true；列表未就绪返回 false
+     */
+    bool IsShowingAnyMessage(const std::vector<int64_t>& msgids);
 
     /**
      *  某条消息被 Pin / 取消 Pin（收到服务端推送后由主面板调用）：把列表里对应那行的
@@ -158,6 +317,23 @@ public:
      *    pinned：true 钉住、false 取消。
      */
     void OnMessagePinned(long long msgid, bool pinned);
+
+    /**
+     *  收到本群一张接龙卡片的变更推送（cmd_relay_changed_notify，由主面板合并进本地库之后调用）：
+     *  把新名单与状态合并进列表里那张卡片并重画。卡片尚未加载进当前视图、或已被撤回变成了提示行
+     *  时安静忽略 —— 本地库那份已经更新，下次翻到它时自然是最新内容。
+     *    notify：已解析的推送；调用期间有效，本方法不保存它。
+     *  @return 列表里找到并刷新了这张卡片返回 true。
+     */
+    bool OnRelayChanged(const net::RelayChangedNotify& notify);
+
+    /**
+     *  取某人在本群接龙卡片与详情窗里显示的名字：群名片 → 通讯录 → 「用户<id>」，与气泡上的
+     *  发送人名同一套（ResolveSender）。主面板给详情窗解析名字时调用。
+     *    userid：用户 userid。
+     *  @return 显示名，保证非空
+     */
+    CString ResolveRelayMemberName(int64_t userid) const;
 
     /**
      *  设置本群当前被 Pin 的消息条数，并据此刷新头部信息行下方的「已 Pin N 条」提示带
@@ -181,6 +357,16 @@ public:
      *  @param msgid       服务器分配的消息ID
      *  @param timestampMs 服务器消息时间（Unix 毫秒）
      */
+    /**
+     *  发送回执失败（cmd_send_message 应答 code 非 0）：若是本窗口「发起接龙」窗口发出的那张卡片，
+     *  交给它在窗口里提示原因并返回 true；否则按 clientMsgId 找到那条「刚发出」的气泡，标为发送失败
+     *  并在下方写原因（SendFailureText），找到时同样返回 true。主面板据返回值决定还要不要弹通用的
+     *  失败提示框。两种情况下该条都不再冒泡。
+     *  @param clientMsgId 回执里的客户端消息ID
+     *  @param code        回执结果码，取值见 enum error_code
+     */
+    bool OnSendChatAckFailed(const std::string& clientMsgId, int code);
+
     void OnSendChatAckBackfill(const std::string& clientMsgId, long long msgid,
                                long long timestampMs);
 
@@ -218,11 +404,161 @@ public:
     LRESULT OnChatForwardRequest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
+     *  WM_CHAT_REEDIT_REQUEST 处理：发送失败的文字气泡右键选了「重新编辑」。
+     *  lParam=堆上 balloonchatwnd::ChatReeditData*，处理后 delete。把原文插到输入框光标处，正文里的 @
+     *  重新登记进 m_pendingMentions，并把焦点交给输入框。
+     */
+    LRESULT OnChatReeditRequest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_ADD_TO_MEMO 处理：文字消息右键选了「添加到我的备忘」或「添加到群备忘」（docs/备忘与提醒方案.md §8）。
+     *  按「来自 群名 / 发送人，时间」补上来源，生成预填的标题与备注，打开新建本人备忘或群备忘的窗口。
+     *  lParam 为堆上的 ChatAddToMemoRequest，本函数 delete。
+     */
+    LRESULT OnChatAddToMemo(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_VOICE_ACTION 处理（语音消息第 3c 步）：语音气泡上点了发送失败的红色感叹号或右键「重新发送」时重发；
+     *  点气泡（播放 / 停止）在第 3e 步接入，目前只记日志。wParam 为 ChatVoiceAction，lParam 为堆上的
+     *  balloonchatwnd::VoiceActionRequest*，处理后 delete。
+     */
+    LRESULT OnChatVoiceAction(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 把一条待冒泡的发送通知给主面板（FMG_MSG_CONV_SEND_BUMP），没有主面板时什么都不做。
+    void PostSendBump(const ConvSendBumpData& data);
+
+    /**
      *  WM_CHAT_OPEN_MERGED_RECORD 处理：单击了合并卡片。lParam=堆上 std::string*（合并消息的
      *  content 原文）。转投给主面板打开聊天记录查看窗（FMG_MSG_OPEN_MERGED_VIEWER，所有权随之
      *  转交）；调试入口没有主面板，记日志后 delete。
      */
     LRESULT OnChatOpenMergedRecord(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 共享卡片被单击（WM_CHAT_OPEN_SHARE）：lParam 为堆上的共享 id，经文件共享宿主打开后释放；
+    // wParam 为 kChatOpenShareOwn 时是本人的共享，在本机打开，否则打开浏览窗口
+    LRESULT OnChatOpenShare(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // WM_DESTROY：向文件共享宿主注销本群的可用共享个数；bHandled 置 FALSE，基类照常处理
+    LRESULT OnDestroyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // ---------------- 边栏「备忘」页签（备忘与提醒，docs/备忘与提醒方案.md 1.2）----------------
+
+    /**
+     *  FMG_MSG_MEMO_CHANGED：备忘簿有变化。wParam 为受影响的群 id（0 表示全量替换或个人备忘），
+     *  与本群有关时重画「备忘」面板与页签角标。
+     */
+    LRESULT OnMemoChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  按备忘簿重画「备忘」面板：备忘卡片、空状态提示（拉取超时时提示没有加载出来），以及「＋ 新建群备忘」
+     *  按本人角色显隐、拉取超时时置灰。
+     */
+    void RenderMemoPanel();
+
+    /**
+     *  刷新「备忘」页签：标题写成「备忘 N」（备忘簿还没拉到时只写「备忘」）；角标为新到、还没点开过页签的条数，
+     *  页签正选中时把新到的计为已看过、角标为 0。
+     */
+    void RefreshMemoTabBadge();
+
+    /**
+     *  打开群备忘的编辑对话框。
+     *    memoid：0 表示新建（开始时间取今天的下一个整点，提醒全体成员，只有群主、管理员能新建）；否则打开
+     *            这一条，群主、管理员可以修改，普通成员只能查看。
+     */
+    void OpenGroupMemoEditor(int64_t memoid);
+
+    /**
+     *  新建群备忘并预填标题与备注（聊天消息右键「添加到群备忘」，docs/备忘与提醒方案.md §8）。其余字段与
+     *  OpenGroupMemoEditor(0) 相同（今天的下一个整点、提醒全体成员）；权限与备忘列表的检查也相同，不满足时不打开。
+     *    titleUtf8 / noteUtf8：预填的标题与备注（UTF-8，已按字数上限截断）。
+     */
+    void OpenGroupMemoEditorWithPrefill(const std::string& titleUtf8, const std::string& noteUtf8);
+
+    /**
+     *  备忘卡片的右键菜单：群主、管理员有「修改」「删除」，普通成员只有「查看」。
+     *    memoid：被右键的那张卡片的备忘 ID。
+     */
+    void ShowGroupMemoMenu(int64_t memoid);
+
+    /**
+     *  记下第 cardIndex 张备忘卡片的备忘 ID，向自己投一条 kMemoCardActionMsg，等当前的控件通知处理完再做。
+     *    action：MemoCardAction 的取值；cardIndex：卡片序号，无效时什么都不做。
+     */
+    void PostMemoCardAction(int action, int cardIndex);
+
+    /**
+     *  kMemoCardActionMsg：执行卡片上的操作。wParam 为 MemoCardAction，备忘 ID 取自 m_pendingMemoCardId。
+     */
+    LRESULT OnMemoCardActionMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  kMustReadConfirmMsg：入群必读弹窗里点了「我已阅读」，发送确认请求（1333）。界面等服务端推 1317 后再恢复。
+     */
+    LRESULT OnMustReadConfirmMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  kMustReadShowMsg：输入区的提示行或必读卡片被点了，弹出入群必读公告（等当前的控件通知处理完再弹）。
+     */
+    LRESULT OnMustReadShowMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 以「入群必读」模式弹出必读公告（标题「入群必读」，按钮「我已阅读」）；必读公告的内容还没取到时什么都不做
+    void ShowMustReadPopup();
+
+    // 发 1336 拉一次本群问答，面板置为「正在加载」（真实群才拉）
+    void RequestGroupQa();
+
+    // 按当前的问答列表、搜索框文字与本人角色重建「问答」面板的卡片、空状态提示与「＋ 新建问答」；
+    // 面板还没排过版（宽度为 0）时什么都不做，切到问答 Tab 时再画
+    void RenderQaPanel();
+
+    /**
+     *  记下第 cardIndex 张问答卡片对应的问答，向自己投一条 kQaCardActionMsg，等当前的控件通知处理完再做。
+     *    action：QaCardAction 的取值；cardIndex：卡片序号，无效时什么都不做（kQaCardActionAdd 不看序号）。
+     */
+    void PostQaCardAction(int action, int cardIndex);
+
+    /**
+     *  kQaCardActionMsg：执行问答卡片上的操作或「＋ 新建问答」。wParam 为 QaCardAction，问答取自 m_pendingQaItem。
+     */
+    LRESULT OnQaCardActionMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    //机器人区域的延后操作（kGroupBotActionMsg）：弹资料卡或打开群机器人管理窗
+    LRESULT OnGroupBotActionMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  kQaEditResultMsg：问答编辑窗点了「保存」且校验通过，lParam 为堆上的 balloonchatwnd::QaEditResult*（这里 delete），
+     *  发送 cmd_save_group_qa。
+     */
+    LRESULT OnQaEditResultMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_MOUSEMOVE / WM_MOUSELEAVE：按光标位置更新备忘卡片的悬停态（理由见 BalloonMemo/MemoCardList.h）。
+     *  只旁听、不消费，bHandled 置 FALSE。
+     */
+    LRESULT OnMemoMouseMoveMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnMemoMouseLeaveMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  备忘卡片重建之后按当前光标位置补一次悬停判定（光标停着不动时不会有 WM_MOUSEMOVE）。
+     */
+    void RefreshMemoHoverAtCursor();
+
+    /**
+     *  选择提醒对象用的候选人：本群成员（取自成员列表），不含本人。
+     */
+    std::vector<net::ContactItem> BuildMemoCandidates() const;
+
+    // 屏幕共享卡片被单击（WM_CHAT_JOIN_SCREENSHARE）：lParam 为堆上的 ScreenShareJoinRequest，经屏幕共享中心交给
+    // FlamingoMedia.dll 加入共享后释放
+    LRESULT OnChatJoinScreenShare(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_RELAY_ACTION：消息列表里点了接龙卡片、卡片底部按钮或带 cardmsgid 的接龙系统提示行。
+     *  wParam 为 balloonchatwnd::ChatRelayAction；lParam 为堆上的 long long*（卡片 msgid），本函数 delete。
+     *  卡片在当前视图里时带上它的内容与发起人，否则留空由主面板从本地库补齐；卡片已撤回（列表里
+     *  那一行已变成提示行）时不打开。请求经 FMG_MSG_OPEN_RELAY_DETAIL 投给主面板。
+     */
+    LRESULT OnChatRelayAction(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_CHAT_MENTION_ACTION 处理：气泡里某个 @某人 片段的右键菜单被选中了。
@@ -244,9 +580,11 @@ public:
     LRESULT OnChatImageAction(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  WM_CHAT_FILE_ACTION 处理：文件气泡底部按钮被点。群里的文件消息只来自转发（本窗口
-     *  发文件走群文件库，不发文件消息），没有接收 / 拒绝流程，也没有本端发送中的那一笔，
-     *  所以只有四类动作：打开 / 打开所在文件夹 / 另存为、下载与重新下载、取消下载。
+     *  WM_CHAT_FILE_ACTION 处理：文件气泡底部按钮被点。群里的文件消息来自转发，或来自宿主「发送到会话」
+     *  （先上传群文件，成功后才发消息，见 SendUploadedFileMessage，所以本人气泡一出现就是已完成态），
+     *  没有接收 / 拒绝流程，也没有本端上传中的那一笔，
+     *  所以只有四类动作：打开 / 打开所在文件夹 / 另存为、下载与重新下载、取消下载；本人发出、被服务端拒绝的那条
+     *  点「重新发送」时重发文件消息（见 ResendGroupFileMessage）。
      *  lParam=堆上 balloonchatwnd::ChatFileActionData*，处理后 delete。
      */
     LRESULT OnChatFileAction(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -301,12 +639,46 @@ public:
     static bool StarredThunk(void* userdata, long long uid);
 
     /**
+     *  ChatMessageList / GroupMemberItem 的「本人是否在本群关注了 TA 的发言」查询钩子（静态转发到实例），
+     *  实例内部经 FMG_MSG_QUERY_GROUP_FOLLOW 同步问主面板 —— 群关注名单只有主面板那一份
+     *  （docs/消息提醒模式与消息盒子方案.md §12）。
+     *    userdata：本窗口 this。
+     *    uid：     待查的 userid。
+     *  @return 已关注返回 true；拿不到窗口 / 没有宿主主面板（调试入口）返回 false。
+     */
+    static bool GroupFollowThunk(void* userdata, long long uid);
+
+    /**
      *  设置本人在本群的角色（0成员 1管理员 2群主，见 group_member_role）。决定
      *  右上角"群管理"齿轮按钮是否显示：仅群主 / 管理员显示。可在 CreateAndShow
      *  前后调用（前调只记录，InitUi 据此设显隐；后调即时刷新齿轮显隐并重排头部）。
      *    role：本人角色。
      */
     void SetMyRole(int role);
+
+    /**
+     *  设置本群的仅通知模式开关（原称全员禁言，docs/群管理接入方案.md §14），来自群列表、群资料应答与资料变更推送。
+     *  本人是普通成员且开关开着时，输入区换成灰字提示行；开关关闭或本人是群主、管理员时恢复输入框。
+     *  与 SetMyRole 一样可在 CreateAndShow 前后调用（前调只记录，InitUi 据此设显隐）。
+     *    muteall：非 0 为开启。
+     */
+    void SetMuteAll(int muteall);
+
+    /**
+     *  设置本群的「谁可以 @ 全体」，来自群资料应答、群列表（沿用缓存）与资料变更推送。只记下来：
+     *  下次弹 @ 浮层时据此与本人角色一起决定有没有「所有人」（CanMentionAll）。可在 CreateAndShow 前后调用。
+     *    scope：0 仅群主和管理员，1 所有人（net::GroupInfoResult::m_atallscope）。
+     */
+    void SetAtAllScope(int scope);
+
+    /**
+     *  本人在本群的角色（0成员 1管理员 2群主，见 group_member_role）；成员列表到达之前为默认的普通成员。
+     *  备忘中枢据此判断本人能不能修改群备忘。
+     */
+    int GetMyRole() const
+    {
+        return m_myRole;
+    }
 
     /**
      *  更新某个群成员的在线状态，成员侧栏里该成员头像右下角的徽标随之重画。由主面板在三个
@@ -326,11 +698,26 @@ public:
     void OnRecvGroupMessage(const net::MessageNotify& notify);
 
     /**
+     *  按本群桌面字幕的状态高亮或恢复头部「字幕模式」按钮（docs/聊天字幕模式方案.md 第 1 节第 11 条）：
+     *  高亮时只把图标画成蓝色，悬停提示同时换成「字幕已开启」，关着时为「字幕已关闭」。
+     *  字幕由主面板持有、不随本窗口关闭；主面板在字幕开关时、以及建出本窗口后调用。窗口还没建好时什么都不做。
+     *  @param active true 字幕开着（按钮高亮），false 关着
+     */
+    void SetSubtitleHighlight(bool active);
+
+    /**
      *  收到本群成员列表：填右侧成员侧栏，并建"发送人 userid → 昵称/头像色"映射，
      *  供气泡显示真实发送人。由主面板的 OnGroupMembersArrived 路由调用。
      *    members：群成员解析结果。
      */
     void OnGroupMembersArrived(const net::GroupMembersResult& members);
+
+    /**
+     *  设置企业部门数组，供「成员」页签的部门树视图使用（docs/群成员部门树方案.md）。主面板新开群聊窗时、以及
+     *  收到通讯录（1201）时推给已打开的群聊窗。当前是部门树视图且成员已到齐时按新部门数组重建成员列表。
+     *    departments：1201 应答的部门数组（本窗口复制一份）。
+     */
+    void SetOrgDepartments(const std::vector<net::DepartmentItem>& departments);
 
     /**
      *  收到本群文件列表的一页应答：累积进拉取缓冲；若 hasmore 为真则继续拉下一页，
@@ -339,6 +726,15 @@ public:
      *    result：cmd_get_group_files 应答解析结果（本页条目 + hasmore + 回显 offset）。
      */
     void OnGroupFilesArrived(const net::GetGroupFilesResult& result);
+
+    /**
+     *  切到右侧边栏「群文件」Tab 并定位到某个文件：把分类重置为「全部」、清空文件名搜索、
+     *  翻到该文件所在的页、以淡黄底标出它并滚动到可见。主面板全局搜索点群文件结果时调用。
+     *  群文件库还没拉全（刚开窗）时先记下，拉全后在 OnGroupFilesArrived 里再定位；库里
+     *  找不到这个文件（已被删除）时只切到群文件 Tab，记一条日志。
+     *    entryId：群文件条目 id（字符串编码的 int64）；空串时只切 Tab。
+     */
+    void ShowGroupFileEntry(const std::string& entryId);
 
     /**
      *  收到本群公告列表应答：填边栏「公告」面板并渲染。
@@ -359,17 +755,55 @@ public:
     void OnAnnouncementChanged(const net::GroupAnnouncementNotify& notify);
 
     /**
-     *  设置头部那行公告摘要（最新一条已发布公告的标题）。
-     *  数据来自群资料里的公告快照（announcetitle），随 1303 / 1318 到达。
-     *    title：公告标题；空串表示本群没有公告，该行不画。
+     *  收到查询入群必读的应答（cmd_get_must_read=1335，主面板按 groupid 转来，docs/群公告接入方案.md §14）：
+     *  记下本人是否待确认与必读公告的内容，按结果切换输入区；本人待确认且本窗口还没弹过时自动弹出必读公告。
+     *  失败应答只记日志，输入区保持原状。
+     *    result：1335 应答解析结果。
      */
-    void SetAnnouncementTitle(LPCTSTR title);
+    void OnMustReadArrived(const net::MustReadResult& result);
 
     /**
-     *  设置头部那行的成员数「(N 人)」。
-     *    count：成员数；<= 0 时不画这一段。
+     *  重新查询一次本人在本群的入群必读状态（发 1335）。主面板收到本群的 1317（changetype 7）或 1318 推送时调用。
      */
-    void SetHeaderMemberCount(int count);
+    void RefreshMustRead();
+
+    /**
+     *  收到本群问答（cmd_get_group_qa=1336，主面板按 groupid 转来，docs/群问答方案.md）：替换本地列表并重画「问答」面板。
+     *  失败应答把面板置为「没有加载出来」。
+     *    result：1336 应答解析结果。
+     */
+    void OnGroupQaArrived(const net::GroupQaResult& result);
+
+    /**
+     *  本群问答变了（cmd_group_qa_changed_notify=1339）：拉过问答的窗口重拉一次；没打开过「问答」页签的不拉，
+     *  等用户点开时自然拉到最新的。
+     */
+    void OnGroupQaChanged();
+
+    /**
+     *  收到本群可用的机器人（cmd_get_group_bots=2801，主面板按 groupid 转来，docs/机器人方案.md §4.2）：替换本地列表，
+     *  刷新已显示消息的发送者名字与「机器人」标识、成员页签的机器人分组与 @ 候选。失败应答保留原列表。
+     *    result：2801 应答解析结果。
+     */
+    void OnGroupBotsArrived(const net::GroupBotsResult& result);
+
+    /**
+     *  本群可用的机器人有变化（cmd_group_bots_changed_notify=2820）：重拉 2801。
+     */
+    void OnGroupBotsChanged();
+
+    /**
+     *  本群的机器人列表（含停用的与在本群关闭了的），2801 到达之前为空。供主面板与插件宿主查询。
+     */
+    const std::vector<net::GroupBotInfo>& GetGroupBots() const;
+
+    /**
+     *  设置头部那行群简介（标题栏下方、图标按钮左侧，一行显示，过长时以省略号截断）。
+     *  数据来自群资料里的 intro 字段，随 1303 应答与 1318 资料变更推送到达。
+     *  2026-10-04 之前这一行显示的是最新公告标题，现已改为群简介。
+     *    intro：群简介原文（可含换行，显示时整理成一行）；空串表示本群没有填写群简介，该行不画。
+     */
+    void SetGroupIntro(LPCTSTR intro);
 
     /**
      *  把右侧边栏切到「公告」Tab（并在需要时拉一次公告）。
@@ -471,14 +905,36 @@ public:
     //更新本端"发送中"文件气泡的上传进度（按 clientMsgId 定位）。
     void OnFileSendProgress(const std::string& clientMsgId, long long sent, long long total);
     //收尾本端"发送中"文件气泡（按 clientMsgId 定位）：成功置完成态；失败标失败；
-    //cancelled 为 true（用户点了「取消」）则置「已取消」态而非失败态。
-    void OnFileSendResult(bool ok, bool cancelled, const std::string& clientMsgId);
+    //cancelled 为 true（用户点了「取消」）则置「已取消」态而非失败态。失败时 errcode 为失败错误码，
+    //气泡下方据此写原因（如文件名包含敏感词，见 FileSendFailureText）。
+    void OnFileSendResult(bool ok, bool cancelled, const std::string& clientMsgId, int errcode = 0);
     //更新收到的某条文件的下载进度（按服务器 msgid 定位）。
     void OnFileDownloadProgress(long long msgid, long long received, long long total);
     //收到的某条文件下载完成：按 msgid 填本地落地路径并渲染。
     void OnFileDownloaded(long long msgid, const std::wstring& localPath);
     //收到的某条文件下载失败：按 msgid 标失败；cancelled 为 true 则标「已取消」。
     void OnFileDownloadFailed(long long msgid, bool cancelled);
+    /**
+     *  一段语音下载有了结果（主面板按 md5 广播）：把本窗口里该段语音的气泡改为就绪或下载失败（语音消息第 3d-3 步）。
+     *  @param md5       语音文件内容 MD5
+     *  @param ok        是否下载成功
+     *  @param localPath 成功时文件的本地完整路径
+     */
+    void OnVoiceDownloadResult(const std::string& md5, bool ok, const std::wstring& localPath);
+    /**
+     *  发语音的上传结果（主面板按会话路由来，语音消息第 3c 步）。成功时不改气泡，等发送回执回填 msgid；
+     *  失败时把那条语音气泡标为发送失败（红色感叹号，气泡下方写原因），并取消这次发送的会话冒泡。
+     *  @param ok          上传并发出是否成功
+     *  @param clientMsgId 发送时的客户端消息ID，定位那条语音气泡
+     *  @param errcode     失败错误码（见 enum error_code），据此写失败原因
+     */
+    void OnVoiceSendResult(bool ok, const std::string& clientMsgId, int errcode);
+    /**
+     *  一条语音在别处（本窗口自己、或消息记录窗）播放过了（主面板写库后按会话转来，语音消息第 6a 步）：
+     *  把本窗口里同一条语音的未听红点去掉。本窗口自己播放时气泡早已记为已听，再调一次不会有变化。
+     *  @param msgid 那条语音的服务器 msgid
+     */
+    void OnVoicePlayedElsewhere(long long msgid);
 
     BEGIN_MSG_MAP(CBalloonGroupChatWindow)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
@@ -497,6 +953,7 @@ public:
         MESSAGE_HANDLER(WM_ACTIVATE, OnActivateForMention)
         MESSAGE_HANDLER(kOpenSendMenuMsg, OnOpenSendMenu)
         MESSAGE_HANDLER(kDoScreenshotMsg, OnDoScreenshot)
+        MESSAGE_HANDLER(kOpenRecordMenuMsg, OnOpenRecordMenu)
         MESSAGE_HANDLER(WM_VIEW_CHAT_IMAGE, OnViewImageMsg)
         MESSAGE_HANDLER(WM_CHAT_IMAGE_READY, OnImageReady)
         MESSAGE_HANDLER(WM_CHAT_OPEN_LINK, OnChatOpenLink)
@@ -513,13 +970,52 @@ public:
         MESSAGE_HANDLER(WM_CHAT_PIN_REQUEST, OnChatPinRequest)
         MESSAGE_HANDLER(WM_CHAT_DELETE_REQUEST, OnChatDeleteRequest)
         MESSAGE_HANDLER(WM_CHAT_FORWARD_REQUEST, OnChatForwardRequest)
+        MESSAGE_HANDLER(WM_CHAT_REEDIT_REQUEST, OnChatReeditRequest)
+        MESSAGE_HANDLER(WM_CHAT_ADD_TO_MEMO, OnChatAddToMemo)
+        MESSAGE_HANDLER(WM_CHAT_VOICE_ACTION, OnChatVoiceAction)
         MESSAGE_HANDLER(WM_CHAT_OPEN_MERGED_RECORD, OnChatOpenMergedRecord)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_SHARE, OnChatOpenShare)
+        MESSAGE_HANDLER(WM_CHAT_JOIN_SCREENSHARE, OnChatJoinScreenShare)
+        //点了群公告卡片：打开公告详情窗
+        MESSAGE_HANDLER(WM_CHAT_OPEN_ANNOUNCEMENT_CARD, OnChatOpenAnnouncementCard)
+        //点了群备忘卡片：打开这条备忘
+        MESSAGE_HANDLER(WM_CHAT_OPEN_MEMO_CARD, OnChatOpenMemoCard)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_CLOUD_RECORD_CARD, OnChatOpenCloudRecordCard)
+        //点了代码片段卡片：打开代码查看窗
+        MESSAGE_HANDLER(WM_CHAT_OPEN_CODE_VIEWER, OnChatOpenCodeViewer)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_MARKDOWN_PREVIEW, OnChatOpenMarkdownPreview)
+        //「发送代码」窗口交回要发送的代码
+        MESSAGE_HANDLER(ballooncode::kMsgCodeComposeSend, OnCodeComposeSend)
+        //输入框的粘贴识别通知：显示或收起「以代码片段发送」提示条
+        MESSAGE_HANDLER(balloonchatwnd::kMsgChatCodePaste, OnCodePasteNotify)
+        //公告详情窗上点了「查看全部」：切到右侧「公告」页签
+        MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_ANNOUNCE, OnOpenGroupAnnounceMsg)
+        //点了接龙卡片、卡片底部按钮或接龙系统提示行：请主面板打开详情窗
+        MESSAGE_HANDLER(WM_CHAT_RELAY_ACTION, OnChatRelayAction)
         MESSAGE_HANDLER(WM_CHAT_MENTION_ACTION, OnChatMentionAction)
         MESSAGE_HANDLER(WM_CHAT_IMAGE_ACTION, OnChatImageAction)
         MESSAGE_HANDLER(WM_CHAT_FILE_ACTION, OnChatFileAction)
         MESSAGE_HANDLER(WM_CHAT_LOAD_OLDER, OnChatLoadOlder)
         MESSAGE_HANDLER(WM_CHAT_REPLY_REQUEST, OnChatReplyRequest)
         MESSAGE_HANDLER(WM_CHAT_LOCATE_QUOTED, OnChatLocateQuoted)
+        //备忘中枢的备忘簿有变化：重画「备忘」面板与页签角标
+        MESSAGE_HANDLER(FMG_MSG_MEMO_CHANGED, OnMemoChanged)
+        //备忘卡片上的操作（「修改」「删除」、双击、右键），由卡片的通知投给自己后在这里执行
+        MESSAGE_HANDLER(kMemoCardActionMsg, OnMemoCardActionMsg)
+        //入群必读弹窗里点了「我已阅读」：发送确认请求
+        MESSAGE_HANDLER(kMustReadConfirmMsg, OnMustReadConfirmMsg)
+        //输入区提示行或必读卡片被点：弹出必读公告
+        MESSAGE_HANDLER(kMustReadShowMsg, OnMustReadShowMsg)
+        //问答卡片上的「发到群里」「修改」「删除」与「＋ 新建问答」，由控件通知投给自己后在这里执行
+        MESSAGE_HANDLER(kQaCardActionMsg, OnQaCardActionMsg)
+        MESSAGE_HANDLER(kGroupBotActionMsg, OnGroupBotActionMsg)
+        //问答编辑窗交回的问题与答案：发送保存请求
+        MESSAGE_HANDLER(kQaEditResultMsg, OnQaEditResultMsg)
+        //备忘卡片的悬停按光标位置判定，只旁听、不消费
+        MESSAGE_HANDLER(WM_MOUSEMOVE, OnMemoMouseMoveMsg)
+        MESSAGE_HANDLER(WM_MOUSELEAVE, OnMemoMouseLeaveMsg)
+        //窗口销毁：注销本群的可用共享个数（不拦截，交给基类继续处理）
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroyMsg)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -573,8 +1069,22 @@ private:
     void RefreshPinBanner();
 
 public:
+    // 按文件共享模块是否可用（已加载且本企业的功能开关打开）显示或隐藏工具栏的「文件共享」按钮；显隐变化后
+    // 对按钮所在的行重排（UI 约定第 5 条）。窗口建好时调一次；运行中收到 1013 功能开关推送后由主面板再调
+    void ApplyShareButtonVisibility();
+
+    // 按群通话是否可用（FlamingoMedia.dll 已加载且本企业的功能开关打开）显示或隐藏头部的「语音通话」「视频通话」按钮；
+    // 显隐变化后对按钮所在的行重排（UI 约定第 5 条）。窗口建好时调一次；运行中收到 1013 功能开关推送后由主面板再调
+    void ApplyGroupCallButtonVisibility();
 
 private:
+    /**
+     *  首屏历史渲染之前发出的 Markdown 文档都已确认入库、且首屏已渲染时，重新拉一次最新一页，
+     *  让被首屏渲染清掉的卡片按服务端快照显示出来（判断见 balloonchatwnd::MarkdownEarlySendTracker）。
+     *  条件不满足时什么都不做。
+     */
+    void ReloadIfMarkdownEarlySendsDone();
+
     /**
      *  WM_CLOSE 处理：销毁本窗口；m_hMainDlg 非空时同时请求
      *  退出程序。
@@ -673,8 +1183,65 @@ private:
      *  发送一段文字到本群（乐观回显气泡 + 网络发文本 + 冒泡会话）。供 DoSend 的
      *  有序发送逐段调用。
      *    text：本段文字（非空）。
+     *    withQuote：是否带上正在引用的消息与 @ 提醒（并在发出后收起引用条）；SendPlainText 传 false，
+     *               引用条与输入框保持原样（屏幕共享第 25 期：分享链接的邀请不该带上用户正在编辑的引用）
      */
-    void SendGroupTextPart(const CString& text);
+    void SendGroupTextPart(const CString& text, bool withQuote = true);
+
+    // 打开 Markdown 编辑器，发送对象预选本群（工具栏的 Markdown 编辑器按钮、Markdown 消息的「重新编辑」共用；
+    // docs/Markdown消息方案.md 第 11.3 节）。调试入口没有群 id 时不预选发送对象。
+    //   sourceUtf8：预填的 Markdown 源文本（UTF-8）；为空时打开空白文档
+    void OpenMarkdownEditor(const std::string& sourceUtf8);
+
+    // 打开「发送代码」窗口（工具栏「代码」按钮、粘贴识别提示条、重新编辑、发送被拒后放回代码共用）。
+    //   initialCode：预填的代码；为空时取输入框里选中的文字
+    //   langId：     预选的语言标识（如 "cpp"）；为空时选「自动识别」
+    //   notes：      预填的批注（重新编辑、发送被拒后放回时带回），行号指 initialCode 的行；可以为空
+    void OpenCodeCompose(const std::wstring& initialCode, const std::string& langId,
+                         const std::vector<codesnippet::CodeNote>& notes = std::vector<codesnippet::CodeNote>());
+
+    // 「发送代码」窗口上次手选的语言标识（用户配置）；没有手选过或没有登录时为空串
+    std::string RememberedCodeLang() const;
+
+    // 发出一段代码片段：乐观气泡按代码卡片显示，网络层按文字消息加 format="code" 与 lang 发出，带上待发的引用。
+    // 离线时提示并放弃，发出去会超过单条消息上限时同样提示并放弃。调试入口（没有真实会话）下只在本地显示。
+    //   code：规范化后的代码；lang：语言，取值见 codesnippet::CodeLanguage
+    //   notes：批注（docs/代码片段方案.md 第 10.5 节），行号指 code 的行，已整理；没有批注时为空
+    //   quote：带上的引用；为 NULL 时用输入框里待发的引用、发出后清掉它；不为 NULL 时用它（追加批注时引用原消息，
+    //          docs/代码片段方案.md 第 11.3 节），输入框里待发的引用保持不动
+    //   返回：已发出（调试入口下为已在本地显示）时为 true；离线、超限而没有发出时为 false
+    bool SendCodeSnippet(const std::wstring& code, int lang,
+                         const std::vector<codesnippet::CodeNote>& notes = std::vector<codesnippet::CodeNote>(),
+                         const net::ReplyQuote* quote = NULL);
+
+    // 打开一条代码片段的代码查看窗（docs/代码片段方案.md 第 12 节）：已有服务器 msgid 的可以在查看窗里追加批注，
+    // 发送时查看窗把结果经 kMsgCodeComposeSend 交回本窗口。
+    //   code、lang、notes：这条消息的代码、语言与批注（notes 里作者为 0 的视为这条消息的发送者）
+    //   key：消息标识（msgid 的十进制串或 clientMsgId），查看窗据此复用已打开的窗口
+    //   msgid：服务器 msgid；不大于 0 时只能查看
+    //   senderId：这条消息的发送者 userid；fromMe：是不是本人发的
+    //   openNotesPane：打开时展开批注栏（聊天卡片右键「添加批注…」、没能发出、重新编辑时为 true）
+    //   editedNotes：没能发出或重新编辑时放回的批注；为空时从这条消息的批注开始
+    void ShowCodeViewer(const std::wstring& code, int lang, const std::vector<codesnippet::CodeNote>& notes,
+                        const std::string& key, long long msgid, long long senderId, bool fromMe, bool openNotesPane,
+                        const std::vector<codesnippet::CodeNote>& editedNotes = std::vector<codesnippet::CodeNote>());
+
+    // 代码片段批注作者的显示名（userid 到名字），群聊里按群成员表取名字（取不到时写「用户<id>」）。代码查看窗与批注模式的批注栏据此写作者
+    //   notes：批注，其中各条的作者都取名字；baseSenderId：代码片段的发送者 userid，也取名字
+    std::map<long long, std::wstring> CodeNoteAuthorNames(const std::vector<codesnippet::CodeNote>& notes,
+                                                          long long baseSenderId) const;
+
+    // 本人 userid；没有登录态时为 0
+    long long SelfUserIdForCode() const;
+
+    // 追加批注时引用原消息：按 msgid 在消息列表里找到它并生成引用；找不到时返回无效的引用（m_valid 为 false），
+    // 此时不带引用照常发出
+    net::ReplyQuote CodeBaseQuote(long long baseMsgId);
+
+    // 显示或收起输入框上方的「以代码片段发送」提示条，并对它所在的输入区块补一次布局（SetVisible 不会重排）。
+    //   show：true 显示；false 收起，同时清掉显示时记下的输入框文字
+    void ShowCodePasteBar(bool show);
+
 
     /**
      *  发送输入框里的一张内联图：直接发 m_pendingShotPaths[imageIndex] 这个源文件。
@@ -727,8 +1294,253 @@ private:
      *    list：   消息列表控件，供本端气泡解析引用缩略图路径；可为 NULL。
      *  @return 气泡数据，由调用方追加进列表
      */
+    // 共享卡片：发送人的填法同 MakeGroupMergedMessage，再套用卡片内容（分享者名取发送人名，含 DLL 手里的最新状态）
+    balloonchatwnd::ChatMessage MakeGroupShareMessage(const net::MessageNotify& m, bool fromMe,
+                                                      balloonchatwnd::ChatMessageList* list);
+
+    // 工具栏「文件共享」：在按钮旁弹出本会话的共享列表浮层（FlamingoFileShare.dll 提供）
+    void OpenConversationShares();
+
+    // 屏幕共享卡片：发送人（发起人）的填法同 MakeGroupShareMessage，再套用卡片内容与屏幕共享中心记录的状态
+    /**
+     *  构造一张群通话卡片（msgtype=16，复用屏幕共享卡片的版式），实时推送与历史加载共用。
+     *  @param m      消息（m_groupCallContent 为卡片 content）
+     *  @param fromMe 是否本人发起
+     *  @param list   消息列表（取本人头像等）
+     */
+    balloonchatwnd::ChatMessage MakeGroupCallCardMessage(const net::MessageNotify& m, bool fromMe,
+                                                         balloonchatwnd::ChatMessageList* list);
+
+    /**
+     *  头部「语音通话」「视频通话」按钮：本群已有进行中的群通话时直接加入那一场；否则以本群成员为候选弹出选人框，
+     *  选好后发起（docs/群音视频通话方案.md 第 2 节第 1 条「选人振铃」）。离线、模块没有加载时提示并放弃。
+     *  @param media 1 群语音、2 群视频
+     */
+    void StartGroupCallFromHeader(int media);
+
+    /**
+     *  群通话选人框确认（选人框的 IMemberPickSink 转来）：发起时交给群通话中心发起，通话中邀请时交给它追加邀请。
+     *  @param userIds 已选的人
+     */
+    void OnGroupCallMembersPicked(const std::vector<int64_t>& userIds);
+
+    balloonchatwnd::ChatMessage MakeGroupScreenShareMessage(const net::MessageNotify& m, bool fromMe,
+                                                            balloonchatwnd::ChatMessageList* list);
+
+    // ---- 群公告卡片（msgtype=22）与群备忘卡片（msgtype=23），docs/群公告接入方案.md §13.4、docs/备忘与提醒方案.md §7.3 ----
+    /**
+     *  构造一条群公告卡片或群备忘卡片的气泡：本人发的画在右侧，别人发的带发送人名字与头像；卡片内容由
+     *  ApplyAnnouncementCard / ApplyMemoCard 套用。群备忘卡片另按备忘簿设好可用状态。实时推送与翻历史共用。
+     *    m：消息（msgtype 须为 22 或 23）；fromMe：是否本人发的；list：消息列表，取本人头像用。
+     */
+    balloonchatwnd::ChatMessage MakeGroupInfoCardMessage(const net::MessageNotify& m, bool fromMe,
+                                                         balloonchatwnd::ChatMessageList* list);
+
+    /**
+     *  构造一条云端录像卡片（msgtype=24，docs/屏幕共享与录制方案.md 12.6.5）的气泡：本人发的画在右侧，别人发的带发送人
+     *  名字与头像；卡片内容由 ApplyCloudRecordCard 套用。实时推送与翻历史共用。
+     *    m：消息（msgtype 须为 24）；fromMe：是否本人发的；list：消息列表，取本人头像用。
+     */
+    balloonchatwnd::ChatMessage MakeGroupCloudRecordMessage(const net::MessageNotify& m, bool fromMe,
+                                                            balloonchatwnd::ChatMessageList* list);
+
+    /**
+     *  卡片副标题里写的操作人名字：成员表或通讯录里查得到时用那里的显示名（群名片优先），查不到返回空串，
+     *  卡片随之退回服务端写进卡片里的昵称，不显示「用户<id>」。
+     *    userId：发布人或备忘的操作人，即卡片的发送者。
+     */
+    CString InfoCardActorName(int64_t userId) const;
+
+    /**
+     *  公告被删除（1326 带 cardmsgid 与改写后的卡片）：把列表里那张公告卡片换成已删除形态。列表里没有这一条时什么都不做。
+     *    cardMsgId：卡片的 msgid；cardContent：改写后的卡片 content。
+     */
+    void ApplyAnnouncementCardDeleted(int64_t cardMsgId, const std::string& cardContent);
+
+    /**
+     *  按备忘簿重新判定列表里每张群备忘卡片是否可用（备忘被删除、本人被移出提醒对象后失效），有变化的就地刷新。
+     *  @return 刷新了几张卡片
+     */
+    int RefreshMemoCardsAvailability();
+
+    /**
+     *  WM_CHAT_OPEN_ANNOUNCEMENT_CARD：点了可点的群公告卡片，用卡片里的内容打开公告详情窗（m_announceCardDlg）。
+     *  lParam 为堆上的 InfoCardOpenRequest，处理后 delete。
+     */
+    LRESULT OnChatOpenAnnouncementCard(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 代码片段卡片请求打开代码查看窗（WM_CHAT_OPEN_CODE_VIEWER）：lParam 为堆上的 CodeViewerOpenRequest，
+    // 按消息标识打开或调出查看窗后释放（docs/代码片段方案.md 第 3.3 节）
+    LRESULT OnChatOpenCodeViewer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // Markdown 卡片请求打开预览窗口（WM_CHAT_OPEN_MARKDOWN_PREVIEW）：lParam 为堆上的 MarkdownPreviewOpenRequest，
+    // 交给 Markdown 编辑器管理器打开或调出预览窗口后释放（docs/Markdown消息方案.md 第 11.3 节）
+    LRESULT OnChatOpenMarkdownPreview(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 「发送代码」窗口把要发送的代码交回本窗口（ballooncode::kMsgCodeComposeSend）：lParam 为堆上的 CodeComposeResult，
+    // 手选的语言记进用户配置，代码按代码片段发出后释放（docs/代码片段方案.md 第 3.1 节）
+    LRESULT OnCodeComposeSend(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 输入框的粘贴识别通知（balloonchatwnd::kMsgChatCodePaste，docs/代码片段方案.md 第 3.1 节）：wParam 为 1 表示
+    // 刚往空输入框里粘贴了文字，像代码时显示「以代码片段发送」提示条；为 0 表示内容有变化，提示条显示之后
+    // 内容与显示时不同（继续输入、删改、发送）就收起
+    LRESULT OnCodePasteNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_MEMO_CARD：点了可点的群备忘卡片，按 OpenGroupMemoEditor 打开备忘簿里的最新版本
+     *  （群主、管理员修改，其他人只读）；备忘簿里已经没有这一条时把卡片转为失效。lParam 处理同上。
+     */
+    LRESULT OnChatOpenMemoCard(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_CLOUD_RECORD_CARD：点了云端录像卡片的「播放」，交给屏幕共享中心转 FlamingoMedia.dll 下载并打开
+     *  （docs/屏幕共享与录制方案.md 12.6.5）。lParam 为堆上的 CloudRecordOpenRequest，本函数 delete。
+     */
+    LRESULT OnChatOpenCloudRecordCard(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  FMG_MSG_OPEN_GROUP_ANNOUNCE：公告详情窗（m_announceCardDlg，宿主是本窗口）上点了「查看全部」，切到右侧「公告」页签。
+     *  wParam 为群 id，不是本群时忽略。
+     */
+    LRESULT OnOpenGroupAnnounceMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 按 FlamingoMedia.dll 是否已加载显示或隐藏头部的「共享屏幕」按钮；显隐变化后对按钮所在的行重排（UI 约定第 5 条）
+    void ApplyScreenShareButtonVisibility();
+
+    // ---- 语音消息（第 3b 步建立，第 6g 步改由录音会话驱动，交互见 docs/语音消息方案.md 第 3.1 节）----
+    // 点了工具栏「语音消息」：交给录音会话开始录音，成功时显示录音条，失败时（麦克风被通话占用、打不开等）提示原因
+    void StartVoiceRecording();
+
+    // 以下为 balloonchatwnd::IVoiceRecordSessionHost 的实现：录音会话请本窗口做的事
+    /**
+     *  显示或收起录音条：录音时隐藏输入框与底部发送行；收起后把焦点还给输入框。
+     *  @param show true 显示录音条，false 恢复输入框
+     */
+    virtual void ShowVoiceRecordBarUi(bool show) override;
+    /**
+     *  在窗口上显示一条录音相关的提示（如「说话时间太短」）。
+     *  @param text 提示文字
+     */
+    virtual void ShowVoiceRecordToast(const std::wstring& text) override;
+    /**
+     *  发送一段录好的语音：在列表末尾插一条发送中的语音气泡，再交给文件传输线程上传并发到本群（第 3c 步）。
+     *  @param clientMsgId 这条语音消息的客户端消息 id
+     *  @param out         录音结果（文件已在 ChatVoice\<md5>.ogg）
+     */
+    virtual void SendRecordedVoice(const std::string& clientMsgId,
+                                   const balloonvoice::VoiceRecordOutput& out) override;
+    /**
+     *  把一条语音交给文件传输线程上传并发出，并登记回执成功后的会话冒泡（语音消息第 3c 步）。首次发送与重发共用。
+     *  @param msg 语音气泡上的消息：取 clientMsgId、录音文件路径、时长与波形
+     */
+    void StartVoiceUpload(const balloonchatwnd::ChatMessage& msg);
+    /**
+     *  重发一条发送失败的语音：能重发时把气泡改回发送中并重新上传；录音文件已不在时提示「语音文件已不存在」。
+     *  @param clientMsgId 发送时的客户端消息ID
+     */
+    void ResendVoice(const std::string& clientMsgId);
+    /**
+     *  点了一条语音气泡（语音消息第 3e 步）：按 DecideVoiceClick 播放、停止、提示正在下载或重新下载。
+     *  @param msgid       气泡上的服务器消息ID；大于 0 时按它定位
+     *  @param clientMsgId 气泡上的客户端消息ID；msgid 为 0（本人还没回执的语音）时按它定位
+     */
+    void HandleVoiceClick(long long msgid, const std::string& clientMsgId);
+    /**
+     *  播放一条语音：交给语音中心播放，列表上进入播放中；对方发来、还没听过的同时请主面板在本地库标为已听。
+     *  播放失败时提示「语音播放失败」。
+     *  @param msg 气泡上的消息（取 msgid、clientMsgId、本地路径、发送方、已听）
+     */
+    void StartVoicePlayback(const balloonchatwnd::ChatMessage& msg);
+
+    // 以下为 balloonvoice::IVoicePlayListener 的实现
+    /**
+     *  播放进度：更新这条语音气泡的喇叭图标帧。
+     *  @param key      正在播的那条语音
+     *  @param playedMs 已播放的毫秒数
+     *  @param totalMs  总毫秒数
+     */
+    virtual void OnVoicePlayProgress(const balloonvoice::VoicePlayKey& key, int64_t playedMs,
+                                     int64_t totalMs) override;
+    /**
+     *  播放结束：气泡退出播放中；播到结尾时接着播紧挨着的下一条未听的语音。
+     *  @param key    结束的那条语音
+     *  @param reason 取值见 balloonvoice::VoicePlayEnd
+     */
+    virtual void OnVoicePlayEnded(const balloonvoice::VoicePlayKey& key, int reason) override;
+    // 按 FlamingoMedia.dll 是否已加载显示或隐藏工具栏的「语音消息」按钮；显隐变化后对按钮所在的行重排
+    void ApplyVoiceButtonVisibility();
+
     balloonchatwnd::ChatMessage MakeGroupMergedMessage(const net::MessageNotify& m, bool fromMe,
                                                        balloonchatwnd::ChatMessageList* list);
+
+    /**
+     *  用一张群接龙卡片（msgtype=11）构造卡片气泡：本人发出的画在右侧（同本端文字气泡），别人
+     *  发出的画在左侧并带发送人名与头像；卡片内容由 ApplyRelayCard 填写，接龙里的名字按本群
+     *  群名片、通讯录解析（RelayNameResolver）。历史消息与实时推送共用。
+     *  顺带登记卡片的截止时间，到时把卡片重画为已截止（见 TrackRelayDeadline）。
+     *    m：      消息解析结果，m_relayContent 为 content 原文（历史里已合并名单与状态）。
+     *    fromMe： 发送方是否本人。
+     *    list：   消息列表控件，供本端气泡解析引用缩略图路径；可为 NULL。
+     *  @return 气泡数据，由调用方追加进列表
+     */
+    balloonchatwnd::ChatMessage MakeGroupRelayMessage(const net::MessageNotify& m, bool fromMe,
+                                                      balloonchatwnd::ChatMessageList* list);
+
+    /**
+     *  登记一张接龙卡片的截止时间：卡片还在进行中且有截止时间时记进 m_relayDeadlines，并重新
+     *  安排截止定时器；否则把它从登记表里去掉。卡片每次构造或重填之后调用。
+     *    card：卡片气泡数据（kind 不是 kMsgRelay 时什么都不做）。
+     */
+    void TrackRelayDeadline(const balloonchatwnd::ChatMessage& card);
+
+    /**
+     *  按 m_relayDeadlines 里最早的截止时间安排一次性定时器 kRelayExpiryTimerId；登记表为空时
+     *  关掉定时器。离截止时间太远时最多等 kRelayExpiryMaxDelayMs 再检查一次，免得本机时间被
+     *  调整之后错过。
+     */
+    void ScheduleRelayExpiryTimer();
+
+    /**
+     *  截止定时器到期：把已到截止时间的卡片按当前时间重填（显示为已截止、按钮消失），从登记表
+     *  里去掉，再安排下一次。列表里已经找不到的卡片（重新加载了历史）一并去掉。
+     */
+    void OnRelayExpiryTimer();
+
+    /**
+     *  把列表里所有接龙卡片按 msgid 重新填一遍（成员表到达之后调用：历史可能先于成员表渲染，
+     *  卡片上的名字当时还是「用户<id>」）。
+     */
+    void RefreshAllRelayCards();
+
+    /**
+     *  接龙卡片上名字的解析：按本群群名片、通讯录依次查找，与气泡上的发送人名同一套
+     *  （ResolveSender），查不到时 ResolveSender 已经写成「用户<id>」。嵌套类可以访问
+     *  本窗口的私有成员；生命周期不长于所引用的窗口，只在构造、刷新卡片的调用期间存在。
+     */
+    class RelayNameResolver : public balloonchatwnd::IRelayNameResolver
+    {
+    public:
+        /**
+         *  @param wnd 所属群聊窗；本对象只保存引用，不持有
+         */
+        explicit RelayNameResolver(const CBalloonGroupChatWindow& wnd)
+            : m_wnd(wnd)
+        {
+        }
+
+        /**
+         *  取某个用户在本群接龙卡片上显示的名字。
+         *  @param userid 用户 userid
+         *  @return 显示名，保证非空
+         */
+        CString ResolveName(int64_t userid) const override
+        {
+            return m_wnd.ResolveSender(userid).m_name;
+        }
+
+    private:
+        const CBalloonGroupChatWindow& m_wnd;   // 所属群聊窗，引用，不持有
+    };
 
     /**
      *  把收到 / 历史里的一条群图片消息渲染成图片气泡：缓存命中直接显原图，否则插
@@ -748,10 +1560,33 @@ private:
                                  bool fromMe, const net::MessageNotify& notify);
 
     /**
+     *  把收到 / 历史里的一条群语音消息（msgtype=4）渲染成语音气泡（语音消息第 3d-3 步）：本机缓存里有这段语音时
+     *  直接就绪，否则显示下载中并在后台下载（方案 V5）；别人发来且未听的画红点（方案 V7）。
+     *    list：消息列表控件，可为 NULL（直接返回）；fromMe：是否本人所发（决定左右、头像与发送人名）；
+     *    notify：消息解析结果；played：本条所在批次的已听查询结果（QueryVoicePlayed 填好的）。
+     */
+    void RenderIncomingGroupVoice(balloonchatwnd::ChatMessageList* list, bool fromMe,
+                                  const net::MessageNotify& notify, const balloonchatwnd::VoicePlayedQuery& played);
+
+    /**
      *  发起截图：模态弹出进程内全屏截图浮层。复制 / 保存由浮层内部完成；「发送」立即
      *  把截图作为群图片消息发出，「发送到对话框」把截图内联插入输入框（见下两个回调）。
+     *  「截图时隐藏当前窗口」开启时（CUserConfig::IsScreenshotHideWindow）本窗口不出现在截图里。
+     *    fullScreen：true=选区直接为鼠标所在的整块显示器（截取全屏）。
      */
-    void DoScreenshot();
+    void DoScreenshot(bool fullScreen);
+
+    /**
+     *  在剪刀与 ▾ 下方弹出截图选项菜单（见 ChatScreenshotMenu.h），按选择发起截图或切换
+     *  「截图时隐藏当前窗口」并存盘。须在 DUI 鼠标事件之外调用（由 kDoScreenshotMsg 驱动）。
+     */
+    void OpenScreenshotMenu();
+
+    /**
+     *  按当前的截图快捷键刷新剪刀按钮的悬停提示：「截图（Alt+Z）」，快捷键停用时为「截图」。
+     *  窗口建好时与每次截图、弹出截图菜单时调用，设置页改了快捷键之后下一次就会更新。
+     */
+    void RefreshScreenshotTip();
 
     // 截图「发送」回调（C 风格，ctx=本窗口 this）：把临时 PNG 作为群图片立即发出。
     static void OnScreenshotSend(void* ctx, const wchar_t* pngPath);
@@ -795,6 +1630,12 @@ private:
      *  分页信息文字。每次分类 / 搜索 / 翻页 / 数据变化后调用。
      */
     void RenderFilePanel();
+
+    /**
+     *  执行 m_pendingLocateEntryId 记下的定位（库已拉全时调用）：重置分类与搜索、翻页、
+     *  设高亮并重渲染，再把那一行滚动到可见。没有待定位的条目时什么也不做。
+     */
+    void ApplyPendingFileLocate();
 
     /**
      *  刷新右侧边栏「成员」/「群文件」两个 Tab 上的数量文案（"成员 12" / "群文件 8"）。
@@ -870,9 +1711,32 @@ private:
      *  PickAndUploadGroupFile 选完文件后调它，拖放进来的文件也走同一条路，两处
      *  共用同一段登记逻辑，不各写一份。
      *    path：本地文件绝对路径。
+     *    uploadIdOut：[出参，可为 NULL] 入队成功时写入这一笔的上传 id（2026-10-05 起，发送录像时据此登记）。
      *  @return 确实入队返回 true；调试入口无群绑定、或路径为空返回 false。
      */
-    bool UploadGroupFile(const std::wstring& path);
+    bool UploadGroupFile(const std::wstring& path, int* uploadIdOut = NULL);
+
+    /**
+     *  宿主「发送到会话」发来的文件上传成功后，在群里发一条文件消息（2026-10-05）：列表末尾插一条本人的文件气泡，
+     *  再经网络层发出（msgtype 3，内容为这个群文件的 fileid、文件名、大小、md5）。
+     *    post：上传成功的群文件
+     */
+    void SendUploadedFileMessage(const balloonchatwnd::GroupFileChatPost& post);
+
+    /**
+     *  经网络层发出一条群文件消息（msgtype 3），并登记回执成功后的会话列表冒泡（摘要「[文件]」）。首次发送与重新发送共用。
+     *    clientMsgId：客户端消息 ID（UTF-8）；重发时沿用原来的，被服务端拒绝的消息没有入库，不会重复
+     *    fileId / fileNameUtf8 / sizeBytes / md5：群文件的文件 id、文件名（UTF-8）、字节数与内容 MD5
+     */
+    void SendGroupFileMessage(const std::string& clientMsgId, const std::string& fileId, const std::string& fileNameUtf8,
+                              long long sizeBytes, const std::string& md5);
+
+    /**
+     *  重发一条被服务端拒绝的本人文件消息（2026-10-05）：气泡清掉失败标记、回到已完成，再用原 clientMsgId 重发文件消息，
+     *  不再上传。气泡不是本人发送失败的那条时什么都不做。
+     *    d：文件气泡的按钮负载（clientMsgId、fileId、文件名、大小、md5）
+     */
+    void ResendGroupFileMessage(const balloonchatwnd::ChatFileActionData& d);
 
     // ---- balloonchatwnd::IChatDropSink 实现（把文件拖进窗口）----
 
@@ -1027,15 +1891,39 @@ private:
     LRESULT OnOpenSendMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  kDoScreenshotMsg 处理：在 DUI 鼠标事件之外发起截图（DoScreenshot），避免模态
-     *  截图浮层在鼠标事件派发栈内运行导致的捕获 / 重入问题。
+     *  kDoScreenshotMsg 处理：在 DUI 鼠标事件之外发起截图（DoScreenshot）或弹出截图选项菜单
+     *  （OpenScreenshotMenu），避免模态截图浮层或菜单在鼠标事件派发栈内运行导致的捕获 / 重入问题。
+     *  wParam 为 balloonchatwnd::ChatScreenshotRequest。
      */
     LRESULT OnDoScreenshot(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  kOpenRecordMenuMsg 处理：工具栏「屏幕录制」被点后，在按钮下方弹出录制菜单（开始录制 / 停止录制、录制管理），
+     *  按选择交给屏幕共享中心（docs/语音字幕方案.md 第 2 节第 10 条）。
+     */
+    LRESULT OnOpenRecordMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  按当前全局发送模式刷新输入区左下角提示文字与输入框 placeholder。
      */
     void RefreshSendModeUi();
+
+    /**
+     *  撤回提示行「编辑」的到期处理（docs/撤回后重新编辑方案.md §3.3）：去掉已到期的「编辑」，再按最早的到期时刻
+     *  重新定 kRecallEditTimerId；一个都不剩时停掉定时器。收到本人撤回、拉完历史、定时器触发时调用。
+     */
+    void RefreshRecallEditTimer();
+
+    /**
+     *  按仅通知模式开关与本人角色切换输入区（docs/群管理接入方案.md §14）：不能发言时把输入框、工具栏换成灰字提示行，
+     *  收起待发的引用并把焦点移开；能发言时恢复。状态没变时什么都不做。SetMuteAll、SetMyRole、InitUi 时调用。
+     */
+    void ApplyNotifyOnlyState();
+
+    /**
+     *  本人此刻是不是受仅通知模式限制（开关开着、本人不是群主或管理员）。发送被拒时据此选择提示文字。
+     */
+    bool IsNotifyOnlyForMe() const;
 
     /**
      *  按 m_myRole 设置右上角"群管理"齿轮按钮(kGIdHdrAdmin)的显隐：仅群主 /
@@ -1044,11 +1932,25 @@ private:
     void ApplyAdminGearVisibility();
 
     /**
+     *  把全部已知成员的头像灰彩告知消息列表（离线用户头像置灰，2026-10-03）：别人的气泡按
+     *  m_memberPresence 里记下的在线状态（离线置灰、查不到不置灰），本人的气泡按本端连接态。
+     *  窗口尚未建好（取不到消息列表）时安全返回。InitUi 末尾与 ApplyConnectionState 调用；
+     *  单个成员的状态变化走 SetMemberPresence，只更新那一个人。
+     */
+    void ApplyAvatarGrayToMessageList();
+
+    /**
      *  打开字体设置浮层 —— 点击工具栏「AF」按钮时调用。锚定在按钮上方，面板内
      *  任意设置变化即经 OnFontChanged 回调更新当前字体（影响后续发送 + 输入框
      *  所见即所得）。
      */
     void OpenFontPanel();
+
+    /**
+     *  点了工具栏的「发起接龙」按钮：打开（或前置）本群的「发起接龙」窗口。调试入口（没有真实群）
+     *  下什么都不做，只记日志。
+     */
+    void OpenRelayCompose();
 
     // 字体设置变化回调（C 风格函数指针，userdata 为本窗口 this）：更新当前字体、
     // 应用到输入框，并存为本群的自定义字体（账号配置，重启后仍然有效）。
@@ -1077,7 +1979,7 @@ private:
 
     /**
      *  打开表情选择面板 —— 点击工具栏"表情"按钮时调用。锚定在表情按钮上方，
-     *  弹出 Bin/Face 图片表情浮层，选中某表情经回调以"带 faceId 标记的内联图"
+     *  弹出 程序目录/Face 图片表情浮层，选中某表情经回调以"带 faceId 标记的内联图"
      *  插入输入框（与单聊窗同构）。
      */
     void OpenEmojiPicker();
@@ -1094,7 +1996,7 @@ private:
     static void OnFacePicked(void* userdata, int faceId, const wchar_t* facePath);
 
 private:
-    // 以下七条都是本窗口投给自己的私有消息，取 WM_APP 段而不是公共的 WM_USER 段。
+    // 以下八条都是本窗口投给自己的私有消息，取 WM_APP 段而不是公共的 WM_USER 段。
     //
     // 理由：WM_USER 段被 UserSessionData.h / CustomMsgDef.h 那两批跨窗口消息占着，
     // 号是手工分配的，群聊窗在里面另起一段只会增加撞号面。这几条既不经
@@ -1119,7 +2021,13 @@ private:
 
     // 自定义消息：截图按钮被点时投递，延后到 DUI 鼠标事件之外再发起模态截图浮层，避免
     // 捕获 / 重入问题导致截图后发送按钮等点击失灵（与发送▼菜单同理）。
+    // 2026-10-05 起 wParam 为 balloonchatwnd::ChatScreenshotRequest：普通截图、截取全屏，
+    // 或弹出 ▾ 截图选项菜单（菜单同样不能在鼠标事件里弹）。
     static const UINT kDoScreenshotMsg = WM_APP + 0x53;
+
+    // 自定义消息：工具栏「屏幕录制」被点时投递，延后到鼠标事件之外弹出录制菜单（菜单不能在鼠标事件里弹）。
+    // 0x55～0x57 已有用途，取 0x58
+    static const UINT kOpenRecordMenuMsg = WM_APP + 0x58;
 
     // 自定义消息：输入框内容 / 光标可能变化时由 @提醒 钩子<u>投递</u>，
     // 本窗口据此重算"光标前是不是正在 @ 某个前缀"，显示 / 更新 / 收起浮层。
@@ -1134,6 +2042,82 @@ private:
     // 不让输入框自己跟着滚。
     static const UINT kMentionWheelMsg = WM_APP + 0x56;
 
+    // 自定义消息：备忘卡片上的「修改」「删除」、双击、右键先投给自己，等当前的控件通知处理完再执行。
+    // 打开对话框或弹菜单期间备忘簿若有变化会重建卡片，发出通知的那个控件会被销毁。wParam 为 MemoCardAction。
+    static const UINT kMemoCardActionMsg = WM_APP + 0x57;
+
+    // 自定义消息：入群必读弹窗里点了「我已阅读」，由弹窗投给本窗口（弹窗的宿主是本窗口），本窗口发送确认请求
+    static const UINT kMustReadConfirmMsg = WM_APP + 0x59;
+
+    // 自定义消息：输入区「点此阅读」提示行或必读卡片被点时投给自己，等当前的控件通知处理完再弹出必读公告
+    static const UINT kMustReadShowMsg = WM_APP + 0x5A;
+
+    // 自定义消息：问答卡片上的按钮或「＋ 新建问答」被点时投给自己，等当前的控件通知处理完再执行（打开对话框或
+    // 重建卡片会销毁发出通知的控件）。wParam 为 QaCardAction
+    static const UINT kQaCardActionMsg = WM_APP + 0x5B;
+
+    // 自定义消息：问答编辑窗点了「保存」，把结果投给本窗口，lParam 为堆上的 balloonchatwnd::QaEditResult*
+    static const UINT kQaEditResultMsg = WM_APP + 0x5C;
+
+    // 自定义消息：成员页签机器人区域里的机器人行或「管理」被点时投给自己，等当前的控件通知处理完再弹资料卡或打开
+    // 群机器人管理窗（弹框期间 2801 到达会重建这些行，docs/机器人方案.md §4.2）。wParam 为 GroupBotAction，lParam 为行号
+    static const UINT kGroupBotActionMsg = WM_APP + 0x5D;
+
+    // 机器人区域的操作，作为 kGroupBotActionMsg 的 wParam
+    enum GroupBotAction
+    {
+        //点了某个机器人：弹出资料卡（简介、用法、来源），lParam 为行号
+        kGroupBotActionCard   = 1,
+        //2 曾是点了「管理」打开群机器人管理窗；2026-10-08 起入口移到群管理窗口，该取值作废、不再复用
+    };
+
+    // 问答面板上的操作，作为 kQaCardActionMsg 的 wParam
+    enum QaCardAction
+    {
+        kQaCardActionSend   = 1,   //「发到群里」：把问答以文字消息发到本群
+        kQaCardActionEdit   = 2,   //「修改」：打开编辑窗
+        kQaCardActionDelete = 3,   //「删除」：确认后删除
+        kQaCardActionAdd    = 4,   //「＋ 新建问答」：打开空白的编辑窗
+    };
+
+    // 备忘卡片上的操作，作为 kMemoCardActionMsg 的 wParam
+    enum MemoCardAction
+    {
+        kMemoCardActionOpen   = 1,   //「修改」或双击：群主、管理员打开修改，普通成员打开查看
+        kMemoCardActionDelete = 2,   //「删除」：确认后删除
+        kMemoCardActionMenu   = 3,   //右键：在光标处弹出菜单
+    };
+
+    std::vector<int64_t> m_memoCardIds;       // 各备忘卡片对应的备忘 ID，下标即卡片序号；RenderMemoPanel 时整体替换
+    int64_t              m_pendingMemoCardId; // 投出 kMemoCardActionMsg 时记下的备忘 ID，处理时取出并清零
+
+    // 点群公告卡片时打开的公告详情窗（与主面板的新公告提示窗是同一个类，宿主是本窗口：窗口居中到本窗口，
+    // 「查看全部」发回本窗口切到公告页签）。第一次点卡片时创建，本窗口销毁时一并销毁
+    CBalloonAnnouncePopupDlg m_announceCardDlg;
+
+    //---- 入群必读（docs/群公告接入方案.md §14）----
+    bool                       m_mustReadPending;     // 本人是否尚未确认入群必读：为 true 时输入区换成「点此阅读」提示行
+    std::vector<net::GroupBotInfo> m_groupBots;       // 本群的机器人（2801，含停用的与在本群关闭了的）；用于发送者名字、
+                                                      // 「机器人」徽章、@ 候选与成员页签的机器人分组（docs/机器人方案.md §4.2）
+    net::GroupBotCaps          m_groupBotCaps;        // 2801 附带的能力说明：是不是群主、企业是否允许群机器人与外部服务
+    bool                       m_groupBotsLoaded;     // 2801 是否已到达（到达前机器人分组不显示）
+    balloonchatwnd::CBotCardWindow m_botCard;         // 点了成员页签里的机器人后弹出的资料卡小窗，宿主是本窗口；
+                                                      // 第一次点时创建，本窗口销毁时一并关闭
+    int64_t                    m_mustReadId;          // 本群被设为入群必读的公告ID；0 表示没有设置
+    bool                       m_mustReadHasItem;     // 是否已取到必读公告的内容（m_mustReadItem 有效）
+    net::GroupAnnouncementItem m_mustReadItem;        // 必读公告的内容，弹窗显示它；随每次 1335 应答更新
+    bool                       m_mustReadPopupShown;  // 本窗口打开后是否已自动弹过必读公告（只自动弹一次）
+    CBalloonAnnouncePopupDlg   m_mustReadDlg;         // 入群必读弹窗：宿主是本窗口，第一次弹出时创建，本窗口销毁时一并销毁
+
+    //---- 群问答（docs/群问答方案.md）----
+    std::vector<net::GroupQaItem> m_qaItems;          // 本群问答（本群问答在前、企业问答在后），随每次 1336 应答整体替换
+    int                           m_qaState;          // 面板加载状态，取值见 balloonchatwnd::QaPanelState
+    bool                          m_qaRequested;      // 本窗口是否拉过问答：第一次切到「问答」Tab 时才拉，拉过之后 1339 推送才重拉
+    std::vector<size_t>           m_qaShown;          // 各问答卡片对应 m_qaItems 的下标，下标即卡片序号；RenderQaPanel 时整体替换
+    int                           m_qaRenderedWidth;  // 上次画卡片时视口的宽度（像素）；宽度变了要按新宽度重新量卡片高度
+    net::GroupQaItem              m_pendingQaItem;    // 投出 kQaCardActionMsg 时记下的那条问答，处理时取出
+    balloonchatwnd::CGroupQaEditDialog m_qaEditDlg;   // 「新建问答」「修改问答」对话框，宿主是本窗口
+
     HWND    m_hMainDlg;     // 主面板窗口句柄（为 NULL 时关闭不退出程序）
     int     m_replyIndex;   // mock 自动回复轮转下标（仅无群 id 的调试入口下用）
     // 当前连接态（ConnectionUiState：0=在线 1=正在连接 2=离线）。由 ApplyConnectionState
@@ -1142,6 +2126,9 @@ private:
 
     int64_t m_groupId;      // 本群 id；0 表示未绑定（调试入口，走 mock）
     int     m_myRole;       // 本人在本群角色（0成员 1管理员 2群主）；决定"群管理"齿轮显隐，默认成员
+    int     m_atAllScope;   // 本群「谁可以 @ 全体」（0 仅群主和管理员 1 所有人）；与 m_myRole 一起决定 @ 浮层有没有「所有人」，默认 0
+    int     m_muteAll;      // 本群的仅通知模式开关（原称全员禁言）：1 开 0 关，由主面板经 SetMuteAll 推来
+    int     m_notifyOnlyShown;   // 输入区当前的状态，取值见 balloonchatwnd::GroupInputBlock（0 可发言、1 仅通知、2 待确认入群必读），-1 表示还没应用过（ApplyNotifyOnlyState 用来去重）
     CString m_groupName;    // 群名（窗口标题）
     HWND    m_hostPanel;    // 主面板 HWND，发消息后经它通知主面板冒泡群会话；0 表示调试入口
     long long m_pendingLocateMsgid;   // 待定定位的目标 msgid（历史在途时暂存，渲染后补定位）；0=无
@@ -1150,11 +2137,36 @@ private:
     // 之后每收到一条 Pin / 取消 Pin 推送由 AdjustPinnedCount 就地 ±1。窗口级、不落盘。
     int     m_pinnedCount;
 
+    // 屏幕共享横幅当前对应的那一场共享（RefreshScreenShareBanner 填写），点横幅时据此加入。
+    // 横幅隐藏时房间号为空；本人发起的共享横幅只告知、点击不加入。
+    std::string m_shareBannerRoomId;     // 房间号
+    CString     m_shareBannerHostName;   // 发起人显示名，用作观看窗标题
+    bool        m_shareBannerSelfHost;   // 进行中的共享是不是本人发起的
+    bool        m_shareBannerForced;     // 进行中的共享是不是强制模式（第 13 期），点横幅加入时先确认
+    // 群通话横幅当前对应的那一场（RefreshGroupCallBanner 填写），点横幅时据此加入；没有进行中的群通话时为空
+    std::string m_callBannerRoomId;
+    // 群通话选人框（发起与通话中邀请共用），首次使用时创建；关窗时随窗口销毁
+    std::unique_ptr<CCreateGroupDlg> m_callPicker;
+    // 群通话选人框的结果接收方（定义在 .cpp 里的小类，把结果转给 OnGroupCallMembersPicked），首次使用时创建
+    std::unique_ptr<GroupCallPickSink> m_callPickSink;
+    // 当前选人框的用途：发起时为媒体类型（1 群语音、2 群视频），通话中邀请时为 0
+    int         m_callPickMedia;
+    // 群通话窗请求过「邀请成员」、当时成员表还没加载：成员表到达后补开选人框（OnGroupMembersArrived 处理后清除）
+    bool        m_callInvitePending;
+    // 上面那次请求要排除的人（已加入或振铃中），m_callInvitePending 为 true 时有效
+    std::vector<int64_t> m_callInviteExclude;
+    // 选人结果的接收方要调私有的 OnGroupCallMembersPicked
+    friend class GroupCallPickSink;
+
     // 本会话历史的向上翻页状态（最早已加载 msgid / 还有没有更早的 / 是否在途）。
     // 判定逻辑在 ChatHistoryPaging（纯逻辑、可单测），本窗口只持有状态并按它的
     // 结论发请求。m_loading 同时用来区分应答是首屏还是翻页 —— 服务端的应答里
     // 不回显 before，客户端只能自己记。
     balloonchatwnd::HistoryPagingState m_paging;
+
+    // 首屏历史渲染之前发出的 Markdown 文档（从 Markdown 编辑器发送时窗口刚打开）。随窗口存续，
+    // 首屏渲染完、这些文档都确认入库后据它重新拉一次最新一页
+    balloonchatwnd::MarkdownEarlySendTracker m_mdEarlySends;
 
     // 打开计时：CreateAndShow 开始时重置，群成员到达、首屏历史到达与渲染完成时读取，
     // 得出从打开到看到历史消息各段花了多久（含两次等待服务端应答），写进日志供性能排查。
@@ -1190,23 +2202,34 @@ private:
     std::string m_groupCustomface; // 群头像标识（UTF-8）：字形为 "glyph|colorIdx"，自定义图为 fileid
 
     // 群成员显示信息（userid → 昵称 + 头像底色），OnGroupMembersArrived 填充，
-    // 渲染收到的群消息气泡时据发送方 userid 取真实昵称/头像。
-    struct MemberInfo
-    {
-        CString     m_name;        // 显示名（群名片优先→账号昵称→"用户<id>"）
-        CString     m_glyph;       // 头像字形（按成员 (facetype,customface) 经 DecodeAvatar 解出；字形头像显示其选定值，否则首字）
-        COLORREF    m_color;       // 头像底色
-        int         m_facetype;    // 头像类型（0 自动 / 1 字形 / 2 真图），见 AvatarSpec.h
-        std::string m_customface;  // 头像标识（UTF-8）：字形="glyph|colorIdx"，真图=fileid
-        CString     m_imagePath;   // 真图头像本地路径（空=画字形，非空=画真图）
-        int         m_role;        // 该成员在本群的角色（0成员 1管理员 2群主，见 group_member_role）；-1=未知
-        MemberInfo() : m_color(0), m_facetype(0), m_role(-1) {}
-    };
+    // 渲染收到的群消息气泡时据发送方 userid 取真实昵称/头像。与帖子群的群成员面板共用同一结构与同一套算法
+    // （GroupMemberPanelKit，docs/帖子群方案.md 14.3），两处的显示名与头像口径一致。
+    typedef balloonchatwnd::GroupMemberRowInfo MemberInfo;
     std::map<int64_t, MemberInfo> m_memberInfo;
 
     // 各成员的在线状态（键为 userid，值同 presence_type），由主面板经 SetMemberPresence 写入。
     // 成员侧栏每次重建时按它给各行设徽标；查不到的成员不画徽标。随窗口存在，关窗即丢弃
     std::map<int64_t, int> m_memberPresence;
+
+    // 最近一次到达的本群成员（1304 应答的 members），按服务端返回的顺序。切换「平铺 / 按部门」视图、
+    // 部门数组更新时据它重建成员列表；随窗口存在，关窗即丢弃
+    std::vector<net::GroupMemberItem> m_lastMembers;
+    // 企业部门数组（主面板经 SetOrgDepartments 推入），部门树视图用；没推过时为空，部门树里全部成员都在「未分配部门」下
+    std::vector<net::DepartmentItem> m_orgDepartments;
+    // 「成员」页签当前是否为部门树视图；建窗时取自账号配置 [GroupDlg] MemberView，点「按部门 / 平铺」切换按钮时切换并存盘
+    bool m_memberTreeView;
+
+    /**
+     *  按 m_lastMembers 与当前视图重建成员侧栏（经 GroupMemberPanelKit 的 FillGroupMemberList，与帖子群的群成员面板
+     *  共用）：平铺视图按群角色排序挂成员行；部门树视图按 BuildGroupMemberDeptTree 挂部门标题行与成员行。重建后按
+     *  搜索框里的关键词重新过滤、重新排版。
+     */
+    void RebuildMemberRows();
+
+    /**
+     *  点了「按部门 / 平铺」切换按钮：切换成员列表的视图，记进账号配置并存盘，更新按钮的高亮状态与悬停提示，再重建成员列表。
+     */
+    void ToggleMemberView();
 
     // 成员表里查不到的发送者（已退群、被移出）在通讯录里查到的显示信息，或"通讯录里也没有"的
     // 结论。一页历史里同一个人往往发很多条，缓存起来只问主面板一次；成员表重新到达时清空
@@ -1220,6 +2243,14 @@ private:
     };
     std::map<int64_t, NonMemberSender> m_nonMemberSenders;
 
+    // 进行中、有截止时间的接龙卡片：卡片 msgid → 截止时间（Unix 毫秒）。TrackRelayDeadline 维护，
+    // 截止定时器据它找出该重画为已截止的卡片；到期处理过、或卡片已结束的条目即被移除。随窗口存在
+    std::map<long long, long long> m_relayDeadlines;
+
+    // 本群的「发起接龙」窗口：第一次点工具栏接龙按钮时创建，之后复用；关闭本窗口时一并销毁。
+    // 回执经 OnSendChatAckBackfill / OnSendChatAckFailed 转给它
+    std::unique_ptr<CRelayComposeDlg> m_relayComposeDlg;
+
     /**
      *  按 userid 解析发送者在气泡里的显示信息：先查成员表 m_memberInfo，成员表里没有（已退群、
      *  被移出）再经主面板查通讯录，两处都没有或字段为空时按 ResolveGroupSender 的规则回退
@@ -1228,6 +2259,25 @@ private:
      *  @return 名字与字形保证非空的显示信息。
      */
     balloonchatwnd::GroupSenderRender ResolveSender(int64_t userId) const;
+
+    /**
+     *  同 ResolveSender，另外照顾机器人消息：成员表、本群机器人列表、通讯录都查不到发送者，而消息带机器人标记时，
+     *  按标记里的名字显示并标为机器人（机器人已删除或不再用于本群，docs/机器人方案.md §3.2）。
+     *  渲染对方的文字消息（历史与实时）时调用。
+     *    userId：     发送者 userid。
+     *    botId：      消息的 content.bot.id；0 表示不是机器人消息，此时与 ResolveSender 相同。
+     *    botNameUtf8：content.bot.name（UTF-8）。
+     *  @return 名字与字形保证非空的显示信息。
+     */
+    balloonchatwnd::GroupSenderRender ResolveSenderWithBotMark(int64_t userId, int64_t botId,
+                                                               const std::string& botNameUtf8) const;
+
+    /**
+     *  切换字幕模式：头部「字幕模式」按钮被点时调用。字幕由主面板持有（不随本窗口关闭），这里经
+     *  FMG_MSG_TOGGLE_SUBTITLE 同步请主面板切换，再按结果高亮按钮；群聊窗本身保持不动。
+     *  调试入口（没有主面板）下什么都不做。副作用：写一行日志。
+     */
+    void ToggleSubtitleMode();
 
     /**
      *  ApplyGroupSendersToList 的查询回调：在成员表里查一名成员的显示信息。
@@ -1262,11 +2312,37 @@ private:
     static bool LookupSenderChain(void* ctx, int64_t userId,
                                   balloonchatwnd::GroupSenderRender& out);
 
+    /**
+     *  查本群机器人列表的回调：发送者是机器人账号时填入机器人的名字、头像与「机器人」标记。
+     *  机器人不在群成员表里（docs/机器人方案.md §3.3），由 LookupSenderChain 在成员表之前调用。
+     *    ctx：   本窗口（CBalloonGroupChatWindow*）。
+     *    userId：要查的 userid。
+     *    out：   [出参] 查到时填入显示信息。
+     *  @return 是本群的机器人返回 true。
+     */
+    static bool LookupBotSender(void* ctx, int64_t userId, balloonchatwnd::GroupSenderRender& out);
+
+    /**
+     *  企业打开了机器人时拉一次本群机器人（2801）。打开窗口、收到 2820、功能开关变化时调用。
+     */
+    void RequestGroupBots();
+
+    /**
+     *  按 m_groupBots 重建成员页签顶部的机器人区域：标题「机器人 N」、群主才有的「管理」、每个机器人一行。
+     *  没有机器人或企业关闭了机器人时整块隐藏。显隐变化后对成员容器 ForceLayout（UI 约定第 5 条）。
+     */
+    void RefreshBotMemberSection();
+
+
     // 用户在输入框里插入过的 @ 记录（按插入顺序）。发送时<u>不</u>直接用它，而是以
     // 输入框最终文本为准调 RescanMentions 重扫一遍 —— 插入之后用户还可能把
     // "@张三" 删掉一半或在中间插字，插入时记的偏移就不准了。扫不到的记录自动作废。
     // 每次 DoSend 全部发完后清空。见 docs/群聊@提醒方案.md §6。
     std::vector<balloonchatwnd::MentionCandidate> m_pendingMentions;
+
+    // 发送后待冒泡的队列：发送时按 clientMsgId 登记，回执成功时取出通知主面板，失败时丢弃。
+    // 生命周期随窗口；关窗后迟到的回执由主面板直接忽略（窗口已不在映射里）。
+    balloonchatwnd::ChatSendBumpQueue m_sendBumps;
 
     // 「@ 成员选择」浮层。惰性创建、跨多次 @ 复用。
     balloonchatwnd::CGroupAtDropdown m_atDropdown;
@@ -1292,7 +2368,7 @@ private:
     HFONT m_hInputFont;
     // 字体设置浮层（按需打开，本类持有）。
     CFontSettingPopup m_fontPopup;
-    // Bin/Face 图片表情浮层（"表情"按钮弹出，本类持有）。
+    // 程序目录/Face 图片表情浮层（"表情"按钮弹出，本类持有）。
     CFaceImagePickerPopup m_facePopup;
 
     // ---- 边栏「群文件」面板状态 ----
@@ -1311,6 +2387,12 @@ private:
     bool m_fileLoading;
     // 拉全量的分页累积缓冲：逐页应答把本页条目追加进来，拉到 !hasmore 后整批灌进库。
     std::vector<net::GroupFileEntry> m_fileLoadBuffer;
+    // 等群文件库拉全后再定位的条目 id（ShowGroupFileEntry 在库未拉全时记下）；空串表示
+    // 没有待定位的条目。定位一次后清空。
+    std::string m_pendingLocateEntryId;
+    // 当前以淡黄底标出的文件条目 id（最近一次定位到的那一个）；空串表示不标。RenderFilePanel
+    // 建行时据它设高亮；保持到下一次定位或关窗，用户翻页、改分类后再回来仍能认出那一行。
+    std::string m_highlightEntryId;
 
     // 正在下载的群文件：entryid → 进度百分比(0~100)。RenderFilePanel 据它给重建出来的
     // 文件行恢复"下载中"态（否则换页 / 推送触发重渲染会丢进度态）；下载结束时移除。
@@ -1318,6 +2400,8 @@ private:
     // 正在上传的群文件跟踪器（可多笔并发）：每笔一行钉在文件列表顶部显示「上传中 NN%」+ ✕。
     // RenderFilePanel 据它在库文件行之前补出这些行；上传结束 / 取消时移除对应笔。
     balloonchatwnd::GroupFileUploadTracker m_uploadTracker;
+    // 宿主「发送到会话」发来的文件（如录像）的上传登记：上传成功后还要在群里发一条文件消息（2026-10-05）
+    balloonchatwnd::GroupFileChatPoster m_chatPoster;
     // 用户当前在哪一块操作（取 CustomMsgDef.h 的 CHAT_FOCUS_*）。Ctrl+C 据它路由。
     // 窗口刚打开时焦点在输入框，故初值为发送框。
     int m_focusArea;
@@ -1329,7 +2413,12 @@ private:
     // 轻量提示条，汇总"哪些拖进来的东西没处理"。所有权在控件树（客户区根容器的
     // 最后一个子），本指针只作访问用；窗口未初始化完成时为 NULL。
     balloonwjui::DuiToast* m_dropToast;
-
+    balloonchatwnd::CVoiceRecordSession m_voiceSession;   // 录音会话（语音消息第 6g 步）：持有录音条与流程状态机，InitUi 时把
+                                                          // 录音条建在布局的占位里；它是语音消息中心的录音与试听通知接收方，
+                                                          // 关窗与析构时取消或丢弃还没发送的录音
+    std::unique_ptr<ballooncode::CCodeComposeWindow> m_codeComposeWnd;   //「发送代码」窗口；第一次打开时创建，本窗口关闭时销毁其窗口
+    std::wstring m_codePasteText;   //「以代码片段发送」提示条显示时输入框里的文字；提示条收起时为空。
+                                    // 之后输入框内容与它不同即视为用户继续输入，提示条随即收起
     // ---- 公告边栏 ----
     //
     // 边栏一次只显示一条公告，所以这里也<u>只留那一条</u>：翻页就按新的下标向服务端

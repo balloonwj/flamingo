@@ -26,6 +26,7 @@
 
 #include "GroupManageModel.h"
 #include "../../net/GroupProtocolClient.h"
+#include "../../net/GroupLinkProtocolClient.h"   // net::GroupLinksResult（加群链接列表应答）
 
 namespace balloongroupmanage {
 
@@ -42,7 +43,8 @@ enum MemberMenuId : UINT
     kMemberMenuCancelAdmin = 4,   // 撤销管理员（仅群主可见，且目标是管理员时）
     kMemberMenuMute        = 5,   // 禁言（目标未被禁言时）
     kMemberMenuUnmute      = 6,   // 解除禁言（目标已被禁言时）
-    kMemberMenuKick        = 7    // 移出本群
+    kMemberMenuKick        = 7,   // 移出本群
+    kMemberMenuReleaseMustRead = 8 // 代为确认入群必读（群主 / 管理员可见，且目标尚未确认，docs/群公告接入方案.md §14）
 };
 
 // 计算菜单可用项时的输入状态。
@@ -52,12 +54,14 @@ struct MemberMenuState
     int  m_targetRole;  // 目标成员的角色，取值见 GroupRole
     bool m_targetMuted; // 目标成员当前是否被禁言
     bool m_isSelf;      // 目标是不是登录者自己
+    bool m_targetMustRead; // 目标是否尚未确认入群必读
 
     MemberMenuState()
         : m_myRole(kRoleMember)
         , m_targetRole(kRoleMember)
         , m_targetMuted(false)
         , m_isSelf(false)
+        , m_targetMustRead(false)
     {
     }
 };
@@ -186,14 +190,13 @@ void ApplyJoinRequests(const net::GroupJoinRequestsResult& requests, int64_t now
 LoadState LoadStateAfterFailure(LoadState current);
 
 /**
- *  把敏感词库应答映射成界面模型的词条列表。
- *    words： 敏感词库应答解析结果；
- *    nowMs： 当前时刻，Unix毫秒，用来算"N 天前"这类相对时间文本；
- *    model： [出参] 待填充的界面模型，其词条列表会被整体替换，并把
- *            m_sensitiveWordsLoaded 置为 true（区分"还没拉"与"拉过但是空的"）。
+ *  把加群链接列表应答（1341）写进模型：成功时整体替换 m_links 并置 m_linksState 为 kLoadDone；
+ *  失败时按 LoadStateAfterFailure 处理加载状态，列表保持原样。
+ *    result：1341 应答解析结果；
+ *    nowMs： 当前时间（Unix 毫秒），用来写生成时间的相对说法；
+ *    model： [出参] 待写入的界面模型。
  */
-void ApplySensitiveWords(const net::SensitiveWordsResult& words, int64_t nowMs,
-                         GroupManageModel& model);
+void ApplyGroupLinks(const net::GroupLinksResult& result, int64_t nowMs, GroupManageModel& model);
 
 /**
  *  把群公告列表应答映射成界面模型的公告列表。
@@ -255,13 +258,31 @@ CString DescribeGroupOpFailure(int cmd, int code, const std::string& msgUtf8);
  *  规则（与方案文档 §7.4 的表格一致）：
  *    · 成员管理、基本信息 —— 所有成员可见（普通成员为只读）；
  *    · 加群审批、禁言管理、群权限 —— 群主与管理员可见；
- *    · 危险区域 —— 仅群主可见。
+ *    · 危险区域、群机器人 —— 仅群主可见（群机器人另须企业打开机器人且插件可用，见 IsBotsPageVisible）。
  *
  *    pageId： 页面 id，取值见 GroupManageLayout.h 的 GmPageId；
  *    myRole： 登录者在本群的角色，取值见 GroupRole。
  *  返回：可见返回 true。未知的 pageId 返回 false。
  */
 bool IsPageVisibleForRole(int pageId, int myRole);
+
+/**
+ *  「群机器人」页（添加与管理本群的群机器人，docs/机器人方案.md §14.9）是否出现在导航里：只有群主，且企业打开了机器人、
+ *  机器人插件 FlamingoBot.dll 已加载时才出现；管理员与普通成员一律看不到（2026-10-08 用户确认）。
+ *    myRole：       登录者在本群的角色，取值见 GroupRole。
+ *    botsAvailable：企业打开了机器人（features.bot）且插件已加载（botui::IsAvailable）。
+ *  @return 出现返回 true
+ */
+bool IsBotsPageVisible(int myRole, bool botsAvailable);
+
+/**
+ *  「群公告」页是否出现在导航里（基本信息页的「群公告」一行同样按它决定）：帖子群没有群公告，这一页与这一行都不出现
+ *  （docs/帖子群方案.md §15.1 第 3 条，2026-10-08 用户确认）；普通群仍按角色判定，规则同 IsPageVisibleForRole。
+ *    myRole：       登录者在本群的角色，取值见 GroupRole。
+ *    isThreadGroup：本群是帖子群。
+ *  @return 出现返回 true
+ */
+bool IsAnnouncementPageVisible(int myRole, bool isThreadGroup);
 
 /**
  *  把服务端的角色值（net 层 group_member_role：0成员 1管理员 2群主）映射成

@@ -26,6 +26,10 @@
 
 #include "UpdateProtocol.h"   //ClientVersionInfo：与应答共用同一份版本信息结构，避免再定义一份并写映射代码
 
+//updateVersion 的 forced 参数取此值时不修改 f_forced 列：clientversion/update.do 的请求里
+//没带 forced 字段（老版本控制台只改说明与最低版本）时用它，保持原值不变。
+constexpr int32_t CLIENT_VERSION_FORCED_KEEP = -1;
+
 //版本表里的一条完整记录，含主键、发布状态与两个时间。
 //与 ClientVersionInfo 的分工：后者只装"下发给客户端要用的那几个字段"，
 //本结构是控制台列表与增改用的完整视图。
@@ -117,21 +121,25 @@ public:
                        int64_t& outId, int& outErrorCode);
 
     /**
-     *  修改一条版本记录的最低版本号与更新说明。
+     *  修改一条版本记录的最低版本号、更新说明与「强制升级」标志。
      *
      *    id：           记录ID
-     *    minVersion：   新的最低可登录版本号；空串表示不改动该列
+     *    minVersion：   新的最低可登录版本号，按传入值写入；<u>空串表示不另设门槛</u>，
+     *                   与新建时留空的含义一致（登录时回落到 ChatSession.cpp 的编译期
+     *                   兜底值）。控制台编辑弹窗会预填当前值，传来空串说明是有意清空
      *    releaseNote：  新的更新说明；<u>空串是合法值</u>，表示把说明清空
+     *    forced：       1 强制升级、0 不强制；取 CLIENT_VERSION_FORCED_KEEP 表示不修改
+     *                   该列（请求里没带 forced 字段的老调用方）
      *    outErrorCode： [出参] 失败原因；成功时置 error_code_ok
      *
      *  @return true 修改成功；记录不存在返回 false 且 outErrorCode 为 error_code_not_found。
      *
-     *  <u>只允许改这两项</u>：版本号与升级包三件套（MD5 / 大小 / 文件名）一旦发布出去
+     *  <u>只允许改这三项</u>：版本号与升级包三件套（MD5 / 大小 / 文件名）一旦发布出去
      *  就可能已被客户端下载，原地改掉会让"同一个版本号对应两份内容"，排查时无从分辨。
      *  要换包请新建一条记录。
      */
     bool updateVersion(int64_t id, const std::string& minVersion,
-                       const std::string& releaseNote, int& outErrorCode);
+                       const std::string& releaseNote, int32_t forced, int& outErrorCode);
 
     /**
      *  发布或撤回一条版本记录。

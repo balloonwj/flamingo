@@ -23,6 +23,8 @@
 #include "../../Session/LoginAccountList.h"      // LOGIN_ACCOUNT_INFO / CLoginAccountList
 #include "../../Session/UserSessionData.h"       // FMG_MSG_UPDATE_RESULT / FMG_MSG_UPDATE_LOGIN_CONTINUE
 #include "LoginProgressState.h"       // auth::LoginProgressState（登录中状态机）
+#include "LoginAccountAvatar.h"       // balloonauth::CLoginAvatarBitmaps（账号下拉列表与大头像的头像位图）
+#include "../../Common/I18n/LanguageSetting.h"   // m_packLanguages 按值持有，需完整类型
 
 class CFlamingoClient;
 
@@ -293,11 +295,38 @@ private:
     // 正下方；选中后把所选 v2 状态存入 m_loginPresence、并刷新 Banner 胶囊的颜色与文字。
     void ShowLoginStatusMenu();
 
-    // “注册账号”链接点击：模态打开注册对话框；注册成功后回填账号 / 密码。
+    // “注册账号”链接点击：模态打开注册对话框（登录窗翻转成注册窗，返回时翻回来）；注册成功后回填账号 / 密码。
     void OnRegisterClicked();
+
+    /**
+     *  注册成功后把账号与密码填进登录框：账号补进历史账号列表与下拉列表并落盘，密码只写进界面，
+     *  两个勾选框复位，Banner 同步。登录窗此刻可以是隐藏的（翻回登录窗之前调用）。
+     *    registeredAccount： 服务端分配的账号。
+     *    registeredPassword：用户在注册窗里设置的明文密码（不落盘、不进日志）。
+     *  返回：填好了返回 true；账号为空（理论上不会发生）时什么都不改，返回 false。
+     */
+    bool ApplyRegisteredAccount(const CString& registeredAccount, const CString& registeredPassword);
+
+    // “忘记密码？”链接点击：提示联系企业管理员重置密码。平时显示在状态区，登录中改为弹提示框
+    // （见 balloonauth::ChooseForgotPasswordHintPlace）。
+    void OnForgotPasswordClicked();
 
     // “网络设置”链接点击：模态打开网络设置对话框。
     void OnNetworkClicked();
+
+    /**
+     *  初始化底部的界面语言链接：语言包存在时把文字设为当前生效语言的名称（English、日本語 ……），
+     *  并记下语言包里的语言供菜单使用；语言包不存在时隐藏链接并重排它所在的那一行。
+     *    content：客户区根控件，不能为 NULL。
+     */
+    void InitLanguageLink(balloonwjui::DuiControl* content);
+
+    /**
+     *  界面语言链接点击：在链接上方弹出语言菜单（跟随系统、简体中文、语言包里的语言，勾选当前配置的那一项）。
+     *  选中后写进 flamingo.ini 的 [ui] language；下次启动生效的语言与当前不同时询问是否立即重启，
+     *  用户同意则启动新进程并关闭登录窗（与点右上角关闭按钮相同，随即退出整个程序）。
+     */
+    void ShowLanguageMenu();
 
     // 检测新版本，用户确认后走自动升级流程（仅 Release 构建会调用）。
 
@@ -411,9 +440,16 @@ private:
     balloonwjui::DuiButton*   m_pRememberPwd;    // “记住密码”复选框
     balloonwjui::DuiButton*   m_pAutoLogin;      // “自动登录”复选框
     balloonauth::AuthBanner*  m_pBanner;         // 顶部品牌 / 头像 Banner（含可点击的在线状态胶囊）
+    // 账号下拉列表每行与上方大头像用到的头像位图（2026-10-04 起），本对象持有，下拉框与大头像只借用。
+    // 作为成员随本对话框对象析构，晚于客户区控件树的销毁，借用方不会拿到已释放的位图。
+    balloonauth::CLoginAvatarBitmaps m_avatarBitmaps;
     // 不确定进度条，仅登录中显示；本类只负责按定时器推进它的 marquee 相位，显隐与重排
     // 统一经 balloonauth::ApplyLoginStatusView。指向客户区控件树内部，生命周期随控件树。
     balloonwjui::DuiProgressBar* m_pStatusProgress;
+    // 界面语言链接；语言包不存在时为隐藏状态。指向客户区控件树内部，生命周期随控件树。
+    balloonwjui::DuiButton*   m_pLanguageLink;
+    // 语言包里的语言（不含简体中文与跟随系统），由 InitLanguageLink 填充，弹语言菜单时使用；语言包不存在时为空
+    std::vector<i18n::LanguageChoice> m_packLanguages;
 
     // 登录流程状态机：管「空闲 / 登录中 / 已登录」的流转，以及迟到结果的作废判定。
     // 纯逻辑、有单元测试（Tests/LoginProgressStateTests.cpp），本类只按它的状态画界面。

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 29 章：「关于」窗口（版本号、检查更新、官方网站）与自动升级（升级提醒、下载安装、强制升级）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关于与自动升级 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c29">
+<article class="doc">
+  <h1>关于与自动升级</h1>
+  <p class="lead">本章介绍如何查看客户端的版本号、手动检查更新，以及管理员发布新版本后客户端如何提醒你升级、如何完成安装。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>新版本由平台管理员发布，见<a href="../platform/04-client-versions.html">「客户端版本与自动升级」</a></li>
+  </ul>
+
+  <h2 id="about">「关于」窗口</h2>
+  <div class="shot-row">
+    <figure class="shot" style="flex:0 0 440px"><img src="../img/zz_about.png" width="440" alt="关于 FlamingoIM"><figcaption>「关于 FlamingoIM」窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>在主面板左下角的系统菜单里选最后一项 <span class="ui">关于 FlamingoIM</span>，打开「关于」窗口：</p>
+      <ul>
+        <li><b>版本号</b>：图标下方显示「版本 2.0.0 (Build 20261009-1340)」这样的版本号和 Build 号。向管理员反馈问题时，请一并提供这一行。</li>
+        <li><b>检查更新</b>：点 <span class="ui">检查</span> 立即检查是否有新版本，结果在升级提醒窗口里显示，见下文。</li>
+        <li><b>用户协议</b>、<b>隐私政策</b>、<b>开源许可</b>：暂未开放，点 <span class="ui">查看</span> 会提示「功能开发中，敬请期待。」</li>
+        <li><b>官方网站</b>：点链接在浏览器里打开项目网站。</li>
+      </ul>
+      <p>菜单项和窗口标题里的产品名称由企业部署时设置，你看到的可能不是「FlamingoIM」。</p>
+    </div>
+  </div>
+
+  <h2 id="update">自动升级</h2>
+  <p>客户端在登录前和登录后都会检查是否有新版本：点 <span class="ui">登 录</span> 时，登录按钮会短暂显示「正在检查更新...」；登录成功后还会再检查一次。也可以在「关于」窗口里手动检查。发现新版本时，会弹出「升级提醒」窗口：</p>
+  <div class="shot-row">
+    <figure class="shot" style="flex:0 0 420px"><img src="../img/zz_update.png" width="420" alt="升级提醒"><figcaption>发现新版本 2.0.1 时的升级提醒</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ul>
+        <li>标题写明「发现新版本」和版本号。</li>
+        <li>下方显示「当前版本 → 最新版本」和升级包的大小。</li>
+        <li><span class="ui">更新说明</span> 区显示管理员填写的本次更新内容。演示截图里这一区是空白的，实际以管理员填写的内容为准。</li>
+        <li><span class="ui">稍后</span>：暂不升级，关闭窗口，登录前弹出时会继续登录。</li>
+        <li><span class="ui">立即更新</span>：开始下载升级包。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>下载与安装</h3>
+  <ol class="steps">
+    <li>点 <span class="ui">立即更新</span> 后，窗口显示下载进度，如「正在下载 6.2 MB / 18.1 MB」。</li>
+    <li>下载完成后提示「下载完成，正在启动安装...」，不需要再确认。</li>
+    <li>客户端随即退出，由升级程序替换程序文件，完成后自动重新启动客户端。</li>
+  </ol>
+  <p>如果升级包已经提前在后台下载好，升级提醒窗口会直接显示「下载完成，可以安装了」，按钮为 <span class="ui">立即重启并安装</span>，点它即开始安装。下载失败时提示「下载失败，请重试」，可以再点一次 <span class="ui">立即更新</span>。手动检查时如果已经是最新版本，窗口会说明这一点，按钮显示为 <span class="ui">知道了</span>。</p>
+
+  <h3>强制升级</h3>
+  <p>管理员可以把某个版本设为强制升级。遇到强制升级的版本时：</p>
+  <ul>
+    <li>升级提醒窗口没有 <span class="ui">稍后</span>，也不能关闭；窗口显示在最前面，客户端的其他窗口暂时不能操作。登录前遇到强制升级时，必须升级后才能登录。</li>
+    <li>升级包会自动下载，下载完成后自动安装并重启客户端，你不需要做任何操作。</li>
+    <li>只有在升级包信息不完整、无法自动升级时，窗口才提供 <span class="ui">退出程序</span> 按钮。这种情况请联系管理员检查发布的版本。</li>
+  </ul>
+  <div class="callout tip"><b>没有收到升级提醒？</b>升级提醒依赖管理员在平台上发布新版本。如果同事已经升级而你没有收到提醒，可以在「关于」窗口里点 <span class="ui">检查</span> 手动检查一次。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

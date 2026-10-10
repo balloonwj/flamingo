@@ -62,7 +62,7 @@ static void resetCvmDb()
 {
     removeCvmDbFiles();
 
-    //CSqliteManager::init 会把空文件建成完整结构（建表 + 补列 + 建索引与触发器）
+    //CSqliteManager::init 会把空文件建成完整结构（建表 + 建索引与触发器）
     REQUIRE(Singleton<CSqliteManager>::Instance().init(CVM_DB_PATH));
 
     //DbFactory 按 CDbConfig 造连接；MySQL 那四个参数在 SQLite 模式下不参与连接
@@ -476,7 +476,7 @@ TEST_CASE("CVM11 重新发布旧版本即完成回滚，创建时间不受影响
 // CVM12  修改
 // ---------------------------------------------------------------------------
 
-TEST_CASE("CVM12 只改说明与最低版本，不动包信息与发布状态")
+TEST_CASE("CVM12 只改说明、最低版本与强制升级，不动包信息与发布状态")
 {
     resetCvmDb();
     ClientVersionManager& mgr = Singleton<ClientVersionManager>::Instance();
@@ -486,7 +486,7 @@ TEST_CASE("CVM12 只改说明与最低版本，不动包信息与发布状态")
     REQUIRE(mgr.createVersion(makeRecord("3.3.0", 1), CVM_BASE_TIME, id, err));
 
     const std::string newNote = "改过的说明：含反斜杠 C:\\Program Files\\ 与单引号 O'Brien";
-    REQUIRE(mgr.updateVersion(id, "3.2.0", newNote, err));
+    REQUIRE(mgr.updateVersion(id, "3.2.0", newNote, CLIENT_VERSION_FORCED_KEEP, err));
     CHECK(err == error_code_ok);
 
     std::vector<ClientVersionRecord> list;
@@ -501,14 +501,56 @@ TEST_CASE("CVM12 只改说明与最低版本，不动包信息与发布状态")
     CHECK(list[0].enabled == 1);
     CHECK(list[0].publishTime == CVM_BASE_TIME);
 
-    //最低版本传空串表示不改动它，说明则允许被清空
-    REQUIRE(mgr.updateVersion(id, "", "", err));
+    //最低版本与说明都允许清空：最低版本为空表示不另设门槛，与新建时留空的含义一致
+    REQUIRE(mgr.updateVersion(id, "", "", CLIENT_VERSION_FORCED_KEEP, err));
     list.clear();
     REQUIRE(mgr.listVersions(platform_pc, list));
-    CHECK(list[0].minVersion == "3.2.0");
+    CHECK(list[0].minVersion.empty());
     CHECK(list[0].releaseNote.empty());
 
     //记录不存在
-    CHECK_FALSE(mgr.updateVersion(999999, "3.0.0", "x", err));
+    CHECK_FALSE(mgr.updateVersion(999999, "3.0.0", "x", CLIENT_VERSION_FORCED_KEEP, err));
     CHECK(err == error_code_not_found);
+}
+
+TEST_CASE("CVM13 编辑时改强制升级：改成 1、改回 0 都能读回，不带该字段时保持原值")
+{
+    resetCvmDb();
+    ClientVersionManager& mgr = Singleton<ClientVersionManager>::Instance();
+
+    int64_t id = 0;
+    int err = -1;
+    REQUIRE(mgr.createVersion(makeRecord("3.3.0", 1), CVM_BASE_TIME, id, err));
+
+    std::vector<ClientVersionRecord> list;
+    REQUIRE(mgr.listVersions(platform_pc, list));
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].forced == 0);
+
+    //改成强制升级
+    REQUIRE(mgr.updateVersion(id, "3.1.0", "说明", 1, err));
+    CHECK(err == error_code_ok);
+    list.clear();
+    REQUIRE(mgr.listVersions(platform_pc, list));
+    CHECK(list[0].forced == 1);
+
+    //不带 forced（老调用方）：其余字段照改，强制升级保持为 1
+    REQUIRE(mgr.updateVersion(id, "3.0.0", "说明二", CLIENT_VERSION_FORCED_KEEP, err));
+    list.clear();
+    REQUIRE(mgr.listVersions(platform_pc, list));
+    CHECK(list[0].forced == 1);
+    CHECK(list[0].minVersion == "3.0.0");
+    CHECK(list[0].releaseNote == "说明二");
+
+    //改回不强制
+    REQUIRE(mgr.updateVersion(id, "3.0.0", "说明二", 0, err));
+    list.clear();
+    REQUIRE(mgr.listVersions(platform_pc, list));
+    CHECK(list[0].forced == 0);
+
+    //下发给客户端的最新版本信息同样反映改动
+    REQUIRE(mgr.updateVersion(id, "3.0.0", "说明二", 1, err));
+    ClientVersionInfo info;
+    REQUIRE(mgr.getLatestVersion(platform_pc, info));
+    CHECK(info.forced == 1);
 }

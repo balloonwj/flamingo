@@ -1,0 +1,219 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{83168e6c-b289-d732-cc78-427b51f93153}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Render">
+      <UniqueIdentifier>{5e520da5-341f-2fec-6d3b-bfe7ef357922}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Scene">
+      <UniqueIdentifier>{9ead0d38-e06e-c253-ca0e-cbf6ea56e59b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Session">
+      <UniqueIdentifier>{71c7ae29-4b7a-bd86-6b3f-b295b3b9e4a4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{fadd1363-4aa9-d02c-f68a-ae2fcdbc5321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonMain">
+      <UniqueIdentifier>{8c406ee6-61e4-c2e3-aa2c-1a2d79bfd56f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\KeepAwakeSession.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\HostLogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\LockLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\LockModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LockAnimationChoice.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LockOverlayLayout.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LockPassword.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LockPreviewState.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LockUiState.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\LockD2D.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\LockOverlayRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockDpi.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockPower.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockPreviewSession.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockSession.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockSetupDialog.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockThread.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\LockWindow.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\BounceScene.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\FlamingoScene.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\GlyphRainScene.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\HonorScene.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\ParticleClockScene.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\SceneFactory.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\SceneModels.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\SceneUtil.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="FlamingoLockApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\BalloonUiText.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\KeepAwakeSession.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\LockLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\LockModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LockAnimationChoice.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LockOverlayLayout.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LockPassword.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LockPreviewState.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LockUiState.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\LockD2D.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\LockOverlayRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\LockScene.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockDpi.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockPower.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockPreviewSession.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockSession.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockSetupDialog.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockThread.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\LockWindow.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\SceneUtil.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\Scenes.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoLockVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoLock.def" />
+  </ItemGroup>
+</Project>

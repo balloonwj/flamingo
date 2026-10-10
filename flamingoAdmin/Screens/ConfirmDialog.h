@@ -75,6 +75,7 @@ public:
     void RequestClose();
 
     BEGIN_MSG_MAP(ConfirmDialog)
+        MESSAGE_HANDLER(WM_KEYDOWN,    OnKeyDownMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_CLOSE,      OnCloseMsg)
         MESSAGE_HANDLER(WM_DESTROY,    OnDestroyMsg)
@@ -93,6 +94,9 @@ private:
 
     // WM_CLOSE:DestroyWindow,具体收尾在 OnDestroyMsg。
     LRESULT OnCloseMsg(UINT, WPARAM, LPARAM, BOOL& bHandled);
+
+    // WM_KEYDOWN：Esc 等同点关闭按钮（不提交）；回车在信息模式（单按钮「知道了」）下等同点该按钮，确认模式下不响应，免得误按回车就执行了删除一类的操作；其余按键不处理，交给基类派发给获得焦点的控件。
+    LRESULT OnKeyDownMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled);
 
     // WM_DESTROY:解除真模态 + 通知 AdminFrame 清自己指针。
     LRESULT OnDestroyMsg(UINT, WPARAM, LPARAM, BOOL& bHandled);

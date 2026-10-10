@@ -93,18 +93,25 @@ bool HitChatScrollBand(POINT pt, const RECT& thumb, const RECT& view)
     return inBand && inView;
 }
 
-void PaintChatScrollThumb(Gdiplus::Graphics& g, const RECT& thumb)
+void PaintChatScrollThumb(Gdiplus::Graphics& g, const RECT& thumb, float opacity)
 {
-    if (thumb.bottom <= thumb.top || thumb.right <= thumb.left)
+    if (thumb.bottom <= thumb.top || thumb.right <= thumb.left || opacity <= 0.0f)
     {
         return;
+    }
+    if (opacity > 1.0f)
+    {
+        opacity = 1.0f;
     }
     Gdiplus::GraphicsPath path;
     const Gdiplus::REAL d = (Gdiplus::REAL)(thumb.right - thumb.left);
     path.AddArc((Gdiplus::REAL)thumb.left, (Gdiplus::REAL)thumb.top, d, d, 180.0f, 180.0f);
     path.AddArc((Gdiplus::REAL)thumb.left, (Gdiplus::REAL)thumb.bottom - d, d, d, 0.0f, 180.0f);
     path.CloseFigure();
-    Gdiplus::SolidBrush brush(Gdiplus::Color(kChatScrollThumbAlpha, kChatScrollThumbGray,
+    //四舍五入到整数的不透明度分量（加半个单位再截断）
+    const float kRoundHalf = 0.5f;
+    const BYTE alpha = (BYTE)((float)kChatScrollThumbAlpha * opacity + kRoundHalf);
+    Gdiplus::SolidBrush brush(Gdiplus::Color(alpha, kChatScrollThumbGray,
                                              kChatScrollThumbGray, kChatScrollThumbGray));
     g.FillPath(&brush, &path);
 }

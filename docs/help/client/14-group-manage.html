@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 14 章：群管理窗口——成员管理、加群审批、禁言、加群链接、群公告、基本信息、群权限、群机器人与危险区域。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>群管理 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c14">
+<article class="doc">
+  <h1>群管理</h1>
+  <p class="lead">群主和管理员在群管理窗口里管理成员、审批加群申请、设置禁言、发布群公告，并修改群资料与群权限。本章逐页介绍群管理窗口的用法。</p>
+  <ul class="facts">
+    <li>适用：群主、管理员</li>
+    <li>「群机器人」「危险区域」两页：仅群主</li>
+  </ul>
+
+  <h2 id="open">打开群管理</h2>
+  <p>有两个入口，都只对群主和管理员显示：</p>
+  <ul>
+    <li>群聊窗口头部右侧的齿轮按钮（<span class="ui">群管理</span>）；</li>
+    <li>主面板群组页签里，在群上点右键选 <span class="ui">群管理</span>。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/j_manage_members.png" width="880" alt="群管理窗口">
+    <figcaption>群管理窗口：顶部是群名、你的角色和成员数，左侧是导航，右侧是当前页的内容</figcaption>
+  </figure>
+  <p>左侧导航分为三组，不同角色看到的页面不同：</p>
+  <table>
+    <tr><th>分组</th><th>页面</th><th>群主</th><th>管理员</th></tr>
+    <tr><td rowspan="4">成员</td><td>成员管理</td><td>可用</td><td>可用</td></tr>
+    <tr><td>加群审批</td><td>可用</td><td>可用</td></tr>
+    <tr><td>禁言管理</td><td>可用</td><td>可用</td></tr>
+    <tr><td>加群链接</td><td>可用</td><td>可用</td></tr>
+    <tr><td>群公告</td><td>群公告</td><td>可用</td><td>可用</td></tr>
+    <tr><td rowspan="4">设置</td><td>基本信息</td><td>可用</td><td>可用</td></tr>
+    <tr><td>群权限</td><td>可用</td><td>可用</td></tr>
+    <tr><td>群机器人</td><td>可用（企业开启机器人功能时）</td><td>不显示</td></tr>
+    <tr><td>危险区域</td><td>可用</td><td>不显示</td></tr>
+  </table>
+  <div class="callout note"><b>帖子群</b>帖子群也用这个窗口管理，但没有「群公告」页。帖子群的用法见<a href="15-thread-group.html">「帖子群」</a>。</div>
+
+  <h2 id="members">成员管理</h2>
+  <p>成员管理页按 <b>群主</b>、<b>管理员</b>、<b>普通成员</b> 分组显示全部成员卡片，导航上的数字是成员数。在顶部的搜索框里可以按姓名、备注、职务查找成员。</p>
+  <h3>邀请成员</h3>
+  <ol class="steps">
+    <li>点右上角的 <span class="ui">＋ 邀请成员</span>，打开「邀请成员入群」窗口。</li>
+    <li>在通讯录里勾选要邀请的同事。</li>
+    <li>在 <b>入群后可查看的聊天记录</b> 里选择：<span class="ui">全部聊天记录</span>（默认）、<span class="ui">最近 N 条</span>（在框里填条数，默认 100），或 <span class="ui">不同步，只能看到入群之后的消息</span>。</li>
+    <li>点 <span class="ui">邀请入群</span>。</li>
+  </ol>
+  <div class="callout note"><b>聊天记录选项不可选？</b>群权限里关闭了「新成员查看历史消息」时，窗口会提示「本群已设置为新成员不可查看入群前的聊天记录」，这几个选项也随之不可用。</div>
+  <h3>成员卡片的右键菜单</h3>
+  <p>在成员卡片上点右键，菜单会按你和对方的角色列出可以执行的操作：</p>
+  <table>
+    <tr><th>菜单项</th><th>说明</th></tr>
+    <tr><td>发消息</td><td>打开与对方的单聊窗口</td></tr>
+    <tr><td>查看资料</td><td>打开对方的资料窗口</td></tr>
+    <tr><td>设为管理员 / 撤销管理员</td><td>只有群主能设置或撤销管理员</td></tr>
+    <tr><td>禁言 / 解除禁言</td><td>点「禁言」后再选时长：<span class="ui">禁言 10 分钟</span>、<span class="ui">禁言 1 小时</span>、<span class="ui">禁言 12 小时</span>、<span class="ui">禁言 1 天</span> 或 <span class="ui">永久禁言</span></td></tr>
+    <tr><td>移出本群</td><td>把对方移出群聊，这是菜单里唯一不可撤销的操作</td></tr>
+    <tr><td>代为确认入群必读</td><td>对方还没确认入群必读时才出现，替对方确认后他就能发言，见下文<a href="#must-read">「入群必读」</a></td></tr>
+  </table>
+  <div class="callout note"><b>谁能管谁</b>群主可以对任何其他成员禁言、移出；管理员只能对普通成员禁言、移出，不能管理其他管理员。任何人都不能对群主执行这些操作。对自己点右键时只有「查看资料」。</div>
+
+  <h2 id="approve">加群审批</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_approve.png" width="880" alt="加群审批页">
+    <figcaption>加群审批页，目前没有待处理的申请</figcaption>
+  </figure>
+  <p>群的加群方式设为「需要验证消息」时，别人申请加入会出现在这里，导航上的数字是待处理的申请数。</p>
+  <ul>
+    <li>每条申请显示申请人、验证消息和来源。来源有 <b>好友邀请</b>、<b>扫码加群</b>、<b>群搜索</b> 和 <b>由某某推荐</b>，通过加群链接提交的申请显示为「扫码加群」。</li>
+    <li>逐条点 <span class="ui">同意</span> 或 <span class="ui">拒绝</span>，或者用右上角的 <span class="ui">批量同意</span>、<span class="ui">批量拒绝</span> 一次处理全部。</li>
+    <li>超过 7 天没人处理的申请会被自动拒绝。</li>
+    <li>如果另一位管理员已经处理了某条申请，你再处理时会提示「该申请已被其他管理员处理。」</li>
+  </ul>
+
+  <h2 id="mute">禁言管理</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_mute.png" width="880" alt="禁言管理页">
+    <figcaption>禁言管理页：顶部显示「禁言中 N 人」，下面是仅通知模式开关和添加按钮</figcaption>
+  </figure>
+  <ul>
+    <li><span class="ui">仅通知模式</span>：打开后，只有群主和管理员可以发言，其他成员只能查看消息，适合发布通知类的群。</li>
+    <li><span class="ui">＋ 添加禁言成员</span>：在「选择要禁言的成员」窗口里勾选一个或多个成员，点 <span class="ui">禁言</span>。从这里添加的成员一律按永久禁言处理，之后可以在列表里逐个调整。</li>
+    <li>禁言中的成员逐行列出，并显示剩余时间（如「剩余 3 小时」或「永久禁言」）。点 <span class="ui">延长</span> 重新选择禁言时长，点 <span class="ui">解除</span> 立即恢复发言。</li>
+  </ul>
+  <p>也可以在成员管理页的成员卡片上点右键选 <span class="ui">禁言</span>，直接选择时长。被禁言的成员不能在群里发言，也不能参与接龙。</p>
+
+  <h2 id="links">加群链接</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_links.png" width="880" alt="加群链接页">
+    <figcaption>加群链接页，本群目前还没有有效的链接</figcaption>
+  </figure>
+  <p>这里列出本群所有仍然有效的加群链接，不论是谁生成的，每条都可以 <span class="ui">作废</span>。作废后链接立即失效，已经通过它加入的成员不受影响。生成链接的方法见<a href="13-group-chat.html#link">「群聊 → 加群链接」</a>。</p>
+
+  <h2 id="announce">群公告</h2>
+  <p>群公告用来发布全群都需要知道的事情。发布后所有成员都会收到弹窗通知，之后还可以在群聊窗口的「公告」页签里再次查看。</p>
+  <h3>发布公告</h3>
+  <figure class="shot">
+    <img src="../img/j_manage_announce.png" width="880" alt="群公告页">
+    <figcaption>还没有发布过公告的群公告页</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在左侧导航点 <span class="ui">群公告</span>。</li>
+    <li>在 <span class="ui">优先级</span> 里选择 <span class="ui">通知</span>、<span class="ui">重要</span> 或 <span class="ui">紧急</span>，默认是「通知」。</li>
+    <li>填写 <span class="ui">公告标题（必填）</span>。</li>
+    <li>在下面的框里填写公告内容，内容可以分多行。</li>
+    <li>点 <span class="ui">发布公告</span>。想重新写时点 <span class="ui">清空</span>。</li>
+  </ol>
+  <figure class="shot">
+    <img src="../img/j_announce_compose.png" width="880" alt="填写公告">
+    <figcaption>优先级选「重要」，填好标题和内容</figcaption>
+  </figure>
+  <h3>成员收到的通知</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/j_announce_popup.png" width="380" alt="新群公告弹窗"><figcaption>成员收到的「新群公告」弹窗</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>公告发布后，全体成员各弹出一次「新群公告」窗口，显示群名、优先级、标题、正文以及发布人和时间：</p>
+      <ul>
+        <li><span class="ui">知道了</span>：关闭弹窗。</li>
+        <li><span class="ui">查看全部</span>：打开这个群的群聊窗口，并切换到右侧的「公告」页签，在那里可以翻看本群的全部公告。</li>
+      </ul>
+      <p>同时，群里会出现一张公告卡片，点卡片上的 <span class="ui">查看</span> 可以阅读全文。</p>
+    </div>
+  </div>
+  <h3>管理历史公告</h3>
+  <figure class="shot">
+    <img src="../img/j_announce_published.png" width="880" alt="历史公告">
+    <figcaption>发布后，公告出现在下方的「历史公告」里</figcaption>
+  </figure>
+  <p>发布过的公告按时间列在 <b>历史公告</b> 中，显示标题、优先级、内容摘要、发布人和时间，公告多时分页显示。每条公告右侧有这些按钮：</p>
+  <ul>
+    <li><span class="ui">重新发布</span>：以当前时间把这条公告再发布一次，全体成员会再收到一次公告提醒。历史公告里会多出一条新的记录，原来那条保留。</li>
+    <li><span class="ui">删除</span>：这条公告会从群公告里彻底消失，成员与管理员都不再看得到，且无法恢复。</li>
+    <li><span class="ui">设为入群必读</span> / <span class="ui">取消入群必读</span>：见下文。</li>
+  </ul>
+  <h3 id="must-read">入群必读</h3>
+  <p>把一条公告设为入群必读后，之后加入的成员要先阅读这条公告并点 <span class="ui">我已阅读</span> 才能在群里发言；已经在群里的成员不受影响。</p>
+  <ul>
+    <li>还没确认的新成员打开群聊窗口时，输入区会提示「请先阅读入群必读公告并点「我已阅读」后再发言，点此阅读」，点它即可打开公告。</li>
+    <li>群主和管理员可以在成员卡片的右键菜单里点 <span class="ui">代为确认入群必读</span>，替某位成员确认。</li>
+    <li>取消入群必读后，还没有确认的新成员也可以直接发言。</li>
+  </ul>
+
+  <h2 id="basic">基本信息</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_basic.png" width="880" alt="基本信息页">
+    <figcaption>基本信息页</figcaption>
+  </figure>
+  <table>
+    <tr><th>项目</th><th>说明</th></tr>
+    <tr><td>群头像</td><td>点 <span class="ui">更换头像</span> 选择图片，支持 JPG、PNG，建议 200×200 以上</td></tr>
+    <tr><td>群名称</td><td>修改群名。设定过群名后，群名不再随成员变化自动生成</td></tr>
+    <tr><td>群号</td><td>点 <span class="ui">复制</span> 把群号复制到剪贴板</td></tr>
+    <tr><td>群公告</td><td>显示最新一条公告的标题，点 <span class="ui">去管理</span> 跳到「群公告」页</td></tr>
+    <tr><td>群简介</td><td>可选，显示在群资料窗口里，以及群聊窗口头部的左侧</td></tr>
+  </table>
+  <p>改完后点 <span class="ui">保存修改</span>；点 <span class="ui">重置</span> 放弃还没保存的修改。</p>
+
+  <h2 id="perm">群权限</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_perm.png" width="880" alt="群权限页">
+    <figcaption>群权限页</figcaption>
+  </figure>
+  <p>这一页的设置在切换开关或选择下拉项后立即生效，不需要另外保存。</p>
+  <table>
+    <tr><th>设置项</th><th>可选值与说明</th></tr>
+    <tr><td>加群方式</td><td><b>允许任何人加入</b>：不需要审批，例如点加群链接后直接入群；<b>需要验证消息</b>：要经群主或管理员在「加群审批」里同意；<b>禁止任何人加入</b>：不能申请，也不能通过加群链接加入</td></tr>
+    <tr><td>谁能 @ 全体成员</td><td><b>仅群主和管理员</b>，或 <b>所有人</b>。设为「所有人」后，普通成员在 @ 候选列表里也能选「所有人」</td></tr>
+    <tr><td>新成员查看历史消息</td><td>新加入的成员能否查看入群前的聊天记录</td></tr>
+    <tr><td>成员邀请好友加群</td><td>允许普通成员邀请好友，无需管理员审批</td></tr>
+    <tr><td>入群欢迎语</td><td>新成员加入时由机器人自动发送欢迎消息</td></tr>
+  </table>
+
+  <h2 id="bots">群机器人</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_bots.png" width="880" alt="群机器人页">
+    <figcaption>群机器人页，本群还没有机器人</figcaption>
+  </figure>
+  <p>这一页只有群主能看到，而且需要企业开启机器人功能。页面列出本群可用的机器人：群机器人由群主添加与管理，企业机器人由企业管理员配置。点 <span class="ui">添加与管理机器人</span> 打开群机器人管理窗口，具体用法见<a href="25-bots.html#group-bots">「机器人 → 创建与使用群机器人」</a>。</p>
+
+  <h2 id="danger">危险区域</h2>
+  <figure class="shot">
+    <img src="../img/j_manage_danger.png" width="880" alt="危险区域页">
+    <figcaption>危险区域页，只有群主能看到</figcaption>
+  </figure>
+  <div class="callout warn"><b>以下操作不可撤销</b>执行前都会弹出确认框，请看清提示再确认。</div>
+  <table>
+    <tr><th>操作</th><th>说明</th></tr>
+    <tr><td>转让群主</td><td>点 <span class="ui">转让群主</span>，在弹出的窗口里选择新群主并点 <span class="ui">转让</span>。转让后你将成为普通成员</td></tr>
+    <tr><td>移除全部成员</td><td>移除群主以外的所有成员，群聊仍然保留</td></tr>
+    <tr><td>解散群聊</td><td>所有成员都会被移出，成员本地的聊天记录随之清除，此操作不可恢复</td></tr>
+  </table>
+  <p>只想自己离开而不解散群时，可以在群列表的右键菜单里点 <span class="ui">退出群聊</span>，按提示先转让群主再退出，见<a href="13-group-chat.html#group-menu">「群聊 → 群列表的右键菜单」</a>。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

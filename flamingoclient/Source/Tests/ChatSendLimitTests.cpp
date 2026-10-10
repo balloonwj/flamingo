@@ -1,7 +1,7 @@
 /**
  *  聊天窗发送前体积检查的单元测试（Suite CSL），ChatSendLimitTests.cpp
  *
- *  背景见 bugs.md 的 BUG-32 与 UI/BalloonChatWnd/ChatSendLimit.h：单条消息 content 超过
+ *  背景见 UI/BalloonChatWnd/ChatSendLimit.h：单条消息 content 超过
  *  MESSAGE_CONTENT_MAX_BYTES（256 KiB，按紧凑 JSON 计）时服务端拒收，超大消息被放行则会让
  *  接收方断线。客户端在按下发送时按与服务端相同的口径检查。覆盖：
  *    CSL1 英文正文正好到上限放行，多一个字符拒绝；

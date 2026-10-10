@@ -242,7 +242,7 @@ const std::vector<ChatMessage>& ChatMessages()
             _T("这是上次品牌讨论的总结，先发你看下")));
 
         // 一条带内联表情的消息 —— 正文里的 /f["<id>"] 会被排版引擎画成
-        // Bin/Face 下的小图（见 ChatInlineText.{h,cpp}）。假数据里必须留这么一条：
+        // 程序目录/Face 下的小图（见 ChatInlineText.{h,cpp}）。假数据里必须留这么一条：
         // 否则两个调试入口下永远走不到内联表情那条渲染分支，目检时看不出它有没有坏。
         msgs.push_back(MakeText(kMsgText, true,
             _T("收到 /f[\"5\"] 我这就看，晚点回你 /f[\"12\"]")));

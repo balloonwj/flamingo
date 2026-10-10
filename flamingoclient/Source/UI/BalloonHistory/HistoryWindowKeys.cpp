@@ -66,4 +66,14 @@ int DecideHistoryKey(UINT vk, bool ctrlDown, bool altDown, bool searchFocused, b
     }
 }
 
+int DecideHistoryKey(UINT vk, bool ctrlDown, bool altDown, bool shiftDown, bool searchFocused, bool searchHasText)
+{
+    //F3 / Shift+F3：在命中之间跳转；按住 Ctrl 或 Alt 时不处理
+    if (vk == VK_F3 && !ctrlDown && !altDown)
+    {
+        return shiftDown ? kHistoryKeyPrevHit : kHistoryKeyNextHit;
+    }
+    return DecideHistoryKey(vk, ctrlDown, altDown, searchFocused, searchHasText);
+}
+
 } // namespace balloonhistory

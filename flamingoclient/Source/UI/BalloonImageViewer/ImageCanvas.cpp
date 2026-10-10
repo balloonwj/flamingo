@@ -16,6 +16,8 @@
 #include <atldlgs.h>   // CFileDialog（另存为）。主工程的 stdafx.h 已含，单元测试工程的没有，这里显式引入
 
 #include <gdiplus.h>
+#include <shlwapi.h>   // SHCreateMemStream：LoadImageFromMemory 经 IStream 交给 GDI+ 解码
+#pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "gdiplus.lib")
 
 #include "ImageCanvas.h"
@@ -26,6 +28,9 @@
 #include "../BalloonChatWnd/ChatClipboardIo.h"   // WriteChatContentToClipboard（与聊天气泡右键「复制」同一套剪贴板格式）
 #include "../../Common/Log/IULog.h"              // LOG_INFO / LOG_ERROR
 #include "../../Common/Util/EncodeUtil.h"        // UnicodeToUtf8（日志里记路径）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/Util/FileDialogFilter.h"   // filedlg::MakeFilter：文件对话框过滤串的说明文字逐段翻译
+#include "../../Feature/Ocr/OcrLauncher.h"        // 工具栏「图片文字识别」：是否显示、发起识别
 
 namespace balloonimageviewer {
 
@@ -60,7 +65,7 @@ int RoundToInt(double v)
 
 } // anonymous namespace
 
-ImageCanvas::ImageCanvas()
+ImageCanvas::ImageCanvas(bool viewOnly)
     : m_image(NULL)
     , m_imgW(0)
     , m_imgH(0)
@@ -71,6 +76,9 @@ ImageCanvas::ImageCanvas()
     , m_pressed(false)
     , m_pToolbar(NULL)
     , m_pToast(NULL)
+    , m_viewOnly(viewOnly)
+    , m_blankClickFn(NULL)
+    , m_blankClickCtx(NULL)
 {
     m_origin.x = 0;
     m_origin.y = 0;
@@ -79,8 +87,10 @@ ImageCanvas::ImageCanvas()
     m_pressPt.x = 0;
     m_pressPt.y = 0;
 
-    // 底部悬浮工具栏作为本画布子控件，初始隐藏（无图时不显示）。
-    std::unique_ptr<ImageViewerToolbar> toolbar(new ImageViewerToolbar(this));
+    // 底部悬浮工具栏作为本画布子控件，初始隐藏（无图时不显示）。图片文字识别模块可用时
+    // 工具栏末尾多一个「图片文字识别」按钮；看图窗打开时决定，之后不变。
+    // 只看不存模式（密聊图片）：工具栏没有复制、另存与识别文字
+    std::unique_ptr<ImageViewerToolbar> toolbar(new ImageViewerToolbar(this, ocr::IsOcrEntryVisible(), m_viewOnly));
     m_pToolbar = toolbar.get();
     m_pToolbar->SetVisible(false);
     AddChild(std::unique_ptr<balloonwjui::DuiControl>(toolbar.release()));
@@ -163,6 +173,95 @@ bool ImageCanvas::LoadImageFromFile(LPCTSTR path)
     ClampOrigin();
     Invalidate();
     return true;
+}
+
+bool ImageCanvas::LoadImageFromMemory(const std::vector<unsigned char>& bytes)
+{
+    EnsureGdiplusStarted();
+
+    // 先释放旧图（与 LoadImageFromFile 相同）。没有源文件路径：另存、复制图片、识别文字都不可用
+    if (m_image != NULL)
+    {
+        delete m_image;
+        m_image = NULL;
+    }
+    m_imgW = 0;
+    m_imgH = 0;
+    m_rotation = 0;
+    m_sourcePath.Empty();
+    if (m_pToolbar != NULL)
+    {
+        m_pToolbar->SetVisible(false);
+    }
+    if (bytes.empty())
+    {
+        Invalidate();
+        return false;
+    }
+
+    // GDI+ 从流解码出的位图在整个生命周期里都可能回读这个流，所以先画到一张独立的位图上，再释放流与解码结果
+    Gdiplus::Bitmap* copy = NULL;
+    IStream* stream = ::SHCreateMemStream(&bytes[0], static_cast<UINT>(bytes.size()));
+    if (stream != NULL)
+    {
+        Gdiplus::Bitmap* decoded = Gdiplus::Bitmap::FromStream(stream, FALSE);
+        if (decoded != NULL && decoded->GetLastStatus() == Gdiplus::Ok)
+        {
+            const UINT w = decoded->GetWidth();
+            const UINT h = decoded->GetHeight();
+            copy = new Gdiplus::Bitmap((INT)w, (INT)h, PixelFormat32bppPARGB);
+            if (copy->GetLastStatus() == Gdiplus::Ok)
+            {
+                Gdiplus::Graphics g(copy);
+                g.DrawImage(decoded, 0, 0, (INT)w, (INT)h);
+            }
+            else
+            {
+                delete copy;
+                copy = NULL;
+            }
+        }
+        delete decoded;
+        stream->Release();
+    }
+    if (copy == NULL)
+    {
+        Invalidate();
+        return false;
+    }
+
+    m_image = copy;
+    m_imgW = (int)copy->GetWidth();
+    m_imgH = (int)copy->GetHeight();
+    if (m_pToolbar != NULL)
+    {
+        m_pToolbar->SetVisible(true);
+    }
+    // 打开即"适应窗口"居中，视口还没布局时等首个 Layout 再适应（同 LoadImageFromFile）
+    m_fitOnLayout = true;
+    SIZE vp = ViewportSize();
+    m_scale = (vp.cx > 0 && vp.cy > 0) ? ComputeFitScale(DisplaySize(), vp, false) : 1.0;
+    ClampOrigin();
+    Invalidate();
+    return true;
+}
+
+void ImageCanvas::SetBlankClickHandler(BlankClickFn fn, void* ctx)
+{
+    m_blankClickFn = fn;
+    m_blankClickCtx = ctx;
+}
+
+bool ImageCanvas::IsPointOnImage(POINT ptHost) const
+{
+    if (m_image == NULL)
+    {
+        return false;
+    }
+    const POINT local = ToLocal(ptHost);
+    const SIZE box = ScaledBoxSize();
+    return local.x >= m_origin.x && local.x < m_origin.x + box.cx
+        && local.y >= m_origin.y && local.y < m_origin.y + box.cy;
 }
 
 bool ImageCanvas::HasImage() const
@@ -328,13 +427,15 @@ bool ImageCanvas::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
 
 bool ImageCanvas::OnMouseMove(POINT pt, UINT /*mkFlags*/)
 {
-    // 图片不可平移（能完整显示、或还没有图片）：移出系统拖动阈值后改为移动整个窗口
+    // 图片不可平移（能完整显示、或还没有图片）：移出系统拖动阈值后改为移动整个窗口。
+    // 只看不存模式嵌在聊天窗里，不移动聊天窗
     if (m_pressed && !m_dragging)
     {
         SIZE threshold;
         threshold.cx = ::GetSystemMetrics(SM_CXDRAG);
         threshold.cy = ::GetSystemMetrics(SM_CYDRAG);
-        if (ResolveCanvasDrag(false, IsPannable(), m_pressPt, pt, threshold) == kCanvasDragMoveWindow)
+        if (!m_viewOnly
+            && ResolveCanvasDrag(false, IsPannable(), m_pressPt, pt, threshold) == kCanvasDragMoveWindow)
         {
             StartWindowMove(pt);
         }
@@ -359,10 +460,14 @@ bool ImageCanvas::OnLButtonUp(POINT /*pt*/, UINT /*mkFlags*/)
     m_pressed = false;
     if (!m_dragging)
     {
-        //按下后没移出阈值就松开（单击）：释放捕获即可
+        //按下后没移出阈值就松开（单击）：释放捕获；按下点不在图片上时通知外层（大图浮层据此关闭）
         if (wasPressed)
         {
             ReleaseCapture();
+            if (m_blankClickFn != NULL && !IsPointOnImage(m_pressPt))
+            {
+                m_blankClickFn(m_blankClickCtx);
+            }
             return true;
         }
         return false;
@@ -586,8 +691,8 @@ void ImageCanvas::CopyImage()
     {
         // 无图时按钮本不可见；走到这里多半是源文件在打开看图窗之后被移走或删除了。
         LOG_ERROR("image viewer: copy image skipped, no image or source file missing.");
-        ::MessageBox(owner, _T("复制图片失败，图片文件可能已被移动或删除。"),
-                     _T("图片查看"), MB_ICONWARNING | MB_OK);
+        ::MessageBox(owner, TR(L"复制图片失败，图片文件可能已被移动或删除。"),
+                     TR(L"图片查看"), MB_ICONWARNING | MB_OK);
         return;
     }
 
@@ -596,8 +701,8 @@ void ImageCanvas::CopyImage()
     if (!balloonchatwnd::WriteChatContentToClipboard(owner, segs))
     {
         LOG_ERROR("image viewer: copy image failed, clipboard unavailable.");
-        ::MessageBox(owner, _T("复制图片失败，剪贴板可能正被其他程序占用，请重试。"),
-                     _T("图片查看"), MB_ICONWARNING | MB_OK);
+        ::MessageBox(owner, TR(L"复制图片失败，剪贴板可能正被其他程序占用，请重试。"),
+                     TR(L"图片查看"), MB_ICONWARNING | MB_OK);
         return;
     }
 
@@ -606,7 +711,7 @@ void ImageCanvas::CopyImage()
              EncodeUtil::UnicodeToUtf8(std::wstring((LPCWSTR)m_sourcePath)).c_str());
     if (m_pToast != NULL)
     {
-        m_pToast->Show(_T("已复制"));
+        m_pToast->Show(TR(L"已复制"));
     }
 }
 
@@ -626,19 +731,34 @@ void ImageCanvas::SaveImageAs()
     int dot = m_sourcePath.ReverseFind(_T('.'));
     CString defExt = (dot >= 0) ? m_sourcePath.Mid(dot + 1) : CString(_T("png"));
 
+    //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+    const std::wstring fileFilter = filedlg::MakeFilter(TR(L"图片文件"), filedlg::kImagePatterns, TR(L"所有文件"), L"*.*");
     CFileDialog dlg(FALSE, defExt, defName,
                     OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY | OFN_EXPLORER,
-                    _T("图片文件\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0所有文件\0*.*\0\0"),
+                    fileFilter.c_str(),
                     owner);
     if (dlg.DoModal() == IDOK)
     {
         // 按原文件字节整体拷贝：无损、保持原格式。
         if (!::CopyFile(m_sourcePath, dlg.m_szFileName, FALSE))
         {
-            ::MessageBox(owner, _T("另存为失败，请重试。"),
-                         _T("图片查看"), MB_ICONWARNING | MB_OK);
+            ::MessageBox(owner, TR(L"另存为失败，请重试。"),
+                         TR(L"图片查看"), MB_ICONWARNING | MB_OK);
         }
     }
+}
+
+void ImageCanvas::RecognizeText()
+{
+    if (m_image == NULL || m_sourcePath.IsEmpty())
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND owner = (host != NULL) ? host->m_hWnd : NULL;
+    // 识别源文件（不是屏幕上缩放后的位图），按当前旋转方向转正后再识别
+    LOG_INFO("image viewer: ocr requested, rotation=%d.", m_rotation);
+    ocr::LaunchOcrForFile(owner, std::wstring((LPCWSTR)m_sourcePath), ocr::QuarterTurnsOf(m_rotation));
 }
 
 } // namespace balloonimageviewer

@@ -242,43 +242,10 @@ TEST_CASE("OPS12 置顶状态没变 / 会话不存在时返回 false", "[convops
     CHECK(SetConversationPinned(items, kSingle, 999999, true) == false);
 }
 
-// =====================================================================
-// OPS13~OPS15 —— 改免打扰：不影响排序，查询对未知会话按"不免打扰"兜底
-// =====================================================================
-
-TEST_CASE("OPS13 设置免打扰只改标志，不改列表顺序", "[convops]")
-{
-    std::vector<net::ConversationItem> items;
-    items.push_back(MakeConv(kSingle, 1001, 0, 3000));
-    items.push_back(MakeConv(kSingle, 1002, 0, 1000));
-    SortConversations(items);
-
-    CHECK(SetConversationMuted(items, kSingle, 1001, true) == true);
-
-    CHECK(IsConversationMuted(items, kSingle, 1001) == true);
-    //顺序不变：免打扰不参与排序。
-    CHECK(items[0].m_cid == 1001);
-    CHECK(items[1].m_cid == 1002);
-}
-
-TEST_CASE("OPS14 取消免打扰后查询回到 false", "[convops]")
-{
-    std::vector<net::ConversationItem> items;
-    items.push_back(MakeConv(kSingle, 1001, 0, 1000));
-
-    CHECK(SetConversationMuted(items, kSingle, 1001, true) == true);
-    CHECK(SetConversationMuted(items, kSingle, 1001, true) == false);   // 已是该状态
-    CHECK(SetConversationMuted(items, kSingle, 1001, false) == true);
-    CHECK(IsConversationMuted(items, kSingle, 1001) == false);
-}
-
-TEST_CASE("OPS15 查询未知会话按不免打扰处理", "[convops]")
-{
-    //新消息可能来自一个本地还没有会话行的对端（会话是收到消息那一刻才建的）。
-    //这种情况必须按"不免打扰"处理，否则提示音和托盘闪烁会被静默吞掉。
-    std::vector<net::ConversationItem> items;
-    CHECK(IsConversationMuted(items, kSingle, 1001) == false);
-}
+// OPS13~OPS15（改免打扰、查询免打扰）已于 2026-10-03 随 SetConversationMuted /
+// IsConversationMuted 一并删除：免打扰扩展成五种消息提醒模式，由模式表 NotifyModeModel
+// 记录，对应用例见 NotifyModeTests.cpp 的 NMD 组（查询未知会话按允许提醒处理即 NMD1）。
+// 编号不复用。
 
 // =====================================================================
 // RD1~RD7 —— 收到消息的当下"算不算用户已经看到"的判据
@@ -377,4 +344,76 @@ TEST_CASE("RD11 未读数为负的脏数据按零起算", "[convunread]")
     CHECK(NextUnreadCount(-5, false, false) == 0);
     CHECK(NextUnreadCount(-5, true, false) == 1);
     CHECK(NextUnreadCount(-5, true, true) == 0);
+}
+
+// =====================================================================
+// RCD1~RCD5 —— 会话摘要的撤回提示
+//
+// 服务端对已撤回的最后一条只下发 recalled 标志与中性提示，主面板渲染会话行时据
+// ClassifyRecalledDigest 拼「你撤回了一条消息」或「某某撤回了一条消息」。
+// =====================================================================
+
+TEST_CASE("RCD1 最后一条没有撤回时照原样显示摘要", "[convops][recall]")
+{
+    net::ConversationItem c = MakeConv(kSingle, 5001, 0, 100);
+    c.m_lastFrom = 5001;
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestNone);
+    //发送方是本人也一样，没撤回就不改写
+    c.m_lastFrom = 10001;
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestNone);
+}
+
+TEST_CASE("RCD2 已撤回时按发送方区分本人撤回与别人撤回", "[convops][recall]")
+{
+    net::ConversationItem c = MakeConv(kGroup, 268435463, 0, 100);
+    c.m_lastRecalled = true;
+
+    c.m_lastFrom = 10001;
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestBySelf);
+
+    c.m_lastFrom = 5001;
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestByOther);
+}
+
+TEST_CASE("RCD3 取不到本端 userid 时一律按别人撤回处理", "[convops][recall]")
+{
+    //发送方缺失（0）与本端 userid 缺失（0）不能被当成同一个人
+    net::ConversationItem c = MakeConv(kSingle, 5001, 0, 100);
+    c.m_lastRecalled = true;
+    c.m_lastFrom = 0;
+    CHECK(ClassifyRecalledDigest(c, 0) == kRecalledDigestByOther);
+    c.m_lastFrom = 10001;
+    CHECK(ClassifyRecalledDigest(c, 0) == kRecalledDigestByOther);
+}
+
+TEST_CASE("RCD4 群主撤回别人发的最后一条：按撤回者区分本人与别人，不看发送方", "[convops][recall]")
+{
+    net::ConversationItem c = MakeConv(kGroup, 268435463, 0, 100);
+    c.m_lastRecalled = true;
+    c.m_lastFrom     = 5001;
+
+    //本人（10001）是群主，撤回了 5001 的消息：显示「你撤回了一条消息」
+    c.m_lastRecalledBy = 10001;
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestBySelf);
+    CHECK(RecalledDigestOperator(c) == 10001);
+
+    //管理员 5003 撤回了本人发的消息：显示「管理员撤回了一条消息」，名字按撤回者取
+    c.m_lastFrom       = 10001;
+    c.m_lastRecalledBy = 5003;
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestByOther);
+    CHECK(RecalledDigestOperator(c) == 5003);
+}
+
+TEST_CASE("RCD5 服务端没有记录撤回者时退回按发送方处理", "[convops][recall]")
+{
+    net::ConversationItem c = MakeConv(kGroup, 268435463, 0, 100);
+    c.m_lastRecalled   = true;
+    c.m_lastFrom       = 10001;
+    c.m_lastRecalledBy = 0;
+    CHECK(RecalledDigestOperator(c) == 10001);
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestBySelf);
+
+    c.m_lastFrom = 5001;
+    CHECK(RecalledDigestOperator(c) == 5001);
+    CHECK(ClassifyRecalledDigest(c, 10001) == kRecalledDigestByOther);
 }

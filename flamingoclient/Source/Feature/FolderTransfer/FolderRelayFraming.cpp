@@ -127,12 +127,15 @@ static bool splitFrame(const unsigned char* body, size_t bodylen,
 
 //==================== 描述符的构造 ====================
 
-//把一个文件条目转成 JSON 对象 {"path":...,"size":...}
+//把一个文件条目转成 JSON 对象 {"path":...,"size":...}，已知修改时间时再加 "mtime"
 static Json::Value makeFileEntryValue(const FolderRelayFileEntry& entry)
 {
     Json::Value v;
     v["path"] = entry.m_relpath;
     v["size"] = static_cast<Json::Int64>(entry.m_size);
+    //修改时间只在已知时写出：单聊文件夹传输的旧版接收端不认识这个字段，也不需要它
+    if (entry.m_mtime > 0)
+        v["mtime"] = static_cast<Json::Int64>(entry.m_mtime);
     return v;
 }
 
@@ -526,6 +529,7 @@ static bool parseManifestDescriptor(const std::string& descriptor,
             FolderRelayFileEntry entry;
             entry.m_relpath = jf["path"].asString();
             entry.m_size    = jsonToInt64(jf["size"]);
+            entry.m_mtime   = jsonToInt64(jf["mtime"]);
             if (entry.m_size < 0)
                 return false;
             out.m_files.push_back(entry);
@@ -873,21 +877,17 @@ FolderRelayManifestAssembler::Feed(const FolderRelayManifestSegment& seg)
         return folder_manifest_error;
     }
 
-    //已经收齐之后又来一段：对端行为异常，整份清单不再可信
+    //以下几处容忍发送端重发清单（2026-10-05）：fileserver 在接收端报到之前收到的帧直接丢弃，发送端因此在
+    //回执到达之前重发整份清单，接收端可能收到缺了开头的一份、中间断开的一份，或收齐之后又来的整份
+
+    //已经收齐之后又来一段：发送端重发的多余一份，丢弃，已收齐的结果不变
     if (m_complete)
+        return folder_manifest_ignored;
+
+    //0 号段是一份清单的开头：还没开始时照常开始；已经在累积时说明发送端开始重发了，丢掉没收齐的部分、从头再来
+    if (seg.m_segindex == 0)
     {
         Reset();
-        return folder_manifest_error;
-    }
-
-    if (!m_started)
-    {
-        //第一段必须是 0 号段，否则前面的段已经丢了
-        if (seg.m_segindex != 0)
-        {
-            Reset();
-            return folder_manifest_error;
-        }
         m_started    = true;
         m_segcount   = seg.m_segcount;
         m_foldername = seg.m_foldername;
@@ -896,22 +896,27 @@ FolderRelayManifestAssembler::Feed(const FolderRelayManifestSegment& seg)
         m_totalsize  = seg.m_totalsize;
         m_nextseg    = 0;
     }
+    else if (!m_started)
+    {
+        //还没收到 0 号段就来了后续段：这一份的开头被 fileserver 丢了，丢弃本段，等发送端重发的下一份
+        return folder_manifest_ignored;
+    }
     else if (seg.m_segcount != m_segcount
              || seg.m_foldername != m_foldername
              || seg.m_totaldirs != m_totaldirs
              || seg.m_totalfiles != m_totalfiles
              || seg.m_totalsize != m_totalsize)
     {
-        //后续段的段数、文件夹名与三项总计必须与第一段完全一致
+        //同一份里后续段的段数、文件夹名与三项总计必须与第一段完全一致
         Reset();
         return folder_manifest_error;
     }
 
-    //中转通道是有序可靠的，段号必须严格递增且不跳号；重复的同一段同样按错误处理
+    //段号必须严格递增且不跳号。跳号或重复说明这一份中间断了，丢弃已累积的部分，等发送端重发的下一份
     if (seg.m_segindex != m_nextseg)
     {
         Reset();
-        return folder_manifest_error;
+        return folder_manifest_ignored;
     }
 
     //本段的起始序号必须正好接在已累积条数之后，否则中间有条目丢失或重复

@@ -465,7 +465,7 @@ TEST_CASE("isMuteExpired: 未禁言与永久禁言都不算过期")
     CHECK(GroupProtocol::isMuteExpired(0, 0, now) == false);
     CHECK(GroupProtocol::isMuteExpired(0, now - 1, now) == false);
 
-    //永久禁言（到期时间 0）—— 永不过期。老库升级后 f_muted=1 的行正是这一形态。
+    //永久禁言（到期时间 0）—— 永不过期
     CHECK(GroupProtocol::isMuteExpired(1, 0, now) == false);
 
     //负的到期时间是脏数据，同样按永久禁言处理，不能因为"小于 now"就放行
@@ -577,10 +577,10 @@ TEST_CASE("parseGroupMemberValueRequest: 设管理员不受新字段影响")
 }
 
 // ====================================================================
-// 群设置七项与新字段的编解码（群管理功能新增）
+// 群设置六项与新字段的编解码（群管理功能新增）
 // ====================================================================
 
-TEST_CASE("parseUpdateGroupInfoRequest: 七个新可选项各自独立")
+TEST_CASE("parseUpdateGroupInfoRequest: 六个新可选项各自独立")
 {
     //只带其中一项时，只有它的 has_* 为真，其余全假 —— 保证"改一项不会顺手
     //把别的项覆盖成默认值"。
@@ -595,7 +595,6 @@ TEST_CASE("parseUpdateGroupInfoRequest: 七个新可选项各自独立")
         CHECK(req.has_memberinvite == false);
         CHECK(req.has_welcomeon == false);
         CHECK(req.has_welcometext == false);
-        CHECK(req.has_sensitiveon == false);
         //老字段也不该被误置
         CHECK(req.has_name == false);
         CHECK(req.has_announcement == false);
@@ -623,14 +622,11 @@ TEST_CASE("parseUpdateGroupInfoRequest: 七个新可选项各自独立")
     {
         UpdateGroupInfoRequest req;
         REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
-            "{\"groupid\":\"10000000001\",\"welcomeon\":1,\"welcometext\":\"hi\","
-            "\"sensitiveon\":1}", req));
+            "{\"groupid\":\"10000000001\",\"welcomeon\":1,\"welcometext\":\"hi\"}", req));
         CHECK(req.has_welcomeon);
         CHECK(req.welcomeon == 1);
         CHECK(req.has_welcometext);
         CHECK(req.welcometext == "hi");
-        CHECK(req.has_sensitiveon);
-        CHECK(req.sensitiveon == 1);
     }
 }
 
@@ -650,7 +646,7 @@ TEST_CASE("parseUpdateGroupInfoRequest: 群名为空串表示恢复自动群名"
     CHECK(req2.has_name == false);
 }
 
-TEST_CASE("parseUpdateGroupInfoRequest: 只带老字段时七项全不更新")
+TEST_CASE("parseUpdateGroupInfoRequest: 只带老字段时六项全不更新")
 {
     //老客户端只改群名时发来的请求形态，不该把新设置项一并重置
     UpdateGroupInfoRequest req;
@@ -663,10 +659,32 @@ TEST_CASE("parseUpdateGroupInfoRequest: 只带老字段时七项全不更新")
     CHECK(req.has_memberinvite == false);
     CHECK(req.has_welcomeon == false);
     CHECK(req.has_welcometext == false);
-    CHECK(req.has_sensitiveon == false);
 }
 
-TEST_CASE("buildGroupInfoResponse: 带上七项新设置且 64 位 id 仍为字符串")
+TEST_CASE("parseUpdateGroupInfoRequest: 旧客户端仍带已删除的 sensitiveon 时忽略该字段")
+{
+    //群级敏感词开关已于 2026-10-02 删除，旧版客户端改群资料时可能仍带着它。
+    //解析应照常成功、只更新请求里其余的字段，不能因为多了一个不认识的字段而整体拒绝。
+    UpdateGroupInfoRequest req;
+    REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
+        "{\"groupid\":\"10000000001\",\"name\":\"newname\",\"sensitiveon\":1}", req));
+    CHECK(req.groupid == 10000000001LL);
+    CHECK(req.has_name);
+    CHECK(req.name == "newname");
+    CHECK(req.has_facetype == false);
+    CHECK(req.has_customface == false);
+    CHECK(req.has_announcement == false);
+    CHECK(req.has_joinmode == false);
+    CHECK(req.has_muteall == false);
+    CHECK(req.has_intro == false);
+    CHECK(req.has_atallscope == false);
+    CHECK(req.has_newseehistory == false);
+    CHECK(req.has_memberinvite == false);
+    CHECK(req.has_welcomeon == false);
+    CHECK(req.has_welcometext == false);
+}
+
+TEST_CASE("buildGroupInfoResponse: 带上六项新设置且 64 位 id 仍为字符串")
 {
     GroupRecord g;
     g.groupid       = 10000000001LL;
@@ -679,7 +697,6 @@ TEST_CASE("buildGroupInfoResponse: 带上七项新设置且 64 位 id 仍为字�
     g.memberinvite  = 1;
     g.welcomeon     = 1;
     g.welcometext   = "welcome-text";
-    g.sensitiveon   = 1;
 
     const std::string out = GroupProtocol::buildGroupInfoResponse(0, "ok", g, group_role_owner);
 
@@ -692,7 +709,8 @@ TEST_CASE("buildGroupInfoResponse: 带上七项新设置且 64 位 id 仍为字�
     CHECK(out.find("\"memberinvite\":1") != std::string::npos);
     CHECK(out.find("\"welcomeon\":1") != std::string::npos);
     CHECK(out.find("\"welcometext\":\"welcome-text\"") != std::string::npos);
-    CHECK(out.find("\"sensitiveon\":1") != std::string::npos);
+    //群级敏感词开关已于 2026-10-02 删除，群资料里不应再出现这个字段
+    CHECK(out.find("\"sensitiveon\"") == std::string::npos);
     CHECK(out.find("\"myrole\":2") != std::string::npos);
 }
 
@@ -801,85 +819,6 @@ TEST_CASE("加群申请的来源与推荐人出现在应答与推送里")
     CHECK(list.find("\"requestid\":\"55\"") != std::string::npos);
     CHECK(list.find("\"source\":0") != std::string::npos);
     CHECK(list.find("\"recommender\":\"100001\"") != std::string::npos);
-}
-
-// ====================================================================
-// 敏感词库报文（cmd_get_sensitive_words / cmd_operate_sensitive_word）
-// ====================================================================
-
-TEST_CASE("parseSensitiveWordOpRequest: 新增操作")
-{
-    SensitiveWordOpRequest req;
-    REQUIRE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":1,\"word\":\"badword\"}", req));
-    CHECK(req.groupid == 10000000001LL);
-    CHECK(req.operation == sensitive_word_add);
-    CHECK(req.word == "badword");
-}
-
-TEST_CASE("parseSensitiveWordOpRequest: 删除操作")
-{
-    SensitiveWordOpRequest req;
-    REQUIRE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":2,\"id\":\"77\"}", req));
-    CHECK(req.operation == sensitive_word_delete);
-    CHECK(req.id == 77);
-}
-
-TEST_CASE("parseSensitiveWordOpRequest: 缺字段与非法 operation 一律拒绝")
-{
-    SensitiveWordOpRequest req;
-
-    //群ID缺失或非正
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"operation\":1,\"word\":\"x\"}", req));
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"0\",\"operation\":1,\"word\":\"x\"}", req));
-
-    //operation 缺失 / 不认识
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"word\":\"x\"}", req));
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":9,\"word\":\"x\"}", req));
-
-    //新增却没给词、或给了空词
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":1}", req));
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":1,\"word\":\"\"}", req));
-
-    //删除却没给词条ID、或ID非正
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":2}", req));
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest(
-        "{\"groupid\":\"10000000001\",\"operation\":2,\"id\":\"0\"}", req));
-
-    //根本不是 JSON
-    CHECK_FALSE(GroupProtocol::parseSensitiveWordOpRequest("not json", req));
-}
-
-TEST_CASE("buildSensitiveWordsResponse: 词条ID以字符串编码")
-{
-    std::vector<GroupSensitiveWordRecord> words;
-
-    GroupSensitiveWordRecord w1;
-    w1.id         = 1;
-    w1.word       = "badword";
-    w1.createtime = 1700000000000LL;
-    words.push_back(w1);
-
-    const std::string out = GroupProtocol::buildSensitiveWordsResponse(
-        0, "ok", 10000000001LL, words);
-    CHECK(out.find("\"groupid\":\"10000000001\"") != std::string::npos);
-    CHECK(out.find("\"id\":\"1\"") != std::string::npos);
-    CHECK(out.find("\"word\":\"badword\"") != std::string::npos);
-    CHECK(out.find("\"timestamp\":1700000000000") != std::string::npos);
-
-    //空词库也要有 words 数组，客户端不必区分"没有该字段"与"空列表"
-    std::vector<GroupSensitiveWordRecord> empty;
-    const std::string emptyOut = GroupProtocol::buildSensitiveWordsResponse(
-        0, "ok", 10000000001LL, empty);
-    CHECK(emptyOut.find("\"words\":[]") != std::string::npos);
 }
 
 // =====================================================================
@@ -1120,4 +1059,89 @@ TEST_CASE("fillGroupValue 群资料顺带带出最新公告快照三项")
         g, group_info_change_updated);
     CHECK(notify.find("\"announceid\":\"15\"") != std::string::npos);
     CHECK(notify.find("\"announcetitle\":\"latest title\"") != std::string::npos);
+}
+
+TEST_CASE("SW-P8 改群资料：只取本次提交且与当前值不同的群名、简介、欢迎语、旧公告字段")
+{
+    GroupRecord current;
+    current.groupid      = 600001;
+    current.name         = "项目组";
+    current.intro        = "旧简介";
+    current.welcometext  = "欢迎";
+    current.announcement = "旧公告";
+
+    //简介与当前相同不取；头像、加群方式等非文字字段不取
+    UpdateGroupInfoRequest req;
+    REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
+        "{\"groupid\":\"600001\",\"name\":\"项目二组\",\"intro\":\"旧简介\",\"welcometext\":\"新欢迎语\","
+        "\"announcement\":\"新公告\",\"customface\":\"f1\",\"joinmode\":1}", req));
+    std::vector<std::string> out;
+    //调用前已有的内容保留，本函数只追加
+    out.push_back("既有");
+    GroupProtocol::collectChangedGroupInfoTexts(req, current, out);
+    REQUIRE(out.size() == 4);
+    CHECK(out[0] == "既有");
+    CHECK(out[1] == "项目二组");
+    CHECK(out[2] == "新欢迎语");
+    CHECK(out[3] == "新公告");
+
+    //群名提交空串表示恢复为自动群名（由成员昵称拼成），没有用户输入的文字，不取
+    UpdateGroupInfoRequest autoName;
+    REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
+        "{\"groupid\":\"600001\",\"name\":\"\"}", autoName));
+    std::vector<std::string> none;
+    GroupProtocol::collectChangedGroupInfoTexts(autoName, current, none);
+    CHECK(none.empty());
+
+    //只改全员禁言：没有需要检查的文字
+    UpdateGroupInfoRequest muteOnly;
+    REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
+        "{\"groupid\":\"600001\",\"muteall\":1}", muteOnly));
+    GroupProtocol::collectChangedGroupInfoTexts(muteOnly, current, none);
+    CHECK(none.empty());
+}
+
+TEST_CASE("NM-S1 仅通知模式开启 / 关闭的系统提示：中文 text、tipkind 与操作人")
+{
+    //docs/群管理接入方案.md §14：开关变化时服务端在群里写这条提示，认得 tipkind 的客户端按界面语言重新生成文字
+    Json::Value on;
+    REQUIRE(parseJson(GroupProtocol::buildMuteAllTipContent(1, u8"张三", 100001), on));
+    CHECK(on["text"].asString() == u8"「张三」开启了仅通知模式，仅群主和管理员可以发言");
+    CHECK(on["tipkind"].asString() == "muteall_on");
+    CHECK(on["tipargs"]["operator"].asString() == u8"张三");
+    CHECK(on["tipargs"]["operatorid"].asString() == "100001");
+
+    Json::Value off;
+    REQUIRE(parseJson(GroupProtocol::buildMuteAllTipContent(0, u8"张三", 100001), off));
+    CHECK(off["text"].asString() == u8"「张三」关闭了仅通知模式");
+    CHECK(off["tipkind"].asString() == "muteall_off");
+
+    //取不到昵称与 userid 时 tipargs 不写这两项，中文 text 用缺省写法
+    Json::Value anonymous;
+    REQUIRE(parseJson(GroupProtocol::buildMuteAllTipContent(1, "", 0), anonymous));
+    CHECK(anonymous["text"].asString() == u8"已开启仅通知模式，仅群主和管理员可以发言");
+    CHECK(anonymous["tipargs"].size() == 0);
+    CHECK(GroupProtocol::buildMuteAllTip(0, "") == std::string(u8"已关闭仅通知模式"));
+}
+
+TEST_CASE("NM-S2 群列表（1320）的每个群都带仅通知模式开关 muteall")
+{
+    //主面板的「仅通知」徽章靠它；三处共用 fillGroupValue，这条用例防止日后有人把它挪出 1320
+    GroupRecord notifyOnly;
+    notifyOnly.groupid = 10000000021LL;
+    notifyOnly.name    = "notify-only";
+    notifyOnly.muteall = 1;
+    GroupRecord normal;
+    normal.groupid = 10000000022LL;
+    normal.name    = "normal";
+    normal.muteall = 0;
+
+    std::vector<GroupRecord> groups;
+    groups.push_back(notifyOnly);
+    groups.push_back(normal);
+    Json::Value root;
+    REQUIRE(parseJson(GroupProtocol::buildUserGroupsResponse(0, "ok", groups, std::set<int64_t>()), root));
+    REQUIRE(root["groups"].size() == 2);
+    CHECK(root["groups"][0]["muteall"].asInt() == 1);
+    CHECK(root["groups"][1]["muteall"].asInt() == 0);
 }

@@ -23,7 +23,15 @@
 #include "../../Common/Util/EncodeUtil.h"           // UnicodeToUtf8（日志里的宽字符串路径转 UTF-8）
 #include "../../Common/Util/Utils.h"                // Hootina::CPath::GetAppPath
 #include "../../Session/UserSessionData.h"          // TrayFlashData / kMyPresence* / kPresenceChange*
+#include "../../Feature/ScreenShare/RecordEntry.h"  // 托盘菜单「发起录制」
+#include "../../Feature/ScreenShare/ScreenShareHub.h"  // 托盘菜单「发起屏幕共享」是否出现（CScreenShareHub::IsModuleReady）
+#include "../../Feature/Lock/LockHost.h"     // 托盘菜单「锁屏」是否出现，以及点了之后请求锁屏
+#include "../../Feature/Markdown/MarkdownDocument.h"    // IsMarkdownAvailable：托盘菜单是否出现「Markdown 编辑器」
+#include "../BalloonMarkdown/MarkdownEditorManager.h"   // 托盘菜单「Markdown 编辑器」打开编辑器
+#include "../../Feature/Screenshot/ScreenshotEntry.h"   // 托盘菜单「截图」的文字（全局配置里的快捷键与注册结果）
+#include "../../Feature/Lock/LockSuppressPolicy.h"  // DecideDuringLock：锁屏期间不弹托盘气泡
 #include "../../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"  // balloonui 弹出菜单
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -32,15 +40,16 @@ static const UINT kTrayIconId = 1;
 
 // 两个定时器的标识。它们挂在宿主窗口上，取值须与宿主自己的定时器错开 —— 宿主当前用
 // 5 作断线重连、6 作「无操作自动离开」，主面板用 0xB001 作滚动条动画。
-static const UINT_PTR kLoginAnimTimerId = 1;
-static const UINT_PTR kFlashTimerId     = 2;
+// 1 原为自动登录的六帧转圈动画（没有调用方，2026-10-03 删除），现由正在连接的亮灰交替沿用。
+static const UINT_PTR kConnectingBlinkTimerId = 1;
+static const UINT_PTR kFlashTimerId           = 2;
+// 重连成功后恢复未读提醒的一次性定时器，时长见 balloonmain::kTrayUnreadResumeDelayMs。
+// CTrayIcon 自己的悬停检测定时器用 990、未读浮窗的隐藏定时器用 991，均不冲突。
+static const UINT_PTR kUnreadResumeTimerId    = 3;
 
-// 自动登录期间托盘图标动画的换帧间隔（毫秒）。六帧循环播放，整轮 1.2 秒 —— 快到能看出
-// 「正在忙」，又不至于闪得刺眼。
-static const UINT kLoginAnimIntervalMs = 200;
-
-// 登录动画的帧数，与 m_hLoginIcon 数组长度一致。
-static const int kLoginIconFrameCount = 6;
+// 正在连接时托盘图标亮灰交替的间隔（毫秒），即每 0.5 秒换一帧、一秒一个来回（与用户确认的约
+// 500 毫秒）。交替期间未读消息的头像闪烁暂停，两者不会同时出现，间隔不必与之错开。
+static const UINT kConnectingBlinkIntervalMs = 500;
 
 // 托盘菜单图标尺寸 / 颜色 —— 与主面板左下角系统菜单同口径，保证两处 DuiMenu 视觉统一。
 // DuiMenu 以源矩形 (0,0,16,16) 采样图标，故尺寸取 16。
@@ -58,14 +67,14 @@ CTrayController::CTrayController()
     , m_lpFMGClient(NULL)
     , m_pHost(NULL)
     , m_hAppIcon(NULL)
-    , m_nCurLoginIcon(0)
     , m_hMsgIcon(NULL)
-    , m_dwLoginTimerId(0)
+    , m_dwBlinkTimerId(0)
+    , m_dwUnreadResumeTimerId(0)
     , m_dwMsgTimerId(0)
     , m_bTrayFlashTickLogged(false)
 {
-    for (int i = 0; i < kLoginIconFrameCount; ++i)
-        m_hLoginIcon[i] = NULL;
+    for (int i = 0; i < kTrayBlinkFrameCount; ++i)
+        m_hBlinkIcon[i] = NULL;
     m_rcTrayIconRect.SetRectEmpty();
     // BEGIN_MSG_MAP_EX 声明的这个标志在首次派发时会被先读后写，非窗口类必须自己置初值。
     m_bMsgHandled = FALSE;
@@ -98,7 +107,7 @@ void CTrayController::RemoveIcon()
 
 void CTrayController::RefreshTipOnly()
 {
-    m_TrayIcon.ModifyTip(BuildTrayTipText());
+    m_TrayIcon.ModifyTip(TrayTipForCurrentState());
 }
 
 void CTrayController::ReloadAppIcon()
@@ -108,30 +117,14 @@ void CTrayController::ReloadAppIcon()
 
 void CTrayController::ShowReconnectingBalloon()
 {
-    // 重连期间托盘按当前状态取图标（此刻连接已断，图标为灰），并弹一次气泡提示。
+    // 重连期间托盘按当前状态取图标（此刻连接已断，正在亮灰交替，取的是当前那一帧），并弹一次气泡提示。
+    // 锁屏期间只换图标、不弹气泡（气泡带系统提示音，见 docs/锁屏方案.md 第 3.7 节）
     LoadAppIcon(m_pHost->GetConnectionUiState());
-    m_TrayIcon.ModifyIcon(m_hAppIcon, BuildTrayTipText(), kTrayIconId, TRUE,
-        _T("温馨提示"), _T("您已经掉线，正在帮您重连......"), 3000);
-}
-
-void CTrayController::StartLoginAnimation()
-{
-    LoadLoginIcon();
-    //::SetTimer 返回 UINT_PTR，而 m_dwLoginTimerId 声明为 DWORD。定时器标识由本处以常量
-    //kLoginAnimTimerId 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
-    m_dwLoginTimerId = static_cast<DWORD>(
-        ::SetTimer(m_hHost, kLoginAnimTimerId, kLoginAnimIntervalMs, NULL));
-    LOG_INFO("TrayController::StartLoginAnimation: tray login animation started, timerId=%u.",
-             (unsigned)m_dwLoginTimerId);
-}
-
-void CTrayController::StopLoginAnimation()
-{
-    if (m_dwLoginTimerId != 0)
-    {
-        ::KillTimer(m_hHost, m_dwLoginTimerId);
-        m_dwLoginTimerId = 0;
-    }
+    const BOOL bPopupBalloon =
+        (balloonlock::DecideDuringLock(balloonlock::kLockEvtTrayBalloon, balloonlock::IsScreenLocked())
+         == balloonlock::kLockActNormal) ? TRUE : FALSE;
+    m_TrayIcon.ModifyIcon(m_hAppIcon, TrayTipForCurrentState(), kTrayIconId, bPopupBalloon,
+        TR(L"温馨提示"), TR(L"您已经掉线，正在帮您重连......"), 3000);
 }
 
 BOOL CTrayController::GetTrayIconRect(RECT* lpRect)
@@ -173,31 +166,47 @@ bool CTrayController::PumpTimer(UINT_PTR nIDEvent)
         OnFlashTimerTick();
         return true;
     }
-    if (nIDEvent == m_dwLoginTimerId && m_dwLoginTimerId != 0)
+    if (nIDEvent == m_dwBlinkTimerId && m_dwBlinkTimerId != 0)
     {
-        // 登录动画：六帧循环播放。
-        m_TrayIcon.ModifyIcon(m_hLoginIcon[m_nCurLoginIcon], _T(""));
-        m_nCurLoginIcon++;
-        if (m_nCurLoginIcon >= kLoginIconFrameCount)
-            m_nCurLoginIcon = 0;
+        OnConnectingBlinkTick();
+        return true;
+    }
+    if (nIDEvent == m_dwUnreadResumeTimerId && m_dwUnreadResumeTimerId != 0)
+    {
+        OnUnreadResumeTick();
         return true;
     }
     return false;
+}
+
+void CTrayController::OnConnectingBlinkTick()
+{
+    const TrayBlinkFrame frame = m_connBlink.Tick();
+    HICON hFrame = m_hBlinkIcon[frame];
+    if (hFrame == NULL)
+    {
+        // LoadBlinkIcons 失败时已记过错误日志，这里不再逐次刷日志，保持当前图标
+        return;
+    }
+    // 提示文字传 NULL：只换图标，悬停提示保持「正在连接」那三行不变
+    m_TrayIcon.ModifyIcon(hFrame, NULL);
 }
 
 void CTrayController::OnFlashTimerTick()
 {
     static BOOL bSwitch = FALSE;
 
-    if (m_dwLoginTimerId != 0)
+    if (!m_unreadHold.AllowUnread())
     {
-        // 登录动画定时器还在，说明本轮登录尚未收到应答。此时直接返回会让托盘
-        // 一声不响地不闪，记一笔，免得排查时以为是闪烁逻辑本身坏了。
+        // 重连期间（以及连上后的等待期里）未读提醒暂停：托盘此刻在亮灰交替或刚停下，未读闪烁的
+        // 定时器照常运行、只是每次都跳过，恢复定时器到点后自然继续。只记一条，免得排查时以为是
+        // 闪烁逻辑本身坏了。
         if (!m_bTrayFlashTickLogged)
         {
             m_bTrayFlashTickLogged = true;
-            LOG_WARNING("Tray flash tick skipped: login animation timer is still running "
-                        "(loginTimerId=%u).", (UINT)m_dwLoginTimerId);
+            LOG_INFO("Tray flash tick paused: unread reminders are held while reconnecting "
+                     "(blinkTimerId=%u, resumeTimerId=%u).", (UINT)m_dwBlinkTimerId,
+                     (UINT)m_dwUnreadResumeTimerId);
         }
         return;
     }
@@ -208,6 +217,9 @@ void CTrayController::OnFlashTimerTick()
     // 画面在交替。
     // 头像图标万一没生成出来（m_hMsgIcon 为空），两个相位都退回应用图标 —— 宁可不闪，
     // 也不要把托盘图标闪成空白。
+    // 提示文字有意传空串而不是 NULL：CTrayIcon::ModifyIcon 只要提示指针非空就带上 NIF_TIP，
+    // 空串会把系统的悬停提示清空。闪烁期间悬停托盘由自绘的未读浮窗（OnTrayIcon_MouseHover）
+    // 接管，系统提示若仍在，两者会同时出现；停闪时 StopTrayFlash 经 UpdateTrayIconTip 恢复提示。
     bSwitch = !bSwitch;
     BOOL bOk = FALSE;
     if (bSwitch || m_hMsgIcon == NULL)
@@ -228,7 +240,8 @@ void CTrayController::OnFlashTimerTick()
 
 void CTrayController::Shutdown()
 {
-    StopLoginAnimation();
+    StopConnectingBlinkTimer();
+    StopUnreadResumeTimer();
 
     if (m_dwMsgTimerId != 0)
     {
@@ -244,7 +257,6 @@ void CTrayController::Shutdown()
         m_trayMsgTipPopup.DestroyWindow();
 
     DestroyAppIcon();
-    DestroyLoginIcon();
 
     if (m_hMsgIcon != NULL)
     {
@@ -253,11 +265,33 @@ void CTrayController::Shutdown()
     }
 }
 
-//======================== 托盘图标资源：按连接态与在线状态取图标，以及自动登录动画的六帧 ========================
+//======================== 托盘图标资源：按连接态与在线状态取图标，以及正在连接时亮灰交替的两帧 ========================
 
 BOOL CTrayController::LoadAppIcon(int nConnUiState)
 {
     DestroyAppIcon();
+
+    // 先据连接态开始或停止亮灰交替，并暂停或准备恢复未读提醒。各处在连接态变化后都会经这里
+    // 重取图标，这两件事因此不必在每个调用点各写一遍。
+    SyncConnectingBlink(nConnUiState);
+    SyncUnreadHold(nConnUiState);
+    if (m_connBlink.IsBlinking())
+    {
+        // 交替中：常态图标就是当前那一帧（复制一份，m_hAppIcon 与两帧图标各自释放），
+        // 调用方随后推给系统的正是这一帧，与交替定时器的下一次切换衔接。正在连接不叠状态角标。
+        HICON hFrame = m_hBlinkIcon[m_connBlink.CurrentFrame()];
+        if (hFrame != NULL)
+        {
+            m_hAppIcon = ::CopyIcon(hFrame);
+        }
+        if (m_hAppIcon != NULL)
+        {
+            return TRUE;
+        }
+        // 两帧图标没有加载成功：退回下面的常规取法（灰色图标），托盘至少不会没有图标
+        LOG_WARNING("TrayController::LoadAppIcon: blink frame icon unavailable, frame=%d, "
+                    "falling back to the plain icon.", (int)m_connBlink.CurrentFrame());
+    }
 
     // 图标文件名由 OnlineCapability 决定（真正在线才彩色，离线与连接未就绪都灰），
     // 与"离线时哪些功能可用"同一个判定口径；日后为离开 / 忙碌各配一只图标时只改那一处。
@@ -311,31 +345,129 @@ void CTrayController::DestroyAppIcon()
     }
 }
 
-BOOL CTrayController::LoadLoginIcon()
+void CTrayController::SyncConnectingBlink(int nConnUiState)
 {
-    DestroyLoginIcon();
-
-    CString strFileName;
-    for (int i = 0; i < 6; i++)
+    const TrayBlinkAction action = m_connBlink.OnConnUiState(nConnUiState);
+    if (action == kTrayBlinkStart)
     {
-        strFileName.Format(_T("%sImage\\Loading_%d.ico"), Hootina::CPath::GetAppPath().c_str(), i + 1);
-        m_hLoginIcon[i] = AtlLoadIconImage((LPCTSTR)strFileName, LR_DEFAULTCOLOR | LR_LOADFROMFILE,
-            ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+        LoadBlinkIcons();
+        //::SetTimer 返回 UINT_PTR，而 m_dwBlinkTimerId 声明为 DWORD。定时器标识由本处以常量
+        //kConnectingBlinkTimerId 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
+        m_dwBlinkTimerId = static_cast<DWORD>(
+            ::SetTimer(m_hHost, kConnectingBlinkTimerId, kConnectingBlinkIntervalMs, NULL));
+        LOG_INFO("TrayController::SyncConnectingBlink: connecting, tray icon blink started, "
+                 "timerId=%u, interval=%u ms, unreadFlashTimerId=%u.",
+                 (UINT)m_dwBlinkTimerId, kConnectingBlinkIntervalMs, (UINT)m_dwMsgTimerId);
     }
-
-    return TRUE;
+    else if (action == kTrayBlinkStop)
+    {
+        StopConnectingBlinkTimer();
+        // 未读闪烁的定时器在交替期间一直在跑、只是每次都跳过，停止交替后自然恢复；
+        // 复位首次 tick 日志标志，恢复后的第一次闪烁照常记一条
+        m_bTrayFlashTickLogged = false;
+        LOG_INFO("TrayController::SyncConnectingBlink: connUiState=%d, tray icon blink stopped, "
+                 "resting frame=%d (0=bright 1=gray), unreadFlashTimerId=%u.",
+                 nConnUiState, (int)m_connBlink.CurrentFrame(), (UINT)m_dwMsgTimerId);
+    }
 }
 
-void CTrayController::DestroyLoginIcon()
+void CTrayController::SyncUnreadHold(int nConnUiState)
 {
-    for (int i = 0; i < 6; i++)
+    const bool wasAllowed = m_unreadHold.AllowUnread();
+    const TrayUnreadHoldAction action = m_unreadHold.OnConnUiState(nConnUiState);
+    if (action == kTrayUnreadHoldStartResume)
     {
-        if (m_hLoginIcon[i] != NULL)
+        //::SetTimer 返回 UINT_PTR，而 m_dwUnreadResumeTimerId 声明为 DWORD。定时器标识由本处以常量
+        //kUnreadResumeTimerId 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
+        m_dwUnreadResumeTimerId = static_cast<DWORD>(
+            ::SetTimer(m_hHost, kUnreadResumeTimerId, kTrayUnreadResumeDelayMs, NULL));
+        LOG_INFO("TrayController::SyncUnreadHold: connection ready, unread reminders resume in %u ms, "
+                 "timerId=%u.", kTrayUnreadResumeDelayMs, (UINT)m_dwUnreadResumeTimerId);
+    }
+    else if (action == kTrayUnreadHoldCancelResume)
+    {
+        StopUnreadResumeTimer();
+        LOG_INFO("TrayController::SyncUnreadHold: connUiState=%d, pending unread resume cancelled, "
+                 "allowUnread=%d.", nConnUiState, m_unreadHold.AllowUnread() ? 1 : 0);
+    }
+
+    // 刚进入暂停：已经弹出的未读浮窗收起来，悬停改为显示系统提示
+    if (wasAllowed && !m_unreadHold.AllowUnread())
+    {
+        if (m_trayMsgTipPopup.IsWindow())
         {
-            ::DestroyIcon(m_hLoginIcon[i]);
-            m_hLoginIcon[i] = NULL;
+            m_trayMsgTipPopup.HidePopup();
+        }
+        LOG_INFO("TrayController::SyncUnreadHold: reconnecting, unread reminders held, "
+                 "unreadConversations=%d.", m_trayFlash.GetConversationCount());
+    }
+}
+
+void CTrayController::StopUnreadResumeTimer()
+{
+    if (m_dwUnreadResumeTimerId != 0)
+    {
+        ::KillTimer(m_hHost, m_dwUnreadResumeTimerId);
+        m_dwUnreadResumeTimerId = 0;
+    }
+}
+
+void CTrayController::OnUnreadResumeTick()
+{
+    // 一次性定时器：到点即停
+    StopUnreadResumeTimer();
+    m_unreadHold.OnResumeTimer();
+    // 恢复后的第一次未读闪烁照常记一条日志
+    m_bTrayFlashTickLogged = false;
+    // 有未读时系统提示让位给未读浮窗
+    RefreshTipOnly();
+    LOG_INFO("TrayController::OnUnreadResumeTick: unread reminders resumed, allowUnread=%d, "
+             "unreadConversations=%d.", m_unreadHold.AllowUnread() ? 1 : 0,
+             m_trayFlash.GetConversationCount());
+}
+
+void CTrayController::LoadBlinkIcons()
+{
+    DestroyBlinkIcons();
+
+    // 两帧就是在线与离线两只托盘图标，文件名取 GetTrayIconFileName 的结果，与常态图标同源
+    const int frameConnUi[kTrayBlinkFrameCount] = { kConnUiOnline, kConnUiOffline };
+    const int nIconW = ::GetSystemMetrics(SM_CXSMICON);
+    const int nIconH = ::GetSystemMetrics(SM_CYSMICON);
+    for (int i = 0; i < kTrayBlinkFrameCount; ++i)
+    {
+        tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\");
+        strFileName += balloonmain::GetTrayIconFileName(frameConnUi[i]);
+        m_hBlinkIcon[i] = AtlLoadIconImage(strFileName.c_str(), LR_DEFAULTCOLOR | LR_LOADFROMFILE,
+            nIconW, nIconH);
+        if (m_hBlinkIcon[i] == NULL)
+        {
+            LOG_ERROR("TrayController::LoadBlinkIcons: failed to load blink frame %d icon: %s.",
+                      i, EncodeUtil::UnicodeToUtf8(strFileName).c_str());
         }
     }
+}
+
+void CTrayController::DestroyBlinkIcons()
+{
+    for (int i = 0; i < kTrayBlinkFrameCount; ++i)
+    {
+        if (m_hBlinkIcon[i] != NULL)
+        {
+            ::DestroyIcon(m_hBlinkIcon[i]);
+            m_hBlinkIcon[i] = NULL;
+        }
+    }
+}
+
+void CTrayController::StopConnectingBlinkTimer()
+{
+    if (m_dwBlinkTimerId != 0)
+    {
+        ::KillTimer(m_hHost, m_dwBlinkTimerId);
+        m_dwBlinkTimerId = 0;
+    }
+    DestroyBlinkIcons();
 }
 
 //======================== 悬停提示文字与图标刷新 ========================
@@ -366,9 +498,20 @@ CString CTrayController::BuildTrayTipText()
     return strIconInfo;
 }
 
+CString CTrayController::TrayTipForCurrentState()
+{
+    // 有未读时悬停弹的是未读消息浮窗，系统提示留空，两者不会叠在一起出现。原先只有未读闪烁的
+    // 每一拍传空串，「正在连接」期间闪烁暂停、各处刷新又把三行提示写了回去，悬停时就两个都出来了
+    if (!balloonmain::ShouldShowTraySystemTip(m_trayFlash, m_unreadHold.AllowUnread()))
+    {
+        return CString();
+    }
+    return BuildTrayTipText();
+}
+
 void CTrayController::UpdateTrayIconTip()
 {
-    m_TrayIcon.ModifyIcon(m_hAppIcon, BuildTrayTipText());
+    m_TrayIcon.ModifyIcon(m_hAppIcon, TrayTipForCurrentState());
 }
 
 void CTrayController::RefreshTrayIconForStatus()
@@ -379,11 +522,11 @@ void CTrayController::RefreshTrayIconForStatus()
     // 注意这里<u>不再</u>读 v1 的 m_FMGClient.GetStatus()：v2 改状态并不更新那个字段，
     // 只有掉线时的 ResetToOfflineStatus 会把它置成 STATUS_OFFLINE，据它取图标会取错。
     //
-    // 提示文字统一走 BuildTrayTipText（昵称 / 账号 / 状态三行），与其它几处刷新托盘
-    // 提示的地方保持同一种格式 —— 原先这里用的是"昵称（状态）"单行格式，两种格式会
-    // 互相覆盖，用户看到的提示取决于最后是谁刷的。
+    // 提示文字统一走 TrayTipForCurrentState（没有未读时为昵称 / 账号 / 状态三行，有未读时为空），
+    // 与其它几处刷新托盘提示的地方保持同一种格式 —— 原先这里用的是"昵称（状态）"单行格式，
+    // 两种格式会互相覆盖，用户看到的提示取决于最后是谁刷的。
     LoadAppIcon(m_pHost->GetConnectionUiState());
-    m_TrayIcon.ModifyIcon(m_hAppIcon, BuildTrayTipText());
+    m_TrayIcon.ModifyIcon(m_hAppIcon, TrayTipForCurrentState());
 }
 
 //======================== 新消息闪烁 ========================
@@ -486,8 +629,18 @@ void CTrayController::OnTrayIcon_RButtunUp()
     bool bMuted = IsMuted();
     int  nCurrentPresence = m_pHost->GetCurrentPresence();
     int  nConnUiState = m_pHost->GetConnectionUiState();
+    // 「截图」一项登录前后都有，文字带上当前生效的快捷键（注册失败或停用时只写「截图」）；shotLabel 须活到菜单用完
+    const CString shotLabel = balloonscreenshot::TrayScreenshotLabel(
+        balloonscreenshot::LoadGlobalScreenshotPrefs().m_hotkey,
+        balloonscreenshot::GetScreenshotHotkeyState() == balloonscreenshot::kShotHotkeyRegistered);
     std::vector<balloonmain::TrayMenuEntry> model =
-        balloonmain::BuildTrayMenuModel(kind, bMuted, nCurrentPresence, nConnUiState);
+        balloonmain::BuildTrayMenuModel(kind, bMuted, nCurrentPresence, nConnUiState,
+                                        balloonscreenshare::CurrentRecordMenuState(),
+                                        balloonscreenshare::CScreenShareHub::GetInstance().IsModuleReady(),
+                                        balloonlock::CLockHost::GetInstance().IsModuleReady(),
+                                        markdown::IsMarkdownAvailable(),
+                                        //截图模块不可用时不传文字，菜单里就没有「截图」（docs/截图独立模块方案.md 3.3 节）
+                                        balloonscreenshot::IsScreenshotAvailable() ? (LPCWSTR)shotLabel : NULL);
 
     balloonwjui::DuiMenu menu;
     std::vector<std::unique_ptr<CImageEx> > icons;
@@ -610,6 +763,33 @@ void CTrayController::OnTrayIcon_RButtunUp()
         m_pHost->ShowLoginOrMainPanel();
         break;
 
+    // 「发起屏幕共享」：交给主面板打开选会话窗口，选好后打开那个会话的聊天窗并弹出共享内容选择窗
+    case balloonmain::kTrayMenuScreenShare:
+        if (m_pPanel != NULL && m_pPanel->IsWindow())
+            m_pPanel->OpenStartScreenSharePicker();
+        break;
+
+    // 「锁屏」：由 FlamingoLock.dll 在它自己的线程上弹出设置临时密码的窗口，本调用立即返回
+    case balloonmain::kTrayMenuLockScreen:
+        balloonlock::CLockHost::GetInstance().RequestLock();
+        break;
+
+    // 「截图」：登录前后都可用，交给主面板等菜单从屏幕上消失后再发起不绑定会话的截图（docs/截图独立模块方案.md 3.6 节）
+    case balloonmain::kTrayMenuScreenshot:
+        if (m_pPanel != NULL && m_pPanel->IsWindow())
+            m_pPanel->RequestTrayScreenshot();
+        break;
+
+    // 「Markdown 编辑器」：打开一个空白编辑器，登录前后都可用（docs/Markdown消息方案.md 第 11.3 节）
+    case balloonmain::kTrayMenuMarkdownEditor:
+        balloonmd::CMarkdownEditorManager::GetInstance().OpenEditor(std::string(), NULL);
+        break;
+
+    // 「发起录制 / 停止录制」：由 FlamingoMedia.dll 开始独立录屏，录制中则停止并保存
+    case balloonmain::kTrayMenuRecord:
+        balloonscreenshare::ToggleRecording();
+        break;
+
     case balloonmain::kTrayMenuLogout:
         // 登出不能在这里同步做：它要销毁主面板并进入登录窗的模态循环，而此刻还站在
         // 托盘消息处理 + TrackPopup 返回后的调用栈上。投递给自己，等消息循环下一轮
@@ -629,8 +809,9 @@ void CTrayController::OnTrayIcon_RButtunUp()
 
 void CTrayController::OnTrayIcon_MouseHover()
 {
-    // 仅在托盘正闪新消息时弹出未读提示列表（无未读不弹）。
-    if (!m_trayFlash.IsFlashing())
+    // 仅在托盘正闪新消息时弹出未读提示列表（无未读不弹）。重连期间与连上后的等待期里也不弹
+    // （见 CTrayUnreadHold），此时悬停显示的是系统提示。
+    if (!m_trayFlash.IsFlashing() || !m_unreadHold.AllowUnread())
         return;
 
     // 托盘图标定位：现代 Windows 上读其它进程托盘工具栏取图标矩形并不可靠（曾导致
@@ -730,6 +911,9 @@ LRESULT CTrayController::OnV2TrayFlash(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM 
     // 重建"最近一条"会话的 monogram 头像图标，供 OnTimer 闪烁切换使用。
     UpdateTrayFlashIcon();
 
+    // 有了未读就立刻清空系统提示，不等第一次闪烁计时：那之前悬停会同时出现系统提示与未读浮窗
+    RefreshTipOnly();
+
     // 闪烁定时器未起则起一个（复用收消息闪烁定时器 id）。已在闪则沿用，避免重复 SetTimer。
     const bool bTimerAlreadyOn = (0 != m_dwMsgTimerId);
     if (!bTimerAlreadyOn)
@@ -750,9 +934,9 @@ LRESULT CTrayController::OnV2TrayFlash(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM 
     m_bTrayFlashTickLogged = false;
 
     LOG_INFO("Tray flash requested: ctype=%d, cid=%lld, conversations=%d, avatarIcon=%p, "
-             "timerAlreadyOn=%d, loginAnimTimerId=%u.",
+             "timerAlreadyOn=%d, connectingBlink=%d.",
              nCtype, nCid, m_trayFlash.GetConversationCount(), m_hMsgIcon,
-             bTimerAlreadyOn ? 1 : 0, (UINT)m_dwLoginTimerId);
+             bTimerAlreadyOn ? 1 : 0, m_connBlink.IsBlinking() ? 1 : 0);
 
     return 0;
 }
@@ -790,9 +974,17 @@ LRESULT CTrayController::OnV2TrayClear(UINT /*uMsg*/, WPARAM wParam, LPARAM lPar
 // 也不会打断闪烁。
 LRESULT CTrayController::OnTrayMinimizeTip(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
 {
-    m_TrayIcon.ShowBalloonTip(_T("温馨提示"),
-        _T("FlamingoIM 已最小化到托盘，单击托盘图标可重新打开主面板。"),
-        kTrayMinimizeTipTimeoutMs);
+    // 锁屏期间不弹（锁屏前一刻最小化主面板时，这条消息可能在锁屏之后才处理）
+    if (balloonlock::DecideDuringLock(balloonlock::kLockEvtTrayBalloon, balloonlock::IsScreenLocked())
+        != balloonlock::kLockActNormal)
+    {
+        LOG_INFO("Tray balloon tip skipped: screen is locked.");
+        return 0;
+    }
+    // 提示里的产品名称取 flamingo.ini 的 [ui] apptitle
+    CString strTip;
+    strTip.Format(TR(L"%s 已最小化到托盘，单击托盘图标可重新打开主面板。"), g_strAppTitle.c_str());
+    m_TrayIcon.ShowBalloonTip(TR(L"温馨提示"), strTip, kTrayMinimizeTipTimeoutMs);
 
     LOG_INFO("Tray balloon tip shown: main panel minimized to tray.");
     return 0;

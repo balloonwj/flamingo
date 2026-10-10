@@ -79,14 +79,19 @@ static bool insertRow(IDatabase& db, int id, const char* note)
 // Suite DRP：断线重试策略（纯函数，不碰数据库）
 // ---------------------------------------------------------------------------
 
-TEST_CASE("DRP1 断线错误码的判定：只有 2006 与 2013 算连接断开")
+TEST_CASE("DRP1 断线错误码的判定：2006、2013、2026、4031 算连接断开")
 {
     CHECK(dbapi::IsDisconnectMysqlErrno(dbapi::DB_MYSQL_ERR_SERVER_GONE));
     CHECK(dbapi::IsDisconnectMysqlErrno(dbapi::DB_MYSQL_ERR_SERVER_LOST));
+    //TLS 连接被服务端关闭后的读写失败，与空闲超时被服务端断开（实测见 DbRetryPolicy.h 的注释）
+    CHECK(dbapi::IsDisconnectMysqlErrno(dbapi::DB_MYSQL_ERR_TLS_CONNECTION));
+    CHECK(dbapi::IsDisconnectMysqlErrno(dbapi::DB_MYSQL_ERR_INTERACTION_TIMEOUT));
 
     //数值本身也钉住，避免有人顺手改了常量却没人发现
     CHECK(dbapi::DB_MYSQL_ERR_SERVER_GONE == 2006);
     CHECK(dbapi::DB_MYSQL_ERR_SERVER_LOST == 2013);
+    CHECK(dbapi::DB_MYSQL_ERR_TLS_CONNECTION == 2026);
+    CHECK(dbapi::DB_MYSQL_ERR_INTERACTION_TIMEOUT == 4031);
 
     //0 表示没有错误；1062 是主键冲突；2005 是解析不出主机名，属于连不上而不是连上了又断
     CHECK_FALSE(dbapi::IsDisconnectMysqlErrno(0));
@@ -109,27 +114,35 @@ TEST_CASE("DRP2 重试判定的完整取值表：错误码 × 事务中与否 ×
 
     static const RetryCase kCases[] =
     {
-        //非事务 + 只读：两种断线码都该重试，SELECT 重跑没有副作用
-        { dbapi::DB_MYSQL_ERR_SERVER_GONE, false, dbapi::DB_STMT_READ_ONLY, true  },
-        { dbapi::DB_MYSQL_ERR_SERVER_LOST, false, dbapi::DB_STMT_READ_ONLY, true  },
+        //非事务 + 只读：四种断线码都该重试，SELECT 重跑没有副作用
+        { dbapi::DB_MYSQL_ERR_SERVER_GONE,         false, dbapi::DB_STMT_READ_ONLY, true  },
+        { dbapi::DB_MYSQL_ERR_SERVER_LOST,         false, dbapi::DB_STMT_READ_ONLY, true  },
+        { dbapi::DB_MYSQL_ERR_TLS_CONNECTION,      false, dbapi::DB_STMT_READ_ONLY, true  },
+        { dbapi::DB_MYSQL_ERR_INTERACTION_TIMEOUT, false, dbapi::DB_STMT_READ_ONLY, true  },
         //非事务 + 只读 + 普通 SQL 错误：不是断线，不该重试
-        { 1062,                            false, dbapi::DB_STMT_READ_ONLY, false },
+        { 1062,                                    false, dbapi::DB_STMT_READ_ONLY, false },
 
-        //非事务 + 写：只有 2006 能确定语句没到达服务端，才允许重试
-        { dbapi::DB_MYSQL_ERR_SERVER_GONE, false, dbapi::DB_STMT_WRITE,     true  },
-        //非事务 + 写 + 2013：语句已经发出，有没有生效无从判断，重跑可能写进两份数据
-        { dbapi::DB_MYSQL_ERR_SERVER_LOST, false, dbapi::DB_STMT_WRITE,     false },
-        { 1062,                            false, dbapi::DB_STMT_WRITE,     false },
+        //非事务 + 写：只有能确定语句没到达服务端的 2006 与 4031，才允许重试
+        { dbapi::DB_MYSQL_ERR_SERVER_GONE,         false, dbapi::DB_STMT_WRITE,     true  },
+        { dbapi::DB_MYSQL_ERR_INTERACTION_TIMEOUT, false, dbapi::DB_STMT_WRITE,     true  },
+        //非事务 + 写 + 2013 / 2026：语句可能已经发出，有没有生效无从判断，重跑可能写进两份数据
+        { dbapi::DB_MYSQL_ERR_SERVER_LOST,         false, dbapi::DB_STMT_WRITE,     false },
+        { dbapi::DB_MYSQL_ERR_TLS_CONNECTION,      false, dbapi::DB_STMT_WRITE,     false },
+        { 1062,                                    false, dbapi::DB_STMT_WRITE,     false },
 
         //事务中：无论错误码是什么、语句是哪一类，一律不重试。
         //这是本次改动的核心规则 —— 重连拿到的是一条全新的、处于自动提交状态的连接，
         //在它上面重跑只会让这条语句单独生效并立即提交，把整批操作的原子性破坏掉
-        { dbapi::DB_MYSQL_ERR_SERVER_GONE, true,  dbapi::DB_STMT_READ_ONLY, false },
-        { dbapi::DB_MYSQL_ERR_SERVER_LOST, true,  dbapi::DB_STMT_READ_ONLY, false },
-        { 1062,                            true,  dbapi::DB_STMT_READ_ONLY, false },
-        { dbapi::DB_MYSQL_ERR_SERVER_GONE, true,  dbapi::DB_STMT_WRITE,     false },
-        { dbapi::DB_MYSQL_ERR_SERVER_LOST, true,  dbapi::DB_STMT_WRITE,     false },
-        { 1062,                            true,  dbapi::DB_STMT_WRITE,     false }
+        { dbapi::DB_MYSQL_ERR_SERVER_GONE,         true,  dbapi::DB_STMT_READ_ONLY, false },
+        { dbapi::DB_MYSQL_ERR_SERVER_LOST,         true,  dbapi::DB_STMT_READ_ONLY, false },
+        { dbapi::DB_MYSQL_ERR_TLS_CONNECTION,      true,  dbapi::DB_STMT_READ_ONLY, false },
+        { dbapi::DB_MYSQL_ERR_INTERACTION_TIMEOUT, true,  dbapi::DB_STMT_READ_ONLY, false },
+        { 1062,                                    true,  dbapi::DB_STMT_READ_ONLY, false },
+        { dbapi::DB_MYSQL_ERR_SERVER_GONE,         true,  dbapi::DB_STMT_WRITE,     false },
+        { dbapi::DB_MYSQL_ERR_SERVER_LOST,         true,  dbapi::DB_STMT_WRITE,     false },
+        { dbapi::DB_MYSQL_ERR_TLS_CONNECTION,      true,  dbapi::DB_STMT_WRITE,     false },
+        { dbapi::DB_MYSQL_ERR_INTERACTION_TIMEOUT, true,  dbapi::DB_STMT_WRITE,     false },
+        { 1062,                                    true,  dbapi::DB_STMT_WRITE,     false }
     };
 
     const size_t caseCount = sizeof(kCases) / sizeof(kCases[0]);

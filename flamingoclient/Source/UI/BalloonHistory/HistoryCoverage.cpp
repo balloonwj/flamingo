@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 #include <stdio.h>   // swprintf_s（副标题与底部信息栏文字）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -184,12 +185,12 @@ std::wstring BuildHistorySubtitleText(int64_t total, bool hasUnloadedOlder)
     wchar_t buf[kHistoryTextBufLen] = { 0 };
     if (hasUnloadedOlder)
     {
-        swprintf_s(buf, kHistoryTextBufLen, L"已加载 %lld 条消息，翻到最后一页会继续加载更早的",
+        swprintf_s(buf, kHistoryTextBufLen, TR(L"已加载 %lld 条消息，翻到最后一页会继续加载更早的"),
                    (long long)total);
     }
     else
     {
-        swprintf_s(buf, kHistoryTextBufLen, L"共 %lld 条消息", (long long)total);
+        swprintf_s(buf, kHistoryTextBufLen, TR(L"共 %lld 条消息"), (long long)total);
     }
     return buf;
 }
@@ -198,13 +199,13 @@ std::wstring BuildHistoryFooterText(int64_t total, int currentPage, int pageCoun
                                     bool hasUnloadedOlder, bool fetchingOlder)
 {
     wchar_t buf[kHistoryTextBufLen] = { 0 };
-    swprintf_s(buf, kHistoryTextBufLen, hasUnloadedOlder ? L"已加载 %lld 条 · 第 %d/%d 页"
-                                                         : L"共 %lld 条 · 第 %d/%d 页",
+    swprintf_s(buf, kHistoryTextBufLen, hasUnloadedOlder ? TR(L"已加载 %lld 条 · 第 %d/%d 页")
+                                                         : TR(L"共 %lld 条 · 第 %d/%d 页"),
                (long long)total, currentPage, pageCount);
     std::wstring text = buf;
     if (fetchingOlder)
     {
-        text += L" · 正在加载更早的消息…";
+        text += TR(L" · 正在加载更早的消息…");
     }
     return text;
 }

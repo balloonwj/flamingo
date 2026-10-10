@@ -88,6 +88,13 @@ public:
      */
     void SetDeletable(bool canDelete);
 
+    /**
+     *  设置本行是否以淡黄底标出（主面板全局搜索点了某个群文件结果、打开群聊窗后，标出被
+     *  定位的那一行）。标出时整行底色优先于悬停浅灰底。
+     *    on：true 标出，false 取消。
+     */
+    void SetHighlighted(bool on);
+
     // DuiControl 覆写：绘制角标 / 文件名 / 说明 / 下载箭头（+ 行悬停底）。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 
@@ -128,6 +135,7 @@ private:
     int      m_uploadPercent; // 上传进度百分比 0~100（仅 m_uploading 时有意义）
     bool     m_canDelete;     // 本行是否可删除（宿主按权限设；决定悬停时是否显示垃圾桶图标）
     bool     m_deleteHover;   // 垃圾桶图标当前是否被悬停（决定其高亮与手型）
+    bool     m_highlighted;   // 本行是否以淡黄底标出（全局搜索定位到的那一行；行随重渲染重建，状态随之重置）
 };
 
 } // namespace balloonchatwnd

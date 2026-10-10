@@ -18,6 +18,7 @@
 #include "Util/CrashHandler.h"
 #include "Util/AppConfig.h"
 #include "Util/HttpWorker.h"
+#include "Util/LinkBridge.h"   // FlamingoLink.dll 的卸载（退出前兜底）
 
 #include "DuiDpi.h"
 
@@ -80,9 +81,11 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int nCmdShow)
         frame.SetMinSize(kMinClientWidth, kMinClientHeight);
         frame.SetTitleBarHeight(flamingoadmin::theme::kTitleBarHeight);
 
+        // WS_CLIPCHILDREN：企业详情页的「在线用户」内容是 FlamingoLink.dll 建的子窗口，主窗口重绘时
+        // 跳过子窗口所占的区域，避免先画一遍主窗口内容再被子窗口盖住造成闪烁（2026-10-04）。
         if (!frame.Create(NULL, CWindow::rcDefault,
                           _T("FlamingoIM Enterprise Admin"),
-                          WS_OVERLAPPEDWINDOW, 0))
+                          WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, 0))
         {
             FA_LOGE(_T("主窗口创建失败，程序退出"));
             Gdiplus::GdiplusShutdown(gdiplusToken);
@@ -148,6 +151,15 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int nCmdShow)
                 frame.ToggleDebugConsole();
                 continue;
             }
+            // Esc：主窗口里有叠层弹窗时关闭它（等同点关闭按钮）。在派发之前拦截，这样无论
+            // 焦点落在弹窗里的哪个输入框上都生效；独立顶层的对话框各自处理 Esc，不经这里。
+            if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE
+                && (msg.lParam & kKeyPrevDownBit) == 0
+                && ::GetAncestor(msg.hwnd, GA_ROOT) == frame.m_hWnd
+                && frame.HandleEscapeKey())
+            {
+                continue;
+            }
             ::TranslateMessage(&msg);
             ::DispatchMessage(&msg);
         }
@@ -155,6 +167,10 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int nCmdShow)
 
         // 停止 HTTP 工作线程并 join，确保进程退出前线程已干净收回。
         flamingoadmin::HttpWorker::Instance().Stop();
+
+        // FlamingoLink.dll 通常已在主窗口销毁时卸载（AdminFrame::OnDestroy）；这里再调一次，
+        // 确保主窗口创建后中途异常退出时 DLL 的连接线程也被停掉。重复调用安全。
+        flamingoadmin::LinkBridge::Instance().Unload();
     }
 
     Gdiplus::GdiplusShutdown(gdiplusToken);

@@ -48,9 +48,13 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "ContactLayout.h"
+#include "ContactModel.h"       // ApplyContactAvatar 读取的资料模型
+#include "../BalloonMain/AvatarGray.h"   // MakeGrayColor：离线头像的灰色底色
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"   // 头部头像控件
 #include "TagChip.h"
 #include "ContactTagModel.h"    // kContactTagMaxCount（"标签最多 N 个"提示文字里的 N）
 #include "ContactIcons.h"
+#include "../BalloonMain/NotifyModeMenu.h"   // 「消息提醒」下拉框的选项（与右键二级菜单同一份顺序和文字）
 #include "../../Common/Util/ClipboardText.h"   // 点击姓名 / 账号 / 部门路径复制到剪贴板
 #include "../../Common/Log/IULog.h"           // LOG_INFO（标签区行数与滚动范围的排查线索）
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
@@ -61,6 +65,14 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h" // 悬停提示"点击复制"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"                      // GetHost()->m_hWnd（ClientToScreen）
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/I18n/I18nLayout.h"   // GrowFixedWidthToText：译文较长时加宽固定宽度的按钮
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：翻译内嵌 XML 里的界面文字
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 「展开全部 / 收起」链接
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"     // 「个人资料」格的就地编辑输入框
+#include "../../Session/ProfileFields.h"   // 性别下拉框的选项与序号；公开范围开关的文字与菜单项
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"   // 公开范围菜单
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"               // 公开范围开关量宽时的默认字体
 
 namespace ballooncontact {
 
@@ -70,6 +82,7 @@ using balloonwjui::DuiComboBox;
 using balloonwjui::DuiToast;
 using balloonwjui::DuiToolTipMgr;
 using balloonwjui::DuiScrollView;
+using balloonwjui::DuiLabel;
 
 // =====================================================================
 // 全局：主题色板（RGB），照任务说明的色板表
@@ -111,6 +124,36 @@ const TCHAR* const kDeptPathEllipsis = _T("…");
 // 累计宽度，不需要它按宽度截断（截断由调用方自己算）。
 const int kMeasureNoWidthLimit = 0x7FFFFFFF;
 
+// =====================================================================
+// 「个人资料」区块的排版常量（逻辑像素，2026-10-04）
+// =====================================================================
+
+const int kProfileBlockPaddingV  = 12;   // 区块上下内边距
+const int kProfileTitleHeight    = 16;   // 「个人资料」小标题行高
+const int kProfileTitleGap       = 6;    // 小标题与第一行格子之间的间距
+const int kProfileLabelHeight    = 16;   // 格子里字段名一行的高度
+const int kProfileCellInnerGap   = 2;    // 字段名与值之间的间距
+const int kProfileValueHeight    = 22;   // 格子里值一行的设计高度（下限）；实际高度见 ContactProfileValueHeight
+const int kProfileEditBorderPx   = 1;    // 就地编辑输入框的边框宽度，与 balloonui DuiEdit.cpp 的 kBorderPx 相同
+const int kProfileEditSlackPx    = 2;    // 输入框里一行文字上下各留的余量（DuiEdit 原有的上下内边距）
+const int kProfileRowGap         = 8;    // 行与行之间的间距
+const int kProfileColumnGap      = 24;   // 两列之间的间距
+const int kProfilePencilSize     = 16;   // 编辑按钮的边长
+const int kProfileToggleWidth    = 96;   // 「展开全部 / 收起」链接的宽度，英文「Show all」也放得下
+const int kProfileToggleFontPt   = 9;    // 「展开全部 / 收起」链接的字号（磅）
+const int kProfileVisibilityFontPt   = 9;    // 公开范围开关（「仅自己可见 ▾」链接）的字号（磅），与「展开全部」相同
+const int kProfileVisibilitySlackW   = 6;    // 公开范围开关量出的文字宽度之外再留的余量（像素），兜住 DrawText 与测量之间的出入
+const int kProfileVisibilityDefaultW = 84;   // 取不到设备上下文时公开范围开关的保守宽度（像素），按中文「仅自己可见 ▾」定
+const int kProfileVisibilityMenuGap  = 2;    // 公开范围菜单与开关下边之间的间隙（像素）
+const int kProfileSeparatorHeight = 1;   // 区块下方分隔线的高度
+
+// 看本人时整块隐藏的区块高度（逻辑像素），与内嵌 XML 里各自的 fixedHeight 一致
+const int kRemarkSectionHeight    = 132;  // 备注名 + 分组两行所在的 vbox
+const int kNotifySectionHeight    = 118;  // 消息提醒 + 添加到收藏两行所在的 vbox
+const int kSectionSeparatorHeight = 1;    // 区块之间的分隔线
+// 两列各自的宽度：客户区去掉左右内边距，再去掉两列之间的间距后平分（600 宽时为 268）
+const int kProfileColumnWidth = (kContactBodyWidth - kContactBodyPaddingH * 2 - kProfileColumnGap) / 2;
+
 // 没有部门路径区块、且标签只占一行时的客户区固定高度（逻辑像素），<u>不含</u>
 // 快捷操作行本身与它下方那一段间距 —— 那两段由 ContactBodyHeight 用
 // kContactQuickRowHeight / kContactQuickRowGap 另行加上，见该函数。
@@ -119,14 +162,16 @@ const int kMeasureNoWidthLimit = 0x7FFFFFFF;
 //   头部行 84 + 头部下边距 spacer 14 + 分隔线 1
 //   标签区 vbox 76 + 分隔线 1
 //   备注名 / 分组区 vbox 132 + 分隔线 1
-//   其它开关区 vbox 170 + 分隔线 1
+//   消息提醒 / 收藏区 vbox 118 + 分隔线 1
 //   底部按钮行 58
 //   客户区下内边距 18
-// 合计 = 18 + 99 + 77 + 133 + 171 + 58 + 18 = 574。
+// 合计 = 18 + 99 + 77 + 133 + 119 + 58 + 18 = 522。
+// 2026-10-03 之前这一区有「消息免打扰 / 添加到收藏 / 特别关注」三行开关（vbox 170），
+// 免打扰与特别关注合并成「消息提醒」下拉框后少了一行 52，合计由 574 变为 522。
 // 头部行取 84 而非 64：设计稿头部 4 行文字块（姓名 + 职务 + 账号 + 签名）整体
 // 约 82 像素，比头像 64 更高 —— 设计稿 alignItems:center 让头像在该高度内垂直
 // 居中，行高不足会裁掉第 4 行签名。
-const int kContactBodyBaseHeight = 574;
+const int kContactBodyBaseHeight = 522;
 
 // =====================================================================
 // 标签区的几何常量（逻辑像素）
@@ -150,15 +195,10 @@ const int kTagTitleHeight = 16;
 // 小标题与下方胶囊容器之间的间距。与内嵌 XML 里标签区 vbox 的 gap="8" 一致。
 const int kTagTitleGap = 8;
 
-// 标签区滚动视口的滚动条宽度。超过 kContactTagMaxRows 行时才会出现（见
-// DuiScrollView::DoLayout 的 sbVisible 判定），出现时会占掉这么多内容宽度，
-// 故行数要按缩窄后的宽度重数一遍。取 8 与群聊窗文件列表的细滚动条同宽。
-const int kTagScrollBarWidth = 8;
-
 // 标签正好一行时标签区整块的高度。等于 14 + 16 + 8 + 24 + 14 = 76，也就是
 // 内嵌 XML 里标签区 vbox 写死的那个 fixedHeight —— 单独取个名字是为了让
 // ContactBodyHeight 能把"标签多出来的那几行"作为增量加到 kContactBodyBaseHeight
-// 上，而不必把 574 拆开重算。
+// 上，而不必把 522 拆开重算。
 const int kTagBlockOneRowHeight = kTagBlockPaddingV + kTagTitleHeight + kTagTitleGap
                                 + kTagRowHeight + kTagBlockPaddingV;
 
@@ -166,12 +206,12 @@ const int kTagBlockOneRowHeight = kTagBlockPaddingV + kTagTitleHeight + kTagTitl
 // 可点击复制的三处热区：悬停提示与复制成功提示的文案
 // =====================================================================
 
-const TCHAR* const kTipCopyName        = _T("点击复制姓名");
-const TCHAR* const kTipCopyAccount     = _T("点击复制账号");
-const TCHAR* const kTipCopyDeptPath    = _T("点击复制部门路径");
-const TCHAR* const kToastCopiedName    = _T("已复制姓名");
-const TCHAR* const kToastCopiedAccount = _T("已复制账号");
-const TCHAR* const kToastCopiedDept    = _T("已复制部门路径");
+const TCHAR* const kTipCopyName        = TR_NOOP(L"点击复制姓名");
+const TCHAR* const kTipCopyAccount     = TR_NOOP(L"点击复制账号");
+const TCHAR* const kTipCopyDeptPath    = TR_NOOP(L"点击复制部门路径");
+const TCHAR* const kToastCopiedName    = TR_NOOP(L"已复制姓名");
+const TCHAR* const kToastCopiedAccount = TR_NOOP(L"已复制账号");
+const TCHAR* const kToastCopiedDept    = TR_NOOP(L"已复制部门路径");
 
 // 复制成功提示的显示时长（毫秒，不含淡入淡出）。DuiToast 默认 3000 对
 // "已复制 xxx"这种看完即走的短句偏长，缩到 1.6 秒。
@@ -205,7 +245,7 @@ HFONT CreateYaHeiFont(int pixelHeight, bool bold)
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
 }
 
 // 用 GDI 绘制单行文字。
@@ -563,6 +603,39 @@ std::string GetNodeAttr(const DuiXmlBuilder::Node& n, const char* key,
     return (it != n.attrs.end()) ? it->second : std::string(def);
 }
 
+// 解析 "r,g,b" 形式的颜色属性（复用 builder 的 ParseColor 不便，它在 builder 的匿名命名空间里）。
+// 各分量超过 255 时按 255 处理；属性为空或一个分量都没有时返回 def；只写了部分分量时其余分量取 def 的值。
+COLORREF ParseRgbAttr(const std::string& text, COLORREF def)
+{
+    const int kComponentCount = 3;
+    const int kComponentMax = 255;
+    const int kDecimal = 10;
+    int rgb[kComponentCount] = { GetRValue(def), GetGValue(def), GetBValue(def) };
+    int idx = 0;
+    int cur = 0;
+    bool hasDigit = false;
+    for (size_t i = 0; i <= text.size() && idx < kComponentCount; ++i)
+    {
+        const char ch = (i < text.size()) ? text[i] : ',';
+        if (ch >= '0' && ch <= '9')
+        {
+            cur = cur * kDecimal + (ch - '0');
+            hasDigit = true;
+        }
+        else if (ch == ',')
+        {
+            if (hasDigit)
+            {
+                rgb[idx] = (cur > kComponentMax) ? kComponentMax : cur;
+                ++idx;
+            }
+            cur = 0;
+            hasDigit = false;
+        }
+    }
+    return RGB(rgb[0], rgb[1], rgb[2]);
+}
+
 // 把 net-text 的 align 属性翻译成 DrawText 对齐标志。
 UINT TextAlignFromAttr(const std::string& align)
 {
@@ -626,6 +699,13 @@ public:
     void SetTextContent(LPCTSTR text)
     {
         m_text = (text != NULL) ? text : _T("");
+        Invalidate();
+    }
+
+    // 修改文字颜色（保持其余样式不变）。供「个人资料」区块的「未填写」改用弱色等场景用。
+    void SetTextColorValue(COLORREF color)
+    {
+        m_color = color;
         Invalidate();
     }
 
@@ -808,13 +888,13 @@ public:
         if (zone == kZoneName)
         {
             flamingo::CopyTextToClipboard(m_primaryName);
-            ShowContactCopyToast(this, kToastCopiedName);
+            ShowContactCopyToast(this, TR(kToastCopiedName));
             return true;
         }
         if (zone == kZoneAccount)
         {
             flamingo::CopyTextToClipboard(m_account);
-            ShowContactCopyToast(this, kToastCopiedAccount);
+            ShowContactCopyToast(this, TR(kToastCopiedAccount));
             return true;
         }
         return false;
@@ -866,11 +946,11 @@ private:
         {
         //姓名热区：提示点击可复制姓名
         case kZoneName:
-            return kTipCopyName;
+            return TR(kTipCopyName);
 
         //账号热区：提示点击可复制账号
         case kZoneAccount:
-            return kTipCopyAccount;
+            return TR(kTipCopyAccount);
 
         //其余位置（含热区之外的空白）不给提示
         default:
@@ -940,7 +1020,7 @@ public:
         }
         else
         {
-            DuiToolTipMgr::Inst().Register(this, kTipCopyDeptPath);
+            DuiToolTipMgr::Inst().Register(this, TR(kTipCopyDeptPath));
         }
 
         Invalidate();
@@ -974,7 +1054,7 @@ public:
             return false;
         }
         flamingo::CopyTextToClipboard(m_path);
-        ShowContactCopyToast(this, kToastCopiedDept);
+        ShowContactCopyToast(this, TR(kToastCopiedDept));
         return true;
     }
 
@@ -984,6 +1064,72 @@ public:
 private:
     CString m_path;                 // 原始完整部门路径（点击复制的就是它），可空
     std::vector<CString> m_lines;   // 折行后逐行的显示文本；空表示本区块不占位
+};
+
+/**
+ *  ContactAvatar —— 头部头像（DuiAvatar 的子类，2026-10-07）。
+ *
+ *  DuiAvatar 本身是纯绘制控件：悬停时不变光标，松开左键时由基类 DuiControl 发出通用的 DUIN_CLICK。
+ *  资料窗看本人时头像要能点击打开修改头像对话框，看别人时不能点，故子类化补两件事：
+ *    · 可点击时：悬停显示手形光标与提示文字（如「修改头像」），松开左键发 DUIN_CLICK；
+ *    · 不可点击时：不变光标，也不发点击通知，看别人时点头像不会被当成「修改头像」。
+ *  本控件不画悬停效果，故不必在鼠标进出时请求重画（UI 约定第 9 条）。
+ */
+class ContactAvatar : public balloonwjui::DuiAvatar
+{
+public:
+    ContactAvatar()
+        : m_clickable(false)
+    {
+    }
+
+    ~ContactAvatar() override
+    {
+        // 提示管理器按裸指针记录注册项，控件析构时必须注销
+        DuiToolTipMgr::Inst().Unregister(this);
+    }
+
+    // 设置是否可点击与可点击时的悬停提示文字（NULL 或空串表示不提示）。
+    void SetClickable(bool clickable, LPCTSTR tooltip)
+    {
+        m_clickable = clickable;
+        DuiToolTipMgr::Inst().Unregister(this);
+        if (clickable && tooltip != NULL && tooltip[0] != _T('\0'))
+        {
+            DuiToolTipMgr::Inst().Register(this, tooltip);
+        }
+    }
+
+    // 当前是否可点击。
+    bool IsClickable() const
+    {
+        return m_clickable;
+    }
+
+    // 可点击时显示手形光标；不可点击时交给宿主设默认箭头。
+    bool OnSetCursor(POINT /*pt*/) override
+    {
+        if (!m_clickable)
+        {
+            return false;
+        }
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+
+    // 可点击且松开在头像之内时发 DUIN_CLICK；否则不处理，也不发通用点击通知。
+    bool OnLButtonUp(POINT pt, UINT /*mkFlags*/) override
+    {
+        if (!m_clickable || !IsEnabled() || !::PtInRect(&m_rcItem, pt))
+        {
+            return false;
+        }
+        NotifyParent(balloonwjui::DUIN_CLICK);
+        return true;
+    }
+
+private:
+    bool m_clickable;   // 是否可点击：资料窗看本人时为 true，由 SetContactAvatarClickable 设置
 };
 
 /**
@@ -1165,17 +1311,11 @@ public:
         ::FillRect(hdc, &m_rcItem, hBrush);
         ::DeleteObject(hBrush);
 
-        balloonwjui::DuiScrollBar* scrollBar = GetScrollBar();
-        const bool sbVisible = (scrollBar != NULL) && scrollBar->IsVisible();
-        const int viewWidth = (m_rcItem.right - m_rcItem.left)
-                            - (sbVisible ? GetScrollBarWidth() : 0);
-
-        // 内容的绘制要裁到视口内（不含滚动条那一列），否则滚动时超出部分会画到
-        // 视口外面去。用 SaveDC + IntersectClipRect + RestoreDC 是相交语义，与基类
-        // 的做法一致。
+        // 内容的绘制要裁到视口内，否则滚动时超出部分会画到视口外面去。2026-10-04 起
+        // 滚动条为悬浮式、浮在内容之上，裁剪范围就是整个视口（此前要扣掉滚动条那一列）。
+        // 用 SaveDC + IntersectClipRect + RestoreDC 是相交语义，与基类的做法一致。
         int dcSaved = ::SaveDC(hdc);
-        ::IntersectClipRect(hdc, m_rcItem.left, m_rcItem.top,
-                            m_rcItem.left + viewWidth, m_rcItem.bottom);
+        ::IntersectClipRect(hdc, m_rcItem.left, m_rcItem.top, m_rcItem.right, m_rcItem.bottom);
 
         DuiControl* content = GetContent();
         if (content != NULL)
@@ -1189,8 +1329,9 @@ public:
 
         ::RestoreDC(hdc, dcSaved);
 
-        // 滚动条固定在视口右侧一列，本来就在视口内，不必裁剪。
-        if (sbVisible)
+        // 滚动条浮在内容右缘之上，最后画；它本来就在视口内，不必裁剪。
+        balloonwjui::DuiScrollBar* scrollBar = GetScrollBar();
+        if (scrollBar != NULL && scrollBar->IsVisible())
         {
             RECT inter;
             if (::IntersectRect(&inter, &scrollBar->GetRect(), &rcDirty))
@@ -1555,21 +1696,23 @@ int ContactTagFlow::CountRows(int availWidth) const
 //     ConfigureContactDeptPath 按折行行数改写；没有部门时保持 0 且不可见）；
 //   · 头部下边距 spacer（14，对应设计稿 header paddingBottom）；
 //   · 快捷操作行（语音通话 / 视频通话 / 历史消息 / 组织架构四个等宽 ghost
-//     按钮），fixedHeight 36。四个按钮同时写了 fixedWidth 89 与 weight 1：
+//     按钮），fixedHeight 36。四个按钮同时写了 fixedWidth 134 与 weight 1：
 //     DuiHBox 排版时，带 weight 的子控件仍以自身期望宽度打底，再去分剩余空间
 //     （见 DuiLayout.cpp 的 HintFixedMainPx）。只写 weight 的话，四个按钮按
 //     文字量算出的期望宽度加起来超过可用宽度，剩余空间为 0，最后一个按钮会被
-//     挤出客户区右边界。89 的来历：客户区名义宽 420 减左右内边距各 20 得 380，
-//     减去三条 8 像素间隔得 356，四等分即 89。实际客户区比名义宽度多出一圈缩放
-//     边框（实测 438），多出来的部分由 weight 均分掉，四个按钮仍然等宽铺满；
+//     挤出客户区右边界。134 的来历：客户区名义宽 600 减左右内边距各 20 得 560，
+//     减去三条 8 像素间隔得 536，四等分即 134（2026-10-04 加宽之前是 420 宽、每个 89）；
 //   · 快捷操作行下边距 spacer（14）；
 //   · 分隔线；
+//   · 「个人资料」区块与它下方的分隔线（2026-10-04）：XML 里写的是占位标记
+//     <contact-profile-block/>，BuildContactBody 解析前把它替换成 BuildContactProfileBlockXml
+//     生成的片段。出场时高度为 0、不可见，由 ConfigureContactProfile 按字段灌数据并改写高度；
 //   · 标签区（小标题 + 装着流式胶囊容器的滚动视口）。它的 fixedHeight 写的是
 //     "标签只有一行"时的高度，真实高度在运行期由 SyncContactTagArea 按行数改写；
 //   · 分隔线；
 //   · 备注名 + 分组两行 FieldRow；
 //   · 分隔线；
-//   · 开关区三行 FieldRow（消息免打扰 / 添加到收藏 / 特别关注）；
+//   · 消息提醒（下拉框）+ 添加到收藏（开关）两行 FieldRow；
 //   · 弹性占位 control（weight=1，把底部按钮推到底）；
 //   · 底部分隔线 + 按钮行（关闭 / 发消息）；
 //   · 复制成功的轻量提示（DuiToast）。放在<u>末尾</u>是因为基类按子控件顺序
@@ -1586,10 +1729,9 @@ const char* const kContactBodyXml = u8R"xml(
 <contact-root padding="20,18,20,18" gap="0">
 
   <hbox fixedHeight="84" gap="14">
-    <avatar id="1000" name="江" shape="round-rect" corner-radius="9"
-            status="away" fallback-bg-color="59,130,246"
-            initials-color="255,255,255"
-            fixedWidth="64" fixedHeight="64" alignCross="center"/>
+    <contact-avatar id="1000" name="江" shape="round-rect" corner-radius="9"
+                    fallback-bg-color="59,130,246" initials-color="255,255,255"
+                    fixedWidth="64" fixedHeight="64" alignCross="center"/>
     <contact-header id="1001" weight="1"/>
   </hbox>
 
@@ -1599,29 +1741,31 @@ const char* const kContactBodyXml = u8R"xml(
 
   <hbox id="1046" fixedHeight="36" gap="8">
     <contact-actionbtn id="1042" text="语音通话" primary="false" icon="phone"
-                       weight="1" fixedWidth="89" fixedHeight="36"/>
+                       weight="1" fixedWidth="134" fixedHeight="36"/>
     <contact-actionbtn id="1043" text="视频通话" primary="false" icon="video"
-                       weight="1" fixedWidth="89" fixedHeight="36"/>
+                       weight="1" fixedWidth="134" fixedHeight="36"/>
     <contact-actionbtn id="1044" text="历史消息" primary="false" icon="history"
-                       weight="1" fixedWidth="89" fixedHeight="36"/>
+                       weight="1" fixedWidth="134" fixedHeight="36"/>
     <contact-actionbtn id="1045" text="组织架构" primary="false" icon="locate"
-                       weight="1" fixedWidth="89" fixedHeight="36"/>
+                       weight="1" fixedWidth="134" fixedHeight="36"/>
   </hbox>
 
   <control fixedHeight="14"/>
   <separator fixedHeight="1" color="237,237,237"/>
+
+  <contact-profile-block/>
 
   <vbox id="1012" fixedHeight="76" padding="0,14,0,14" gap="8">
     <contact-text text="标签" size="11" color="107,107,107" fixedHeight="16"/>
     <contact-tagscroll id="1013" weight="1" gap="6" row-height="24"/>
   </vbox>
 
-  <separator fixedHeight="1" color="237,237,237"/>
+  <separator id="1015" fixedHeight="1" color="237,237,237"/>
 
-  <vbox fixedHeight="132" padding="0,14,0,14" gap="0">
+  <vbox id="1016" fixedHeight="132" padding="0,14,0,14" gap="0">
     <field-row fixedHeight="52" divider="false" gap="16">
       <contact-text text="备注名" size="14" color="26,26,26" weight="1"/>
-      <contact-valuetext id="1020" text="设计组组长" size="13"
+      <contact-valuetext id="1020" text="" size="13"
                          color="26,26,26" align="right"
                          fixedWidth="150" alignCross="center"/>
       <edit id="1022" fixedWidth="140" fixedHeight="28" alignCross="center"/>
@@ -1630,27 +1774,22 @@ const char* const kContactBodyXml = u8R"xml(
     </field-row>
     <field-row fixedHeight="52" divider="false" gap="16">
       <contact-text text="分组" size="14" color="26,26,26" weight="1"/>
-      <combobox id="1023" fixedWidth="170" fixedHeight="28"
+      <combobox id="1023" fixedWidth="208" fixedHeight="28"
                 alignCross="center"/>
     </field-row>
   </vbox>
 
-  <separator fixedHeight="1" color="237,237,237"/>
+  <separator id="1017" fixedHeight="1" color="237,237,237"/>
 
-  <vbox fixedHeight="170" padding="0,14,0,0" gap="0">
+  <vbox id="1018" fixedHeight="118" padding="0,14,0,0" gap="0">
     <field-row fixedHeight="52" divider="true" gap="16">
-      <contact-text text="消息免打扰" size="14" color="26,26,26" weight="1"/>
-      <switch id="1030" fixedWidth="36" fixedHeight="20" alignCross="center"
-              on-color="255,122,69" off-color="216,213,208"/>
-    </field-row>
-    <field-row fixedHeight="52" divider="true" gap="16">
-      <contact-text text="添加到收藏" size="14" color="26,26,26" weight="1"/>
-      <switch id="1033" fixedWidth="36" fixedHeight="20" alignCross="center"
-              on-color="255,122,69" off-color="216,213,208"/>
+      <contact-text text="消息提醒" size="14" color="26,26,26" weight="1"/>
+      <contact-notifycombo id="1035" fixedWidth="208" fixedHeight="28"
+                           alignCross="center"/>
     </field-row>
     <field-row fixedHeight="52" divider="false" gap="16">
-      <contact-text text="特别关注" size="14" color="26,26,26" weight="1"/>
-      <switch id="1034" fixedWidth="36" fixedHeight="20" alignCross="center"
+      <contact-text text="添加到收藏" size="14" color="26,26,26" weight="1"/>
+      <switch id="1033" fixedWidth="36" fixedHeight="20" alignCross="center"
               on-color="255,122,69" off-color="216,213,208"/>
     </field-row>
   </vbox>
@@ -1673,14 +1812,178 @@ const char* const kContactBodyXml = u8R"xml(
 )xml";
 
 // =====================================================================
+// 「个人资料」区块的 XML 生成
+// =====================================================================
+
+// 内嵌 XML 里「个人资料」区块的占位标记，BuildContactBody 解析前替换成生成的片段。
+const char* const kContactProfileBlockMarker = "<contact-profile-block/>";
+
+// 生成一个格子槽位的 XML：字段名与编辑按钮一行，值一行。
+//   slot：槽位，取值 [0, kContactProfileSlotCount)。
+//   fullWidth：true 时占满整行（昵称、个性签名），false 时按两列之一的固定宽度。
+std::string BuildContactProfileCellXml(int slot, bool fullWidth)
+{
+    std::string xml;
+    xml += "        <vbox id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartCell)) + "\"";
+    if (fullWidth)
+    {
+        xml += " weight=\"1\"";
+    }
+    else
+    {
+        xml += " fixedWidth=\"" + std::to_string(kProfileColumnWidth) + "\"";
+    }
+    xml += " gap=\"" + std::to_string(kProfileCellInnerGap) + "\">\n";
+    xml += "          <hbox fixedHeight=\"" + std::to_string(kProfileLabelHeight) + "\" gap=\"4\">\n";
+    xml += "            <contact-text id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartLabel))
+         + "\" text=\"\" size=\"12\" color=\"107,107,107\" weight=\"1\"/>\n";
+    // 公开范围开关：出场时宽 0、不可见，只有看本人时的手机号、座机两格由 FillContactProfileSlot 设宽并显示
+    xml += "            <label id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartVisibility))
+         + "\" fixedWidth=\"0\"/>\n";
+    xml += "            <contact-iconbtn id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartPencil))
+         + "\" fixedWidth=\"" + std::to_string(kProfilePencilSize) + "\" fixedHeight=\""
+         + std::to_string(kProfilePencilSize) + "\" alignCross=\"center\"/>\n";
+    xml += "          </hbox>\n";
+    xml += "          <contact-valuetext id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartValue))
+         + "\" text=\"\" size=\"13\" color=\"26,26,26\" fixedHeight=\"" + std::to_string(ContactProfileValueHeight()) + "\"/>\n";
+    // 就地编辑用的输入框与性别下拉框，与值占同一个位置、同样高（ContactProfileValueHeight，按字体算），出场时隐藏（BuildContactBody）
+    xml += "          <edit id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartEdit))
+         + "\" fixedHeight=\"" + std::to_string(ContactProfileValueHeight()) + "\"/>\n";
+    xml += "          <combobox id=\"" + std::to_string((unsigned)ContactProfileCtrlId(slot, kProfilePartCombo))
+         + "\" fixedHeight=\"" + std::to_string(ContactProfileValueHeight()) + "\"/>\n";
+    xml += "        </vbox>\n";
+    return xml;
+}
+
+// 生成「个人资料」区块与它下方分隔线的 XML。格子较多、结构重复，故用代码生成而不是逐个手写；
+// 出场时区块与分隔线的高度都是 0，由 ConfigureContactProfile 改写。
+std::string BuildContactProfileBlockXml()
+{
+    std::string xml;
+    xml += "  <vbox id=\"" + std::to_string((int)kIdProfileBlock) + "\" fixedHeight=\"0\" padding=\"0,"
+         + std::to_string(kProfileBlockPaddingV) + ",0," + std::to_string(kProfileBlockPaddingV)
+         + "\" gap=\"" + std::to_string(kProfileTitleGap) + "\">\n";
+    // 小标题行：「个人资料」+ 右侧的「展开全部 / 收起」链接（文字由 ConfigureContactProfile 设置）
+    xml += "    <hbox fixedHeight=\"" + std::to_string(kProfileTitleHeight) + "\" gap=\"8\">\n";
+    xml += "      <contact-text text=\"";
+    xml += TR_NOOP(u8"个人资料");
+    xml += "\" size=\"11\" color=\"107,107,107\" weight=\"1\"/>\n";
+    xml += "      <label id=\"" + std::to_string((int)kIdProfileToggle) + "\" fixedWidth=\""
+         + std::to_string(kProfileToggleWidth) + "\"/>\n";
+    xml += "    </hbox>\n";
+    // 各行：0 行放昵称（0 号槽位）、1 行放个性签名（1 号槽位），各占整行；其后每行两个槽位
+    xml += "    <vbox weight=\"1\" gap=\"" + std::to_string(kProfileRowGap) + "\">\n";
+    for (int row = 0; row < kContactProfileRowSlots; ++row)
+    {
+        xml += "      <hbox id=\"" + std::to_string((int)kIdProfileRowBase + row) + "\" fixedHeight=\""
+             + std::to_string(ContactProfileRowHeight()) + "\" gap=\"" + std::to_string(kProfileColumnGap) + "\">\n";
+        int firstSlot = 0;
+        int lastSlot = 0;
+        ContactProfileRowSlotRange(row, firstSlot, lastSlot);
+        const bool fullWidth = (firstSlot == lastSlot && firstSlot < kContactProfileFirstGridSlot);
+        for (int slot = firstSlot; slot <= lastSlot; ++slot)
+        {
+            xml += BuildContactProfileCellXml(slot, fullWidth);
+        }
+        xml += "      </hbox>\n";
+    }
+    xml += "    </vbox>\n";
+    xml += "  </vbox>\n";
+    xml += "  <separator id=\"" + std::to_string((int)kIdProfileSeparator)
+         + "\" fixedHeight=\"0\" color=\"237,237,237\"/>\n";
+    return xml;
+}
+
+// 「个人资料」区块里哪些字段的值可能很长、需要悬停显示全文（单行显示，超出部分以省略号结尾）
+bool IsLongProfileField(int field)
+{
+    return field == kProfileFieldNickname || field == kProfileFieldSignature || field == kProfileFieldAddress
+        || field == kProfileFieldPost || field == kProfileFieldMail;
+}
+
+// 把一个格子的数据灌进 slot 号槽位；cell 为 NULL 表示该槽位空着（整格不可见）。
+void FillContactProfileSlot(DuiControl* root, int slot, const ContactProfileCell* cell)
+{
+    DuiControl* cellCtrl = root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartCell));
+    if (cellCtrl == NULL)
+    {
+        return;
+    }
+    cellCtrl->SetVisible(cell != NULL);
+    ContactText* value = dynamic_cast<ContactText*>(root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartValue)));
+    if (value != NULL)
+    {
+        // 先撤掉上一次注册的悬停全文：槽位换了字段或字段被清空时不能留着旧文字
+        DuiToolTipMgr::Inst().Unregister(value);
+    }
+    if (cell == NULL)
+    {
+        return;
+    }
+    ContactText* label = dynamic_cast<ContactText*>(root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartLabel)));
+    if (label != NULL)
+    {
+        label->SetTextContent(cell->m_label);
+    }
+    if (value != NULL)
+    {
+        value->SetTextContent(cell->m_value);
+        value->SetTextColorValue(cell->m_isEmpty ? kColorTextFaint : kColorText);
+        if (!cell->m_isEmpty && IsLongProfileField(cell->m_field))
+        {
+            DuiToolTipMgr::Inst().Register(value, cell->m_value);
+        }
+    }
+    DuiControl* pencil = root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartPencil));
+    if (pencil != NULL)
+    {
+        pencil->SetVisible(cell->m_editable);
+    }
+    // 公开范围开关：只有看本人时的手机号、座机两格有。宽度按两种文字中较宽的一种设定，切换取值时不变
+    DuiLabel* visibility = dynamic_cast<DuiLabel*>(
+        root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartVisibility)));
+    if (visibility != NULL)
+    {
+        visibility->SetVisible(cell->m_hasVisibility);
+        if (cell->m_hasVisibility)
+        {
+            visibility->SetText(profilefields::VisibilityLinkText(cell->m_visibility).c_str());
+            balloonwjui::DuiLayout* labelRow = dynamic_cast<balloonwjui::DuiLayout*>(visibility->GetParent());
+            if (labelRow != NULL)
+            {
+                balloonwjui::DuiLayout::Hint hint = labelRow->GetHint(visibility);
+                hint.Fixed(ProfileVisibilityLinkWidth(visibility));
+                labelRow->SetHint(visibility, hint);
+            }
+        }
+    }
+    // 重新灌数据时一律退出就地编辑：值可见，输入框与下拉框隐藏
+    if (value != NULL)
+    {
+        value->SetVisible(true);
+    }
+    DuiControl* edit = root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartEdit));
+    if (edit != NULL)
+    {
+        edit->SetVisible(false);
+    }
+    DuiControl* combo = root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartCombo));
+    if (combo != NULL)
+    {
+        combo->SetVisible(false);
+    }
+}
+
+// =====================================================================
 // 自定义标签工厂
 // =====================================================================
 //
 // 接 contact-root / contact-text / contact-header / contact-deptpath /
-// contact-toast / contact-tagscroll / contact-valuetext /
-// contact-iconbtn / field-row / contact-actionbtn / combobox / control；
-// 其余标签（vbox / hbox / edit / switch / separator / avatar）走 builder
-// 内置处理。
+// contact-toast / contact-tagscroll / contact-valuetext / contact-avatar /
+// contact-iconbtn / field-row / contact-actionbtn / combobox / contact-notifycombo /
+// control；
+// 其余标签（vbox / hbox / edit / switch / separator / label）走 builder
+// 内置处理。头部头像 2026-10-07 起改用 contact-avatar（可点击的 DuiAvatar 子类）。
 std::unique_ptr<DuiControl> CreateContactCustomControl(
     const DuiXmlBuilder::Node& n)
 {
@@ -1696,38 +1999,25 @@ std::unique_ptr<DuiControl> CreateContactCustomControl(
         const std::string strSize = GetNodeAttr(n, "size", "13");
         const std::string strColor = GetNodeAttr(n, "color", "26,26,26");
 
-        // 解析 "r,g,b" 颜色 —— 复用 builder 的 ParseColor 不便（在匿名 ns），
-        // 这里就地解析。
-        int rgb[3] = { 26, 26, 26 };
-        {
-            int idx = 0;
-            int cur = 0;
-            bool hasDigit = false;
-            for (size_t i = 0; i <= strColor.size() && idx < 3; ++i)
-            {
-                const char ch = (i < strColor.size()) ? strColor[i] : ',';
-                if (ch >= '0' && ch <= '9')
-                {
-                    cur = cur * 10 + (ch - '0');
-                    hasDigit = true;
-                }
-                else if (ch == ',')
-                {
-                    if (hasDigit)
-                    {
-                        rgb[idx] = (cur > 255) ? 255 : cur;
-                        ++idx;
-                    }
-                    cur = 0;
-                    hasDigit = false;
-                }
-            }
-        }
         const bool bold = (GetNodeAttr(n, "bold") == "true");
         const UINT align = TextAlignFromAttr(GetNodeAttr(n, "align"));
         text->Configure(strText, atoi(strSize.c_str()),
-                        RGB(rgb[0], rgb[1], rgb[2]), bold, align);
+                        ParseRgbAttr(strColor, kColorText), bold, align);
         return std::unique_ptr<DuiControl>(text.release());
+    }
+
+    if (n.tag == "contact-avatar")
+    {
+        // 头部头像：DuiAvatar 的子类（见 ContactAvatar）。自定义标签不经 builder 内置的 avatar 解析，
+        // 这里按同名属性就地设置；状态点不在 XML 里写，由 ApplyContactAvatar 按模型设置
+        std::unique_ptr<ContactAvatar> avatar(new ContactAvatar());
+        avatar->SetName(Utf8ToCString(GetNodeAttr(n, "name")));
+        avatar->SetShape(GetNodeAttr(n, "shape") == "round-rect" ? balloonwjui::DuiAvatar::ShapeRoundRect
+                                                                 : balloonwjui::DuiAvatar::ShapeCircle);
+        avatar->SetCornerRadius(atoi(GetNodeAttr(n, "corner-radius", "8").c_str()));
+        avatar->SetFallbackBgColor(ParseRgbAttr(GetNodeAttr(n, "fallback-bg-color"), kContactAvatarBgColor));
+        avatar->SetInitialsColor(ParseRgbAttr(GetNodeAttr(n, "initials-color"), kColorWhite));
+        return std::unique_ptr<DuiControl>(avatar.release());
     }
 
     if (n.tag == "contact-header")
@@ -1768,7 +2058,7 @@ std::unique_ptr<DuiControl> CreateContactCustomControl(
         flow->SetRowHeight(atoi(strRow.c_str()));
         scroll->SetContent(std::unique_ptr<DuiControl>(flow.release()));
         scroll->SetAutoContentHeight(false);
-        scroll->SetScrollBarWidth(kTagScrollBarWidth);
+        // 滚动条用 balloonui 统一的悬浮式细滑块与默认命中带宽（2026-10-04 起不再单独设宽）
         return std::unique_ptr<DuiControl>(scroll.release());
     }
 
@@ -1807,6 +2097,21 @@ std::unique_ptr<DuiControl> CreateContactCustomControl(
         return std::unique_ptr<DuiControl>(combo.release());
     }
 
+    if (n.tag == "contact-notifycombo")
+    {
+        // 「消息提醒」下拉框：选项固定为单聊可用的四种提醒模式（没有屏蔽消息），顺序与
+        // 文字取自 NotifyModeMenu，与右键菜单的「消息提醒设置」二级菜单一致。选中项由
+        // 窗口按 ContactModel::NotifyMode 置位。
+        std::unique_ptr<DuiComboBox> combo(new DuiComboBox());
+        combo->SetEditable(false);
+        const std::vector<int> modes = balloonmain::GetNotifyModeChoices(/*isGroup*/false);
+        for (size_t i = 0; i < modes.size(); ++i)
+        {
+            combo->AddString(balloonmain::GetNotifyModeLabel(modes[i]));
+        }
+        return std::unique_ptr<DuiControl>(combo.release());
+    }
+
     if (n.tag == "control")
     {
         return std::unique_ptr<DuiControl>(new DuiControl());
@@ -1823,8 +2128,89 @@ std::unique_ptr<DuiControl> CreateContactCustomControl(
 
 std::unique_ptr<DuiControl> BuildContactBody()
 {
-    return DuiXmlBuilder::FromString(kContactBodyXml,
-                                     &CreateContactCustomControl);
+    // 先把「个人资料」区块的占位标记换成生成的片段
+    std::string xml = kContactBodyXml;
+    const size_t marker = xml.find(kContactProfileBlockMarker);
+    if (marker != std::string::npos)
+    {
+        xml.replace(marker, strlen(kContactProfileBlockMarker), BuildContactProfileBlockXml());
+    }
+    // 内嵌 XML 里的界面文字先经 TranslateXml 换成当前语言的译文；FromString 在调用内解析完毕，临时串的生命周期足够
+    std::unique_ptr<DuiControl> root = DuiXmlBuilder::FromString(i18n::TranslateXml(xml.c_str()).c_str(),
+                                                                 &CreateContactCustomControl);
+    if (root)
+    {
+        // 「展开全部 / 收起」链接：主题色文字、靠右，点击发 DUIN_CLICK（窗口按 kIdProfileToggle 处理）；
+        // 出场时不可见，由 ConfigureContactProfile 按行数决定显隐与文字
+        DuiLabel* toggle = dynamic_cast<DuiLabel*>(root->FindCtrlById((UINT)kIdProfileToggle));
+        if (toggle != NULL)
+        {
+            toggle->SetMode(DuiLabel::ModeLink);
+            toggle->SetLinkColor(kColorAccent);
+            toggle->SetHoverColor(kColorAccent);
+            toggle->SetVisitedColor(kColorAccent);
+            toggle->SetTextAlign(DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            toggle->SetTextPointSize(kProfileToggleFontPt, false);
+            toggle->SetVisible(false);
+        }
+        // 各格子的就地编辑输入框与性别下拉框：画边框、限制长度、填好选项，出场时隐藏
+        for (int slot = 0; slot < kContactProfileSlotCount; ++slot)
+        {
+            // 公开范围开关：与「展开全部」同样的主题色链接、靠右，点击发 DUIN_CLICK（窗口按部件
+            // kProfilePartVisibility 处理）；出场时不可见，由 FillContactProfileSlot 决定显隐与文字
+            DuiLabel* visibility = dynamic_cast<DuiLabel*>(
+                root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartVisibility)));
+            if (visibility != NULL)
+            {
+                visibility->SetMode(DuiLabel::ModeLink);
+                visibility->SetLinkColor(kColorAccent);
+                visibility->SetHoverColor(kColorAccent);
+                visibility->SetVisitedColor(kColorAccent);
+                visibility->SetTextAlign(DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+                visibility->SetTextPointSize(kProfileVisibilityFontPt, false);
+                visibility->SetVisible(false);
+            }
+            balloonwjui::DuiEdit* edit = dynamic_cast<balloonwjui::DuiEdit*>(
+                root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartEdit)));
+            if (edit != NULL)
+            {
+                edit->SetShowBorder(true);
+                edit->SetMaxLength(profilefields::kProfileLongTextMaxChars);
+                edit->SetVisible(false);
+            }
+            DuiComboBox* combo = dynamic_cast<DuiComboBox*>(
+                root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartCombo)));
+            if (combo != NULL)
+            {
+                for (int i = 0; i < profilefields::kGenderComboCount; ++i)
+                {
+                    combo->AddString(profilefields::GenderText(profilefields::ComboIndexToGender(i)));
+                }
+                combo->SetVisible(false);
+            }
+        }
+        // 个人资料区块与它下方的分隔线出场时不可见（高度已是 0）
+        DuiControl* profileBlock = root->FindCtrlById((UINT)kIdProfileBlock);
+        if (profileBlock != NULL)
+        {
+            profileBlock->SetVisible(false);
+        }
+        DuiControl* profileSeparator = root->FindCtrlById((UINT)kIdProfileSeparator);
+        if (profileSeparator != NULL)
+        {
+            profileSeparator->SetVisible(false);
+        }
+
+        // 底部两个按钮按译文宽度只增不减地加宽（多语言第 4 期，简体中文不变）：
+        // 按钮文字 14 像素半粗体（ContactActionButton::OnPaint）；左右各留 12 像素，「发消息」另有 14 像素图标与 6 像素间距
+        const int kFooterTextPx = 14;
+        const int kFooterPadPx = 24;
+        const int kFooterIconPx = 14 + 6;
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kIdBtnClose), TR(L"关闭"), kFooterTextPx, true, kFooterPadPx);
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kIdBtnSend), TR(L"发消息"), kFooterTextPx, true,
+                                   kFooterPadPx + kFooterIconPx);
+    }
+    return root;
 }
 
 std::unique_ptr<DuiControl> CreateTagChip(LPCTSTR text, UINT ctrlId)
@@ -1839,7 +2225,7 @@ std::unique_ptr<DuiControl> CreateAddTagButton()
 {
     std::unique_ptr<ContactAddTagButton> btn(new ContactAddTagButton());
     btn->SetButtonType(balloonwjui::DuiButton::StylePushButton);
-    btn->SetText(_T("+ 添加标签"));
+    btn->SetText(TR(L"+ 添加标签"));
     btn->SetCtrlId((UINT)kIdAddTagButton);
     return std::unique_ptr<DuiControl>(btn.release());
 }
@@ -1849,7 +2235,7 @@ std::unique_ptr<DuiControl> CreateTagLimitHint()
     std::unique_ptr<ContactTagLimitHint> hint(new ContactTagLimitHint());
     // 文字里的条数由常量拼出来，改上限时不必再来这里改一遍文案。
     CString text;
-    text.Format(_T("标签最多 %d 个"), kContactTagMaxCount);
+    text.Format(TR(L"标签最多 %d 个"), kContactTagMaxCount);
     hint->SetHintText(text);
     hint->SetCtrlId((UINT)kIdTagLimitHint);
     return std::unique_ptr<DuiControl>(hint.release());
@@ -1873,9 +2259,9 @@ int SyncContactTagArea(DuiControl* root)
         root->FindCtrlById((UINT)kIdTagScroll));
 
     // 可用宽度取滚动视口<u>实际</u>布局出来的宽度，而不是照客户区宽度算出来的
-    // kContactTagFlowAvailWidth。两者并不相等：窗口客户区比 kContactBodyWidth
-    // 宽出一圈缩放边框，根面板的左右内边距是从这个更宽的矩形上扣的，于是真实
-    // 可用宽度要大二十来个像素。按常量算会多数出一行来，窗口就比该有的高度高一截。
+    // kContactTagFlowAvailWidth。2026-10-02 之前两者并不相等：窗口客户区比
+    // kContactBodyWidth 宽出一圈系统边框，按常量算会多数出一行来，窗口就比该有的高度
+    // 高一截；现在两者一致，仍以实测为准，免得日后窗口宽度再有变化时两处不同步。
     int measuredWidth = 0;
     if (scroll != NULL)
     {
@@ -1895,17 +2281,9 @@ int SyncContactTagArea(DuiControl* root)
                            && (measuredWidth <= kContactTagFlowMaxTrustedWidth);
     int contentWidth = widthTrusted ? measuredWidth : kContactTagFlowAvailWidth;
 
-    // 第一遍按整宽数行数。行数没超上限时不会出现滚动条，这个结果就是最终结果。
-    const int fullWidth = contentWidth;
-    int rows = flow->CountRows(contentWidth);
-
-    // 超过上限说明会出现滚动条，可用宽度要减去滚动条那一条，按缩窄后的宽度重数
-    // 一遍 —— 少了这一步，滚动范围会比实际内容短一截，最后一行滚不出来。
-    if (rows > kContactTagMaxRows)
-    {
-        contentWidth = fullWidth - kTagScrollBarWidth;
-        rows = flow->CountRows(contentWidth);
-    }
+    // 按整宽数行数。2026-10-04 起滚动条为悬浮式、不占内容宽度，超过行数上限出现滚动条时
+    // 内容宽度也不变，不必再按缩窄后的宽度重数一遍。
+    const int rows = flow->CountRows(contentWidth);
 
     int contentHeight = 0;
     if (scroll != NULL)
@@ -1964,6 +2342,61 @@ void ShowContactTipToast(DuiControl* root, LPCTSTR text)
     }
 }
 
+void ApplyContactAvatar(balloonwjui::DuiAvatar* avatar, const ContactModel& model)
+{
+    if (avatar == NULL)
+    {
+        return;
+    }
+    // 带头像来源时占位字形与底色取自来源（与主面板列表同一份解码结果），否则取姓名首字与固定底色
+    const ContactAvatarSource& source = model.AvatarSource();
+    avatar->SetName(source.m_valid ? (LPCTSTR)source.m_glyph : (LPCTSTR)model.AvatarLetter());
+
+    // 模型状态映射到 DuiAvatar 的状态点。
+    switch (model.Status())
+    {
+    // 在线：绿色状态点
+    case kContactStatusOnline:
+        avatar->SetStatus(balloonwjui::DuiAvatar::StatusOnline);
+        break;
+    // 离开：橙色状态点
+    case kContactStatusAway:
+        avatar->SetStatus(balloonwjui::DuiAvatar::StatusAway);
+        break;
+    // 忙碌：红色状态点
+    case kContactStatusBusy:
+        avatar->SetStatus(balloonwjui::DuiAvatar::StatusBusy);
+        break;
+    // 离线：灰色状态点
+    case kContactStatusOffline:
+        avatar->SetStatus(balloonwjui::DuiAvatar::StatusOffline);
+        break;
+    // 未登记的取值：不画状态点
+    default:
+        avatar->SetStatus(balloonwjui::DuiAvatar::StatusNone);
+        break;
+    }
+
+    // 对方离线时头像画成灰度：字形头像只需把底色换成等亮度的灰色，字仍是白色
+    const COLORREF bg = source.m_valid ? source.m_color : kContactAvatarBgColor;
+    avatar->SetFallbackBgColor(model.IsAvatarGray() ? balloonmain::MakeGrayColor(bg) : bg);
+}
+
+void SetContactAvatarClickable(balloonwjui::DuiAvatar* avatar, bool clickable, LPCTSTR tooltip)
+{
+    ContactAvatar* contactAvatar = dynamic_cast<ContactAvatar*>(avatar);
+    if (contactAvatar != NULL)
+    {
+        contactAvatar->SetClickable(clickable, tooltip);
+    }
+}
+
+bool IsContactAvatarClickable(const balloonwjui::DuiAvatar* avatar)
+{
+    const ContactAvatar* contactAvatar = dynamic_cast<const ContactAvatar*>(avatar);
+    return (contactAvatar != NULL) && contactAvatar->IsClickable();
+}
+
 void ConfigureContactHeader(DuiControl* root,
                             LPCTSTR primaryName, LPCTSTR parenText,
                             LPCTSTR title, LPCTSTR accountRegion,
@@ -1980,6 +2413,198 @@ void ConfigureContactHeader(DuiControl* root,
         header->Configure(primaryName, parenText, title,
                           accountRegion, signature, account);
     }
+}
+
+int ConfigureContactProfile(DuiControl* root, const std::vector<ContactProfileCell>& cells,
+                            bool collapsible, bool expanded, std::vector<int>& outSlotFields)
+{
+    outSlotFields.assign(kContactProfileSlotCount, -1);
+    if (root == NULL)
+    {
+        return 0;
+    }
+    DuiControl* block = root->FindCtrlById((UINT)kIdProfileBlock);
+    if (block == NULL)
+    {
+        return 0;
+    }
+
+    // 格子分配到槽位：昵称进 0 号槽位、个性签名进 1 号槽位，其余按顺序进 2～8 号槽位
+    std::vector<const ContactProfileCell*> slotCells(kContactProfileSlotCount, (const ContactProfileCell*)NULL);
+    const int kNicknameSlot = 0;
+    const int kSignatureSlot = 1;
+    int nextGridSlot = kContactProfileFirstGridSlot;
+    for (size_t i = 0; i < cells.size(); ++i)
+    {
+        if (cells[i].m_field == kProfileFieldNickname)
+        {
+            slotCells[kNicknameSlot] = &cells[i];
+        }
+        else if (cells[i].m_field == kProfileFieldSignature)
+        {
+            slotCells[kSignatureSlot] = &cells[i];
+        }
+        else if (nextGridSlot < kContactProfileSlotCount)
+        {
+            slotCells[nextGridSlot] = &cells[i];
+            ++nextGridSlot;
+        }
+    }
+
+    const int totalRows = ContactProfileRowCount(cells);
+    const int shownRows = ContactProfileShownRows(totalRows, collapsible, expanded);
+
+    // 逐行决定显隐：有格子的行按先后计数，超出 shownRows 的行收起
+    int filledRows = 0;
+    for (int row = 0; row < kContactProfileRowSlots; ++row)
+    {
+        int firstSlot = 0;
+        int lastSlot = 0;
+        ContactProfileRowSlotRange(row, firstSlot, lastSlot);
+        const bool hasCell = (slotCells[firstSlot] != NULL);
+        const bool show = hasCell && filledRows < shownRows;
+        if (hasCell)
+        {
+            ++filledRows;
+        }
+        DuiControl* rowCtrl = root->FindCtrlById((UINT)(kIdProfileRowBase + row));
+        if (rowCtrl != NULL)
+        {
+            rowCtrl->SetVisible(show);
+        }
+        for (int slot = firstSlot; slot <= lastSlot && slot < kContactProfileSlotCount; ++slot)
+        {
+            const ContactProfileCell* cell = show ? slotCells[slot] : NULL;
+            FillContactProfileSlot(root, slot, cell);
+            if (cell != NULL)
+            {
+                outSlotFields[slot] = cell->m_field;
+            }
+        }
+    }
+
+    // 「展开全部 / 收起」链接：只在可收起且行数多于默认行数时出现
+    DuiLabel* toggle = dynamic_cast<DuiLabel*>(root->FindCtrlById((UINT)kIdProfileToggle));
+    if (toggle != NULL)
+    {
+        const bool showToggle = collapsible && totalRows > kContactProfileCollapsedRows;
+        toggle->SetVisible(showToggle);
+        toggle->SetText(expanded ? TR(L"收起") : TR(L"展开全部"));
+    }
+
+    // 区块与分隔线的显隐及高度。分隔线另算 1 像素，ContactProfileBlockHeight 已把它算在内
+    block->SetVisible(shownRows > 0);
+    balloonwjui::DuiLayout* parent = dynamic_cast<balloonwjui::DuiLayout*>(block->GetParent());
+    DuiControl* separator = root->FindCtrlById((UINT)kIdProfileSeparator);
+    if (parent != NULL)
+    {
+        balloonwjui::DuiLayout::Hint hint = parent->GetHint(block);
+        hint.Fixed(shownRows > 0 ? ContactProfileBlockHeight(shownRows) - kProfileSeparatorHeight : 0);
+        parent->SetHint(block, hint);
+        if (separator != NULL)
+        {
+            balloonwjui::DuiLayout::Hint sepHint = parent->GetHint(separator);
+            sepHint.Fixed(shownRows > 0 ? kProfileSeparatorHeight : 0);
+            parent->SetHint(separator, sepHint);
+        }
+    }
+    if (separator != NULL)
+    {
+        separator->SetVisible(shownRows > 0);
+    }
+    return shownRows;
+}
+
+void SetContactProfileSlotEditing(DuiControl* root, int slot, int field, bool editing,
+                                  LPCTSTR text, int gender)
+{
+    if (root == NULL || slot < 0 || slot >= kContactProfileSlotCount)
+    {
+        return;
+    }
+    DuiControl* value = root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartValue));
+    DuiControl* pencil = root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartPencil));
+    balloonwjui::DuiEdit* edit = dynamic_cast<balloonwjui::DuiEdit*>(
+        root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartEdit)));
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartCombo)));
+    const bool isGender = (field == kProfileFieldGender);
+
+    if (value != NULL)
+    {
+        value->SetVisible(!editing);
+    }
+    if (pencil != NULL)
+    {
+        pencil->SetVisible(!editing);
+    }
+    if (edit != NULL)
+    {
+        if (editing && !isGender)
+        {
+            edit->SetText(text != NULL ? text : _T(""));
+        }
+        edit->SetVisible(editing && !isGender);
+    }
+    if (combo != NULL)
+    {
+        if (editing && isGender)
+        {
+            // 程序设置选中项，不触发 DUIN_VALUECHANGED（否则一进入编辑就被当成选好了）
+            combo->SetCurSel(profilefields::GenderToComboIndex(gender), false);
+        }
+        combo->SetVisible(editing && isGender);
+    }
+}
+
+int ProfileVisibilityLinkWidth(const DuiLabel* link)
+{
+    if (link == NULL)
+    {
+        return 0;
+    }
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return kProfileVisibilityDefaultW;
+    }
+    // 用开关自己绘制时的字体量（SetTextPointSize 设的磅值、按控件所在窗口的 DPI），没设字体时用默认字体
+    HFONT font = link->GetFont();
+    if (font == NULL)
+    {
+        font = balloonwjui::DuiResMgr::Inst().GetDefaultFont();
+    }
+    HFONT oldFont = (font != NULL) ? (HFONT)::SelectObject(hdc, font) : NULL;
+    int widest = 0;
+    const int kValues[] = { profile_visibility_self_only, profile_visibility_colleagues };
+    for (size_t i = 0; i < sizeof(kValues) / sizeof(kValues[0]); ++i)
+    {
+        const std::wstring text = profilefields::VisibilityLinkText(kValues[i]);
+        SIZE size = { 0, 0 };
+        if (::GetTextExtentPoint32W(hdc, text.c_str(), (int)text.size(), &size) && size.cx > widest)
+        {
+            widest = size.cx;
+        }
+    }
+    if (oldFont != NULL)
+    {
+        ::SelectObject(hdc, oldFont);
+    }
+    ::ReleaseDC(NULL, hdc);
+    return (widest > 0) ? widest + kProfileVisibilitySlackW : kProfileVisibilityDefaultW;
+}
+
+UINT TrackProfileVisibilityMenu(HWND owner, const RECT& anchorScreen, int current)
+{
+    balloonwjui::DuiMenu menu;
+    const std::vector<profilefields::VisibilityMenuEntry> entries = profilefields::BuildVisibilityMenu(current);
+    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        menu.AppendChecked(entries[i].m_id, entries[i].m_label.c_str(), entries[i].m_checked);
+    }
+    // 落点超出工作区时由 DuiMenu 自己翻向上方 / 左方（UI 约定第 3 条），这里只给期望位置
+    const UINT chosen = menu.TrackPopup(anchorScreen.left, anchorScreen.bottom + kProfileVisibilityMenuGap, owner);
+    LOG_INFO("profile visibility menu: current=%d, chosen id=%u.", current, chosen);
+    return chosen;
 }
 
 int ConfigureContactDeptPath(DuiControl* root, LPCTSTR deptPath)
@@ -2185,7 +2810,95 @@ int ContactTagBlockHeight(int tagRowCount)
          + kTagBlockPaddingV;
 }
 
-int ContactBodyHeight(int deptLineCount, int tagRowCount)
+int ContactProfileValueHeightForDpi(int dpi)
+{
+    //就地编辑输入框（DuiEdit）只在「一行的高度 < 控件高 - 上下边框」时把单行文字垂直居中（DuiEdit::ApplyTextInsets），
+    //否则从顶部排、超出部分在底部被裁掉。一行的高度按 DuiRichEdit::GetLineHeight 的算法：默认字体的 tmHeight 加行间距
+    HFONT font = balloonwjui::DuiResMgr::Inst().GetDefaultFontForDpi(dpi);
+    if (font == NULL)
+    {
+        return kProfileValueHeight;
+    }
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return kProfileValueHeight;
+    }
+    HFONT old = (HFONT)::SelectObject(hdc, font);
+    TEXTMETRICW tm;
+    memset(&tm, 0, sizeof(tm));
+    const BOOL ok = ::GetTextMetricsW(hdc, &tm);
+    ::SelectObject(hdc, old);
+    ::ReleaseDC(NULL, hdc);
+    if (!ok || tm.tmHeight <= 0)
+    {
+        return kProfileValueHeight;
+    }
+    const int need = tm.tmHeight + tm.tmExternalLeading + 2 * (kProfileEditBorderPx + kProfileEditSlackPx);
+    return (need > kProfileValueHeight) ? need : kProfileValueHeight;
+}
+
+int ContactProfileValueHeight()
+{
+    //balloonui 的字体按窗口所在显示器的 DPI 取，控件尺寸不随 DPI 缩放：按本机所有显示器中最高的 DPI 算，
+    //窗口放在哪块显示器上都放得下（2026-10-07，用户在 125% 缩放的显示器上看到输入框里的文字下半截被裁掉）
+    return ContactProfileValueHeightForDpi(i18n::MaxMonitorDpi());
+}
+
+int ContactProfileRowHeight()
+{
+    return kProfileLabelHeight + kProfileCellInnerGap + ContactProfileValueHeight();
+}
+
+int ContactProfileBlockHeight(int rowCount)
+{
+    if (rowCount <= 0)
+    {
+        return 0;
+    }
+    return kProfileBlockPaddingV + kProfileTitleHeight + kProfileTitleGap
+         + rowCount * ContactProfileRowHeight() + (rowCount - 1) * kProfileRowGap
+         + kProfileBlockPaddingV + kProfileSeparatorHeight;
+}
+
+int ContactProfileShownRows(int totalRows, bool collapsible, bool expanded)
+{
+    if (totalRows <= 0)
+    {
+        return 0;
+    }
+    if (collapsible && !expanded && totalRows > kContactProfileCollapsedRows)
+    {
+        return kContactProfileCollapsedRows;
+    }
+    return totalRows;
+}
+
+void ApplyContactSelfView(DuiControl* root, bool self)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    // 看本人时隐藏的控件：两个通话按钮、发消息按钮，以及标签 / 备注分组 / 提醒收藏三块与它们下方的分隔线
+    const UINT kHiddenForSelf[] =
+    {
+        (UINT)kIdBtnVoice, (UINT)kIdBtnVideo, (UINT)kIdBtnSend,
+        (UINT)kIdTagBlock, (UINT)kIdTagSeparator,
+        (UINT)kIdRemarkSection, (UINT)kIdRemarkSeparator,
+        (UINT)kIdNotifySection,
+    };
+    for (size_t i = 0; i < sizeof(kHiddenForSelf) / sizeof(kHiddenForSelf[0]); ++i)
+    {
+        DuiControl* c = root->FindCtrlById(kHiddenForSelf[i]);
+        if (c != NULL)
+        {
+            c->SetVisible(!self);
+        }
+    }
+}
+
+int ContactBodyHeight(int deptLineCount, int tagRowCount, int profileRowCount, bool selfView)
 {
     // kContactBodyBaseHeight 里已经含了"标签正好一行"的那一份高度，故这里加的是
     // 标签多出来那几行的<u>增量</u>，不能把整块高度再加一遍。
@@ -2196,8 +2909,19 @@ int ContactBodyHeight(int deptLineCount, int tagRowCount)
     // 所以这里只加一份间距而不是两份。
     const int quickRowExtra = kContactQuickRowHeight + kContactQuickRowGap;
 
-    return kContactBodyBaseHeight + quickRowExtra
-         + ContactDeptBlockHeight(deptLineCount) + tagExtra;
+    const int common = kContactBodyBaseHeight + quickRowExtra
+                     + ContactDeptBlockHeight(deptLineCount)
+                     + ContactProfileBlockHeight(profileRowCount);
+    if (selfView)
+    {
+        // 看本人：标签区（按一行计，基准高度里含的就是这一份）、备注名与分组、消息提醒与收藏三块
+        // 连同两条分隔线都不显示，从基准高度里减掉；标签多出来的行也就不再计入
+        const int hidden = kTagBlockOneRowHeight + kSectionSeparatorHeight
+                         + kRemarkSectionHeight + kSectionSeparatorHeight
+                         + kNotifySectionHeight;
+        return common - hidden;
+    }
+    return common + tagExtra;
 }
 
 } // namespace ballooncontact

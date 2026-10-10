@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 平台超级管理员第 4 章：制作并发布 PC 客户端升级包、编辑与撤回版本、客户端的升级提醒。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>客户端版本与自动升级 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="p04">
+<article class="doc">
+  <h1>客户端版本与自动升级</h1>
+  <p class="lead">PC 客户端的新版本由平台超级管理员在管理控制台发布。发布后，员工的客户端会在登录前后或手动检查时弹出升级提醒，一键完成更新。本章介绍升级包的制作要求、新建与发布版本、撤回与更换升级包，以及员工看到的升级提醒。</p>
+  <ul class="facts">
+    <li>适用：平台超级管理员</li>
+    <li>位置：左侧导航「客户端版本」</li>
+    <li>需要：能把文件放到服务器升级包目录的权限（一般由运维人员操作）</li>
+  </ul>
+
+  <h2 id="flow">发布流程概览</h2>
+  <ol class="steps">
+    <li>按下一节的要求，把新版本客户端打成一个 <code>.zip</code> 升级包。</li>
+    <li>把升级包放到服务器的升级包目录里。文件名可以随意起，例如 <code>Flamingo-2.0.1.zip</code>，不需要改名，也不需要自己计算 MD5。</li>
+    <li>在管理控制台的「客户端版本」页点 <span class="ui">新建版本</span>，选中这个升级包，填写版本号等信息。</li>
+    <li>先存为草稿核对，或者直接发布。</li>
+    <li>员工的客户端检查更新时收到升级提醒。</li>
+  </ol>
+
+  <h2 id="package">制作升级包</h2>
+  <p>升级程序只会覆盖或新增包里有的文件，包里没有的文件原样保留，从不删除。因此制作升级包时请注意以下几点（完整规则见仓库文档 <code>docs/客户端自动更新方案.md</code> 第 7.1 节）：</p>
+  <ul>
+    <li><b>每次都要放进包里的</b>：安装目录下的全部 <code>.exe</code> 与 <code>.dll</code>，即 <code>Flamingo.exe</code>、<code>FlamingoUpdater.exe</code> 和全部 <code>Flamingo*.dll</code> 插件，不能只放改过的那几个；以及 <code>Face/</code>、<code>Image/</code>、<code>Sound/</code> 三个资源目录。只更新主程序而沿用旧插件时，对应功能会因版本不符而无法加载，入口直接隐藏且没有任何提示。</li>
+    <li><b>可以不放的</b>：字幕模型 <code>FlamingoCaptionModel.dll</code> 没有变化时可以不放，用户电脑上原有的那份照常可用，这样升级包能小很多。</li>
+    <li><b>绝对不能放的</b>：<code>config/</code> 目录（里面有服务器地址和用户自己改过的设置，放进去会把它们全部改回包里的那一份），以及 <code>Users/</code>、<code>Logs/</code> 等运行期数据。</li>
+    <li>使用 Release x64 版本的程序制作，升级包不能超过 500 MB。</li>
+  </ul>
+
+  <h2 id="list">版本列表</h2>
+  <p>点左侧导航的 <span class="ui">客户端版本</span>，进入「客户端升级发布」页面：</p>
+  <figure class="shot">
+    <img src="../img/sa_versions.png" width="880" alt="客户端升级发布页面">
+    <figcaption>客户端升级发布页面，2.0.1 版本当前生效</figcaption>
+  </figure>
+  <p>页面上方的提示条写明了服务器升级包目录的位置。截图中的 <code>/mnt/e/flamingo/tmp/help/live/server/bin/updatecache/</code> 是演示环境的目录，正式环境以实际部署为准。</p>
+  <p>列表各列依次是 <span class="ui">版本号</span>（附平台，如 Windows PC）、<span class="ui">最低版本</span>、<span class="ui">包大小</span>、<span class="ui">发布时间</span>、<span class="ui">状态</span> 和 <span class="ui">操作</span>：</p>
+  <table>
+    <tr><th>状态</th><th>含义</th><th>可用操作</th></tr>
+    <tr><td>草稿</td><td>已创建但未发布，客户端收不到</td><td>发布、编辑</td></tr>
+    <tr><td>当前生效</td><td>已发布的版本中发布时间最新的一个，客户端检查更新时拿到的就是它</td><td>撤回、编辑</td></tr>
+    <tr><td>已发布</td><td>已发布，但不是发布时间最新的那一个</td><td>撤回、编辑</td></tr>
+  </table>
+  <p>点 <span class="ui">发布</span> 时确认框会提示：发布后，低于它的客户端检查更新时都会收到升级提示（设为强制升级时还要求必须升级后才能继续使用）。</p>
+
+  <h2 id="new">新建版本</h2>
+  <p>点右上角的 <span class="ui">新建版本</span>，打开「新建客户端版本」对话框：</p>
+  <figure class="shot">
+    <img src="../img/sa_version_new.png" width="880" alt="新建客户端版本对话框">
+    <figcaption>新建客户端版本对话框，已选中升级包 Flamingo-2.0.1.zip</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">选择升级包</span> 列表中点选升级包。列表列出服务器升级包目录里的文件；刚放进去的文件没有出现时，点右上角的 <span class="ui">重新扫描</span>。标着「不是 zip」的文件不能使用，标着「已建过版本」的表示已经有版本记录用过这个包。</li>
+    <li>填写 <span class="ui">版本号</span>：2~4 段用点分隔的数字，例如 <code>2.0.1</code>，必须与这个升级包里客户端内置的版本号一致，否则员工升级完之后仍会提示有新版本。</li>
+    <li>按需填写 <span class="ui">最低可用版本</span>：低于它的客户端会被拒绝登录，并在检查更新时判为强制升级；留空表示不设门槛。</li>
+    <li>填写 <span class="ui">更新说明</span>：可以分多行写，会原样显示在客户端的升级窗里。</li>
+    <li>需要所有人必须升级时，勾选 <span class="ui">强制升级（客户端不能跳过，装完才能继续用）</span>。</li>
+    <li>点 <span class="ui">存为草稿</span> 先保存、核对无误后再发布；或者点 <span class="ui">直接发布</span>。</li>
+  </ol>
+
+  <h2 id="edit">编辑、撤回与更换升级包</h2>
+  <p>点某个版本的 <span class="ui">编辑</span>，打开「编辑客户端版本」对话框：</p>
+  <figure class="shot">
+    <img src="../img/sa_version_edit.png" width="880" alt="编辑客户端版本对话框">
+    <figcaption>编辑客户端版本对话框，顶部注明升级包不可更换</figcaption>
+  </figure>
+  <p>编辑时只能修改 <span class="ui">最低可用版本</span>、<span class="ui">更新说明</span> 和 <span class="ui">强制升级</span>，改好后点 <span class="ui">保存</span>。版本号和升级包不能修改。</p>
+  <p>点某个已发布版本的 <span class="ui">撤回</span> 并确认后，客户端不再收到它的升级提示，检查更新时改为提示此前发布的最新版本；一个已发布的版本都不剩时，客户端不会收到升级提示。</p>
+  <div class="callout warn"><b>发布后不要直接替换升级包文件</b>发布记录绑定的是升级包内容的 MD5，不是文件名。发布后在服务器上重新打包、覆盖同名文件，会让 MD5 变化，客户端下载就会失败。要换包，请先撤回该版本，把新包放进目录，再新建版本重新发布一次。</div>
+  <div class="callout tip"><b>让旧版本重新生效</b>对旧版本先点「撤回」、再点「发布」，发布时间会刷新为当前时间，它就成为「当前生效」的版本。注意这只影响还没有升级的客户端：客户端只在服务器上的版本比自己新时才提示升级，已经装上新版本的员工不会被降回旧版本。</div>
+
+  <h2 id="client">员工看到的升级提醒</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/zz_update.png" width="420" alt="客户端的升级提醒窗口"><figcaption>客户端弹出的「FlamingoIM升级提醒」窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>版本发布后，员工的客户端会在登录前、登录后，或在「关于」页点检查更新时弹出升级提醒。窗口里显示新版本号、当前版本 → 最新版本、升级包大小，以及你填写的更新说明。</p>
+      <p>员工点 <span class="ui">立即更新</span> 下载并安装新版本，点 <span class="ui">稍后</span> 暂不更新。版本设为强制升级、或员工的版本低于最低可用版本时，不能跳过，必须更新后才能继续使用。</p>
+      <p>员工一侧的详细说明见客户端<a href="../client/29-about-update.html">「关于与自动升级」</a>。</p>
+    </div>
+  </div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

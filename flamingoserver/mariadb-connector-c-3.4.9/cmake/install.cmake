@@ -1,0 +1,160 @@
+#
+#  Copyright (C) 2013-2016 MariaDB Corporation AB
+#
+#  Redistribution and use is allowed according to the terms of the New
+#  BSD license.
+#  For details see the COPYING-CMAKE-SCRIPTS file.
+#
+
+#
+# This file contains settings for the following layouts:
+#
+# - RPM
+# Built with default prefix=/usr
+#
+#
+# The following va+riables are used and can be overwritten
+#
+# INSTALL_LAYOUT     installation layout (DEFAULT = standard for tar.gz and zip packages
+#                                         RPM packages
+#
+# INSTALL_BINDIR    location of binaries (mariadb_config)
+# INSTALL_LIBDIR    location of libraries
+# INSTALL_PLUGINDIR location of plugins
+# INSTALL_MANDIR    location of manpages 
+
+IF(NOT INSTALL_LAYOUT)
+  SET(INSTALL_LAYOUT "DEFAULT")
+ENDIF()
+
+SET(INSTALL_LAYOUT ${INSTALL_LAYOUT} CACHE
+  STRING "Installation layout. Currently supported options are DEFAULT (tar.gz and zip), RPM and DEB")
+
+# On Windows we only provide zip and .msi. Latter one uses a different packager.
+IF(UNIX)
+  IF(INSTALL_LAYOUT MATCHES "RPM")
+    SET(libmariadb_prefix "/usr")
+  ELSEIF(INSTALL_LAYOUT MATCHES "DEFAULT|DEB")
+    SET(libmariadb_prefix ${CMAKE_INSTALL_PREFIX})
+  ENDIF()
+ENDIF()
+
+IF(CMAKE_DEFAULT_PREFIX_INITIALIZED_BY_DEFAULT)
+  SET(CMAKE_DEFAULT_PREFIX ${libmariadb_prefix} CACHE PATH "Installation prefix" FORCE)
+ENDIF()
+
+# check if the specified installation layout is valid
+SET(VALID_INSTALL_LAYOUTS "DEFAULT" "RPM" "DEB")
+LIST(FIND VALID_INSTALL_LAYOUTS "${INSTALL_LAYOUT}" layout_no)
+IF(layout_no EQUAL -1)
+  MESSAGE(FATAL_ERROR "Invalid installation layout ${INSTALL_LAYOUT}. Please specify one of the following layouts: ${VALID_INSTALL_LAYOUTS}")
+ENDIF()
+
+
+
+#
+# Todo: We don't generate man pages yet, will fix it
+#       later (webhelp to man transformation)
+#
+
+#
+# DEFAULT layout
+#
+
+SET(INSTALL_BINDIR_DEFAULT "bin")
+SET(INSTALL_LIBDIR_DEFAULT "lib/mariadb")
+SET(INSTALL_PCDIR_DEFAULT "lib/pkgconfig")
+SET(INSTALL_INCLUDEDIR_DEFAULT "include/mariadb")
+SET(INSTALL_DOCDIR_DEFAULT "docs")
+SET(INSTALL_MANDIR_DEFAULT "man")
+IF(NOT IS_SUBPROJECT)
+  SET(INSTALL_PLUGINDIR_DEFAULT "lib/mariadb/plugin")
+ELSE()
+ENDIF()
+SET(LIBMARIADB_STATIC_DEFAULT "mariadbclient")
+#
+# RPM layout
+#
+SET(INSTALL_BINDIR_RPM "bin")
+IF((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "s390x" OR CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64") AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+  SET(INSTALL_LIBDIR_RPM "lib64/mariadb")
+  SET(INSTALL_PCDIR_RPM "lib64/pkgconfig")
+  SET(INSTALL_PLUGINDIR_RPM "lib64/mariadb/plugin")
+ELSE()
+  SET(INSTALL_LIBDIR_RPM "lib/mariadb")
+  SET(INSTALL_PCDIR_RPM "lib/pkgconfig")
+  SET(INSTALL_PLUGINDIR_RPM "lib/mariadb/plugin")
+ENDIF()
+SET(INSTALL_INCLUDEDIR_RPM "include")
+SET(INSTALL_DOCDIR_RPM "docs")
+SET(INSTALL_MANDIR_RPM "share/man")
+SET(LIBMARIADB_STATIC_RPM "mariadbclient")
+
+#
+# DEB layout
+#
+SET(INSTALL_BINDIR_DEB "bin")
+SET(INSTALL_LIBDIR_DEB "lib/${CMAKE_LIBRARY_ARCHITECTURE}")
+SET(INSTALL_PCDIR_DEB "lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig")
+SET(INSTALL_PLUGINDIR_DEB "${INSTALL_LIBDIR_DEB}/libmariadb${CPACK_PACKAGE_VERSION_MAJOR}/plugin")
+SET(INSTALL_INCLUDEDIR_DEB "include/mariadb")
+SET(INSTALL_MANDIR_DEB "share/man")
+SET(LIBMARIADB_STATIC_DEB "mariadb")
+
+IF(INSTALL_LAYOUT MATCHES "DEB")
+  SET(INSTALL_PLUGINDIR_CLIENT ${INSTALL_PLUGINDIR_DEB})
+ENDIF()
+
+
+#
+# Overwrite defaults
+#
+IF(INSTALL_LIBDIR)
+  SET(INSTALL_LIBDIR_${INSTALL_LAYOUT} ${INSTALL_LIBDIR})
+ENDIF()
+
+IF(INSTALL_PCDIR)
+  SET(INSTALL_PCDIR_${INSTALL_LAYOUT} ${INSTALL_PCDIR})
+ENDIF()
+
+IF(INSTALL_PLUGINDIR)
+  SET(INSTALL_PLUGINDIR_${INSTALL_LAYOUT} ${INSTALL_PLUGINDIR})
+ENDIF()
+
+# Extra INSTALL_PLUGINDIR_CLIENT that overrides any INSTALL_PLUGINDIR override
+IF(INSTALL_PLUGINDIR_CLIENT)
+  SET(INSTALL_PLUGINDIR_${INSTALL_LAYOUT} ${INSTALL_PLUGINDIR_CLIENT})
+ENDIF()
+
+IF(INSTALL_INCLUDEDIR)
+  SET(INSTALL_INCLUDEDIR_${INSTALL_LAYOUT} ${INSTALL_INCLUDEDIR})
+ENDIF()
+
+IF(INSTALL_BINDIR)
+  SET(INSTALL_BINDIR_${INSTALL_LAYOUT} ${INSTALL_BINDIR})
+ENDIF()
+
+IF(INSTALL_MANDIR)
+  SET(INSTALL_MANDIR_${INSTALL_LAYOUT} ${INSTALL_MANDIR})
+ENDIF()
+
+IF(NOT INSTALL_PREFIXDIR)
+  SET(INSTALL_PREFIXDIR_${INSTALL_LAYOUT} ${libmariadb_prefix})
+ELSE()
+  SET(INSTALL_PREFIXDIR_${INSTALL_LAYOUT} ${INSTALL_PREFIXDIR})
+ENDIF()
+
+IF(DEFINED INSTALL_SUFFIXDIR)
+  SET(INSTALL_SUFFIXDIR_${INSTALL_LAYOUT} ${INSTALL_SUFFIXDIR})
+ENDIF()
+
+FOREACH(dir "BIN" "LIB" "PC" "INCLUDE" "DOCS"  "PLUGIN" "MAN")
+  SET(INSTALL_${dir}DIR ${INSTALL_${dir}DIR_${INSTALL_LAYOUT}})
+  MARK_AS_ADVANCED(INSTALL_${dir}DIR)
+  MESSAGE1(INSTALL_${dir}DIR "MariaDB Connector C: INSTALL_${dir}DIR=${INSTALL_${dir}DIR}")
+ENDFOREACH()
+
+SET(LIBMARIADB_STATIC_NAME ${LIBMARIADB_STATIC_${INSTALL_LAYOUT}})
+MARK_AS_ADVANCED(LIBMARIADB_STATIC_NAME)
+
+MESSAGE1(LIBMARIADB_STATIC_NAME "MariaDB Connector C: LIBMARIADB_STATIC_NAME ${LIBMARIADB_STATIC_NAME}")

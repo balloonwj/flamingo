@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 27 章：公告与通知（右下角的新公告提示窗、公告中心）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>公告与通知 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c27">
+<article class="doc">
+  <h1>公告与通知</h1>
+  <p class="lead">管理员在管理控制台发布公告后，收到公告的员工会在桌面右下角看到提示，所有公告都可以在公告中心里随时查阅。本章介绍这两处界面的用法。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>公告由管理员发布，员工只能查看</li>
+  </ul>
+
+  <h2 id="popup">新公告提示</h2>
+  <p>有新公告发布时，屏幕右下角会弹出「新公告」窗口，不必打开主面板也能第一时间看到：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/c_announce_popup.png" width="360" alt="新公告提示窗"><figcaption>右下角的「新公告」窗口</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <ul>
+        <li>顶部左侧是来源，右侧是公告的级别：<b>通知</b>（灰色）、<b>提醒</b>（琥珀色）或 <b>警告</b>（红色）。</li>
+        <li>中间是公告标题和正文。</li>
+        <li>点 <span class="ui">知道了</span> 关闭提示窗。这条公告仍然保持未读，之后可以在公告中心里查看。</li>
+        <li>点 <span class="ui">查看全部</span> 打开公告中心。</li>
+      </ul>
+      <p>上一条提示还没关闭时又来了新公告，提示窗的内容会直接换成新的那一条。</p>
+    </div>
+  </div>
+
+  <h2 id="center">公告中心</h2>
+  <p>公告中心汇总了你收到的全部公告。打开方式有两种：</p>
+  <ul>
+    <li>点主面板头像下方的铃铛按钮。有未读公告时，铃铛上显示未读条数，鼠标停在上面会提示「你有 N 条新公告」；</li>
+    <li>点主面板左下角的 ≡，在系统菜单中选 <span class="ui">公告与通知</span>。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/c_notice_center.png" width="838" alt="公告中心">
+    <figcaption>公告中心：左侧是公告列表，右侧是选中公告的详情</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>左侧列表顶部显示公告总数，有未读公告时还会显示未读条数，如「共 9 条 · 2 条未读」。</li>
+    <li>点左侧的一条公告，右侧显示它的标题、发布者、发布时间和完整正文。打开过的公告自动标为已读。</li>
+    <li>需要一次清除所有未读时，点右下角的 <span class="ui">全部标为已读</span>（没有未读公告时按钮为灰色）。</li>
+  </ol>
+  <p>列表中的几种标记：</p>
+  <table>
+    <tr><th>标记</th><th>含义</th></tr>
+    <tr><td>标题左侧的小圆点</td><td>这条公告还没有读过</td></tr>
+    <tr><td>标题前的「[置顶]」</td><td>管理员把这条公告置顶了</td></tr>
+    <tr><td>左边缘的琥珀色竖条</td><td>级别为「提醒」的公告</td></tr>
+    <tr><td>左边缘的红色竖条</td><td>级别为「警告」的公告</td></tr>
+    <tr><td>浅色底与橙色竖条</td><td>当前正在右侧查看的那一条</td></tr>
+  </table>
+  <p>公告正文里的网址可以直接点击打开。</p>
+
+  <div class="callout note"><b>群公告不在这里</b>公告中心只收管理员在管理控制台发布的公告。群主或管理员在群里发布的群公告显示在群聊窗口里，见<a href="13-group-chat.html">「群聊」</a>。</div>
+  <div class="callout tip"><b>管理员如何发布公告</b>公告可以发给全部企业，也可以只发给指定的企业、部门或员工，操作方法见<a href="../platform/03-announcements.html">「平台公告」</a>。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

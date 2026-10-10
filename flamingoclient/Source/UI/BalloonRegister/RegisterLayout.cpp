@@ -57,10 +57,15 @@ extern CAppModule _Module;
 #include "RegisterLayout.h"
 #include "RegisterModel.h"
 #include "RegisterIcons.h"
+#include "../../App/BrandText.h"   // 产品名称与标语的缺省值
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 服务协议 / 隐私政策超链接（ModeLink）
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h" // 公司名称组合框
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"     // 组合框内嵌的输入框（设占位文字）
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../Common/I18n/I18n.h"      // TR / TRF / TR_NOOP：界面文字的多语言查找
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：内嵌 XML 的文字属性换成译文
 
 namespace balloonregister {
 
@@ -106,14 +111,22 @@ const int           kBannerPanelH    = kBannerVisibleH + kBackRowOverhang;  // 1
 // 三段内嵌 XML 里 reg-banner 的 fixedHeight 必须与 kBannerPanelH 一致 ——
 // 此处编译期校验，防止两边数值漂移。
 static_assert(kBannerPanelH == 160,
-              "reg-banner XML fixedHeight 与 kBannerPanelH 不一致");
+              "reg-banner XML fixedHeight must equal kBannerPanelH");
 const Gdiplus::REAL kFlamingoSize    = 180.0f; // 火烈鸟线条画外接方块边长
 const Gdiplus::REAL kFlamingoStroke  = 3.0f;   // 火烈鸟描边宽度
 const int           kBrandTextLeft   = 24;     // 品牌字距 banner 左
-const int           kBrandTextBottom = 18;     // 品牌字距 banner 下
-const int           kBrandTitleSize  = 22;     // "FlamingoIM" 字号
-const int           kBrandSubSize    = 12;     // "让沟通像火烈鸟一样优雅" 字号（11.5 取整）
+const int           kBrandTextBottom = 18;     // 品牌文字块（产品名称 + 标语）的下缘距 banner 下沿
+const int           kBrandTitleSize  = 22;     // 产品名称（默认 "FlamingoIM"）的设计字号
+const int           kBrandTitleMinSize = 14;   // 产品名称过长时允许缩小到的字号
+const int           kBrandSubSize    = 12;     // 标语（默认 "开源实用的企业即时通讯软件"）字号（11.5 取整）
 const int           kBrandGap        = 2;      // 品牌主副标题间距
+const int           kBrandTextGapToFlamingo = 8;  // 品牌文字右缘与火烈鸟图案最左端之间的间距
+// 火烈鸟线条画的定位（design：svg viewBox 200，绘制区 right:-20 top:10、宽高 180）。
+// 绘制与品牌文字区的右界计算共用这几项。
+const Gdiplus::REAL kFlamingoViewBox       = 200.0f;  // SVG viewBox 边长
+const Gdiplus::REAL kFlamingoRightOverflow = 20.0f;   // 绘制区右溢出 banner 的距离
+const Gdiplus::REAL kFlamingoTopOffset     = 10.0f;   // 绘制区距 banner 顶的距离
+const Gdiplus::REAL kFlamingoPathMinX      = 52.0f;   // 火烈鸟路径最左点的 x（viewBox 内）
 
 // ---- 内容区（auth.jsx AuthShell 的 padding:'22px 28px 24px'）--------
 const int           kContentPadX     = 28;     // 内容区左右内边距
@@ -140,6 +153,11 @@ const int           kInputIconGap    = 8;      // 图标与文字间距
 // ---- 服务协议 / 隐私政策一行 ---------------------------------------
 // 说明文字与两条超链接同字号，这样一行读起来是连贯的一句话。
 const int           kAgreementTextSize = 12;    // 该行文字字号（像素）
+// 该行 hbox 子控件之间的间距，须与填写页 XML 中该行 <hbox gap="4"> 一致。服务协议链接
+// 按文字实际宽度重设宽度时，据此算出本行留给它的宽度上限。
+const int           kAgreementRowGap   = 4;
+// 服务协议链接宽度在文字实际宽度之外多留的像素，避免 ClearType 的字形外扩被裁掉。
+const int           kAgreementLinkPadX = 2;
 // 超链接三态颜色。normal 用主题 accent（与"提交注册"按钮同色，一眼看出可点）；
 // hover 略加深给出反馈；visited 刻意与 normal 相同 —— 服务协议 / 隐私政策不是
 // "读过就不用再读"的东西，用 DuiLabel 默认的紫色反而显脏。
@@ -157,12 +175,12 @@ const int           kSuccessIconBox  = 64;     // 圆形成功图标直径
 const Gdiplus::REAL kSuccessCheckPad = 16.0f;  // 对勾在圆内的内边距
 const Gdiplus::REAL kSuccessCheckW   = 3.4f;   // 对勾描边宽度（粗 stroke）
 
-// 步骤标签文字。design 原稿是 ['填写资料','手机验证','完成'] 三步，
+// 步骤标签文字（静态表在语言确定之前就已初始化，只能用 TR_NOOP 标记，绘制处再调 TR）。design 原稿是 ['填写资料','手机验证','完成'] 三步，
 // 现在注册不再收短信验证码，中间那步整个去掉，手机号并入第一步。
 const wchar_t* const kStepLabels[kRegStepCount] =
 {
-    L"填写资料",
-    L"完成",
+    TR_NOOP(L"填写资料"),
+    TR_NOOP(L"完成"),
 };
 
 // =====================================================================
@@ -191,6 +209,27 @@ void AddRoundRect(Gdiplus::GraphicsPath& path,
     path.CloseFigure();
 }
 
+// 本模块所有文字使用的字体。品牌文字的字号适配（FitRegisterBrandTitle）按它测量，须与绘制一致。
+// 简体中文沿用 Microsoft YaHei UI（行距比 Microsoft YaHei 紧，中文布局按它调过），其它语言用当前界面语言的
+// 界面字体（多语言第 3e 步）
+const wchar_t* RegFontFace()
+{
+    return i18n::IsSourceLanguage() ? L"Microsoft YaHei UI" : i18n::UiFontName();
+}
+
+// 计算 banner 左下角品牌文字的可用宽度：从文字左边距起，到火烈鸟图案最左端之前再留出间距。
+//   bannerWidth：banner 宽度（像素）。
+// 返回：可用宽度（像素），不小于 0。
+int RegBrandTextMaxWidth(int bannerWidth)
+{
+    // 火烈鸟绘制区左缘 = banner 右缘 - 绘制区边长 + 右溢出量（与 DrawFlamingoSilhouette 一致），
+    // 再加上路径最左点在绘制区内的偏移
+    const Gdiplus::REAL flamingoLeft = (Gdiplus::REAL)bannerWidth - kFlamingoSize + kFlamingoRightOverflow
+                                     + kFlamingoPathMinX * kFlamingoSize / kFlamingoViewBox;
+    const int width = (int)flamingoLeft - kBrandTextGapToFlamingo - kBrandTextLeft;
+    return (width > 0) ? width : 0;
+}
+
 // 取服务协议 / 隐私政策超链接用的字体（12px 常规字重，与相邻说明文字同字号）。
 //
 // balloonui 的 DuiLabel 用 HFONT 绘制，且明确规定字体由调用方持有、控件不会
@@ -204,7 +243,7 @@ HFONT GetRegLinkFont()
         FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, RegFontFace());
     return s_hLinkFont;
 }
 
@@ -221,7 +260,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, RegFontFace());
     if (hFont == NULL)
     {
         return;
@@ -249,7 +288,7 @@ int MeasureGdiTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, RegFontFace());
     if (hFont == NULL)
     {
         return 0;
@@ -304,6 +343,8 @@ class RegBannerPanel : public balloonwjui::DuiVBox
 public:
     RegBannerPanel()
         : m_topOffset(0)
+        , m_title(brandtext::kDefaultAppTitle)
+        , m_slogan(brandtext::kDefaultSlogan)
     {
     }
 
@@ -313,6 +354,66 @@ public:
     {
         m_topOffset = px;
         Invalidate();
+    }
+
+    // 设置左下角的产品名称与标语。
+    //   title： 产品名称；NULL 或空串时恢复为 FlamingoIM。
+    //   slogan：标语；NULL 或空串表示不显示标语。
+    void SetBrandText(LPCTSTR title, LPCTSTR slogan)
+    {
+        m_title  = (title != NULL && title[0] != _T('\0')) ? title : brandtext::kDefaultAppTitle;
+        m_slogan = (slogan != NULL) ? slogan : _T("");
+        Invalidate();
+    }
+
+    // 取当前的产品名称。
+    const CString& GetTitleText() const
+    {
+        return m_title;
+    }
+
+    // 取当前的标语；空串表示不显示。
+    const CString& GetSloganText() const
+    {
+        return m_slogan;
+    }
+
+    // 取完整 banner 下沿的 y 坐标（与本控件同一坐标系）。完整 banner 从窗口顶算高 160，
+    // 本控件顶端在其下 m_topOffset 处。
+    int GetBannerBottom() const
+    {
+        return m_rcItem.top - m_topOffset + kBannerHeight;
+    }
+
+    // 计算左下角产品名称与标语两行文字的矩形（与本控件同一坐标系），绘制与单元测试共用。
+    // 按设计稿（auth.jsx AuthShell 的 bottom:18 作用在两行文字整体上），文字块的下缘离 banner
+    // 下沿 kBrandTextBottom：有标语时标语在下、产品名称在其上；不显示标语时产品名称下移到
+    // 标语的位置。这样文字块与返回按钮（上缘在 banner 下沿以上 10 像素）之间留有 8 像素。
+    //   rcTitle： [出参] 产品名称行的矩形。
+    //   rcSlogan：[出参] 标语行的矩形；不显示标语时为空矩形（上下缘相同）。
+    void ComputeBrandRows(RECT& rcTitle, RECT& rcSlogan) const
+    {
+        const int textLeft  = m_rcItem.left + kBrandTextLeft;
+        // 品牌文字的右界止于火烈鸟图案之前，长名称不会压到图案上。
+        const int textRight = textLeft + RegBrandTextMaxWidth(m_rcItem.right - m_rcItem.left);
+        const int blockBottom = GetBannerBottom() - kBrandTextBottom;
+
+        rcTitle.left  = textLeft;
+        rcTitle.right = textRight;
+        if (m_slogan.IsEmpty())
+        {
+            ::SetRect(&rcSlogan, textLeft, blockBottom, textRight, blockBottom);
+            rcTitle.bottom = blockBottom;
+        }
+        else
+        {
+            rcSlogan.left   = textLeft;
+            rcSlogan.right  = textRight;
+            rcSlogan.bottom = blockBottom;
+            rcSlogan.top    = rcSlogan.bottom - (kBrandSubSize + 4);
+            rcTitle.bottom  = rcSlogan.top - kBrandGap;
+        }
+        rcTitle.top = rcTitle.bottom - (kBrandTitleSize + 6);
     }
 
     // 自定义布局：本控件含唯一一个子控件（返回行 hbox），把它锚定在本
@@ -348,8 +449,6 @@ public:
 
             // 完整 banner 的顶端在本控件之上 m_topOffset 像素处。
             const int bannerTop = m_rcItem.top - m_topOffset;
-            // 完整 banner 高度固定 160（design AuthShell）。
-            const int bannerBottom = bannerTop + kBannerHeight;
 
             // ---- 右上角白色火烈鸟线条画 ----
             // design：viewBox 200，绘制区 right:-20 top:10、宽高 180。
@@ -357,26 +456,22 @@ public:
 
             // ---- 左下角品牌主 / 副标题 ----
             {
-                // 主标题 "FlamingoIM"。
                 RECT rcTitle;
-                rcTitle.left   = x + kBrandTextLeft;
-                rcTitle.right  = x + w;
-                rcTitle.bottom = bannerBottom - kBrandTextBottom;
-                rcTitle.top    = rcTitle.bottom - (kBrandTitleSize + 6);
-                DrawGdiText(hdc, L"FlamingoIM", rcTitle, kBrandTitleSize, true,
-                            kClrWhiteRef,
-                            DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
-
-                // 副标题 "让沟通像火烈鸟一样优雅"（design opacity .85 ——
-                // 这里用纯白近似，banner 已是浅橙底，视觉差异可忽略）。
                 RECT rcSub;
-                rcSub.left   = x + kBrandTextLeft;
-                rcSub.right  = x + w;
-                rcSub.top    = rcTitle.bottom + kBrandGap;
-                rcSub.bottom = rcSub.top + (kBrandSubSize + 4);
-                DrawGdiText(hdc, L"让沟通像火烈鸟一样优雅", rcSub,
+                ComputeBrandRows(rcTitle, rcSub);
+
+                // 主标题：产品名称。放不下时先缩小字号，缩到下限仍放不下则以省略号截断；
+                // 文字贴框底绘制，缩小字号后仍紧贴下方的标语。
+                const balloonauth::BrandTextFitResult titleFit = FitRegisterBrandTitle(hdc, w, m_title);
+                DrawGdiText(hdc, m_title, rcTitle, titleFit.m_pixelHeight, true,
+                            kClrWhiteRef,
+                            DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+
+                // 副标题：标语（design opacity .85 —— 这里用纯白近似，banner 已是浅橙底，
+                // 视觉差异可忽略）。不缩小字号，放不下以省略号截断；为空时不绘制。
+                DrawGdiText(hdc, m_slogan, rcSub,
                             kBrandSubSize, false, kClrWhiteRef,
-                            DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+                            DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
             }
         }
 
@@ -398,14 +493,10 @@ private:
     {
         // design：svg viewBox 200，绘制区 right:-20 top:10、宽高 180。
         // 即绘制方块左上角 = (bannerRight - 180 + 20, bannerTop + 10)。
-        const Gdiplus::REAL kViewBox      = 200.0f;
-        const Gdiplus::REAL kRightOverflow = 20.0f;   // svg 右溢出 banner 20px
-        const Gdiplus::REAL kTopOffset     = 10.0f;   // svg 距 banner 顶 10px
-
         const Gdiplus::REAL boxLeft =
-            (Gdiplus::REAL)(bannerX + bannerW) - kFlamingoSize + kRightOverflow;
-        const Gdiplus::REAL boxTop = (Gdiplus::REAL)bannerY + kTopOffset;
-        const Gdiplus::REAL scale  = kFlamingoSize / kViewBox;
+            (Gdiplus::REAL)(bannerX + bannerW) - kFlamingoSize + kFlamingoRightOverflow;
+        const Gdiplus::REAL boxTop = (Gdiplus::REAL)bannerY + kFlamingoTopOffset;
+        const Gdiplus::REAL scale  = kFlamingoSize / kFlamingoViewBox;
 
         Gdiplus::GraphicsState st = g.Save();
         g.TranslateTransform(boxLeft, boxTop);
@@ -457,7 +548,9 @@ private:
     }
 
 private:
-    int m_topOffset;   // 窗口标题栏高度 —— 完整 banner 顶端到本控件顶端的距离
+    int     m_topOffset;   // 窗口标题栏高度 —— 完整 banner 顶端到本控件顶端的距离
+    CString m_title;       // 左下角的产品名称；默认 FlamingoIM，注册窗经 ApplyRegisterBrand 改写
+    CString m_slogan;      // 产品名称下方的标语；默认内置标语，空串表示不显示
 };
 
 /**
@@ -573,6 +666,18 @@ public:
         m_text = (text != NULL) ? text : _T("");
     }
 
+    // 当前文本。服务协议一行按译文宽度加宽时用来测量（见 GrowAgreementRowTexts）。
+    const CString& GetText() const
+    {
+        return m_text;
+    }
+
+    // 当前文字颜色（单元测试核对文字与底色的反差，见 GetRegisterTextColor）。
+    COLORREF GetColor() const
+    {
+        return m_color;
+    }
+
     void OnPaint(HDC hdc, const RECT& /*rcDirty*/) override
     {
         UINT flags = m_align | DT_NOPREFIX;
@@ -643,7 +748,7 @@ public:
         for (int i = 0; i < kRegStepCount; ++i)
         {
             labelWidth[i] =
-                MeasureGdiTextWidth(hdc, kStepLabels[i], kStepLabelSize, false);
+                MeasureGdiTextWidth(hdc, TR(kStepLabels[i]), kStepLabelSize, false);
         }
 
         // 一组（圆点 + gap + 标签）的固定宽度之和。
@@ -710,7 +815,7 @@ public:
             // ---- 标签 ----
             {
                 RECT rcLabel = { penX, y, penX + labelWidth[i], y + h };
-                DrawGdiText(hdc, kStepLabels[i], rcLabel, kStepLabelSize, false,
+                DrawGdiText(hdc, TR(kStepLabels[i]), rcLabel, kStepLabelSize, false,
                             active ? kClrText : kClrTextMuted,
                             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             }
@@ -771,6 +876,21 @@ public:
     int GetIconKind() const
     {
         return m_iconKind;
+    }
+
+    // 鼠标移入 / 移出本行（左侧图标与内边距处）：悬停时描一条细边，基类布局容器不会因悬停变化重画，
+    // 这里补一次（2026-10-06）
+    bool OnMouseEnter() override
+    {
+        const bool handled = balloonwjui::DuiHBox::OnMouseEnter();
+        Invalidate();
+        return handled;
+    }
+    bool OnMouseLeave() override
+    {
+        const bool handled = balloonwjui::DuiHBox::OnMouseLeave();
+        Invalidate();
+        return handled;
     }
 
     void OnPaint(HDC hdc, const RECT& rcDirty) override
@@ -1022,9 +1142,11 @@ public:
 // 下发验证码，手机号并到这里，同时新增公司名称；登录账号则由服务端自动生成，
 // 界面上没有对应的输入框。
 //
-// 高度核算：窗口 610 - banner 160 - 步骤指示器行 64 = 386，减去本 vbox 的
+// 高度核算：窗口 642 - 标题栏 32 - banner 160 - 步骤指示器行 64 = 386，减去本 vbox 的
 // 上下 padding(4 + 16) 后可用 366；五个输入框 200 + 协议行 34 + 按钮 42
 // = 276，八个子控件之间七道 gap(10) 共 70，合计 346，余下 20 给弹性占位。
+// 这里的 banner 160 是客户区里 reg-banner 控件的高度（可见 128 + 返回行悬挑 32），
+// 标题栏在它上方另占 32，不能混为一谈（2026-10-02 之前的核算漏扣了标题栏）。
 // 改动这里的任何一项尺寸都要连带核对 BalloonRegisterWindow.cpp 的
 // kRegWindowHeight，否则底部按钮会被挤出可视区。
 const char* const kRegBodyStep1Xml = u8R"xml(
@@ -1032,7 +1154,7 @@ const char* const kRegBodyStep1Xml = u8R"xml(
   <reg-banner fixedHeight="160" padding="0" gap="0">
     <hbox padding="0" gap="10">
       <reg-backbtn id="800" fixedWidth="36" fixedHeight="36" alignCross="center"/>
-      <reg-text text="注册新账号" size="15" color="255,255,255" bold="true" weight="1"/>
+      <reg-text id="801" text="注册新账号" size="15" color="26,26,26" bold="true" weight="1"/>
     </hbox>
   </reg-banner>
   <vbox weight="1" padding="0,0,0,0" gap="0">
@@ -1053,7 +1175,7 @@ const char* const kRegBodyStep1Xml = u8R"xml(
         <edit id="815" weight="1"/>
       </reg-input>
       <reg-input icon="company" fixedHeight="40">
-        <edit id="816" weight="1"/>
+        <reg-combo id="816" weight="1"/>
       </reg-input>
       <hbox fixedHeight="34" gap="4">
         <reg-text text="注册即表示同意" size="12" color="107,107,107" fixedWidth="88"/>
@@ -1080,7 +1202,7 @@ const char* const kRegBodyStep2Xml = u8R"xml(
   <reg-banner fixedHeight="160" padding="0" gap="0">
     <hbox padding="0" gap="10">
       <reg-backbtn id="800" fixedWidth="36" fixedHeight="36" alignCross="center"/>
-      <reg-text text="注册新账号" size="15" color="255,255,255" bold="true" weight="1"/>
+      <reg-text id="801" text="注册新账号" size="15" color="26,26,26" bold="true" weight="1"/>
     </hbox>
   </reg-banner>
   <vbox weight="1" padding="0,0,0,0" gap="0">
@@ -1091,7 +1213,7 @@ const char* const kRegBodyStep2Xml = u8R"xml(
       <reg-success fixedHeight="64"/>
       <reg-text text="注册成功！" size="16" color="26,26,26" bold="true" align="center" fixedHeight="38"/>
       <reg-text id="831" text="" size="18" color="255,122,69" bold="true" align="center" fixedHeight="32"/>
-      <reg-text text="请牢记该账号，登录时需要用到" size="13" color="107,107,107" align="center" fixedHeight="24"/>
+      <reg-text text="请牢记该账号，也可用手机号登录" size="13" color="107,107,107" align="center" fixedHeight="24"/>
       <reg-text id="832" text="" size="13" color="107,107,107" align="center" fixedHeight="24"/>
       <control weight="1"/>
       <reg-actionbtn id="830" text="立即登录" primary="true" fixedHeight="42"/>
@@ -1217,8 +1339,28 @@ int InputIconFromAttr(const std::string& icon)
 // 自定义标签工厂
 // =====================================================================
 //
+// 取出可编辑组合框内嵌的输入框子控件。DuiComboBox 在 editable 风格下把一个 DuiEdit 子类
+// 挂到自己名下，但没有公开取用它的接口，也没有转发 SetPlaceholder；这里顺着公开的
+// Children() 找出它，在不改动 balloonui 的前提下设置占位文字（登录窗账号框也是这样做的，
+// 见 BalloonLoginLayout.cpp 的 FindComboEditHost）。
+//   combo：组合框，须非空。
+// 返回：内嵌的输入框；还没有内嵌控件（read-only 风格）时返回 NULL。所有权属于组合框。
+balloonwjui::DuiEdit* FindRegComboEdit(balloonwjui::DuiComboBox* combo)
+{
+    const std::vector<std::unique_ptr<DuiControl>>& kids = combo->Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        balloonwjui::DuiEdit* edit = dynamic_cast<balloonwjui::DuiEdit*>(kids[i].get());
+        if (edit != NULL)
+        {
+            return edit;
+        }
+    }
+    return NULL;
+}
+
 // 接 reg-root / reg-banner / reg-backbtn / reg-text / reg-stepper /
-// reg-input / reg-actionbtn / reg-linkbtn / reg-success / control；
+// reg-input / reg-combo / reg-actionbtn / reg-linkbtn / reg-success / control；
 // 其余标签（vbox / hbox / edit）走 builder 内置处理。
 std::unique_ptr<DuiControl> CreateRegCustomControl(const DuiXmlBuilder::Node& n)
 {
@@ -1268,6 +1410,29 @@ std::unique_ptr<DuiControl> CreateRegCustomControl(const DuiXmlBuilder::Node& n)
         return std::unique_ptr<DuiControl>(input.release());
     }
 
+    if (n.tag == "reg-combo")
+    {
+        // 公司名称：可编辑组合框，下拉里只有默认公司一项（flamingo.ini 的 [ui] defaultcompany），
+        // 初始显示它；用户可改成自己公司的全称。底色与 RegInput 圆角底一致、关掉自身边框，
+        // 嵌在圆角输入框里不露方框边。id / weight 等通用属性由 builder 设置到本控件上。
+        std::unique_ptr<balloonwjui::DuiComboBox> combo(new balloonwjui::DuiComboBox());
+        combo->SetEditable(true);
+        combo->SetBgColor(kClrInputBg);
+        combo->SetShowBorder(false);
+        const CString defaultCompany = RegDefaultCompany();
+        combo->AddString(defaultCompany);
+        combo->SetText(defaultCompany);
+
+        // 占位文字点明「须与公司全称一致」—— 服务端按这个名字做精确匹配，用户清空后
+        // 自己填时，不提醒的话很容易填成简称然后收到「找不到这家公司」。
+        balloonwjui::DuiEdit* edit = FindRegComboEdit(combo.get());
+        if (edit != NULL)
+        {
+            edit->SetPlaceholder(TR(L"公司名称（须与公司全称一致）"));
+        }
+        return std::unique_ptr<DuiControl>(combo.release());
+    }
+
     if (n.tag == "reg-actionbtn")
     {
         std::unique_ptr<RegActionButton> btn(new RegActionButton());
@@ -1285,7 +1450,8 @@ std::unique_ptr<DuiControl> CreateRegCustomControl(const DuiXmlBuilder::Node& n)
         link->SetMode(balloonwjui::DuiLabel::ModeLink);
         link->SetText(Utf8ToCString(GetNodeAttr(n, "text")));
         link->SetFont(GetRegLinkFont());
-        link->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        // DT_END_ELLIPSIS：产品名称很长时，服务协议链接受本行宽度所限，文字以省略号收尾
+        link->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
         link->SetLinkColor(kClrLinkNormal);
         link->SetHoverColor(kClrLinkHover);
         link->SetVisitedColor(kClrLinkVisited);
@@ -1353,6 +1519,138 @@ void ConfigureBuiltTree(DuiControl* node, int step)
     }
 }
 
+// 在控件子树中查找 banner 装饰层（它没有 ctrl-id，按类型定位）。
+//   node：子树根，可为 NULL。
+// 返回：找到的 RegBannerPanel；没有时返回 NULL。所有权仍归控件树。
+RegBannerPanel* FindBannerPanel(DuiControl* node)
+{
+    if (node == NULL)
+    {
+        return NULL;
+    }
+    RegBannerPanel* banner = dynamic_cast<RegBannerPanel*>(node);
+    if (banner != NULL)
+    {
+        return banner;
+    }
+    const std::vector<std::unique_ptr<DuiControl>>& kids = node->Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        banner = FindBannerPanel(kids[i].get());
+        if (banner != NULL)
+        {
+            return banner;
+        }
+    }
+    return NULL;
+}
+
+// 按文字实际宽度重设服务协议链接的宽度。宽度上限是本行留给它的宽度：内容区宽度减去同行
+// 其它固定宽度的控件与子控件间距；超过上限时取上限，文字由 DT_END_ELLIPSIS 截断。
+//   link：服务协议链接，其父控件须是该行的 hbox；不是时不做任何修改。
+// 服务协议一行里除服务协议链接之外的文字（说明文字、「和」、「隐私政策」链接），文字比 XML 里的固定宽度更宽时
+// 把宽度加到能放下文字为止。设计宽度是按简体中文定的，只有换成其它语言的译文后才可能放不下（如英文），所以中文
+// 界面下本函数不改变任何宽度。非简体中文界面下译文也可能比设计宽度窄（如英文的说明文字），此时宽度收窄到贴合
+// 文字，避免与后面的链接之间留出一段空白（多语言第 4 期）。须在 FitAgreementLinkWidth 之前调用：后者按其余控件的
+// 宽度算出服务协议链接还能用多少。
+//   link：服务协议链接；它所在的那一行即要处理的行。
+void GrowAgreementRowTexts(balloonwjui::DuiLabel* link)
+{
+    balloonwjui::DuiLayout* row = dynamic_cast<balloonwjui::DuiLayout*>(link->GetParent());
+    if (row == NULL)
+    {
+        return;
+    }
+
+    HDC hdc = ::GetDC(NULL);
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, GetRegLinkFont());
+    const std::vector<std::unique_ptr<DuiControl>>& kids = row->Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        DuiControl* child = kids[i].get();
+        if (child == link)
+        {
+            continue;
+        }
+        // 这一行里有两种文字控件：说明文字与「和」是 RegText，「隐私政策」链接是 DuiLabel
+        CString text;
+        balloonwjui::DuiLabel* label = dynamic_cast<balloonwjui::DuiLabel*>(child);
+        RegText* plain = dynamic_cast<RegText*>(child);
+        if (label != NULL)
+            text = label->GetText();
+        else if (plain != NULL)
+            text = plain->GetText();
+        else
+            continue;
+
+        // 与相邻的链接同字号（12px 常规字重），用同一字体测量
+        SIZE size = { 0, 0 };
+        ::GetTextExtentPoint32W(hdc, (LPCWSTR)text, text.GetLength(), &size);
+        balloonwjui::DuiLayout::Hint hint = row->GetHint(child);
+        const int needed = size.cx + kAgreementLinkPadX;
+        //简体中文界面只可能加宽（实际上设计宽度都放得下）；其它语言按译文贴合，变宽变窄都可以
+        const bool fitToText = !i18n::IsSourceLanguage();
+        if (hint.fixedMain > 0 && (needed > hint.fixedMain || (fitToText && needed < hint.fixedMain)))
+        {
+            hint.fixedMain = needed;
+            row->SetHint(child, hint);
+        }
+    }
+    ::SelectObject(hdc, hOldFont);
+    ::ReleaseDC(NULL, hdc);
+}
+
+void FitAgreementLinkWidth(balloonwjui::DuiLabel* link)
+{
+    balloonwjui::DuiLayout* row = dynamic_cast<balloonwjui::DuiLayout*>(link->GetParent());
+    if (row == NULL)
+    {
+        return;
+    }
+
+    int cap = kRegWindowWidth - 2 * kContentPadX;
+    const std::vector<std::unique_ptr<DuiControl>>& kids = row->Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        if (kids[i].get() == link)
+        {
+            continue;
+        }
+        const balloonwjui::DuiLayout::Hint sibling = row->GetHint(kids[i].get());
+        if (sibling.fixedMain > 0)
+        {
+            cap -= sibling.fixedMain;
+        }
+    }
+    if (kids.size() > 1)
+    {
+        cap -= kAgreementRowGap * (int)(kids.size() - 1);
+    }
+
+    // 用链接自己的字体测量，与它绘制时一致
+    const CString text = link->GetText();
+    SIZE size = { 0, 0 };
+    HDC hdc = ::GetDC(NULL);
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, GetRegLinkFont());
+    ::GetTextExtentPoint32W(hdc, (LPCWSTR)text, text.GetLength(), &size);
+    ::SelectObject(hdc, hOldFont);
+    ::ReleaseDC(NULL, hdc);
+
+    int width = size.cx + kAgreementLinkPadX;
+    if (width > cap)
+    {
+        width = cap;
+    }
+    if (width < 0)
+    {
+        width = 0;
+    }
+
+    balloonwjui::DuiLayout::Hint hint = row->GetHint(link);
+    hint.fixedMain = width;
+    row->SetHint(link, hint);
+}
+
 } // anonymous namespace
 
 std::unique_ptr<DuiControl> BuildRegisterBody(int step)
@@ -1364,8 +1662,9 @@ std::unique_ptr<DuiControl> BuildRegisterBody(int step)
         safeStep = kRegStepFillInfo;
     }
 
+    //XML 里的界面文字先换成当前语言的译文（简体中文时原样返回）
     std::unique_ptr<DuiControl> root = DuiXmlBuilder::FromString(
-        RegBodyXmlForStep(safeStep), &CreateRegCustomControl);
+        i18n::TranslateXml(RegBodyXmlForStep(safeStep)).c_str(), &CreateRegCustomControl);
 
     // 构建后配置：步骤指示器高亮进度、banner 装饰层的标题栏偏移。
     ConfigureBuiltTree(root.get(), safeStep);
@@ -1387,6 +1686,84 @@ bool SetRegisterText(DuiControl* root, int ctrlId, LPCTSTR text)
 
     label->SetText(text);
     return true;
+}
+
+bool GetRegisterTextColor(DuiControl* root, int ctrlId, COLORREF& color)
+{
+    if (root == NULL)
+    {
+        return false;
+    }
+
+    RegText* label = dynamic_cast<RegText*>(root->FindCtrlById(ctrlId));
+    if (label == NULL)
+    {
+        return false;
+    }
+
+    color = label->GetColor();
+    return true;
+}
+
+bool ApplyRegisterBrand(DuiControl* root, LPCTSTR title, LPCTSTR slogan)
+{
+    if (root == NULL)
+    {
+        return false;
+    }
+
+    RegBannerPanel* banner = FindBannerPanel(root);
+    if (banner == NULL)
+    {
+        return false;
+    }
+
+    const CString strTitle = (title != NULL && title[0] != _T('\0')) ? CString(title)
+                                                                      : CString(brandtext::kDefaultAppTitle);
+    banner->SetBrandText(strTitle, slogan);
+
+    // 填写页才有服务协议链接；完成页没有，跳过即可
+    balloonwjui::DuiLabel* agreement = dynamic_cast<balloonwjui::DuiLabel*>(root->FindCtrlById(kRegIdLinkAgreement));
+    if (agreement != NULL)
+    {
+        //整条链接为「<产品名称> 服务协议」，用整句模板，译文可以调整产品名称的位置
+        agreement->SetText(TRF(L"{0} 服务协议", (LPCTSTR)strTitle).c_str());
+        GrowAgreementRowTexts(agreement);
+        FitAgreementLinkWidth(agreement);
+    }
+    return true;
+}
+
+bool GetRegisterBrandText(DuiControl* root, CString& title, CString& slogan)
+{
+    RegBannerPanel* banner = FindBannerPanel(root);
+    if (banner == NULL)
+    {
+        return false;
+    }
+
+    title  = banner->GetTitleText();
+    slogan = banner->GetSloganText();
+    return true;
+}
+
+bool GetRegisterBrandRows(DuiControl* root, RECT& rcTitle, RECT& rcSlogan, int& bannerBottom)
+{
+    RegBannerPanel* banner = FindBannerPanel(root);
+    if (banner == NULL)
+    {
+        return false;
+    }
+
+    banner->ComputeBrandRows(rcTitle, rcSlogan);
+    bannerBottom = banner->GetBannerBottom();
+    return true;
+}
+
+balloonauth::BrandTextFitResult FitRegisterBrandTitle(HDC hdc, int bannerWidth, LPCWSTR title)
+{
+    return balloonauth::FitBrandTextSize(hdc, title, RegFontFace(), kBrandTitleSize, kBrandTitleMinSize,
+                                         RegBrandTextMaxWidth(bannerWidth), true);
 }
 
 } // namespace balloonregister

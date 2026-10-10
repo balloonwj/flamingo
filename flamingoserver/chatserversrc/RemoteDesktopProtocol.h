@@ -87,10 +87,13 @@ public:
      *  @param relayip   imgserver 中转地址
      *  @param relayport imgserver 中转端口
      *  @param token     relay 令牌
+     *  @param p2pSessionId 服务端为这次远程桌面建的 P2P 会话号（P2P 方案第 6 期）；为空时不写 p2psessionid 字段，
+     *                   两端照旧只走 imgserver 中转
      */
     static std::string buildRelayInfo(const std::string& sessionid, int role,
                                       const std::string& relayip, int relayport,
-                                      const std::string& token);
+                                      const std::string& token,
+                                      const std::string& p2pSessionId = std::string());
 
     /**
      *  构造状态推送（cmd_rd_state_notify=1715）。

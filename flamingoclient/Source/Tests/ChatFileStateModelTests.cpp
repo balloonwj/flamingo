@@ -9,7 +9,7 @@
  *    CFSM4  传输中（上传 / 下载）只给「取消」；
  *    CFSM5  完成态给「打开 / 打开所在文件夹 / 另存为」三个，顺序固定；
  *    CFSM6  失败态只给「重试」：失败时传输已经结束，没有可取消的任务，原先给出的「取消」
- *           点了没有任何反应（bugs.md 的 BUG-37）；
+ *           点了没有任何反应；
  *    CFSM7  已删除态无操作；
  *    CFSM8  未知状态按无操作保守处理，不越界写 out[]；
  *    CFSM9  每个状态的按钮数与实际写入的动作数一致（防止画了按钮却点不到，
@@ -93,7 +93,7 @@ TEST_CASE("CFSM5 完成态给三个文件操作")
 
 TEST_CASE("CFSM6 失败态只给「重试」，不给「取消」")
 {
-    //失败时传输任务已经结束，「取消」没有可取消的对象（BUG-37），只留重新发送 / 重新下载
+    //失败时传输任务已经结束，「取消」没有可取消的对象，只留重新发送 / 重新下载
     REQUIRE(FileStateButtonCount(kFileFailed, kFromMe) == 1);
     REQUIRE(FileStateButtonCount(kFileFailed, kFromPeer) == 1);
 
@@ -216,5 +216,45 @@ TEST_CASE("CFSM11 除待接收外其余状态不受 fromMe 影响")
             INFO("state = " << st << ", slot = " << k);
             CHECK(peerActs[k] == mineActs[k]);
         }
+    }
+}
+
+// ======================= 2026-10-04 单聊在线直传（docs/单聊文件P2P直传与P2P徽章方案.md） =======================
+
+TEST_CASE("CFSM13 等待对方接收（直传，发送方）：给「发送离线文件」与「取消」两个按钮，没有进度条", "[directfile]")
+{
+    CHECK_FALSE(FileStateHasProgress(kFileDirectWaiting));
+    CHECK(FileStateButtonCount(kFileDirectWaiting, kFromMe) == 2);
+    int acts[kMaxChatFileActions] = { 0 };
+    REQUIRE(FileButtonActions(kFileDirectWaiting, kFromMe, acts) == 2);
+    CHECK(acts[0] == kChatFileSendOffline);
+    CHECK(acts[1] == kChatFileCancel);
+}
+
+TEST_CASE("CFSM14 对方已改为离线发送（直传，接收方）：没有按钮，没有进度条", "[directfile]")
+{
+    CHECK_FALSE(FileStateHasProgress(kFileDirectToOffline));
+    CHECK(FileStateButtonCount(kFileDirectToOffline, kFromPeer) == 0);
+    int acts[kMaxChatFileActions] = { 0 };
+    CHECK(FileButtonActions(kFileDirectToOffline, kFromPeer, acts) == 0);
+}
+
+TEST_CASE("CFSM15 文件卡片的「P2P」徽章：只有直连的在线直传在传输中、已完成、已失效时画", "[directfile]")
+{
+    const int shown[] = { kFileUploading, kFileDownloading, kFileNormal, kFileDeleted };
+    for (size_t i = 0; i < sizeof(shown) / sizeof(shown[0]); ++i)
+    {
+        INFO("state = " << shown[i]);
+        CHECK(FileCardShowsP2PBadge(shown[i], true, true));
+        //经中转的直传、普通离线文件：都不画
+        CHECK_FALSE(FileCardShowsP2PBadge(shown[i], true, false));
+        CHECK_FALSE(FileCardShowsP2PBadge(shown[i], false, true));
+    }
+    const int hidden[] = { kFileFailed, kFileCancelled, kFilePendingAccept, kFileRejected, kFileDirectWaiting,
+                           kFileDirectToOffline };
+    for (size_t i = 0; i < sizeof(hidden) / sizeof(hidden[0]); ++i)
+    {
+        INFO("state = " << hidden[i]);
+        CHECK_FALSE(FileCardShowsP2PBadge(hidden[i], true, true));
     }
 }

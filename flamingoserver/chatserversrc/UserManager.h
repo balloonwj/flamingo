@@ -12,6 +12,7 @@
 #include <set>
 #include <map>
 #include <atomic>
+#include <random>
 
 using namespace std;
 
@@ -33,6 +34,10 @@ struct User
     string         address;
     string         phonenumber;
     string         mail;
+    string         landline;    //座机，对应 t_user.f_landline；未填为空串
+    string         post;        //岗位：本人填写的自由文本，对应 t_user.f_post，与部门职位无关；未填为空串
+    int32_t        phonevisible;    //手机号是否对同事公开，取值见 Protocol.h 的 enum profile_visibility，对应 t_user.f_phone_visible；默认不公开
+    int32_t        landlinevisible; //座机是否对同事公开，取值同上，对应 t_user.f_landline_visible；默认公开
     //历史遗留列 t_user.f_teaminfo（QQ 式好友分组信息）。企业版已取消好友分组，
     //本字段只在加载 / 回写用户资料时原样搬运，不再有任何业务读它。
     string             teaminfo;
@@ -62,12 +67,30 @@ public:
     int32_t allocUserId();
 
     /**
+     *  抽一个没人用的随机登录账号：前缀 + 8 位随机数字（docs/登录账号与手机号登录方案.md 第 3.3 节）。
+     *  在用户缓存里按不区分大小写查重（与库上 uk_f_username 的比较规则一致），撞号重抽，最多
+     *  ACCOUNT_ALLOC_MAX_TRIES 次。线程安全：内部对 m_mutex 加锁。
+     *  并发：查重与写库之间不加锁，两次请求恰好抽中同一个号时，后写库的那次被唯一索引拒绝、建号失败。
+     *  @param prefix 企业账号前缀（已规整，见 AccountName.h 的 NormalizeAccountPrefix）；为空时用 EMP
+     *  @return 账号；重抽次数用完仍然撞号时返回空串（理论上不会发生），调用方按建号失败处理
+     */
+    std::string allocRandomAccount(const std::string& prefix);
+
+    /**
+     *  用固定种子重新播种抽账号的随机数发生器，只供单元测试复现抽号序列（预知下一个号、验证撞号重抽）。
+     *  生产代码不要调用：固定种子会让每次启动后抽出的账号序列相同。
+     *  @param seed 种子
+     */
+    void seedAccountRngForTest(uint32_t seed);
+
+    /**
      *  新建一个账号并落库（t_user）。
      *  @param u            账号信息，入参使用其 username/nickname/password/salt/
      *                      usertype/phonenumber；成功后回填 userid 与若干字段默认值。
-     *                      **username 留空时**由本方法按 MakeEmployeeAccount 规则
-     *                      根据新分配的用户ID自动生成（形如 "EMP1024"）并回填，
-     *                      这是 PC 客户端自助注册走的路径；调用方已填则原样使用。
+     *                      **username 留空时**由本方法用 allocRandomAccount 抽一个
+     *                      默认 EMP 前缀的随机账号（形如 "EMP48203917"）并回填；
+     *                      PC 客户端自助注册会先按企业前缀抽好账号再调用本方法。
+     *                      调用方已填则原样使用。
      * @param enterpriseId 所属企业的业务ID，写入 t_user.f_enterprise_id。
      *                      群账号等没有企业归属的对象传 0。
      *  @return 落库成功返回 true；失败时不会把该账号加入内存缓存。
@@ -79,8 +102,28 @@ public:
     bool modifyUserPassword(int32_t userid, const std::string& newpassword);
 
     //TODO: 当用户越来越多，并发量越来越多的时候，这个系列的函数效率高吗？
+    //按账号查用户，不区分大小写（与库上 uk_f_username 的比较规则一致）
     bool getUserInfoByUsername(const std::string& username, User& u);
+    //按手机号查普通用户（不看群账号）；空串返回 false
     bool getUserInfoByPhone(const std::string& phone, User& u);
+
+    /**
+     *  登录时按输入找用户（docs/登录账号与手机号登录方案.md 第 3.4 节）：先按账号（不区分大小写）；
+     *  查不到、且输入是 11 位以 1 开头的数字时，再按手机号找。
+     *  @param input          用户在登录框里输入的账号或手机号
+     *  @param u              [出参] 找到的用户
+     *  @param matchedByPhone [出参] 是按手机号找到的为 true（用于日志）
+     *  @return 找到返回 true
+     */
+    bool findLoginUser(const std::string& input, User& u, bool& matchedByPhone);
+
+    /**
+     *  手机号是否已被别的普通用户使用（手机号可用于登录，必须全局唯一）。只看普通用户，不看群账号。
+     *  @param phone         手机号；空串一律返回 false
+     *  @param excludeUserId 不计入的用户ID（编辑员工时传本人，保留自己原来的号码不算重复）；新建时传 0
+     *  @return 被别人用着返回 true
+     */
+    bool isPhoneTaken(const std::string& phone, int32_t excludeUserId);
 
     //按账号(查用户)或群号(查群)的前缀检索；wantGroup=false 查普通用户、true 查群
     bool searchUsersByPrefix(const std::string& prefix, bool wantGroup,
@@ -115,4 +158,5 @@ private:
     std::atomic<int>    m_baseGroupId{0x0FFFFFFF};
     list<User>          m_allCachedUsers;
     mutex               m_mutex;
+    std::mt19937        m_accountRng;   //抽随机账号用的随机数发生器，构造时以 std::random_device 播种；受 m_mutex 保护
 };

@@ -33,7 +33,10 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonContact/ContactLayout.h"
+#include "LayoutFitCheck.h"                 // layoutfit::MeasureAt：按设计尺寸排得下的检查
 #include "../UI/BalloonContact/ContactModel.h"
+#include "../UI/BalloonMain/NotifyModeMenu.h"   // GetNotifyModeChoices / GetNotifyModeLabel：「消息提醒」下拉框的选项
+#include "../net/Protocol.h"                    // enum conversation_notify_mode
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"   // 快捷操作行四个按钮的公共基类
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
@@ -79,10 +82,10 @@ int CountContactId(const std::vector<UINT>& ids, UINT id)
 
 // ---- 客户区高度用的基准常量（逻辑像素）-------------------------------
 
-// 2026-08-17 加入快捷操作行<u>之前</u>，"没有部门路径、标签只占一行"时的客户区高度。
-// 574 是内嵌 XML 各区块高度自上而下的累加值，出处见 ContactLayout.cpp 里
-// kContactBodyBaseHeight 的注释。
-const int kTestBodyHeightBeforeQuickRow = 574;
+// 不算快捷操作行时，"没有部门路径、标签只占一行"的客户区高度。
+// 522 是内嵌 XML 各区块高度自上而下的累加值，出处见 ContactLayout.cpp 里
+// kContactBodyBaseHeight 的注释（2026-10-03 两个开关合并成一个下拉框之前是 574）。
+const int kTestBodyHeightBeforeQuickRow = 522;
 
 // 快捷操作行给客户区带来的高度增量 = 行高 + 它<u>下方</u>那一个 spacer。上方那个
 // spacer（头部与分隔线之间的间距）原先就在，不计入增量。
@@ -99,12 +102,10 @@ const int kTestContactBaseBodyHeight =
 const int kTestTagRowHeight = 24;
 const int kTestTagRowGap    = 6;
 
-// 100% 缩放下对话框实际的客户区宽度（逻辑像素）。DuiFrameWindow 在
-// WM_NCCALCSIZE 里把整个窗口矩形当客户区，客户区因此比 ResizeClient 指定的
-// kContactBodyWidth（420）多出左右两条缩放边框。438 这个数取自实测：
-// Bin\Logs 里 "tag area rebuilt" 一行打出的标签流式容器矩形是 20,222-410，
-// 加上滚动条那 8 像素即滚动视口宽 398 = 438 - 左右内边距 40。
-const int kTestRealClientWidth = 438;
+// 对话框实际的客户区宽度（逻辑像素）。2026-10-02 起 ResizeClient 设的就是整窗尺寸，
+// 客户区宽度恰好等于 kContactBodyWidth（420）。此前客户区多出一圈系统边框，
+// 本常量曾取实测值 438。
+const int kTestRealClientWidth = kContactBodyWidth;
 
 // 窗口 Create(CWindow::rcDefault) 之后、ApplyBodyHeight 里 ResizeClient 之前，
 // 客户区的宽度（逻辑像素）。1422 同样取自实测：那一次布局里标签区滚动视口
@@ -134,13 +135,14 @@ std::unique_ptr<DuiControl> BuildLaidOutTagBody(int tagCount, int clientWidth)
         return root;
     }
 
-    // 标签文字统一取 6 个汉字 + 序号，让这批标签在对话框真实宽度下必然排到
-    // 三行以上（能验出滚动范围），而在窗口默认尺寸那种超宽布局下又刚好排得下
-    // 一行（正是本组用例要复现的错误场景）。
+    // 标签文字统一取 9 个汉字 + 序号，让这批标签在对话框真实宽度下必然排到
+    // 三行以上（能验出滚动范围），而在窗口默认尺寸那种超宽布局下只排两行——行数对不上正是
+    // 本组用例要复现的错误场景。2026-10-04 对话框由 420 加宽到 600 之前取的是 6 个汉字，加宽后
+    // 10 枚只排得满三行，验不出滚动范围，故加长。
     for (int i = 0; i < tagCount; ++i)
     {
         CString text;
-        text.Format(_T("标签示例内容%d"), i);
+        text.Format(_T("标签示例内容较长的%d"), i);
         flow->AddChild(CreateTagChip(text, (UINT)(kIdTagChipBase + i)));
     }
     flow->AddChild(CreateAddTagButton());
@@ -229,23 +231,26 @@ TEST_CASE("C5 联系人资料对话框含分组下拉框", "[contact]")
               root->FindCtrlById(kIdGroupCombo)) != nullptr);
 }
 
-TEST_CASE("C6 联系人资料对话框含三个 DuiSwitch 开关", "[contact]")
+TEST_CASE("C6 联系人资料对话框含「消息提醒」下拉框与「添加到收藏」开关", "[contact]")
 {
     auto root = BuildContactBody();
     REQUIRE(root != nullptr);
 
-    CHECK(dynamic_cast<DuiSwitch*>(
-              root->FindCtrlById(kIdSwitchMute)) != nullptr);
+    CHECK(dynamic_cast<DuiComboBox*>(
+              root->FindCtrlById(kIdNotifyCombo)) != nullptr);
     CHECK(dynamic_cast<DuiSwitch*>(
               root->FindCtrlById(kIdSwitchFavorite)) != nullptr);
-    CHECK(dynamic_cast<DuiSwitch*>(
-              root->FindCtrlById(kIdSwitchStarred)) != nullptr);
 
-    // 三个开关的编号必须正是约定的 1030 / 1033 / 1034 —— 主面板那一侧按这几个号
-    // 对接，改错了不报错也不崩溃，只表现为界面上拨了没反应。
-    CHECK((UINT)kIdSwitchMute     == 1030u);
+    // 编号必须正是约定的 1035 / 1033 —— 窗口那一侧按这几个号分派通知，改错了不报错
+    // 也不崩溃，只表现为界面上选了没反应。
+    CHECK((UINT)kIdNotifyCombo    == 1035u);
     CHECK((UINT)kIdSwitchFavorite == 1033u);
-    CHECK((UINT)kIdSwitchStarred  == 1034u);
+
+    // 1030 曾是「消息免打扰」开关、1034 曾是「特别关注」开关，2026-10-03 合并成
+    // 「消息提醒」下拉框。用字面量断言 —— 枚举项已经删了，这里要防的是"日后有人
+    // 复用这两个编号"。
+    CHECK(root->FindCtrlById(1030) == nullptr);
+    CHECK(root->FindCtrlById(1034) == nullptr);
 
     // 1031 曾是「置顶聊天」开关（置顶是会话的属性、不是人的属性，会话列表右键菜单
     // 里已有该项），1032 曾是「加入黑名单」开关（企业版取消好友关系后移除），两行
@@ -283,7 +288,7 @@ TEST_CASE("C8 联系人资料对话框控件 id 互不重复", "[contact]")
         (UINT)kIdCopyToast,     (UINT)kIdTagFlow,      (UINT)kIdTagBlock,
         (UINT)kIdTagScroll,     (UINT)kIdRemarkValue,  (UINT)kIdRemarkEditBtn,
         (UINT)kIdRemarkEdit,    (UINT)kIdGroupCombo,
-        (UINT)kIdSwitchMute,    (UINT)kIdSwitchFavorite, (UINT)kIdSwitchStarred,
+        (UINT)kIdNotifyCombo,   (UINT)kIdSwitchFavorite,
         (UINT)kIdBtnClose,      (UINT)kIdBtnSend,
         (UINT)kIdBtnVoice,      (UINT)kIdBtnVideo,
         (UINT)kIdBtnHistory,    (UINT)kIdBtnLocate,    (UINT)kIdQuickRow,
@@ -298,6 +303,39 @@ TEST_CASE("C8 联系人资料对话框控件 id 互不重复", "[contact]")
 // =====================================================================
 // C9-C15 ContactModel 数据模型契约
 // =====================================================================
+
+TEST_CASE("C15b ContactModel 提醒模式默认允许提醒、可读写", "[contact][model][notifymode]")
+{
+    ContactModel model;
+    CHECK(model.NotifyMode() == notify_mode_allow);
+
+    model.SetNotifyMode(notify_mode_starred);
+    CHECK(model.NotifyMode() == notify_mode_starred);
+    model.SetNotifyMode(notify_mode_msgbox);
+    CHECK(model.NotifyMode() == notify_mode_msgbox);
+
+    // 拷贝随模型整份走：资料窗 RefreshContactData 是整份替换的
+    ContactModel copy = model;
+    CHECK(copy.NotifyMode() == notify_mode_msgbox);
+}
+
+TEST_CASE("C15c 「消息提醒」下拉框的选项是单聊可用的四种模式（没有屏蔽）", "[contact][notifymode]")
+{
+    auto root = BuildContactBody();
+    REQUIRE(root != nullptr);
+
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdNotifyCombo));
+    REQUIRE(combo != nullptr);
+    const std::vector<int> modes = balloonmain::GetNotifyModeChoices(false);
+    REQUIRE(combo->GetCount() == (int)modes.size());
+    REQUIRE(combo->GetCount() == 4);
+    for (int i = 0; i < combo->GetCount(); ++i)
+    {
+        CHECK(combo->GetItemText(i) == CString(balloonmain::GetNotifyModeLabel(modes[(size_t)i])));
+        CHECK(combo->GetItemText(i) != CString(L"屏蔽消息"));
+    }
+    CHECK(combo->IsEditable() == false);
+}
 
 TEST_CASE("C9 ContactModel 默认 mock 数据正确", "[contact][model]")
 {
@@ -375,31 +413,23 @@ TEST_CASE("C14 ContactModel 分组默认选中「产品部 · 设计组」、可
     CHECK(model.SelectedGroup() == 0);
 }
 
-TEST_CASE("C15 ContactModel 三个开关默认全关、可读写、越界忽略", "[contact][model]")
+TEST_CASE("C15 ContactModel 开关默认全关、可读写、越界忽略", "[contact][model]")
 {
     ContactModel model;
 
     // 默认全关。
-    CHECK(model.Switch(kContactSwitchMute)     == false);
     CHECK(model.Switch(kContactSwitchFavorite) == false);
-    CHECK(model.Switch(kContactSwitchStarred)  == false);
 
-    // 逐个打开，互不串扰。
     model.SetSwitch(kContactSwitchFavorite, true);
-    CHECK(model.Switch(kContactSwitchMute)     == false);
     CHECK(model.Switch(kContactSwitchFavorite) == true);
-    CHECK(model.Switch(kContactSwitchStarred)  == false);
-
-    model.SetSwitch(kContactSwitchStarred, true);
-    CHECK(model.Switch(kContactSwitchMute)     == false);
-    CHECK(model.Switch(kContactSwitchFavorite) == true);
-    CHECK(model.Switch(kContactSwitchStarred)  == true);
+    model.SetSwitch(kContactSwitchFavorite, false);
+    CHECK(model.Switch(kContactSwitchFavorite) == false);
 
     // 越界 kind：写忽略、读返回 false。用 kContactSwitchCount 表达"第一个越界下标"，
-    // 开关增减时本用例不必改数字；这一条同时锁住"三个开关的下标是 0/1/2 连续编号、
-    // kContactSwitchCount 确实等于 3"。
-    CHECK(kContactSwitchCount == 3);
-    CHECK((int)kContactSwitchStarred == kContactSwitchCount - 1);
+    // 开关增减时本用例不必改数字；这一条同时锁住"开关下标从 0 起连续编号、
+    // kContactSwitchCount 确实等于 1"（免打扰与特别关注已合并进提醒模式）。
+    CHECK(kContactSwitchCount == 1);
+    CHECK((int)kContactSwitchFavorite == kContactSwitchCount - 1);
     model.SetSwitch(kContactSwitchCount, true);
     CHECK(model.Switch(kContactSwitchCount) == false);
     model.SetSwitch(-1, true);
@@ -783,7 +813,7 @@ TEST_CASE("C34 标签区在控件树完全没布局过时也算得出行数", "[
     for (int i = 0; i < kTestTagCount; ++i)
     {
         CString text;
-        text.Format(_T("标签示例内容%d"), i);
+        text.Format(_T("标签示例内容较长的%d"), i);
         flow->AddChild(CreateTagChip(text, (UINT)(kIdTagChipBase + i)));
     }
     flow->AddChild(CreateAddTagButton());
@@ -940,3 +970,26 @@ TEST_CASE("C37 进入备注名编辑态后文本框落在本行右端并纵向�
     CHECK(rcEdit.bottom <= rcRow.bottom);
     CHECK(rcEdit.top - rcRow.top == rcRow.bottom - rcEdit.bottom);
 }
+
+// C38：内容区按设计宽度与 ContactBodyHeight 算出的高度排版后，要完整容下底部两个按钮，
+// 且按钮没有被压扁。窗口高度是这个内容高度加上 kContactTitleBarHeight。
+TEST_CASE("C38 客户区按设计宽度与 ContactBodyHeight 排版后排得下底部按钮", "[contact][layoutfit]")
+{
+    const int contentH = ContactBodyHeight(0, 1);
+    const UINT btns[] = { (UINT)kIdBtnClose, (UINT)kIdBtnSend };
+    for (size_t i = 0; i < sizeof(btns) / sizeof(btns[0]); ++i)
+    {
+        INFO("button id = " << btns[i]);
+        std::unique_ptr<DuiControl> root = BuildContactBody();
+        REQUIRE(root != nullptr);
+        const layoutfit::FitResult r = layoutfit::MeasureAt(root.get(), btns[i], kContactBodyWidth, contentH);
+        REQUIRE(r.m_found);
+        INFO("button bottom = " << r.m_bottom << ", content height = " << contentH
+             << ", height = " << r.m_height << ", roomy height = " << r.m_roomyHeight
+             << ", bottom gap = " << r.m_bottomGap << ", roomy bottom gap = " << r.m_roomyBottomGap);
+        CHECK(r.m_bottom <= contentH);
+        CHECK(r.m_height == r.m_roomyHeight);
+        CHECK(r.m_bottomGap == r.m_roomyBottomGap);
+    }
+}
+

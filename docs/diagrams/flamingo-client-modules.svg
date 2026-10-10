@@ -1,0 +1,278 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1060" viewBox="0 0 1680 1060">
+  <!-- Flamingo PC 客户端模块架构图（中文版，供 README.md 使用；英文版为 flamingo-client-modules-en.svg，两份内容须保持一致）。balloonwj@qq.com 2026-10-10
+       源文件，PNG 由 tools/render_diagrams.ps1 用 Edge 无头模式渲染生成，改图请改本文件后重新渲染。 -->
+  <defs>
+    <style>
+      text { font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif; fill: #1E293B; }
+      .title { font-size: 30px; font-weight: 700; fill: #0F172A; text-anchor: middle; }
+      .subtitle { font-size: 15px; fill: #64748B; text-anchor: middle; }
+      .gh { font-size: 17px; font-weight: 700; }
+      .name { font-size: 14.5px; font-weight: 700; fill: #0F172A; }
+      .desc { font-size: 12.5px; fill: #475569; }
+      .chip { font-size: 11.5px; font-weight: 700; text-anchor: middle; }
+      .lay { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; font-weight: 700; }
+      .t { font-size: 13px; fill: #334155; }
+      .s { font-size: 12px; fill: #64748B; }
+      .c { text-anchor: middle; }
+      .r { text-anchor: end; }
+      .uichip { font-size: 12.5px; fill: #1E3A8A; text-anchor: middle; }
+    </style>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <marker id="aDark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1680" height="1060" fill="#FFFFFF"/>
+
+  <text class="title" x="840" y="50">Flamingo PC 客户端模块架构</text>
+  <text class="subtitle" x="840" y="80">主程序 Flamingo.exe + 13 个插件 DLL，按启动、登录、首次使用三个时机分批加载</text>
+
+  <!-- ===================== 主程序与插件之间的加载 / 回调箭头 ===================== -->
+  <path d="M478,384 H414" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <path d="M412,408 H476" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s c" x="445" y="374">加载</text>
+  <text class="s c" x="445" y="430">回调</text>
+
+  <path d="M1202,284 H1266" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <path d="M1268,308 H1204" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s c" x="1235" y="274">加载</text>
+  <text class="s c" x="1235" y="330">回调</text>
+
+  <path d="M1202,594 H1266" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <path d="M1268,618 H1204" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s c" x="1235" y="584">加载</text>
+  <text class="s c" x="1235" y="640">回调</text>
+
+  <!-- 主程序 → 本地数据 / 升级程序 / 服务端 -->
+  <path d="M520,700 V746" stroke="#475569" stroke-width="2.5" marker-start="url(#aDark)" marker-end="url(#aDark)"/>
+  <text class="s" x="528" y="728">读写</text>
+  <path d="M840,700 V746" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s" x="848" y="728">升级时启动</text>
+  <path d="M1160,700 V746" stroke="#475569" stroke-width="2.5" marker-start="url(#aDark)" marker-end="url(#aDark)"/>
+  <text class="s" x="1168" y="728">TCP / UDP</text>
+
+  <!-- ===================== 左侧：启动时加载 ===================== -->
+  <rect x="30" y="110" width="380" height="590" rx="14" fill="#F0F9FF" stroke="#0284C7" stroke-width="2"/>
+  <text class="gh" x="48" y="140" style="fill:#0369A1">启动时加载</text>
+  <text class="s r" x="394" y="140">登录前就能用</text>
+
+  <g>
+    <rect x="46" y="160" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="160" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="186">FlamingoLang</text>
+    <rect x="330" y="170" width="52" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="356" y="185.5" style="fill:#475569">无界面</text>
+    <text class="desc" x="62" y="210">界面语言包：繁体中文 · 英语 · 日语 · 韩语</text>
+
+    <rect x="46" y="236" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="236" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="262">FlamingoP2P</text>
+    <rect x="266" y="246" width="52" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="292" y="261.5" style="fill:#475569">无界面</text>
+    <rect x="324" y="246" width="58" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="353" y="261.5" style="fill:#C2410C">2300 段</text>
+    <text class="desc" x="62" y="286">点对点链路：直连 / UDP 打洞，失败回落中转</text>
+
+    <rect x="46" y="312" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="312" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="338">FlamingoMedia</text>
+    <rect x="342" y="322" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="362" y="337.5" style="fill:#1D4ED8">界面</text>
+    <text class="desc" x="62" y="362">通话 · 群通话 · 远程桌面 · 屏幕共享 · 录屏</text>
+
+    <rect x="46" y="388" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="388" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="414">FlamingoLock</text>
+    <rect x="342" y="398" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="362" y="413.5" style="fill:#1D4ED8">界面</text>
+    <text class="desc" x="62" y="438">托盘「锁屏」：全屏锁定 · 五种动画</text>
+
+    <rect x="46" y="464" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="464" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="490">FlamingoScreenshot</text>
+    <rect x="342" y="474" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="362" y="489.5" style="fill:#1D4ED8">界面</text>
+    <text class="desc" x="62" y="514">截图 · 标注 · 复制 / 保存 / 发送</text>
+
+    <rect x="46" y="540" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="540" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="566">FlamingoOcr</text>
+    <rect x="330" y="550" width="52" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="356" y="565.5" style="fill:#475569">无界面</text>
+    <text class="desc" x="62" y="590">图片文字识别，启动后在后台线程预加载</text>
+
+    <rect x="46" y="616" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="616" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="642">FlamingoMarkdown</text>
+    <rect x="330" y="626" width="52" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="356" y="641.5" style="fill:#475569">无界面</text>
+    <text class="desc" x="62" y="666">Markdown 解析 · 排版 · 导出，后台预加载</text>
+  </g>
+
+  <!-- ===================== 右上：首次登录成功后加载 ===================== -->
+  <rect x="1270" y="110" width="380" height="360" rx="14" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+  <text class="gh" x="1288" y="140" style="fill:#15803D">首次登录成功后加载</text>
+
+  <g>
+    <rect x="1286" y="160" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="160" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="186">FlamingoFileShare</text>
+    <rect x="1518" y="170" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1538" y="185.5" style="fill:#1D4ED8">界面</text>
+    <rect x="1564" y="170" width="58" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1593" y="185.5" style="fill:#C2410C">2200 段</text>
+    <text class="desc" x="1302" y="210">在聊天里共享本机磁盘 / 文件夹 / 文件</text>
+
+    <rect x="1286" y="236" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="236" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="262">FlamingoSecretChat</text>
+    <rect x="1464" y="246" width="52" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="1490" y="261.5" style="fill:#475569">无界面</text>
+    <rect x="1520" y="246" width="58" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1549" y="261.5" style="fill:#C2410C">2600 段</text>
+    <rect x="1582" y="246" width="40" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1602" y="261.5" style="fill:#15803D">开关</text>
+    <text class="desc" x="1302" y="286">密聊：端到端加密 · 防截屏 · 只存内存</text>
+
+    <rect x="1286" y="312" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="312" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="338">FlamingoThreadGroup</text>
+    <rect x="1476" y="322" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1496" y="337.5" style="fill:#1D4ED8">界面</text>
+    <rect x="1520" y="322" width="58" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1549" y="337.5" style="fill:#C2410C">2700 段</text>
+    <rect x="1582" y="322" width="40" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1602" y="337.5" style="fill:#15803D">开关</text>
+    <text class="desc" x="1302" y="362">帖子群：发帖 · 评论 · 表情回应</text>
+
+    <rect x="1286" y="388" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="388" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="414">FlamingoBot</text>
+    <rect x="1454" y="398" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1474" y="413.5" style="fill:#1D4ED8">界面</text>
+    <rect x="1500" y="398" width="76" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1538" y="413.5" style="fill:#C2410C">2802~2809</text>
+    <rect x="1582" y="398" width="40" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1602" y="413.5" style="fill:#15803D">开关</text>
+    <text class="desc" x="1302" y="438">群机器人与个人机器人的管理界面</text>
+  </g>
+
+  <!-- ===================== 右下：首次使用时加载 ===================== -->
+  <rect x="1270" y="490" width="380" height="210" rx="14" fill="#FFFBEB" stroke="#D97706" stroke-width="2"/>
+  <text class="gh" x="1288" y="520" style="fill:#B45309">首次使用时加载</text>
+  <text class="s r" x="1634" y="520">第一次用到字幕功能时</text>
+
+  <g>
+    <rect x="1286" y="540" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#FDE68A" filter="url(#sh)"/>
+    <rect x="1286" y="540" width="5" height="64" rx="2" fill="#D97706"/>
+    <text class="name" x="1302" y="566">FlamingoCaption</text>
+    <rect x="1536" y="550" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1556" y="565.5" style="fill:#1D4ED8">界面</text>
+    <rect x="1582" y="550" width="40" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1602" y="565.5" style="fill:#15803D">开关</text>
+    <text class="desc" x="1302" y="590">语音字幕：流式识别 · 字幕编辑 · 导出</text>
+
+    <rect x="1286" y="616" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#FDE68A" filter="url(#sh)"/>
+    <rect x="1286" y="616" width="5" height="64" rx="2" fill="#D97706"/>
+    <text class="name" x="1302" y="642">FlamingoCaptionModel</text>
+    <rect x="1582" y="626" width="40" height="22" rx="11" fill="#FEF3C7"/><text class="chip" x="1602" y="641.5" style="fill:#B45309">资源</text>
+    <text class="desc" x="1302" y="666">识别模型，在内存中加载，不解压到磁盘</text>
+  </g>
+
+  <!-- ===================== 中间：主程序 Flamingo.exe ===================== -->
+  <rect x="480" y="110" width="720" height="590" rx="16" fill="#F8FAFF" stroke="#2563EB" stroke-width="2.5" filter="url(#sh)"/>
+  <text x="500" y="142"><tspan style="font-size:21px;font-weight:700;fill:#1D4ED8">Flamingo.exe 主程序</tspan></text>
+  <text class="s r" x="1180" y="142">Win32 + WTL · balloonui 自绘界面 · Source/ 按目录分层</text>
+
+  <!-- UI/ -->
+  <rect x="500" y="158" width="680" height="114" rx="10" fill="#EFF6FF" stroke="#BFDBFE"/>
+  <text class="lay" x="516" y="188" style="fill:#1D4ED8">UI/</text>
+  <text class="s" x="516" y="210">24 个窗口模块</text>
+  <g>
+    <rect x="620" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="671" y="188">登录 / 注册</text>
+    <rect x="730" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="781" y="188">主面板</text>
+    <rect x="840" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="891" y="188">单聊窗</text>
+    <rect x="950" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1001" y="188">群聊窗</text>
+    <rect x="1060" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1111" y="188">通讯录</text>
+
+    <rect x="620" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="671" y="220">群管理</text>
+    <rect x="730" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="781" y="220">消息记录</text>
+    <rect x="840" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="891" y="220">全局搜索</text>
+    <rect x="950" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1001" y="220">系统设置</text>
+    <rect x="1060" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1111" y="220">个人资料</text>
+
+    <rect x="620" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="671" y="252">备忘</text>
+    <rect x="730" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="781" y="252">公告中心</text>
+    <rect x="840" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="891" y="252">消息盒子</text>
+    <rect x="950" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1001" y="252">Markdown</text>
+    <rect x="1060" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1111" y="252">代码片段</text>
+  </g>
+
+  <!-- Feature/ -->
+  <rect x="500" y="282" width="680" height="110" rx="10" fill="#EEF2FF" stroke="#C7D2FE"/>
+  <text class="lay" x="516" y="312" style="fill:#4338CA">Feature/</text>
+  <text class="s" x="516" y="334">功能与插件宿主</text>
+  <text class="t" x="620" y="308">每个插件一个宿主：加载 DLL、核对接口版本、把入口接到菜单与工具栏</text>
+  <g>
+    <rect x="620" y="320" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="671" y="338" style="fill:#3730A3">文件夹传输</text>
+    <rect x="730" y="320" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="781" y="338" style="fill:#3730A3">自动更新</text>
+    <rect x="840" y="320" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="891" y="338" style="fill:#3730A3">云端录像传输</text>
+    <rect x="950" y="320" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="1001" y="338" style="fill:#3730A3">语音消息</text>
+    <rect x="1060" y="320" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="1111" y="338" style="fill:#3730A3">离线改写同步</text>
+  </g>
+  <text class="s" x="620" y="374">插件经宿主接口回调主程序：写日志、翻译界面文字、发送协议帧等</text>
+
+  <!-- Session/ 与 Common/ -->
+  <rect x="500" y="402" width="335" height="70" rx="10" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text class="lay" x="516" y="430" style="fill:#0F766E">Session/</text>
+  <text class="s" x="516" y="456">当前用户 · 本机账号列表 · 用户配置 · 群角色规则</text>
+  <rect x="845" y="402" width="335" height="70" rx="10" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text class="lay" x="861" y="430" style="fill:#0F766E">Common/</text>
+  <text class="s" x="861" y="456">日志 · 多语言 I18n · 字体与图片 · 代码词法</text>
+
+  <!-- net/ -->
+  <rect x="500" y="482" width="680" height="118" rx="10" fill="#FFF7ED" stroke="#FED7AA"/>
+  <text class="lay" x="516" y="510" style="fill:#C2410C">net/</text>
+  <text class="s" x="516" y="532">协议与传输</text>
+  <text class="b" x="620" y="508" style="fill:#9A3412">CIUSocket 长连接：v2 协议 · JSON · libsodium 加密</text>
+  <text class="t" x="620" y="532">按 cmd 号段把协议帧原样转交插件，exe 不解析：</text>
+  <g>
+    <rect x="620" y="542" width="104" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="672" y="559" style="fill:#9A3412;font-size:12px">2200 → 文件共享</text>
+    <rect x="730" y="542" width="84" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="772" y="559" style="fill:#9A3412;font-size:12px">2300 → P2P</text>
+    <rect x="820" y="542" width="84" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="862" y="559" style="fill:#9A3412;font-size:12px">2600 → 密聊</text>
+    <rect x="910" y="542" width="96" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="958" y="559" style="fill:#9A3412;font-size:12px">2700 → 帖子群</text>
+    <rect x="1012" y="542" width="128" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="1076" y="559" style="fill:#9A3412;font-size:12px">2802~2809 → 机器人</text>
+  </g>
+  <text class="s" x="620" y="588">文件 / 图片上传下载 · Threading/ 线程池与后台任务</text>
+
+  <!-- App/ -->
+  <rect x="500" y="610" width="680" height="70" rx="10" fill="#F1F5F9" stroke="#CBD5E1"/>
+  <text class="lay" x="516" y="638" style="fill:#334155">App/</text>
+  <text class="s" x="516" y="660">进程外壳</text>
+  <text class="t" x="620" y="638">进程入口 · CAppShell 统一安排启动、退出与插件的加载卸载顺序</text>
+  <text class="s" x="620" y="662">托盘图标与托盘菜单 · 隐藏主窗口 · 崩溃转储</text>
+
+  <!-- ===================== 底部：本地数据 / 升级程序 / 服务端 ===================== -->
+  <rect x="30" y="750" width="530" height="130" rx="12" fill="#FFFFFF" stroke="#475569" stroke-width="2" filter="url(#sh)"/>
+  <text class="gh" x="50" y="780" style="fill:#334155">本地数据</text>
+  <text class="s r" x="544" y="780">每个账号一个目录</text>
+  <text class="t" x="50" y="808">Users/&lt;用户&gt;/ChatLog/msgv2.db　本地消息库（SQLite）</text>
+  <text class="t" x="50" y="832">ChatImage/ · ChatFile/ · Avatar/　图片、文件与头像</text>
+  <text class="t" x="50" y="856">config/flamingo.ini　服务器地址与界面品牌文字</text>
+
+  <rect x="600" y="750" width="480" height="130" rx="12" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2" filter="url(#sh)"/>
+  <text class="gh" x="620" y="780" style="fill:#6D28D9">FlamingoUpdater.exe</text>
+  <text class="s r" x="1064" y="780">独立进程</text>
+  <text class="t" x="620" y="808">主程序下载完升级包后启动它，解压覆盖安装目录</text>
+  <text class="t" x="620" y="832">带 --lang 参数，从 %TEMP% 载入语言包副本，</text>
+  <text class="t" x="620" y="856">所以安装目录里的语言包也能被升级包替换</text>
+
+  <rect x="1120" y="750" width="530" height="130" rx="12" fill="#FFFFFF" stroke="#EA580C" stroke-width="2" filter="url(#sh)"/>
+  <text class="gh" x="1140" y="780" style="fill:#C2410C">服务端</text>
+  <text class="s r" x="1634" y="780">见总体服务架构图</text>
+  <text class="t" x="1140" y="808">chatserver :20000　长连接：登录、消息与各类信令</text>
+  <text class="t" x="1140" y="832">fileserver :20001　文件　·　imgserver :20002　图片</text>
+  <text class="t" x="1140" y="856">imgserver :20003 中转　·　UDP 20004 / 20005 地址探测</text>
+
+  <!-- ===================== 第三方库 ===================== -->
+  <rect x="30" y="905" width="1620" height="72" rx="12" fill="#1E293B"/>
+  <text class="b" x="50" y="933" style="fill:#FFFFFF">主要第三方库</text>
+  <text class="t" x="50" y="961" style="fill:#CBD5E1">balloonui 自绘控件库（主程序与 7 个带界面的插件各自静态链接一份）· WTL 10.1 · jsoncpp 1.9.0 · zlib · SQLite 3.53.1 · libsodium 1.0.22 · opus 1.5.2 / speexdsp 1.2.1 · md4c 0.6.0 · sherpa-onnx</text>
+
+  <!-- ===================== 图例 ===================== -->
+  <g transform="translate(30,1012)">
+    <rect x="0" y="0" width="40" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="20" y="15.5" style="fill:#1D4ED8">界面</text>
+    <text class="s" x="48" y="16">有窗口，自带一份 balloonui</text>
+    <rect x="230" y="0" width="52" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="256" y="15.5" style="fill:#475569">无界面</text>
+    <text class="s" x="290" y="16">只有逻辑，不画界面</text>
+    <rect x="430" y="0" width="58" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="459" y="15.5" style="fill:#C2410C">2700 段</text>
+    <text class="s" x="496" y="16">该号段的协议帧由 exe 原样转交</text>
+    <rect x="700" y="0" width="40" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="720" y="15.5" style="fill:#15803D">开关</text>
+    <text class="s" x="748" y="16">受企业功能开关控制，关闭时不加载</text>
+    <rect x="970" y="0" width="40" height="22" rx="11" fill="#FEF3C7"/><text class="chip" x="990" y="15.5" style="fill:#B45309">资源</text>
+    <text class="s" x="1018" y="16">只含资源，没有代码逻辑</text>
+    <path d="M1200,11 H1240" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+    <text class="s" x="1248" y="16">加载：exe 载入 DLL 并调用接口；回调：DLL 经宿主接口调用 exe</text>
+  </g>
+</svg>

@@ -96,7 +96,7 @@ std::string RemoteDesktopProtocol::buildInviteNotify(const std::string& sessioni
 
 std::string RemoteDesktopProtocol::buildRelayInfo(const std::string& sessionid, int role,
                                                   const std::string& relayip, int relayport,
-                                                  const std::string& token)
+                                                  const std::string& token, const std::string& p2pSessionId)
 {
     Json::Value root;
     root["sessionid"] = sessionid;
@@ -104,6 +104,9 @@ std::string RemoteDesktopProtocol::buildRelayInfo(const std::string& sessionid, 
     root["relayip"]   = relayip;
     root["relayport"] = relayport;
     root["token"]     = token;
+    //只有建了 P2P 会话才写这个字段，没建时与第 6 期之前的推送逐字相同
+    if (!p2pSessionId.empty())
+        root["p2psessionid"] = p2pSessionId;
     return writeCompact(root);
 }
 

@@ -7,14 +7,16 @@
  */
 
 #include "SettingsBinding.h"
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonsettings {
 
 // ---- 选项文本表（静态常量，进程级生命周期）----------------------------
+// 表里是只做了标记（TR_NOOP）的中文原文；显示时由设置页的 AddComboRow 逐项用 TR 取译文。
 static const wchar_t* const kCloseActionOpts[] =
 {
-    L"最小化到托盘",   // kCloseActionMinimize
-    L"退出程序",       // kCloseActionExit
+    TR_NOOP(L"最小化到托盘"),   // kCloseActionMinimize
+    TR_NOOP(L"退出程序"),       // kCloseActionExit
 };
 
 static const wchar_t* const kSendKeyOpts[] =
@@ -23,17 +25,12 @@ static const wchar_t* const kSendKeyOpts[] =
     L"Ctrl + Enter",   // kSendKeyCtrlEnter
 };
 
-static const wchar_t* const kLanguageOpts[] =
-{
-    L"简体中文",       // 本期仅一项（占位，暂不真正切换）
-};
-
 static const wchar_t* const kAutoAwayDelayOpts[] =
 {
-    L"5 分钟",         // kAutoAwayDelay5Min（默认）
-    L"10 分钟",        // kAutoAwayDelay10Min
-    L"15 分钟",        // kAutoAwayDelay15Min
-    L"30 分钟",        // kAutoAwayDelay30Min
+    TR_NOOP(L"5 分钟"),         // kAutoAwayDelay5Min（默认）
+    TR_NOOP(L"10 分钟"),        // kAutoAwayDelay10Min
+    TR_NOOP(L"15 分钟"),        // kAutoAwayDelay15Min
+    TR_NOOP(L"30 分钟"),        // kAutoAwayDelay30Min
 };
 
 // 各档对应的分钟数，逐项与 kAutoAwayDelayOpts 对齐（第 i 项文本 ↔ 第 i 项分钟数）。
@@ -82,28 +79,6 @@ int SendKeyIndexFromPressEnter(bool pressEnterToSend)
 bool PressEnterFromSendKeyIndex(int index)
 {
     return index == kSendKeyEnter;
-}
-
-// ---- 语言 --------------------------------------------------------------
-
-const wchar_t* const* LanguageOptions()
-{
-    return kLanguageOpts;
-}
-
-int LanguageOptionCount()
-{
-    return (int)(sizeof(kLanguageOpts) / sizeof(kLanguageOpts[0]));
-}
-
-int ClampLanguageIndex(int index)
-{
-    int count = LanguageOptionCount();
-    if (index < 0 || index >= count)
-    {
-        return 0;
-    }
-    return index;
 }
 
 // ---- 自动离开等待时长 --------------------------------------------------

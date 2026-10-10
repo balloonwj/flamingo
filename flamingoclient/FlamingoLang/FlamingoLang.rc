@@ -1,0 +1,11 @@
+// FlamingoLang.dll resources: each language's .po translation file is embedded as an RCDATA item.
+// The resource ids are defined in resource.h and looked up by LangModule.cpp.
+// This file must stay ASCII with CRLF line endings (rc.exe only treats CRLF as a line break).
+// balloonwj@qq.com   2026-10-03
+
+#include "resource.h"
+
+IDR_PO_ZH_TW    RCDATA  "lang\\zh-TW.po"
+IDR_PO_EN_US    RCDATA  "lang\\en-US.po"
+IDR_PO_JA_JP    RCDATA  "lang\\ja-JP.po"
+IDR_PO_KO_KR    RCDATA  "lang\\ko-KR.po"

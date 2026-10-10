@@ -55,7 +55,7 @@
 // 于是群聊窗的 @ 菜单永远走进 Pin 的处理函数，MentionActionData* 被当成 long long*
 // 读取并按错误类型 delete（该结构体含 CString 成员，析构不匹配）。2026-08-14 改到
 // WM_USER + 41（本文件当时已用到 +40）。
-#define			WM_CHAT_MENTION_ACTION	WM_USER + 41	// 气泡里 @某人 的片段右键选中某项：lParam = 堆上 balloonchatwnd::MentionActionData*（被 @ 成员的 uid / 显示名 + 选中的菜单项，宿主群聊窗据此打开单聊 / 资料窗 / 插入 @ / 复制昵称，处理后 delete，异步消息）。气泡不认识业务对象，故经宿主窗中转
+#define			WM_CHAT_MENTION_ACTION	WM_USER + 41	// 气泡里 @某人 的片段右键选中某项：lParam = 堆上 balloonchatwnd::MentionActionData*（被 @ 成员的 uid / 显示名 + 选中的菜单项，宿主群聊窗据此打开单聊 / 资料窗 / 插入 @ / 复制名字，处理后 delete，异步消息）。气泡不认识业务对象，故经宿主窗中转
 #define			WM_CHAT_LOAD_OLDER		WM_USER + 32	// 消息区滚到接近顶部：请宿主聊天窗判断要不要拉更早的一页历史（无参，异步消息）。判定所需的分页状态归宿主窗持有，消息列表只报告"滚到顶部附近了"这一事实
 #define			WM_CHAT_REPLY_REQUEST	WM_USER + 33	// 气泡右键「引用回复」：lParam = 被引用消息的服务器 msgid（long long*，堆上，宿主聊天窗据它组装引用快照并在输入区挂出引用条，处理后 delete，异步消息）
 #define			WM_CHAT_LOCATE_QUOTED	WM_USER + 34	// 点击气泡里的引用块：请宿主聊天窗滚动定位到被引用的原消息（lParam = 堆上 long long*，原消息的服务器 msgid，处理后 delete，异步消息）。消息列表只报告"点了引用块"，找不到原消息时由宿主决定怎么提示

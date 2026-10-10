@@ -37,6 +37,7 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "MainPanelSectionHeader.h"
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonmain {
 
@@ -70,7 +71,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;

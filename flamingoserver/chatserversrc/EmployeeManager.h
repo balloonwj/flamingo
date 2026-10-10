@@ -66,10 +66,20 @@ struct EmployeeDetail
     std::string registerTime;  //注册/创建时间
 };
 
+//员工性别取值（t_user.f_gender），数值与 Protocol.h 的 enum profile_gender 一致。admin 一侧的代码
+//包含的是 AdminApiCodes.h，它与 Protocol.h 各自定义了 error_code 等枚举、不能同时包含，故在此另列。
+constexpr int32_t EMPLOYEE_GENDER_UNSET  = 0;   //保密（未设置）
+constexpr int32_t EMPLOYEE_GENDER_MALE   = 1;   //男
+constexpr int32_t EMPLOYEE_GENDER_FEMALE = 2;   //女
+
+//UpdateEmployeeReq::gender 取此值时不修改性别：user/update.do 的请求里没带 gender 字段
+//（老版本控制台）时用它，保持原值不变。
+constexpr int32_t EMPLOYEE_GENDER_KEEP = -1;
+
 //新建员工请求（user/create.do 的输入载体）。
 struct CreateEmployeeReq
 {
-    CreateEmployeeReq() : enterpriseId(0), deptId(0) {}
+    CreateEmployeeReq() : enterpriseId(0), deptId(0), gender(0) {}
 
     int64_t     enterpriseId;  //所属企业ID
     int64_t     deptId;        //初始归属部门ID；0表示暂不归属部门
@@ -79,12 +89,13 @@ struct CreateEmployeeReq
     std::string email;         //邮箱
     std::string phone;         //手机号
     std::string joinDate;      //入职日期，形如 2026-05-21；空则不写
+    int32_t     gender;        //性别：EMPLOYEE_GENDER_UNSET / MALE / FEMALE（0 保密 / 1 男 / 2 女）
 };
 
 //修改员工请求（user/update.do 的输入载体）。
 struct UpdateEmployeeReq
 {
-    UpdateEmployeeReq() : userId(0) {}
+    UpdateEmployeeReq() : userId(0), gender(EMPLOYEE_GENDER_KEEP) {}
 
     int64_t     userId;        //目标用户ID
     std::string name;          //姓名
@@ -96,6 +107,7 @@ struct UpdateEmployeeReq
     std::string phone;         //手机号
     std::string email;         //邮箱
     std::string signature;     //个性签名
+    int32_t     gender;        //性别：EMPLOYEE_GENDER_UNSET / MALE / FEMALE；EMPLOYEE_GENDER_KEEP 表示不修改
 };
 
 //一条登录记录（user/loginrecords.do 应答 records 数组的元素）。
@@ -178,15 +190,20 @@ public:
      *  @param outUserId       输出新用户ID。
      *  @param outInitPassword 输出生成的明文初始密码（供控制台展示给用户）。
      *  @param outUsername     输出自动生成的登录账号（供控制台展示给用户）。
-     *  @return 错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code。
+     *  @return 错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code：手机号为空或格式不对返回
+     *          error_code_phone_invalid，已被其他账号使用返回 error_code_phone_taken（2026-10-06 起手机号必填、
+     *          全局唯一，它可用于登录）；工号与本企业已有员工重复返回 error_code_registeralready。
      */
     int32_t createEmployee(const CreateEmployeeReq& req, int64_t& outUserId,
                            std::string& outInitPassword, std::string& outUsername);
 
     /**
      *  修改员工基本信息（t_user 各字段），并同步更新其主部门成员记录的职务。
+     *  工号为空时写 NULL 而不是空串：唯一索引 uk_ent_employee_no 允许多个 NULL，不允许多个空串。
      *  @param req 修改请求。
-     *  @return 错误码，0 表示成功。
+     *  @return 错误码，0 表示成功：员工不存在返回 error_code_notregister；手机号为空或格式不对返回
+     *          error_code_phone_invalid，被其他账号使用返回 error_code_phone_taken（保留自己原来的号码不算重复）；
+     *          工号与本企业其他员工重复返回 error_code_registeralready（与新建员工一致）。
      */
     int32_t updateEmployee(const UpdateEmployeeReq& req);
 

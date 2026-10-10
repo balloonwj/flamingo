@@ -11,12 +11,25 @@
 
 #include "ChatLinkDetect.h"
 
+#include <string.h>
+#include <wchar.h>   // wcschr / wcslen：分享链接的前缀与链接码（第 25 期）
+#include "../../net/GroupLinkProtocolClient.h"   // parseJoinUrl：加群链接的判定（docs/邀请入群方案.md §12）
+
 namespace balloonchatwnd {
 
 namespace {
 
 //内联表情在扁平文本里的占位字符（与 ChatInlineText / ChatTextSelection 同一口径）。
 const wchar_t kFacePlaceholder = 0xFFFC;
+
+//屏幕共享分享链接的前缀（第 25 期），全小写，MatchesAt 按小写比较；与 FlamingoMedia/Share/ShareLinkInvite.cpp 的前缀一致，
+//由单元测试核对
+const wchar_t kShareLinkPrefix[] = L"flamingo://screenshare/";
+//加群链接的前缀（全小写，docs/邀请入群方案.md §12）；随机码之后的判定交给 net::GroupLinkProtocolClient::parseJoinUrl
+const wchar_t kJoinLinkPrefix[] = L"flamingo://joingroup?code=";
+//分享链接码的长度与字符表：数字 2~9、去掉 I O 的大写字母、去掉 l o 的小写字母（与服务端 ScreenShareLinkTable 一致）
+const std::wstring::size_type kShareLinkCodeChars = 10;
+const wchar_t kShareLinkCodeAlphabet[] = L"23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
 
 //ASCII 可打印区间的两端，用来判断"这个字符还算不算 URL 的一部分"。
 const wchar_t kAsciiPrintableFirst = 0x21;   // '!'：空格及以下的控制字符都终止链接
@@ -163,6 +176,56 @@ std::wstring::size_type TrimTrailingPunct(const std::wstring& text,
 
 std::vector<LinkSpan> DetectLinks(const std::wstring& flatText)
 {
+    return DetectLinks(flatText, true, true);
+}
+
+bool IsScreenShareLinkUrl(const std::wstring& url)
+{
+    if (!MatchesAt(url, 0, kShareLinkPrefix))
+    {
+        return false;
+    }
+    const std::wstring::size_type prefixLen = wcslen(kShareLinkPrefix);
+    if (url.size() != prefixLen + kShareLinkCodeChars)
+    {
+        return false;
+    }
+    for (std::wstring::size_type k = prefixLen; k < url.size(); ++k)
+    {
+        //'\0' 也在字符表的末尾，须先排除
+        if (url[k] == L'\0' || wcschr(kShareLinkCodeAlphabet, url[k]) == NULL)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsJoinGroupLinkUrl(const std::wstring& url, std::string* code)
+{
+    if (!MatchesAt(url, 0, kJoinLinkPrefix))
+    {
+        return false;
+    }
+    std::string parsed;
+    if (!net::GroupLinkProtocolClient::parseJoinUrl(url, parsed))
+    {
+        return false;
+    }
+    //整段必须正好是前缀加随机码：带了别的参数的不当作气泡里的链接
+    if (url.size() != wcslen(kJoinLinkPrefix) + parsed.size())
+    {
+        return false;
+    }
+    if (code != NULL)
+    {
+        *code = parsed;
+    }
+    return true;
+}
+
+std::vector<LinkSpan> DetectLinks(const std::wstring& flatText, bool webLinks, bool shareLinks)
+{
     std::vector<LinkSpan> out;
     std::wstring::size_type i = 0;
     while (i < flatText.size())
@@ -173,22 +236,36 @@ std::vector<LinkSpan> DetectLinks(const std::wstring& flatText)
 
         //先看协议头。https 要排在 http 前面判断吗？不必 —— 两者前缀不同
         //（"https://" 与 "http://" 在第 5 个字符上就分岔），各判各的即可。
-        if (MatchesAt(flatText, i, L"https://"))
+        if (webLinks && MatchesAt(flatText, i, L"https://"))
         {
             scheme    = kLinkSchemeHttps;
             prefixLen = 8;
             matched   = true;
         }
-        else if (MatchesAt(flatText, i, L"http://"))
+        else if (webLinks && MatchesAt(flatText, i, L"http://"))
         {
             scheme    = kLinkSchemeHttp;
             prefixLen = 7;
             matched   = true;
         }
-        else if (MatchesAt(flatText, i, L"www."))
+        else if (webLinks && MatchesAt(flatText, i, L"www."))
         {
             scheme    = kLinkSchemeBare;
             prefixLen = 4;
+            matched   = true;
+        }
+        //屏幕共享的分享链接（第 25 期）
+        else if (shareLinks && MatchesAt(flatText, i, kShareLinkPrefix))
+        {
+            scheme    = kLinkSchemeScreenShare;
+            prefixLen = (int)wcslen(kShareLinkPrefix);
+            matched   = true;
+        }
+        //加群链接（docs/邀请入群方案.md §12）
+        else if (shareLinks && MatchesAt(flatText, i, kJoinLinkPrefix))
+        {
+            scheme    = kLinkSchemeJoinGroup;
+            prefixLen = (int)wcslen(kJoinLinkPrefix);
             matched   = true;
         }
 
@@ -225,6 +302,18 @@ std::vector<LinkSpan> DetectLinks(const std::wstring& flatText)
         span.m_len    = (int)(end - i);
         span.m_scheme = scheme;
         span.m_url    = flatText.substr(i, end - i);
+        //分享链接只认合规的链接码：多一位、少一位或夹了别的字符都当普通文字
+        if (scheme == kLinkSchemeScreenShare && !IsScreenShareLinkUrl(span.m_url))
+        {
+            i = end;
+            continue;
+        }
+        //加群链接同样只认合规的随机码
+        if (scheme == kLinkSchemeJoinGroup && !IsJoinGroupLinkUrl(span.m_url, NULL))
+        {
+            i = end;
+            continue;
+        }
         if (scheme == kLinkSchemeBare)
         {
             //正文里没写协议，补一个 https —— 现在的站点基本都上了 TLS，补 http

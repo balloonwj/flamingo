@@ -153,8 +153,8 @@ bool FileToken::verify(const std::string& token, const std::string& key,
 
 bool FileToken::isImageScene(int scene)
 {
-    //头像与图片消息由 imgserver 处理
-    return scene == file_scene_avatar || scene == file_scene_image_msg;
+    //头像与图片消息由 imgserver 处理；云端录像（第 26 期）也在 imgserver 上，文件在 cloudrecorddir
+    return scene == file_scene_avatar || scene == file_scene_image_msg || scene == file_scene_cloud_record;
 }
 
 bool FileToken::isFileScene(int scene)

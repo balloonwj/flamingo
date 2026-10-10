@@ -12,10 +12,27 @@
 
 #include <stdint.h>
 #include <string>
-#include <mysql/mysql.h>
-#include <mysql/errmsg.h>
+//MariaDB Connector/C 的公共头文件。连接器以源码形式随仓库提交（mariadb-connector-c-3.4.9），这些头文件在其 include 目录下，不再带 mysql/ 前缀
+#include <mysql.h>
+#include <errmsg.h>
 
 #include "../dbapi/IDatabase.h"
+#include "../dbapi/DbHandlePool.h"
+
+/**
+ *  MySQL 连接句柄池：DbHandlePool 配上 MySQL 的关闭（mysql_close）与探活（mysql_ping）函数，
+ *  池中保存的是 MYSQL* 句柄。全进程一个，通过 Singleton<CMysqlHandlePool>::Instance() 访问。
+ *
+ *  只有经 DbFactory::createConnection() 创建的连接才会进池（见 CDatabaseMysql::initialize
+ *  的 usePool 参数）；CMysqlManager、CMysqlThrd 自己持有的长连接不受影响。
+ *  池的打开、关闭与定时维护统一经 DbFactory 进行，见 DbFactory.h。
+ */
+class CMysqlHandlePool : public DbHandlePool
+{
+public:
+    //创建一个空池，初始为关闭状态，容量与时间阈值取 DbHandlePool::Options 的默认值
+    CMysqlHandlePool();
+};
 
 class CDatabaseMysql : public IDatabase
 {
@@ -37,8 +54,12 @@ public:
 	//host：数据库主机地址；user：登录账号；pwd：登录口令；
 	//dbname：要选用的库名，传空串表示只连接服务器而不选库
 	//        （CMysqlManager 建库阶段就是这么用的：库还不存在，没法选）。
+	//usePool：是否使用连接池。为 true 时先从 CMysqlHandlePool 里取一条连到同一主机、账号与库的
+	//        空闲连接，取不到再新建；本对象析构时，若连接状态正常（没有未结束的事务、最后一次
+	//        操作没有出错）则把连接放回池中，而不是关闭。只有 DbFactory 传 true。
 	//返回值：true 表示连接成功，参数会被保存下来供后续断线重连复用。
-	bool initialize(const std::string& host, const std::string& user, const std::string& pwd, const std::string& dbname);
+	bool initialize(const std::string& host, const std::string& user, const std::string& pwd, const std::string& dbname,
+	                bool usePool = false);
 
 	virtual QueryResult* query(const char *sql);
 
@@ -85,7 +106,29 @@ private:
 	//返回 false 表示不属于这种情形，调用方继续走原有的重试 / 报错判断。
 	bool abortTransactionOnDisconnect(unsigned int uMysqlErrno, const char* operation, const char* sql);
 
+	//按 m_DBInfo 新建一条连接，替换当前连接（当前连接直接关闭，不放回池中）。
+	//用于断线后重连：此时连接池里的其他空闲连接很可能也已断开（例如数据库服务刚重启过），
+	//所以始终新建，不从池里取。返回 true 表示连接成功
+	bool reconnect();
+
+	//按 m_DBInfo 建立一条新连接，结果写入 m_Mysql / m_bInit。调用前当前连接必须已经关闭。
+	//返回 true 表示连接成功；失败原因已写入日志
+	bool connectFresh();
+
+	//关闭当前连接（不放回池中），并把 m_Mysql、m_bInit 复位
+	void closeConnection();
+
+	//当前连接能否放回连接池：没有未结束的事务，且最后一次操作没有出错。
+	//出过错的连接一律不放回 —— 错误可能是断线，也可能是别的异常状态，关掉重开最稳妥
+	bool canReturnToPool() const;
+
+	//本连接在连接池中的 key：主机、账号与库名，三者都相同的连接才能互相替代
+	std::string poolKey() const;
+
 	DatabaseInfo    m_DBInfo;    //数据库连接参数（主机/用户/密码/库名），断线重连时复用
+
+	//本连接是否使用连接池，见 initialize 的 usePool 参数。为 true 时析构可能把连接放回池中
+	bool            m_bPooled;
 	MYSQL*          m_Mysql;     //MySQL 连接句柄；NULL 表示尚未连接或连接已断开
 	bool            m_bInit;     //是否已成功建立过连接，析构时据此决定是否 mysql_close
 

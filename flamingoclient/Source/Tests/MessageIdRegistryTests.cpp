@@ -35,7 +35,7 @@
 namespace {
 
 //向上回溯查找客户端根目录时允许的最大层级数。实测最深的一条起点是测试 exe 所在的
-//flamingoclient\Bin\Tests\<平台>\<配置>\，回到 flamingoclient\ 需要 5 层，取 10 留余量。
+//flamingoclient\<配置目录>\Tests\，回到 flamingoclient\ 需要 2 层，取 10 留余量。
 const int kMaxParentWalkDepth = 10;
 
 //用来认定「这一层就是客户端根目录」的标志文件，写成相对该目录的路径。

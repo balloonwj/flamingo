@@ -10,13 +10,14 @@
  *  Create。设计稿 design/群资料.png。
  *
  *  交互(本轮端到端):
- *    · 消息免打扰 / 置顶群聊:两个 DuiSwitch,翻转即乐观更新 + 发
+ *    · 消息提醒:DuiComboBox 下拉框(五种提醒模式),选中即经主面板乐观更新 + 发
  *      cmd_set_conversation(1513);
+ *    · 置顶群聊:DuiSwitch,翻转即乐观更新 + 发 cmd_set_conversation(1513);
  *    · 我在本群的昵称:整行点击就地编辑,失焦提交 cmd_set_member_card(1315);
  *    · 退出群聊:二次确认后发 cmd_leave_group(1309);
  *    · 查看消息记录:本轮占位(点击提示开发中)。
  *
- *  数据通路:主面板先用缓存(群名 / 成员数 / 免打扰 / 置顶)组 seed 打开,再发
+ *  数据通路:主面板先用缓存(群名 / 成员数 / 提醒模式 / 置顶)组 seed 打开,再发
  *  cmd_get_group_info(1303) + cmd_get_group_members(1304) 拉全(公告 / 群主显示名 /
  *  我的群名片),到达后主面板组更全的 GroupInfoViewData 调 ApplyData 刷进来。
  *
@@ -73,6 +74,14 @@ public:
     void ApplyData(const GroupInfoViewData& data);
 
     /**
+     *  只刷新"消息提醒"下拉框:把模式写进内部副本并静默改选中项(不发通知),不动其余控件,
+     *  因而不会打断正在进行的群昵称编辑。主面板在模式表变化后(本机修改、多端同步推送、
+     *  会话列表到达)以及特别关注设置被本地拒绝后调用。窗口未创建时只更新内部副本。
+     *    mode  该群的提醒模式(Protocol.h 的 enum conversation_notify_mode)。
+     */
+    void ApplyNotifyMode(int mode);
+
+    /**
      *  是否有一次"改群名片"正在等服务端应答。主面板据此把 cmd_set_member_card 应答
      *  交给本对话框处理(失败回退)。
      */
@@ -103,7 +112,7 @@ public:
 private:
     /**
      *  WM_DUI_NOTIFY 处理:两开关 VALUECHANGED、名片行 CLICK 进编辑、名片 edit
-     *  KILLFOCUS 提交、退群 / 查看记录按钮 CLICK、群名 / 群号 CLICK 复制。
+     *  回车提交 / Esc 取消 / KILLFOCUS 去抖提交、退群 / 查看记录按钮 CLICK、群名 / 群号 CLICK 复制。
      */
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -129,10 +138,16 @@ private:
     void EnterCardEdit();
 
     /**
-     *  提交群名片编辑(失焦触发):读 edit 文本,若较当前有变化则乐观更新 m_data
+     *  提交群名片编辑(失焦或回车触发):读 edit 文本,若较当前有变化则乐观更新 m_data
      *  并发 cmd_set_member_card;无论是否变化都切回查看态、清 m_cardEditing。
      */
     void CommitCardEdit();
+
+    /**
+     *  取消群名片编辑(Esc 触发,2026-10-07):不提交,切回查看态、清 m_cardEditing,查看态仍显示原名片;
+     *  下次进入编辑时输入框重新填入原名片。
+     */
+    void CancelCardEdit();
 
     /**
      *  退群:有宿主时交给主面板 RequestLeaveGroup(确认框、群主须先转让、离线判断都在那里),

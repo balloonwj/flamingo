@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include "MD5.h"
 
-//以下六个角色常量在 RelayToken.h 的类内已给出初始化值，这里补上类外定义。
+//以下全部角色常量在 RelayToken.h 的类内已给出初始化值，这里补上类外定义（新增角色时这里也要加一行）。
 //C++11 规定：类内初始化的静态常量一旦被 ODR-use（取地址、绑定到引用等），
 //就必须在某个编译单元里有唯一的类外定义，否则链接期报未定义符号。
 //单元测试中 doctest 的 CHECK 宏按引用捕获操作数，正好构成 ODR-use。
@@ -19,6 +19,15 @@ const int RelayToken::role_caller;
 const int RelayToken::role_callee;
 const int RelayToken::role_folder_sender;
 const int RelayToken::role_folder_receiver;
+const int RelayToken::role_screenshare_host;
+const int RelayToken::role_screenshare_member;
+const int RelayToken::role_screenshare_publisher;
+const int RelayToken::role_share_owner;
+const int RelayToken::role_share_visitor;
+const int RelayToken::role_p2p_controlling;
+const int RelayToken::role_p2p_controlled;
+const int RelayToken::role_groupcall_member;
+const int RelayToken::role_server_control;
 
 //HMAC 分组字节数：MD5 的分组长度为 64 字节
 static const size_t HMAC_BLOCK_SIZE = 64;

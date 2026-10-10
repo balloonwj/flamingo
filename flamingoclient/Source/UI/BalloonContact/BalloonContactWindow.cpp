@@ -1,11 +1,11 @@
 /**
  *  BalloonContactWindow.cpp
  *
- *  联系人资料对话框的实现。标签增删 + 备注名行内编辑 + 三个开关（消息免打扰 /
- *  添加到收藏 / 特别关注）+ 分组下拉 + 快捷操作行（语音通话 / 视频通话 /
+ *  联系人资料对话框的实现。标签增删 + 备注名行内编辑 + 「消息提醒」下拉框 +
+ *  「添加到收藏」开关 + 分组下拉 + 快捷操作行（语音通话 / 视频通话 /
  *  历史消息 / 组织架构）+ 底部按钮。
  *
- *  三个开关与四个快捷操作都不在本窗口执行，只把用户的意图回投给主面板，理由见
+ *  提醒模式、收藏与四个快捷操作都不在本窗口执行，只把用户的意图回投给主面板，理由见
  *  BalloonContactWindow.h 的文件说明。
  *
  *  balloonwj@qq.com   2026-05-22
@@ -18,7 +18,7 @@
 #include <windowsx.h>                 // GET_X_LPARAM / GET_Y_LPARAM（鼠标消息取坐标）
 
 #include "../../App/CustomMsgDef.h"          // WM_CLOSE_MAINDLG
-#include "../../Session/UserSessionData.h"       // FMG_MSG_OPEN_CHAT（"发消息"路由）/ FMG_MSG_SET_CONTACT_REMARK（备注提交回投）/ FMG_MSG_SET_CONTACT_TAGS（标签整份提交回投）/ FMG_MSG_SET_CONTACT_MUTE 等三条开关消息 / FMG_MSG_LOCATE_CONTACT / FMG_MSG_CALL_START_INVITE 等
+#include "../../Session/UserSessionData.h"       // FMG_MSG_OPEN_CHAT（"发消息"路由）/ FMG_MSG_SET_CONTACT_REMARK（备注提交回投）/ FMG_MSG_SET_CONTACT_TAGS（标签整份提交回投）/ FMG_MSG_SET_CONTACT_NOTIFY_MODE / FMG_MSG_SET_CONTACT_FAVORITE / FMG_MSG_LOCATE_CONTACT / FMG_MSG_CALL_START_INVITE 等
 #include <string>                     // 备注 / 标签回投的 UTF-8 堆负载，通话邀请的 std::wstring 显示名
 #include <vector>                     // 标签整份提交的列表
 #include <stdint.h>                   // int64_t（历史消息记录窗回投的会话 id）
@@ -29,10 +29,18 @@
 #include "ContactLayout.h"            // BuildContactBody / ContactCtrlId 等
 #include "ContactTagModel.h"          // 标签的归一与增 / 改判定（纯函数）
 #include "TagChip.h"                  // TagChip::DUIN_TAGCHIP_DELETE / DUIN_TAGCHIP_EDIT
+#include "../BalloonMain/NotifyModeMenu.h"   // 「消息提醒」下拉框下标与提醒模式的换算
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../App/BrandText.h"         // g_strAppTitle（提示框标题用的产品名称）
+#include "ContactWindowSet.h"            // ComputeContactWindowCascade / kContactWindowCascadeStep：新窗口错开摆放
+#include "../BalloonMain/InlineEditKeys.h"   // ClassifyInlineEditNotify：「备注名」回车提交、Esc 取消
+#include "../BalloonMain/MainPanelAvatar.h"  // MakeMonogramSquareAvatar：字形头像位图
+#include "../BalloonMain/AvatarImageUtil.h"  // MakeRoundedAvatarFromFile：图片头像位图
+#include "../BalloonMain/AvatarGray.h"       // MakeGrayAvatarBitmap：离线时的灰度头像
 
 using namespace balloonwjui;
 using namespace ballooncontact;
@@ -47,8 +55,7 @@ namespace {
 // ballooncontact::ContactBodyHeight(行数) 算出，见 ApplyBodyHeight。
 const int kContactWindowWidth = ballooncontact::kContactBodyWidth;
 
-// 标题栏高度（逻辑像素，照设计稿 Modal header 44）。
-const int kContactTitleBarHeight = 44;
+// 标题栏高度 kContactTitleBarHeight 定义在 ContactLayout.h，与布局单测共用同一份。
 
 // 标题栏左侧程序图标的边长（逻辑像素）。balloonui 最终按 16x16 绘制，取同值可免去缩放。
 const int kTitleIconSize = 16;
@@ -71,10 +78,15 @@ const COLORREF kTitleBarBgColor = RGB(245, 246, 250);
 // "最多 N 个"）在用到的地方按上限常量拼出来，改上限时不必回来改文案，故这里
 // 只放不含数字的这一条。
 
-const TCHAR* const kTipTagDuplicate = _T("该标签已存在");
+const TCHAR* const kTipTagDuplicate = TR_NOOP(L"该标签已存在");
 
 // "新增标签"时用来表示"这次不是在改某一枚已有标签"的下标值。
 const int kTagIndexNone = -1;
+
+// 头部头像位图的边长与圆角半径（像素），与内嵌 XML 里 contact-avatar 的 fixedWidth / corner-radius 一致；
+// 头像控件按自身矩形缩放位图并裁成圆角矩形，位图按同样尺寸生成可免去缩放
+const int kAvatarBitmapSize = 64;
+const int kAvatarBitmapRadius = 9;
 
 // ---- 打开历史消息记录窗时 wParam 的打包（约定见 UserSessionData.h 上
 //      FMG_MSG_OPEN_HISTORY 的说明：低字节 = 会话类型，次低字节 = 预选的类型胶囊）----
@@ -119,6 +131,13 @@ std::string CStrToUtf8(const CString& text)
 // 构造 / 析构
 // =======================================================================
 
+CBalloonContactWindow::PromptHook CBalloonContactWindow::s_promptHook = NULL;
+
+void CBalloonContactWindow::SetPromptHook(PromptHook hook)
+{
+    s_promptHook = hook;
+}
+
 CBalloonContactWindow::CBalloonContactWindow(CFlamingoClient* pFMGClient)
     : m_lpFMGClient(pFMGClient)
     , m_hMainDlg(NULL)
@@ -127,12 +146,22 @@ CBalloonContactWindow::CBalloonContactWindow(CFlamingoClient* pFMGClient)
     , m_remarkEditing(false)
     , m_deptLineCount(0)
     , m_tagRowCount(1)
+    , m_profileExpanded(false)
+    , m_profileRowCount(0)
+    , m_profileEditSlot(-1)
+    , m_profileEditGeneration(0)
+    , m_profileCommitBusy(false)
     , m_editingTagIndex(kTagIndexNone)
     , m_titleIconBmp(NULL)
     , m_hTaskIconBig(NULL)
     , m_hTaskIconSmall(NULL)
     , m_connUiState((int)balloonmain::kConnUiOnline)
+    , m_avatarBmp(NULL)
+    , m_avatarGrayBmp(NULL)
+    , m_hasCascadeAnchor(false)
 {
+    m_cascadeAnchor.x = 0;
+    m_cascadeAnchor.y = 0;
     // 标签输入弹层的提交回调只需注册一次，弹层本身随窗口存活。
     m_tagPopup.SetCommitCallback(&CBalloonContactWindow::OnTagPopupCommitThunk, this);
 }
@@ -144,6 +173,8 @@ void CBalloonContactWindow::OpenForContact(HWND hostPanel, UINT peerUserId,
     m_hostPanel  = hostPanel;
     m_peerUserId = peerUserId;
     m_model      = model;
+    // 每次打开（含换看另一个联系人）「个人资料」区块都从收起状态开始
+    m_profileExpanded = false;
 
     // 已打开：用新数据重建客户区并前置；未打开：走创建流程。
     if (IsWindow())
@@ -187,6 +218,65 @@ void CBalloonContactWindow::RefreshContactData(const ballooncontact::ContactMode
     ::InvalidateRect(m_hWnd, NULL, FALSE);
 }
 
+void CBalloonContactWindow::SetCascadeAnchor(bool hasPrevious, POINT previousTopLeft)
+{
+    m_hasCascadeAnchor = hasPrevious;
+    m_cascadeAnchor = previousTopLeft;
+}
+
+void CBalloonContactWindow::ActivateExisting(bool beginRemarkEdit)
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+    // 不重建界面：正在编辑的备注名或资料格的内容保留
+    if (IsIconic())
+    {
+        ShowWindow(SW_RESTORE);
+    }
+    ::SetForegroundWindow(m_hWnd);
+
+    // 「修改备注」入口：没在编辑时进入编辑态；已在编辑时只把焦点交回输入框（不重填内容）
+    if (beginRemarkEdit && !m_model.IsSelf())
+    {
+        if (!m_remarkEditing)
+        {
+            SetRemarkEditing(true);
+        }
+        else
+        {
+            DuiControl* content = GetClientContent();
+            DuiEdit* remarkEdit = (content != NULL) ? dynamic_cast<DuiEdit*>(content->FindCtrlById(kIdRemarkEdit))
+                                                    : NULL;
+            if (remarkEdit != NULL && remarkEdit->IsVisible())
+            {
+                remarkEdit->SetFocus();
+            }
+        }
+    }
+    LOG_INFO("contact dialog: activate existing window, peer=%u, remarkEdit=%d, editing=%d.", m_peerUserId,
+             beginRemarkEdit ? 1 : 0, m_remarkEditing ? 1 : 0);
+}
+
+void CBalloonContactWindow::ApplyAvatarSource(const ballooncontact::ContactAvatarSource& source)
+{
+    m_model.SetAvatarSource(source);
+    if (!IsWindow())
+    {
+        return;
+    }
+    DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    // 只动头像控件：占位字形与底色，再按需要换位图
+    ApplyContactAvatar(dynamic_cast<DuiAvatar*>(content->FindCtrlById(kIdAvatar)), m_model);
+    EnsureAvatarBitmaps();
+    ::InvalidateRect(m_hWnd, NULL, FALSE);
+}
+
 void CBalloonContactWindow::ApplyConnectionState(int state)
 {
     // 状态没变就不必再记一条日志 —— 主面板是每次连接态变化逐窗推的，重复值很常见。
@@ -204,6 +294,9 @@ void CBalloonContactWindow::ApplyConnectionState(int state)
 CBalloonContactWindow::~CBalloonContactWindow()
 {
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
+
+    // 头像位图由本类持有。此时窗口已销毁、不会再绘制，头像控件对位图的借用不再有效
+    ReleaseAvatarBitmaps();
 
     // 标题栏图标位图与任务栏图标由本类持有：DuiFrameWindow::SetIcon 只借用不释放，
     // WM_SETICON 交给系统的图标同样不由系统释放，都要在这里还回去。
@@ -232,7 +325,7 @@ void CBalloonContactWindow::CreateAndShow(HWND hMainDlg)
 {
     m_hMainDlg = hMainDlg;
 
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR(_T("联系人资料对话框 Create 失败。"));
@@ -288,13 +381,14 @@ void CBalloonContactWindow::CreateAndShow(HWND hMainDlg)
     // 量到那个默认宽度就会把十来个标签算成一行。高度这时还不知道（取决于部门路径与
     // 标签各占几行），先按"没有部门、标签一行"的基准高度占位，InitUi 之后由
     // ApplyBodyHeight 改写成真实高度。
-    ResizeClient(kContactWindowWidth, ballooncontact::ContactBodyHeight(0, 1));
+    ResizeClient(kContactWindowWidth, ballooncontact::ContactBodyHeight(0, 1) + kContactTitleBarHeight);
 
     // 窗口高度取决于部门路径折了几行，只有 InitUi 把资料灌进控件之后才知道，
     // 故 SetMinSize / 真实高度的 ResizeClient 都放在 InitUi 之后由 ApplyBodyHeight 统一做。
     InitUi();
     ApplyBodyHeight();
-    CenterWindow();
+    // 有上一个资料窗时相对它错开摆放，没有时在工作区居中（2026-10-07，多个资料窗并存）
+    PlaceInitially();
 
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -335,17 +429,27 @@ void CBalloonContactWindow::InitUi()
         remarkEdit->SetVisible(false);
     }
 
+    // 控件树整个重建，原先的就地编辑随之结束：资料格与「备注名」的编辑态一并复位（备注名输入框在上面
+    // 已按不可见建出，编辑态标志不复位的话，之后点铅笔、失焦提交都会按「正在编辑」处理）
+    m_profileEditSlot = -1;
+    m_remarkEditing = false;
+
+    // 看本人时隐藏通话、发消息、标签、备注分组、提醒收藏（看别人时全部显示）
+    ApplyContactSelfView(content, m_model.IsSelf());
+
     // 把模型数据灌进各控件。
     FillHeader();
+    FillProfile();
     RebuildTags();
     FillGroupCombo();
     FillSwitches();
+    FillNotifyCombo();
 
     // 「备注名」行右侧当前值显示。
     {
         const CString& remark = m_model.Remark();
         SetContactText(content, kIdRemarkValue,
-                       remark.IsEmpty() ? _T("未设置") : (LPCTSTR)remark);
+                       remark.IsEmpty() ? TR(L"未设置") : (LPCTSTR)remark);
     }
 
     // 标题随联系人走。放在这里而不是只放在 CreateAndShow 里：窗口已经开着时切换到
@@ -366,13 +470,11 @@ void CBalloonContactWindow::UpdateWindowTitle()
     const CString& name = m_model.Name();
     if (name.IsEmpty())
     {
-        SetTitle(_T("联系人资料"));
+        SetTitle(TR(L"联系人资料"));
         return;
     }
 
-    CString title = name;
-    title += _T("的资料");
-    SetTitle(title);
+    SetTitle(TRF(L"{0}的资料", name).c_str());
 }
 
 void CBalloonContactWindow::FillHeader()
@@ -383,33 +485,15 @@ void CBalloonContactWindow::FillHeader()
         return;
     }
 
-    // 头像 —— XML 里已设了占位字母 / 形状 / 状态 / 底色，这里按模型再确认
-    // 占位字母与状态（模型未来接真实数据时此处即为唯一灌入点）。
-    DuiAvatar* avatar = dynamic_cast<DuiAvatar*>(
-        content->FindCtrlById(kIdAvatar));
-    if (avatar != NULL)
-    {
-        avatar->SetName(m_model.AvatarLetter());
-        // 模型状态映射到 DuiAvatar 的状态点。
-        switch (m_model.Status())
-        {
-        case kContactStatusOnline:
-            avatar->SetStatus(DuiAvatar::StatusOnline);
-            break;
-        case kContactStatusAway:
-            avatar->SetStatus(DuiAvatar::StatusAway);
-            break;
-        case kContactStatusBusy:
-            avatar->SetStatus(DuiAvatar::StatusBusy);
-            break;
-        case kContactStatusOffline:
-            avatar->SetStatus(DuiAvatar::StatusOffline);
-            break;
-        default:
-            avatar->SetStatus(DuiAvatar::StatusNone);
-            break;
-        }
-    }
+    // 头像 —— XML 里已设了占位字母 / 形状 / 底色，这里按模型再确认
+    // 占位字母、状态点与底色（对方离线时底色画成灰色）。
+    DuiAvatar* avatar = dynamic_cast<DuiAvatar*>(content->FindCtrlById(kIdAvatar));
+    ApplyContactAvatar(avatar, m_model);
+    // 真实头像（2026-10-07）：按模型的头像来源生成位图挂上；客户区重建过时新控件上还没有位图，一并挂上
+    EnsureAvatarBitmaps();
+    ApplyAvatarBitmapToControl();
+    // 看本人时头像可点击，打开修改头像对话框
+    SetContactAvatarClickable(avatar, m_model.IsSelf(), TR(L"修改头像"));
 
     // 头部右侧多行资料块 —— 各行文本由模型拼出，交自由函数按 id 配置。
 
@@ -439,9 +523,7 @@ void CBalloonContactWindow::FillHeader()
     CString title = m_model.Title();
 
     // 第 3 行「账号 XXX · 地区」。
-    CString accountRegion;
-    accountRegion = _T("账号 ");
-    accountRegion += m_model.Account();
+    CString accountRegion = TRF(L"账号 {0}", m_model.Account()).c_str();
     if (!m_model.Region().IsEmpty())
     {
         accountRegion += _T(" · ");
@@ -457,6 +539,255 @@ void CBalloonContactWindow::FillHeader()
     LOG_INFO("contact dialog: dept path wrapped into %d line(s).", m_deptLineCount);
 }
 
+void CBalloonContactWindow::FillProfile()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    const std::vector<ballooncontact::ContactProfileCell> cells = ballooncontact::BuildContactProfileCells(m_model);
+    // 看本人时始终全部展开；看别人时多于默认行数的部分按 m_profileExpanded 收起
+    m_profileRowCount = ballooncontact::ConfigureContactProfile(content, cells, !m_model.IsSelf(),
+                                                                m_profileExpanded, m_profileSlotFields);
+    LOG_INFO("contact dialog: profile block shows %d row(s) of %d cell(s), self=%d, expanded=%d.",
+             m_profileRowCount, (int)cells.size(), m_model.IsSelf() ? 1 : 0, m_profileExpanded ? 1 : 0);
+}
+
+bool CBalloonContactWindow::IsProfilePartId(UINT ctrlId, int part, int& outSlot)
+{
+    const UINT first = (UINT)kIdProfileCellBase;
+    const UINT last = (UINT)(kIdProfileCellBase + kContactProfileSlotCount * kIdProfileCellStride);
+    if (ctrlId < first || ctrlId >= last)
+    {
+        return false;
+    }
+    const int offset = (int)(ctrlId - first);
+    if (offset % kIdProfileCellStride != part)
+    {
+        return false;
+    }
+    outSlot = offset / kIdProfileCellStride;
+    return true;
+}
+
+void CBalloonContactWindow::BeginProfileEdit(int slot)
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL || slot < 0 || slot >= (int)m_profileSlotFields.size() || !m_model.IsSelf())
+    {
+        return;
+    }
+    const int field = m_profileSlotFields[slot];
+    if (field < 0 || field == kProfileFieldMobile)
+    {
+        return;
+    }
+    // 已有别的格子在编辑：先提交它；不合格时它留在编辑态，本次不切换
+    if (m_profileEditSlot >= 0 && m_profileEditSlot != slot)
+    {
+        CommitProfileEdit();
+        if (m_profileEditSlot >= 0)
+        {
+            return;
+        }
+    }
+
+    m_profileEditSlot = slot;
+    ++m_profileEditGeneration;
+    const CString text = ProfileCellEditText(m_model, field);
+    SetContactProfileSlotEditing(content, slot, field, true, text, m_model.Gender());
+    // 显隐变化之后重排，输入框才拿得到矩形（UI 约定第 5 条）
+    RelayoutContactBody(content);
+
+    if (field == kProfileFieldGender)
+    {
+        DuiComboBox* combo = dynamic_cast<DuiComboBox*>(
+            content->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartCombo)));
+        if (combo != NULL)
+        {
+            combo->SetFocus();
+        }
+    }
+    else
+    {
+        DuiEdit* edit = dynamic_cast<DuiEdit*>(content->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartEdit)));
+        if (edit != NULL)
+        {
+            edit->SetFocus();
+            edit->SelectAll();
+        }
+    }
+    LOG_INFO("contact dialog: begin profile edit, slot=%d, field=%d.", slot, field);
+}
+
+void CBalloonContactWindow::EndProfileEdit()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL || m_profileEditSlot < 0)
+    {
+        m_profileEditSlot = -1;
+        return;
+    }
+    const int slot = m_profileEditSlot;
+    const int field = (slot < (int)m_profileSlotFields.size()) ? m_profileSlotFields[slot] : -1;
+    m_profileEditSlot = -1;
+    SetContactProfileSlotEditing(content, slot, field, false, NULL, 0);
+    RelayoutContactBody(content);
+}
+
+void CBalloonContactWindow::CancelProfileEdit()
+{
+    LOG_INFO("contact dialog: cancel profile edit, slot=%d.", m_profileEditSlot);
+    EndProfileEdit();
+}
+
+void CBalloonContactWindow::CommitProfileEdit()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL || m_profileEditSlot < 0 || m_profileCommitBusy)
+    {
+        return;
+    }
+    const int slot = m_profileEditSlot;
+    const int field = (slot < (int)m_profileSlotFields.size()) ? m_profileSlotFields[slot] : -1;
+
+    // 取输入框文字或下拉框序号
+    CString text;
+    int genderIndex = -1;
+    DuiEdit* edit = dynamic_cast<DuiEdit*>(content->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartEdit)));
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(content->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartCombo)));
+    if (edit != NULL)
+    {
+        text = edit->GetText();
+    }
+    if (combo != NULL)
+    {
+        genderIndex = combo->GetCurSel();
+    }
+
+    net::ProfileUpdateFields fields;
+    profilefields::ProfileEditError error = profilefields::profile_edit_ok;
+    const ProfileCellCommitResult result = DecideProfileCellCommit(m_model, field, text, genderIndex, fields, error);
+    LOG_INFO("contact dialog: commit profile edit, slot=%d, field=%d, result=%d, error=%d.",
+             slot, field, (int)result, (int)error);
+
+    if (result == profile_cell_unchanged)
+    {
+        EndProfileEdit();
+        return;
+    }
+    if (result == profile_cell_invalid)
+    {
+        // 提示期间提示框会抢走焦点，输入框随之失焦；置忙标志，免得那次失焦又触发一次提交
+        m_profileCommitBusy = true;
+        ShowPrompt(profilefields::ProfileEditErrorText(error).c_str());
+        m_profileCommitBusy = false;
+        if (edit != NULL && edit->IsVisible())
+        {
+            edit->SetFocus();
+            edit->SelectAll();
+        }
+        return;
+    }
+
+    // 离线时发不出去：提示后留在编辑态，内容不丢
+    if (m_hostPanel != NULL && !CheckOnlineFor(balloonmain::kActionAccountOp))
+    {
+        return;
+    }
+
+    // 先退出编辑，再把新值显示出来并交主面板发请求
+    EndProfileEdit();
+    SubmitProfileFields(fields);
+}
+
+void CBalloonContactWindow::SubmitProfileFields(const net::ProfileUpdateFields& fields)
+{
+    // 先把新值显示出来，再交主面板发请求（失败时主面板回滚并刷新本窗口）
+    m_model.ApplyProfileUpdate(fields);
+    FillProfile();
+    // 改了昵称：头部姓名与窗口标题随之换成新昵称
+    if (fields.m_hasNickname)
+    {
+        FillHeader();
+        UpdateWindowTitle();
+    }
+    ApplyBodyHeight();
+
+    if (m_hostPanel != NULL && ::IsWindow(m_hostPanel))
+    {
+        // 跨窗口传结构体走堆对象，由主面板处理后 delete（与本工程其余「窗口→主面板」回投一致）
+        ::PostMessage(m_hostPanel, FMG_MSG_CONTACT_PROFILE_EDIT, 0, (LPARAM)new net::ProfileUpdateFields(fields));
+        return;
+    }
+    // 调试入口（--contact）没有宿主主面板：只就地更新显示，不发协议
+    LOG_INFO("contact dialog (no host panel): profile edit applied locally only.");
+}
+
+LRESULT CBalloonContactWindow::OnVisibilityMenuMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/,
+                                                   BOOL& /*bHandled*/)
+{
+    DuiControl* content = GetClientContent();
+    const int slot = (int)wParam;
+    if (content == NULL || !m_model.IsSelf() || slot < 0 || slot >= (int)m_profileSlotFields.size())
+    {
+        return 0;
+    }
+    // 槽位上的字段决定改哪个号码；菜单弹出之前资料被刷新过、槽位换了字段时不再处理
+    const int field = m_profileSlotFields[slot];
+    int target = -1;
+    int current = profile_visibility_self_only;
+    if (field == kProfileFieldMobile)
+    {
+        target = profilefields::visibility_target_phone;
+        current = m_model.PhoneVisible();
+    }
+    else if (field == kProfileFieldLandline)
+    {
+        target = profilefields::visibility_target_landline;
+        current = m_model.LandlineVisible();
+    }
+    if (target < 0)
+    {
+        return 0;
+    }
+    // 别的格子正在就地编辑：先提交它；不合格时它留在编辑态，本次不弹菜单
+    if (m_profileEditSlot >= 0)
+    {
+        CommitProfileEdit();
+        if (m_profileEditSlot >= 0)
+        {
+            return 0;
+        }
+    }
+
+    // 菜单落在开关的左下方：开关的客户区矩形换成屏幕坐标
+    DuiControl* link = content->FindCtrlById(ContactProfileCtrlId(slot, kProfilePartVisibility));
+    if (link == NULL || !link->IsVisible())
+    {
+        return 0;
+    }
+    RECT anchor = link->GetRect();
+    ::MapWindowPoints(m_hWnd, NULL, (LPPOINT)&anchor, 2);
+    const UINT chosen = TrackProfileVisibilityMenu(m_hWnd, anchor, current);
+
+    net::ProfileUpdateFields fields;
+    if (!profilefields::DecideVisibilityChange(target, current, chosen, fields))
+    {
+        return 0;
+    }
+    // 离线时发不出去：提示后保持原设置
+    if (m_hostPanel != NULL && !CheckOnlineFor(balloonmain::kActionAccountOp))
+    {
+        return 0;
+    }
+    LOG_INFO("contact dialog: profile visibility changed, field=%d, %d -> %d.", field, current,
+             profilefields::VisibilityFromMenuId(chosen));
+    SubmitProfileFields(fields);
+    return 0;
+}
+
 void CBalloonContactWindow::ApplyBodyHeight()
 {
     if (!IsWindow())
@@ -464,7 +795,10 @@ void CBalloonContactWindow::ApplyBodyHeight()
         return;
     }
 
-    const int height = ballooncontact::ContactBodyHeight(m_deptLineCount, m_tagRowCount);
+    //ContactBodyHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+    const int height = ballooncontact::ContactBodyHeight(m_deptLineCount, m_tagRowCount, m_profileRowCount,
+                                                         m_model.IsSelf())
+                     + kContactTitleBarHeight;
     SetMinSize(kContactWindowWidth, height);
     ResizeClient(kContactWindowWidth, height);
 
@@ -593,14 +927,14 @@ void CBalloonContactWindow::FillSwitches()
     }
 
     // 各开关的 ctrlId 与对应模型开关类别。两张表按行一一对应，顺序即界面上
-    // 自上而下的顺序（消息免打扰 / 添加到收藏 / 特别关注）。
+    // 自上而下的顺序（目前只有「添加到收藏」）。
     const UINT switchIds[kContactSwitchCount] =
     {
-        kIdSwitchMute, kIdSwitchFavorite, kIdSwitchStarred
+        kIdSwitchFavorite
     };
     const int switchKinds[kContactSwitchCount] =
     {
-        kContactSwitchMute, kContactSwitchFavorite, kContactSwitchStarred
+        kContactSwitchFavorite
     };
 
     for (int i = 0; i < kContactSwitchCount; ++i)
@@ -613,6 +947,207 @@ void CBalloonContactWindow::FillSwitches()
             sw->SetChecked(m_model.Switch(switchKinds[i]), false, false);
         }
     }
+}
+
+void CBalloonContactWindow::FillNotifyCombo()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(content->FindCtrlById(kIdNotifyCombo));
+    if (combo == NULL)
+    {
+        return;
+    }
+    // notify=false：只是把模型值同步进控件，不能当成用户的选择再回投一次
+    combo->SetCurSel(balloonmain::NotifyModeChoiceIndex(/*isGroup*/false, m_model.NotifyMode()), false);
+}
+
+void CBalloonContactWindow::ApplyNotifyMode(int mode)
+{
+    m_model.SetNotifyMode(mode);
+    if (!IsWindow())
+    {
+        return;
+    }
+    FillNotifyCombo();
+    ::InvalidateRect(m_hWnd, NULL, FALSE);
+}
+
+void CBalloonContactWindow::ApplyPeerPresence(int status, bool avatarGray)
+{
+    m_model.SetStatus(status);
+    m_model.SetAvatarGray(avatarGray);
+    if (!IsWindow())
+    {
+        return;
+    }
+    DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    ApplyContactAvatar(dynamic_cast<DuiAvatar*>(content->FindCtrlById(kIdAvatar)), m_model);
+    // 真实头像：在线挂彩色位图，离线挂灰度副本
+    ApplyAvatarBitmapToControl();
+    ::InvalidateRect(m_hWnd, NULL, FALSE);
+}
+
+// =======================================================================
+// 头部头像（2026-10-07）
+// =======================================================================
+
+void CBalloonContactWindow::EnsureAvatarBitmaps()
+{
+    // 来源没变，且位图已生成（或来源无效、本来就不需要位图）：不重新生成
+    const ContactAvatarSource& source = m_model.AvatarSource();
+    if (SameAvatarSource(source, m_avatarBmpSource) && (m_avatarBmp != NULL || !source.m_valid))
+    {
+        return;
+    }
+
+    // 先生成新位图、挂到控件上，再释放旧位图：控件只借用位图，顺序反了会画到已释放的位图
+    HBITMAP fresh = NULL;
+    if (source.m_valid)
+    {
+        if (!source.m_imagePath.IsEmpty())
+        {
+            fresh = balloonmain::MakeRoundedAvatarFromFile(source.m_imagePath, kAvatarBitmapSize, kAvatarBitmapRadius);
+        }
+        // 没有本机图片，或图片解码失败：画字形头像
+        if (fresh == NULL)
+        {
+            fresh = balloonmain::MakeMonogramSquareAvatar(source.m_glyph, source.m_color, kAvatarBitmapSize,
+                                                         kAvatarBitmapRadius);
+        }
+    }
+    HBITMAP oldColor = m_avatarBmp;
+    HBITMAP oldGray = m_avatarGrayBmp;
+    m_avatarBmp = fresh;
+    m_avatarGrayBmp = NULL;
+    m_avatarBmpSource = source;
+    ApplyAvatarBitmapToControl();
+    if (oldColor != NULL)
+    {
+        ::DeleteObject(oldColor);
+    }
+    if (oldGray != NULL)
+    {
+        ::DeleteObject(oldGray);
+    }
+    LOG_INFO("contact dialog: avatar bitmap rebuilt, peer=%u, valid=%d, image=%d, ok=%d.", m_peerUserId,
+             source.m_valid ? 1 : 0, source.m_imagePath.IsEmpty() ? 0 : 1, (fresh != NULL) ? 1 : 0);
+}
+
+void CBalloonContactWindow::ApplyAvatarBitmapToControl()
+{
+    DuiControl* content = GetClientContent();
+    DuiAvatar* avatar = (content != NULL) ? dynamic_cast<DuiAvatar*>(content->FindCtrlById(kIdAvatar)) : NULL;
+    if (avatar == NULL)
+    {
+        return;
+    }
+    HBITMAP bmp = m_avatarBmp;
+    if (bmp != NULL && m_model.IsAvatarGray())
+    {
+        if (m_avatarGrayBmp == NULL)
+        {
+            m_avatarGrayBmp = balloonmain::MakeGrayAvatarBitmap(m_avatarBmp);
+        }
+        // 取不到灰度副本时退回彩色图，不画出空白
+        if (m_avatarGrayBmp != NULL)
+        {
+            bmp = m_avatarGrayBmp;
+        }
+    }
+    avatar->SetBitmap(bmp);
+}
+
+void CBalloonContactWindow::ReleaseAvatarBitmaps()
+{
+    if (m_avatarBmp != NULL)
+    {
+        ::DeleteObject(m_avatarBmp);
+        m_avatarBmp = NULL;
+    }
+    if (m_avatarGrayBmp != NULL)
+    {
+        ::DeleteObject(m_avatarGrayBmp);
+        m_avatarGrayBmp = NULL;
+    }
+    m_avatarBmpSource = ContactAvatarSource();
+}
+
+void CBalloonContactWindow::OnAvatarClicked()
+{
+    // 只有看本人时头像可点击（看别人时头像控件不发点击通知），这里再判一次作兜底
+    if (!m_model.IsSelf())
+    {
+        return;
+    }
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+    {
+        LOG_INFO("contact dialog: no host panel, avatar click ignored.");
+        return;
+    }
+    // 改头像要上传并同步到服务器，离线时在入口拦住（主面板打开对话框前还有一次同样的判定）
+    if (!CheckOnlineFor(balloonmain::kActionAccountOp))
+    {
+        return;
+    }
+    ::PostMessage(m_hostPanel, FMG_MSG_OPEN_MODIFY_AVATAR, 0, 0);
+    LOG_INFO("contact dialog: ask host panel to open the modify avatar dialog.");
+}
+
+void CBalloonContactWindow::PlaceInitially()
+{
+    RECT rcWindow;
+    if (!GetWindowRect(&rcWindow))
+    {
+        return;
+    }
+    SIZE size;
+    size.cx = rcWindow.right - rcWindow.left;
+    size.cy = rcWindow.bottom - rcWindow.top;
+
+    // 工作区取上一个资料窗所在的显示器；没有上一个窗口时取主面板所在的显示器，再没有时取本窗口所在的
+    HMONITOR monitor = NULL;
+    if (m_hasCascadeAnchor)
+    {
+        monitor = ::MonitorFromPoint(m_cascadeAnchor, MONITOR_DEFAULTTONEAREST);
+    }
+    else if (m_hostPanel != NULL && ::IsWindow(m_hostPanel))
+    {
+        monitor = ::MonitorFromWindow(m_hostPanel, MONITOR_DEFAULTTONEAREST);
+    }
+    else
+    {
+        monitor = ::MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY);
+    }
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (monitor == NULL || !::GetMonitorInfo(monitor, &mi))
+    {
+        CenterWindow();
+        return;
+    }
+    const POINT topLeft = ComputeContactWindowCascade(mi.rcWork, size, m_hasCascadeAnchor, m_cascadeAnchor,
+                                                      kContactWindowCascadeStep);
+    SetWindowPos(NULL, topLeft.x, topLeft.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    LOG_INFO("contact dialog: placed at %d,%d, size %dx%d, cascade=%d.", (int)topLeft.x, (int)topLeft.y,
+             (int)size.cx, (int)size.cy, m_hasCascadeAnchor ? 1 : 0);
+}
+
+void CBalloonContactWindow::ShowPrompt(LPCTSTR text)
+{
+    if (s_promptHook != NULL)
+    {
+        s_promptHook(m_hWnd, text);
+        return;
+    }
+    ::MessageBox(m_hWnd, text, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
 }
 
 // =======================================================================
@@ -729,6 +1264,20 @@ void CBalloonContactWindow::CommitRemarkEdit()
     LOG_INFO(_T("联系人资料对话框（无宿主主面板）：备注仅就地更新，未发协议。"));
 }
 
+void CBalloonContactWindow::CancelRemarkEdit()
+{
+    // 只退出编辑态：模型里的备注没动，当前值照旧显示原备注；输入框里这次敲的内容在下次进入编辑时被原备注覆盖
+    SetRemarkEditing(false);
+    LOG_INFO("contact dialog: remark edit cancelled, peer=%u.", m_peerUserId);
+}
+
+void CBalloonContactWindow::ReleaseHiddenEditFocus()
+{
+    // 输入框已隐藏，但 DUI 焦点还在它身上，之后的按键仍会送进去；摘掉焦点。随之而来的失焦通知
+    // 因为已不在编辑态而被忽略，不会再提交一次
+    SetDuiFocus(NULL);
+}
+
 void CBalloonContactWindow::RefreshRemarkDisplay()
 {
     DuiControl* content = GetClientContent();
@@ -740,7 +1289,7 @@ void CBalloonContactWindow::RefreshRemarkDisplay()
     // 备注名那一行的当前值；空则显示"未设置"占位，别留一片空白让人以为控件坏了。
     const CString& remark = m_model.Remark();
     SetContactText(content, kIdRemarkValue,
-                   remark.IsEmpty() ? _T("未设置") : (LPCTSTR)remark);
+                   remark.IsEmpty() ? TR(L"未设置") : (LPCTSTR)remark);
 
     // 头部也要刷：备注名会影响第 1 行的主名与括号里的真名。
     FillHeader();
@@ -876,14 +1425,14 @@ void CBalloonContactWindow::OnTagPopupCommit(const CString& text)
 
         //与已有标签重复：不追加，给一句轻提示，免得用户以为点击没生效。
         case kTagAddDuplicate:
-            ShowContactTipToast(content, kTipTagDuplicate);
+            ShowContactTipToast(content, TR(kTipTagDuplicate));
             break;
 
         //超长：输入框已 SetMaxLength 限死长度，正常敲不出来，粘贴等路径才会走到。
         case kTagAddTooLong:
             {
                 CString tip;
-                tip.Format(_T("标签最长 %d 个字符"), kContactTagMaxLen);
+                tip.Format(TR(L"标签最长 %d 个字符"), kContactTagMaxLen);
                 ShowContactTipToast(content, tip);
             }
             break;
@@ -892,7 +1441,7 @@ void CBalloonContactWindow::OnTagPopupCommit(const CString& text)
         case kTagAddFull:
             {
                 CString tip;
-                tip.Format(_T("标签最多 %d 个"), kContactTagMaxCount);
+                tip.Format(TR(L"标签最多 %d 个"), kContactTagMaxCount);
                 ShowContactTipToast(content, tip);
             }
             break;
@@ -936,7 +1485,7 @@ void CBalloonContactWindow::OnTagPopupCommit(const CString& text)
     case kTagEditTooLong:
         {
             CString tip;
-            tip.Format(_T("标签最长 %d 个字符"), kContactTagMaxLen);
+            tip.Format(TR(L"标签最长 %d 个字符"), kContactTagMaxLen);
             ShowContactTipToast(content, tip);
         }
         break;
@@ -990,22 +1539,10 @@ void CBalloonContactWindow::OnSwitchToggled(UINT switchCtrlId, bool on)
     UINT msgId = 0;
     switch (switchCtrlId)
     {
-    //消息免打扰：主面板据此改与该联系人这条会话的免打扰属性
-    case kIdSwitchMute:
-        kind  = kContactSwitchMute;
-        msgId = FMG_MSG_SET_CONTACT_MUTE;
-        break;
-
     //添加到收藏：主面板据此把该联系人加入 / 移出通讯录顶部的「我的收藏」分区
     case kIdSwitchFavorite:
         kind  = kContactSwitchFavorite;
         msgId = FMG_MSG_SET_CONTACT_FAVORITE;
-        break;
-
-    //特别关注：主面板据此登记 / 取消该联系人上下线时的桌面提示
-    case kIdSwitchStarred:
-        kind  = kContactSwitchStarred;
-        msgId = FMG_MSG_SET_CONTACT_STARRED;
         break;
 
     //其余控件不是本对话框的开关，不处理
@@ -1018,8 +1555,8 @@ void CBalloonContactWindow::OnSwitchToggled(UINT switchCtrlId, bool on)
     m_model.SetSwitch(kind, on);
 
     // 有宿主主面板（正常登录态）时，"该不该发、发不出去怎么办、失败怎么退回来"
-    // 全部交给主面板判定与执行 —— 收藏 / 特别关注的缓存、会话免打扰的开关与 socket
-    // 都在它手上。做法与备注名（CommitRemarkEdit）、标签（CommitTagList）完全同构。
+    // 全部交给主面板判定与执行 —— 收藏的缓存与 socket 都在它手上。做法与备注名
+    // （CommitRemarkEdit）、标签（CommitTagList）完全同构。
     if (m_hostPanel != NULL && ::IsWindow(m_hostPanel) && m_peerUserId != 0)
     {
         // 传的是<u>目标状态</u>而不是"取反"：用户连点两下、而第一条应答还在路上时，
@@ -1034,6 +1571,32 @@ void CBalloonContactWindow::OnSwitchToggled(UINT switchCtrlId, bool on)
     // 在调试入口下仍然能走通、能人工核对界面。
     LOG_INFO("contact dialog: no host panel, switch updated in memory only, "
              "ctrlId=%u, target=%d.", switchCtrlId, on ? 1 : 0);
+}
+
+void CBalloonContactWindow::OnNotifyModeChosen(int index)
+{
+    if (index < 0)
+    {
+        return;
+    }
+    const int mode = balloonmain::NotifyModeOfChoice(/*isGroup*/false, index);
+    if (mode == m_model.NotifyMode())
+    {
+        return;
+    }
+    // 先写模型：下一次重建客户区（FillNotifyCombo）按新值置位，不会把下拉框改回去。
+    // 主面板若因特别关注已满而拒绝，会经 ApplyNotifyMode 把实际模式写回来。
+    m_model.SetNotifyMode(mode);
+
+    if (m_hostPanel != NULL && ::IsWindow(m_hostPanel) && m_peerUserId != 0)
+    {
+        // 传目标模式而不是"下一个模式"，理由同 OnSwitchToggled
+        ::PostMessage(m_hostPanel, FMG_MSG_SET_CONTACT_NOTIFY_MODE, (WPARAM)m_peerUserId, (LPARAM)mode);
+        LOG_INFO("contact dialog: submit notify mode, userid=%u, mode=%d.", m_peerUserId, mode);
+        return;
+    }
+
+    LOG_INFO("contact dialog: no host panel, notify mode updated in memory only, mode=%d.", mode);
 }
 
 void CBalloonContactWindow::OnQuickActionClicked(UINT ctrlId)
@@ -1141,8 +1704,7 @@ bool CBalloonContactWindow::CheckOnlineFor(int action)
     LOG_INFO("ContactWindow::CheckOnlineFor: blocked. peer=%u, action=%d, "
              "connUiState=%d (0=online 1=connecting 2=offline).",
              m_peerUserId, action, m_connUiState);
-    ::MessageBox(m_hWnd, balloonmain::GetBlockedActionTip(action),
-                 _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+    ShowPrompt(balloonmain::GetBlockedActionTip(action));
     return false;
 }
 
@@ -1164,9 +1726,9 @@ void CBalloonContactWindow::DoSendMessage()
     CString msg;
     const CString& remark = m_model.Remark();
     const CString primaryName = remark.IsEmpty() ? m_model.Name() : remark;
-    msg.Format(_T("向「%s」发消息\n\n（调试入口，当前为 mock 演示）"),
+    msg.Format(TR(L"向「%s」发消息\n\n（调试入口，当前为 mock 演示）"),
                (LPCTSTR)primaryName);
-    ::MessageBox(m_hWnd, msg, _T("联系人资料"), MB_OK | MB_ICONINFORMATION);
+    ::MessageBox(m_hWnd, msg, TR(L"联系人资料"), MB_OK | MB_ICONINFORMATION);
     LOG_INFO(_T("联系人资料对话框「发消息」被点击（mock）。"));
 }
 
@@ -1222,11 +1784,95 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         return 0;
     }
 
+    // ---- 「个人资料」格子的就地编辑 ----
+    // 编辑按钮的 id 按槽位编号（ContactProfileCtrlId），不在下面的 switch 里逐个列出
+    int profileSlot = -1;
+    if (pNotify->code == DUIN_CLICK && IsProfilePartId(pNotify->ctrlId, kProfilePartPencil, profileSlot))
+    {
+        BeginProfileEdit(profileSlot);
+        return 0;
+    }
+    //点了手机号或座机格的公开范围开关：等这次鼠标事件处理完再弹菜单
+    if (pNotify->code == DUIN_CLICK && IsProfilePartId(pNotify->ctrlId, kProfilePartVisibility, profileSlot))
+    {
+        if (IsWindow())
+        {
+            ::PostMessage(m_hWnd, WM_CONTACT_VISIBILITY_MENU, (WPARAM)profileSlot, 0);
+        }
+        return 0;
+    }
+    if (m_profileEditSlot >= 0)
+    {
+        const UINT editId = ContactProfileCtrlId(m_profileEditSlot, kProfilePartEdit);
+        const UINT comboId = ContactProfileCtrlId(m_profileEditSlot, kProfilePartCombo);
+        //输入框里按回车：提交
+        if (pNotify->code == (UINT)DuiEdit::DUIN_EDIT_ENTER && pNotify->ctrlId == editId)
+        {
+            CommitProfileEdit();
+            return 0;
+        }
+        //输入框里按 Esc：取消
+        if (pNotify->code == (UINT)DuiEdit::DUIN_EDIT_ESCAPE && pNotify->ctrlId == editId)
+        {
+            CancelProfileEdit();
+            return 0;
+        }
+        //输入框失去焦点：延后一拍再判定（与备注名同理：在框内点一下会短暂失焦再得焦）
+        if (pNotify->code == DUIN_KILLFOCUS && pNotify->ctrlId == editId)
+        {
+            if (!m_profileCommitBusy && IsWindow())
+            {
+                ::PostMessage(m_hWnd, WM_CONTACT_PROFILE_COMMIT, (WPARAM)m_profileEditGeneration, 0);
+            }
+            return 0;
+        }
+        //性别下拉框选好了：直接提交
+        if (pNotify->code == DUIN_VALUECHANGED && pNotify->ctrlId == comboId)
+        {
+            CommitProfileEdit();
+            return 0;
+        }
+    }
+
+    // ---- 「备注名」行内编辑：回车提交、Esc 取消、失焦延后提交（2026-10-07 补上回车与 Esc）----
+    switch (balloonmain::ClassifyInlineEditNotify(pNotify->code, pNotify->ctrlId, (UINT)kIdRemarkEdit,
+                                                  m_remarkEditing))
+    {
+    //输入框里按回车：立即提交，再摘掉已隐藏输入框的焦点
+    case balloonmain::inline_edit_commit:
+        CommitRemarkEdit();
+        ReleaseHiddenEditFocus();
+        return 0;
+
+    //输入框里按 Esc：不提交，恢复显示原备注
+    case balloonmain::inline_edit_cancel:
+        CancelRemarkEdit();
+        ReleaseHiddenEditFocus();
+        return 0;
+
+    //输入框失去焦点：不能就地提交 —— 在框内点一下会短暂失焦再得焦，立即提交就成了"一点就退回"。
+    //延后一拍投消息，由 OnRemarkCommitDeferred 查焦点再定夺
+    case balloonmain::inline_edit_blur:
+        if (IsWindow())
+        {
+            ::PostMessage(m_hWnd, WM_CONTACT_REMARK_COMMIT, 0, 0);
+        }
+        return 0;
+
+    //不是备注名输入框的回车、Esc、失焦通知，或当前不在编辑态：交给后面的分支
+    default:
+        break;
+    }
+
     // ---- 点击类通知 ----
     if (pNotify->code == DUIN_CLICK)
     {
         switch (pNotify->ctrlId)
         {
+        //点头部头像 —— 看本人时请主面板打开修改头像对话框（看别人时头像不发点击通知）。
+        case kIdAvatar:
+            OnAvatarClicked();
+            return 0;
         //点「+ 添加标签」—— 在按钮位置弹出输入框，输入完提交整份标签列表。
         //标签数已达上限时这个按钮压根不存在（换成了说明文字），故不会走到这里。
         case kIdAddTagButton:
@@ -1235,6 +1881,12 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         //点铅笔按钮 —— 进入备注名行内编辑态。
         case kIdRemarkEditBtn:
             SetRemarkEditing(true);
+            return 0;
+        //点「个人资料」小标题右侧的「展开全部 / 收起」—— 切换后重填区块并按新行数调整窗口高度
+        case kIdProfileToggle:
+            m_profileExpanded = !m_profileExpanded;
+            FillProfile();
+            ApplyBodyHeight();
             return 0;
         //点底部「关闭」按钮 —— 等价于标题栏的关闭按钮。
         case kIdBtnClose:
@@ -1262,11 +1914,16 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (pNotify->code == DUIN_VALUECHANGED)
     {
         // 开关翻转 —— extra 为新状态（1 开 / 0 关）。
-        if (pNotify->ctrlId == kIdSwitchMute
-            || pNotify->ctrlId == kIdSwitchFavorite
-            || pNotify->ctrlId == kIdSwitchStarred)
+        if (pNotify->ctrlId == kIdSwitchFavorite)
         {
             OnSwitchToggled(pNotify->ctrlId, pNotify->extra != 0);
+            return 0;
+        }
+
+        // 「消息提醒」下拉选择变化 —— extra >= 0 为新选中下标。
+        if (pNotify->ctrlId == kIdNotifyCombo)
+        {
+            OnNotifyModeChosen((int)pNotify->extra);
             return 0;
         }
 
@@ -1282,17 +1939,8 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
     }
 
-    // ---- 备注名文本框失焦 —— 去抖后视为提交编辑 ----
-    // 不能就地提交：用户在编辑框内点一下，EDIT 会短暂失焦再得焦，立即提交就成了
-    // "一点就退回"。延后一拍投消息，由 OnRemarkCommitDeferred 查焦点再定夺。
-    if (pNotify->code == DUIN_KILLFOCUS && pNotify->ctrlId == kIdRemarkEdit)
-    {
-        if (m_remarkEditing && IsWindow())
-        {
-            ::PostMessage(m_hWnd, WM_CONTACT_REMARK_COMMIT, 0, 0);
-        }
-        return 0;
-    }
+    // 备注名输入框的失焦通知已在上面按 ClassifyInlineEditNotify 处理；不在编辑态时的失焦通知落到这里，
+    // 与其它未处理的通知一样交回基类。
 
     // 其它通知交回 DuiFrameWindow 链。
     bHandled = FALSE;
@@ -1312,6 +1960,41 @@ LRESULT CBalloonContactWindow::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
     // 焦点本来就在宿主窗口上，再调一次 ::SetFocus(m_hWnd) 不产生任何焦点变化（故那
     // 一句已删除）；而点在文本框上的鼠标消息同样会到达宿主。于是改为在这里自己判
     // 落点，只有确实点在文本框之外时才摘焦点。
+    // 「个人资料」格子就地编辑时点在输入框 / 下拉框之外：输入框摘掉焦点走失焦提交；下拉框没有失焦提交，
+    // 直接投递一次延迟提交（没改动时只是退出编辑）
+    if (m_profileEditSlot >= 0)
+    {
+        DuiControl* content = GetClientContent();
+        DuiControl* editor = NULL;
+        if (content != NULL)
+        {
+            editor = content->FindCtrlById(ContactProfileCtrlId(m_profileEditSlot, kProfilePartEdit));
+            if (editor == NULL || !editor->IsVisible())
+            {
+                editor = content->FindCtrlById(ContactProfileCtrlId(m_profileEditSlot, kProfilePartCombo));
+            }
+        }
+        if (editor != NULL && editor->IsVisible())
+        {
+            POINT pt;
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+            RECT rcEditor = editor->GetRect();
+            if (!::PtInRect(&rcEditor, pt))
+            {
+                DuiEdit* edit = dynamic_cast<DuiEdit*>(editor);
+                if (edit != NULL && edit->IsFocused())
+                {
+                    SetDuiFocus(NULL);
+                }
+                else if (edit == NULL)
+                {
+                    ::PostMessage(m_hWnd, WM_CONTACT_PROFILE_COMMIT, (WPARAM)m_profileEditGeneration, 0);
+                }
+            }
+        }
+    }
+
     if (m_remarkEditing)
     {
         DuiControl* content = GetClientContent();
@@ -1340,6 +2023,29 @@ LRESULT CBalloonContactWindow::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
     }
     bHandled = FALSE;   // 继续交给 DuiFrameWindow / DuiHost 正常处理这次点击
+    return 0;
+}
+
+LRESULT CBalloonContactWindow::OnProfileCommitDeferred(UINT /*uMsg*/, WPARAM wParam,
+                                                       LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    // 已结束编辑、已换到别的格子（轮次号对不上）或正在提交中：这条消息已过期
+    if (m_profileEditSlot < 0 || (unsigned int)wParam != m_profileEditGeneration || m_profileCommitBusy)
+    {
+        return 0;
+    }
+    // 焦点又回到了输入框（在框内点击引起的短暂失焦）：人还在编辑，不提交
+    DuiControl* content = GetClientContent();
+    if (content != NULL)
+    {
+        DuiEdit* edit = dynamic_cast<DuiEdit*>(
+            content->FindCtrlById(ContactProfileCtrlId(m_profileEditSlot, kProfilePartEdit)));
+        if (edit != NULL && edit->IsVisible() && edit->IsFocused())
+        {
+            return 0;
+        }
+    }
+    CommitProfileEdit();
     return 0;
 }
 

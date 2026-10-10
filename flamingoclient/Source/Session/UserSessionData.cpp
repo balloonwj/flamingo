@@ -15,8 +15,6 @@ char g_szHomePathAscii[MAX_PATH] = {0};
 //未配置时等于 g_szHomePath。含义与分工见 UserSessionData.h 的声明处注释。
 TCHAR g_szDataRoot[MAX_PATH] = {0};
 
-std::wstring g_strAppTitle;
-
 //系统库中用户头像的个数
 const UINT USER_THUMB_COUNT = 36;
 
@@ -48,6 +46,11 @@ void CBuddyInfo::Reset()
     m_strMobile = _T("");
     m_strEmail = _T("");
     m_strAddress = _T("");
+    m_strLandline = _T("");
+    m_strPost = _T("");
+    //公开范围默认值与服务端两列的默认值一致：手机号仅本人可见、座机对同事可见
+    m_nPhoneVisible = profile_visibility_self_only;
+    m_nLandlineVisible = profile_visibility_colleagues;
     m_uMsgID = 0;
     m_bUseCustomFace = FALSE;
     m_bCustomFaceAvailable = FALSE;
@@ -55,6 +58,7 @@ void CBuddyInfo::Reset()
     m_nTeamIndex = 0;
 }
 
+// i18n-ignore-begin: 调试用的模拟用户资料
 void CBuddyInfo::FillFakeData()
 {
     m_uUserID = 0;
@@ -72,6 +76,7 @@ void CBuddyInfo::FillFakeData()
     m_bUseCustomFace = FALSE;
     m_bCustomFaceAvailable = FALSE;
 }
+// i18n-ignore-end
 
 void CBuddyInfo::SetBuddyInfo(CBuddyInfo* lpBuddyInfo)
 {
@@ -88,6 +93,65 @@ void CBuddyInfo::SetBuddyInfo(CBuddyInfo* lpBuddyInfo)
     m_strEmail = lpBuddyInfo->m_strEmail;
     m_strAddress = lpBuddyInfo->m_strAddress;
     m_strSign = lpBuddyInfo->m_strSign;
+    m_strLandline = lpBuddyInfo->m_strLandline;
+    m_strPost = lpBuddyInfo->m_strPost;
+    m_nPhoneVisible = lpBuddyInfo->m_nPhoneVisible;
+    m_nLandlineVisible = lpBuddyInfo->m_nLandlineVisible;
+}
+
+net::ProfileEditableValues CBuddyInfo::GetEditableProfile() const
+{
+    net::ProfileEditableValues v;
+    v.m_nickname  = EncodeUtil::UnicodeToUtf8(m_strNickName);
+    v.m_signature = EncodeUtil::UnicodeToUtf8(m_strSign);
+    v.m_gender    = (int)m_nGender;
+    v.m_birthday  = (int)m_nBirthday;
+    v.m_address   = EncodeUtil::UnicodeToUtf8(m_strAddress);
+    v.m_mail      = EncodeUtil::UnicodeToUtf8(m_strEmail);
+    v.m_landline  = EncodeUtil::UnicodeToUtf8(m_strLandline);
+    v.m_post      = EncodeUtil::UnicodeToUtf8(m_strPost);
+    v.m_phoneVisible    = m_nPhoneVisible;
+    v.m_landlineVisible = m_nLandlineVisible;
+    return v;
+}
+
+void CBuddyInfo::SetEditableProfile(const net::ProfileEditableValues& values)
+{
+    m_strNickName = EncodeUtil::Utf8ToUnicode(values.m_nickname);
+    m_strSign     = EncodeUtil::Utf8ToUnicode(values.m_signature);
+    m_nGender     = values.m_gender;
+    m_nBirthday   = values.m_birthday;
+    m_strAddress  = EncodeUtil::Utf8ToUnicode(values.m_address);
+    m_strEmail    = EncodeUtil::Utf8ToUnicode(values.m_mail);
+    m_strLandline = EncodeUtil::Utf8ToUnicode(values.m_landline);
+    m_strPost     = EncodeUtil::Utf8ToUnicode(values.m_post);
+    m_nPhoneVisible    = values.m_phoneVisible;
+    m_nLandlineVisible = values.m_landlineVisible;
+}
+
+void CBuddyInfo::ApplyProfileUpdate(const net::ProfileUpdateFields& fields)
+{
+    const net::ProfileEditableValues& v = fields.m_values;
+    if (fields.m_hasNickname)
+        m_strNickName = EncodeUtil::Utf8ToUnicode(v.m_nickname);
+    if (fields.m_hasSignature)
+        m_strSign = EncodeUtil::Utf8ToUnicode(v.m_signature);
+    if (fields.m_hasGender)
+        m_nGender = v.m_gender;
+    if (fields.m_hasBirthday)
+        m_nBirthday = v.m_birthday;
+    if (fields.m_hasAddress)
+        m_strAddress = EncodeUtil::Utf8ToUnicode(v.m_address);
+    if (fields.m_hasMail)
+        m_strEmail = EncodeUtil::Utf8ToUnicode(v.m_mail);
+    if (fields.m_hasLandline)
+        m_strLandline = EncodeUtil::Utf8ToUnicode(v.m_landline);
+    if (fields.m_hasPost)
+        m_strPost = EncodeUtil::Utf8ToUnicode(v.m_post);
+    if (fields.m_hasPhoneVisible)
+        m_nPhoneVisible = v.m_phoneVisible;
+    if (fields.m_hasLandlineVisible)
+        m_nLandlineVisible = v.m_landlineVisible;
 }
 
 
@@ -529,7 +593,7 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
         pContent->m_FontInfo.m_strName = strTmp.GetString();
     }
     else
-        pContent->m_FontInfo.m_strName = _T("微软雅黑");
+        pContent->m_FontInfo.m_strName = _T("微软雅黑");    //i18n-ignore: 聊天内容字体的默认值，属于用户设置，不随界面语言变化
 
     //字体大小
     if (!JsonValue["font"][(UINT)1].isNull())

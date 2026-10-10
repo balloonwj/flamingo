@@ -5,6 +5,7 @@
  */
 #include "stdafx.h"
 #include "Screens/AnnouncementPreviewPanel.h"
+#include "Util/AdminApi.h"   // adminapi::AnnSeverityLabel：公告级别的统一叫法
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/UiHelpers.h"
@@ -58,21 +59,10 @@ const int kScheduleIconBoxW = 40; // 调度卡图标外框尺寸
 const int kTitlePt = theme::kFontSizeHeading + 4;  // 标题(20pt)
 const int kEmptyHintPt = theme::kFontSizeTitle;    // 未选中占位字号
 
-// 公告严重级别 → 徽章文案(与 AnnouncementsScreen.cpp 内部 helper 一致)。
+// 公告严重级别 → 徽章文案。与新建公告、公告列表、导出共用一套名称（普通 / 提醒 / 警告）。
 LPCTSTR SeverityChipLabel(Severity s)
 {
-    switch (s)
-    {
-    case Severity::Warn:
-        return _T("提醒");
-    case Severity::Danger:
-        return _T("安全公告");
-    case Severity::Info:
-        return _T("通知");
-    case Severity::Normal:
-    default:
-        return _T("通知");
-    }
+    return adminapi::AnnSeverityLabel(s);
 }
 
 // 量算一段 word-wrap 文字在给定宽度下的高度(像素)。
@@ -504,6 +494,9 @@ void AnnouncementPreviewPanel::SetAnnouncement(const Announcement* a)
     // 草稿 / 已撤回隐藏(物理删除统一走左侧「删除公告」按钮)。
     m_btnDelete->SetText(_T("撤回"));
     m_btnDelete->SetVisible(a->m_status == 1);
+
+    // 「重新推送」只对已发布的公告有意义（服务端也只接受已发布的）：草稿与已撤回时置灰。
+    m_btnRepush->SetEnabled(a->m_status == 1);
 
 }
 

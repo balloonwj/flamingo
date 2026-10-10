@@ -189,7 +189,9 @@ public:
 
     /**
      *  取仪表盘概览统计。
-     *  @param enterpriseId 统计范围：0=全平台口径，非0=仅该企业口径。
+     *  @param enterpriseId 统计范围：0=全平台口径；非0=仅该企业口径，每一项都只算该企业：
+     *                      企业数按该企业自身的状态计（总数 1，活跃 / 待审核取 0 或 1），
+     *                      员工数与今日审计、今日告警只算 f_enterprise_id 等于它的记录。
      *  @param outStats     输出的统计结果。
      */
     void getDashboardStats(int64_t enterpriseId, DashboardStats& outStats);

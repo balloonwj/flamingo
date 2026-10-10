@@ -86,6 +86,41 @@ TEST_CASE("CP3 buildInviteNotify 字段完整、fromid 字符串编码、media �
     CHECK(rbig["media"].asInt() == call_media_video);
 }
 
+TEST_CASE("CP8 buildInviteResponse 的 p2psessionid：成功且给了才写，没给时与原来相同（P2P 方案第 6 期）")
+{
+    std::string json = CallProtocol::buildInviteResponse(0, "ok", "sess-001", "p2p-1-2-3-4");
+    Json::Value root;
+    REQUIRE(cpParseJsonText(json, root));
+    CHECK(root["sessionid"].asString() == "sess-001");
+    CHECK(root["p2psessionid"].asString() == "p2p-1-2-3-4");
+
+    //没给：不写这个字段，与第 6 期之前的应答逐字相同
+    const std::string plain = CallProtocol::buildInviteResponse(0, "ok", "sess-001");
+    REQUIRE(cpParseJsonText(plain, root));
+    CHECK_FALSE(root.isMember("p2psessionid"));
+    CHECK(plain == CallProtocol::buildInviteResponse(0, "ok", "sess-001", std::string()));
+
+    //失败：即使给了也不写
+    REQUIRE(cpParseJsonText(CallProtocol::buildInviteResponse(702, "peer offline", "", "p2p-x"), root));
+    CHECK_FALSE(root.isMember("p2psessionid"));
+}
+
+TEST_CASE("CP9 buildInviteNotify 的 p2psessionid：给了才写，没给时与原来相同（P2P 方案第 6 期）")
+{
+    const int64_t kRingMs = 45000;
+    std::string json = CallProtocol::buildInviteNotify("sess-001", 5002, "x", call_media_video, kRingMs, "p2p-1-2-3-4");
+    Json::Value root;
+    REQUIRE(cpParseJsonText(json, root));
+    CHECK(root["p2psessionid"].asString() == "p2p-1-2-3-4");
+    CHECK(root["ringms"].asInt64() == kRingMs);
+    CHECK(root["media"].asInt() == call_media_video);
+
+    const std::string plain = CallProtocol::buildInviteNotify("sess-001", 5002, "x", call_media_video, kRingMs);
+    REQUIRE(cpParseJsonText(plain, root));
+    CHECK_FALSE(root.isMember("p2psessionid"));
+    CHECK(plain == CallProtocol::buildInviteNotify("sess-001", 5002, "x", call_media_video, kRingMs, std::string()));
+}
+
 TEST_CASE("CP4 parseResponseRequest 取 sessionid 与 accept")
 {
     std::string sessionid;
@@ -137,4 +172,82 @@ TEST_CASE("CP7 buildStateNotify 字段完整（8 种状态之一）")
     CHECK(root["sessionid"].asString() == "sess-001");
     CHECK(root["state"].asInt() == call_state_connected);
     CHECK(root["msg"].asString() == "connected");
+}
+
+
+TEST_CASE("CP10 一对一通话卡片：呼叫时的 content 字段齐全，id 与时间按字符串编码")
+{
+    const std::string content = CallProtocol::buildCardContent("5127-5308-1-1", call_media_video, 5127, u8"张勇", 5308,
+                                                               1791167956000LL);
+    Json::Value root;
+    REQUIRE(cpParseJsonText(content, root));
+    CHECK(root["kind"].asString() == "call");
+    CHECK(root["sessionid"].asString() == "5127-5308-1-1");
+    CHECK(root["media"].asInt() == call_media_video);
+    CHECK(root["caller"].asString() == "5127");
+    CHECK(root["callername"].asString() == u8"张勇");
+    CHECK(root["callee"].asString() == "5308");
+    CHECK(root["starttime"].asString() == "1791167956000");
+    CHECK_FALSE(root.isMember("result"));
+    CHECK_FALSE(root.isMember("duration"));
+    CHECK(CallProtocol::cardMedia(content) == call_media_video);
+}
+
+TEST_CASE("CP11 一对一通话卡片改写：接通过的带时长（秒），没接通的不带；media 以结束时为准")
+{
+    const int64_t start = 1791167956000LL;
+    const std::string content = CallProtocol::buildCardContent("s1", call_media_audio, 5127, u8"张勇", 5308, start);
+    //接通 1 秒后开始算，171.9 秒后挂断：按秒向下取整为 171；通话中切到了视频
+    const int64_t connect = start + 1000;
+    const int64_t end = connect + 171900;
+    const std::string ended = CallProtocol::buildEndedCardContent(content, "s1", call_media_video, 5127, u8"张勇", 5308,
+                                                                  start, connect, call_state_ended, end);
+    Json::Value root;
+    REQUIRE(cpParseJsonText(ended, root));
+    CHECK(root["kind"].asString() == "call");
+    CHECK(root["callername"].asString() == u8"张勇");
+    CHECK(root["result"].asInt() == call_state_ended);
+    CHECK(root["endtime"].asString() == std::to_string(end));
+    CHECK(root["duration"].asInt64() == 171);
+    CHECK(root["media"].asInt() == call_media_video);
+
+    //没接通（拒绝）：有结果与结束时间，没有时长
+    const std::string rejected = CallProtocol::buildEndedCardContent(content, "s1", call_media_audio, 5127, u8"张勇",
+                                                                     5308, start, 0, call_state_rejected, start + 5000);
+    Json::Value r;
+    REQUIRE(cpParseJsonText(rejected, r));
+    CHECK(r["result"].asInt() == call_state_rejected);
+    CHECK_FALSE(r.isMember("duration"));
+}
+
+TEST_CASE("CP12 一对一通话卡片改写：原 content 不可用时按会话信息重建；结束早于接通按 0 秒")
+{
+    const int64_t start = 1000000LL;
+    const std::string ended = CallProtocol::buildEndedCardContent("not json", "s2", call_media_audio, 7, "A", 8, start,
+                                                                  start + 5000, call_state_ended, start + 3000);
+    Json::Value root;
+    REQUIRE(cpParseJsonText(ended, root));
+    CHECK(root["kind"].asString() == "call");
+    CHECK(root["sessionid"].asString() == "s2");
+    CHECK(root["caller"].asString() == "7");
+    CHECK(root["callee"].asString() == "8");
+    CHECK(root["duration"].asInt64() == 0);
+}
+
+TEST_CASE("CP13 cardMedia 只认一对一通话卡片；cmd_call_card_notify 的字段与各自视角的 cid")
+{
+    CHECK(CallProtocol::cardMedia("{\"kind\":\"groupcall\",\"media\":1}") == 0);
+    CHECK(CallProtocol::cardMedia("{\"kind\":\"call\",\"media\":9}") == 0);
+    CHECK(CallProtocol::cardMedia("garbage") == 0);
+    CHECK(CallProtocol::cardMedia("{\"kind\":\"call\",\"media\":1}") == call_media_audio);
+
+    const std::string content = CallProtocol::buildCardContent("s3", call_media_audio, 5127, "A", 5308, 1);
+    const std::string notify = CallProtocol::buildCardNotify("s3", 9001, 5308, content);
+    Json::Value root;
+    REQUIRE(cpParseJsonText(notify, root));
+    CHECK(root["sessionid"].asString() == "s3");
+    CHECK(root["msgid"].asString() == "9001");
+    CHECK(root["cid"].asString() == "5308");
+    REQUIRE(root["content"].isObject());
+    CHECK(root["content"]["kind"].asString() == "call");
 }

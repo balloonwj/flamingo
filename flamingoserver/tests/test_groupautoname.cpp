@@ -18,8 +18,6 @@
 #include "../dbapi/DbConfig.h"
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
-#include "../sqliteapi/DatabaseSqlite.h"
-#include "../sqliteapi/SqliteManager.h"
 #include "../base/Singleton.h"
 #include "test_dbbackend.h"
 
@@ -162,12 +160,6 @@ namespace {
 const char* const kGmSqliteFile = "flamingo_sqlite_groupautoname_test.db";
 const char* const kGmMysqlDb    = "flamingo_test_groupautoname";
 
-// GM9 自己手工造老库用的 SQLite 文件，与上面的分开。
-const char* const kGmOldSqliteFile = "flamingo_sqlite_groupautoname_old_test.db";
-
-// GM9 老库里那个群的群ID（位于群ID空间内即可，具体值无含义）。
-const int64_t kGmOldGroupId = 4000000001LL;
-
 // 本套用例统一的基准时间戳（Unix 毫秒）；需要区分入群先后时在其上加偏移。
 const int64_t kGmTime = 1700000000000LL;
 
@@ -188,8 +180,9 @@ void execSql(const std::string& sql)
 void addUser(int64_t userid, const std::string& nickname)
 {
     std::ostringstream os;
-    os << "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) VALUES("
-       << userid << ", 'u" << userid << "', '" << nickname << "', '2026-09-30 10:00:00')";
+    //f_password 非空（table_mysql.sql）；这里只是准备测试数据，不需要能登录，填空串
+    os << "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) VALUES("
+       << userid << ", 'u" << userid << "', '" << nickname << "', '', '2026-09-30 10:00:00')";
     execSql(os.str());
 }
 
@@ -404,40 +397,110 @@ TEST_CASE("GM8 成员改昵称后，他所在的自动命名群重算，自定�
     testdb::cleanupDb(kGmSqliteFile);
 }
 
-TEST_CASE("GM9 老库升级后，已有群的群名标记默认为自定义")
+namespace {
+
+// GM10 公告的发布时间相对基准时间戳的偏移（毫秒），取一个与建群时间不同的值，
+// 使"公告时间读成了建群时间"这类列错位能被断言区分出来。
+const int64_t kGm10AnnounceOffsetMs = 5;
+
+// GM10 写入的各项群设置与公告内容。每一项都取与 t_group 列默认值不同的值，
+// 读回时若某一列错位，读到的会是相邻列的值或默认值，断言随即失败。
+const char* const kGm10Intro         = u8"本群用于项目沟通";
+const char* const kGm10WelcomeText   = u8"欢迎加入";
+const char* const kGm10AnnounceTitle = u8"本周例会改到周四";
+const char* const kGm10AnnounceBody  = u8"地点不变";
+
+// 逐项核对 GM10 那个自定义群名的群读回来的记录。
+//   g：         经 getGroup 或 getUserGroups 读回的群记录
+//   gid：       建群时分配的群ID
+//   announceId：发布公告时返回的公告ID
+void CheckGm10NamedGroup(const GroupRecord& g, int64_t gid, int64_t announceId)
 {
-    //要手工造一个缺列的老库，只有 SQLite 模式能这么做；MySQL 的补列另有 m_mapField 清单
-    if (testdb::useMysql())
-    {
-        MESSAGE("GM9 only runs on SQLite");
-        return;
-    }
-
-    testdb::cleanupDb(kGmOldSqliteFile);
-    {
-        //建表语句只含三列，没有这次新增的群名标记列，并写入一个老群
-        CDatabaseSqlite db;
-        REQUIRE(db.initialize(kGmOldSqliteFile));
-        REQUIRE(db.execute("CREATE TABLE t_group(f_groupid INTEGER NOT NULL, "
-                           "f_name VARCHAR(64) NOT NULL, f_ownerid INTEGER NOT NULL, "
-                           "PRIMARY KEY (f_groupid))"));
-        std::ostringstream os;
-        os << "INSERT INTO t_group(f_groupid, f_name, f_ownerid) VALUES(" << kGmOldGroupId
-           << ", '" << u8"莫梅、黄涛波" << "', " << kOwner << ")";
-        REQUIRE(db.execute(os.str().c_str()));
-    }
-
-    //CSqliteManager::init 会补上缺失的列
-    REQUIRE(Singleton<CSqliteManager>::Instance().init(kGmOldSqliteFile));
-    Singleton<CDbConfig>::Instance().init(DB_TYPE_NAME_SQLITE, NULL, NULL, NULL, NULL, kGmOldSqliteFile);
-
-    GroupManager& mgr = Singleton<GroupManager>::Instance();
-    const GroupRecord g = LoadGroup(mgr, kGmOldGroupId);
+    CHECK(g.groupid == gid);
+    CHECK(g.name == std::string(u8"项目组"));
+    CHECK(g.ownerid == kOwner);
+    CHECK(g.createtime == kGmTime);
+    CHECK(g.intro == std::string(kGm10Intro));
+    CHECK(g.atallscope == group_at_all_everyone);
+    CHECK(g.newseehistory == 0);
+    CHECK(g.memberinvite == 1);
+    CHECK(g.welcomeon == 1);
+    CHECK(g.welcometext == std::string(kGm10WelcomeText));
+    CHECK(g.announceid == announceId);
+    CHECK(g.announcetitle == std::string(kGm10AnnounceTitle));
+    CHECK(g.announcetime == kGmTime + kGm10AnnounceOffsetMs);
+    CHECK(g.announcement == std::string(kGm10AnnounceBody));
     CHECK(g.namecustom == 1);
-    CHECK(g.name == std::string(u8"莫梅、黄涛波"));
+    CHECK(g.membercount == 2);
+}
 
-    //按自定义处理，重算不会改动它
-    std::string newName;
-    CHECK_FALSE(mgr.refreshAutoGroupName(kGmOldGroupId, newName));
-    testdb::cleanupDb(kGmOldSqliteFile);
+} // anonymous namespace
+
+// getGroup 与 getUserGroups 共用一份列清单（kGroupSelectColumns），由 fillGroupRecord
+// 按下标逐列取值。增删 t_group 的列时，排在被改动列之后的下标都要跟着调整，漏改一处
+// 就会整体错位。本用例把每一列都写成非默认值再读回，经两条读取路径逐项核对。
+TEST_CASE("GM10 getGroup 与 getUserGroups 读回群资料的每一列都与写入值一致")
+{
+    GroupManager& mgr = resetGroupNameDb();
+
+    //自定义群名的群：改全部群设置、发一条公告
+    const int64_t namedGid = mgr.createGroup(u8"项目组", static_cast<int32_t>(kOwner), Ids(kUserYi), kGmTime);
+    REQUIRE(namedGid != 0);
+
+    UpdateGroupInfoRequest req;
+    req.groupid           = namedGid;
+    req.has_intro         = true;
+    req.intro             = kGm10Intro;
+    req.has_atallscope    = true;
+    req.atallscope        = group_at_all_everyone;
+    req.has_newseehistory = true;
+    req.newseehistory     = 0;
+    req.has_memberinvite  = true;
+    req.memberinvite      = 1;
+    req.has_welcomeon     = true;
+    req.welcomeon         = 1;
+    req.has_welcometext   = true;
+    req.welcometext       = kGm10WelcomeText;
+    REQUIRE(mgr.updateGroupInfo(req));
+
+    const int64_t announceId = mgr.publishAnnouncement(namedGid, kGm10AnnounceTitle, kGm10AnnounceBody,
+                                                       group_announcement_important, kOwner,
+                                                       kGmTime + kGm10AnnounceOffsetMs);
+    REQUIRE(announceId != 0);
+
+    //自动群名的群：namecustom 为 0，与上面那个群的 1 区分开，防止该列恰好读到常量
+    const int64_t autoGid = mgr.createGroup("", static_cast<int32_t>(kOwner), Ids(kUserYi, kUserBing), kGmTime);
+    REQUIRE(autoGid != 0);
+
+    //读取路径一：getGroup
+    CheckGm10NamedGroup(LoadGroup(mgr, namedGid), namedGid, announceId);
+    const GroupRecord autoByGet = LoadGroup(mgr, autoGid);
+    CHECK(autoByGet.namecustom == 0);
+    CHECK(autoByGet.membercount == 3);
+    CHECK(autoByGet.announceid == 0);
+    CHECK(autoByGet.announcetime == 0);
+
+    //读取路径二：getUserGroups
+    std::vector<GroupRecord> groups;
+    REQUIRE(mgr.getUserGroups(static_cast<int32_t>(kOwner), groups));
+    REQUIRE(groups.size() == 2);
+    bool sawNamed = false;
+    bool sawAuto  = false;
+    for (size_t i = 0; i < groups.size(); ++i)
+    {
+        if (groups[i].groupid == namedGid)
+        {
+            sawNamed = true;
+            CheckGm10NamedGroup(groups[i], namedGid, announceId);
+        }
+        else if (groups[i].groupid == autoGid)
+        {
+            sawAuto = true;
+            CHECK(groups[i].namecustom == 0);
+            CHECK(groups[i].membercount == 3);
+        }
+    }
+    CHECK(sawNamed);
+    CHECK(sawAuto);
+    testdb::cleanupDb(kGmSqliteFile);
 }

@@ -10,6 +10,8 @@
 #include "ChatImageSaveAs.h"
 
 #include "../../Common/Log/IULog.h"   // LOG_INFO / LOG_ERROR
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/Util/FileDialogFilter.h"   // filedlg::MakeFilter：文件对话框过滤串的说明文字逐段翻译
 
 namespace balloonchatwnd {
 
@@ -34,9 +36,11 @@ bool SaveChatImageAs(HWND owner, const std::wstring& imagePath,
     const int dot = defName.ReverseFind(_T('.'));
     CString defExt = (dot >= 0) ? defName.Mid(dot + 1) : CString(kFallbackSaveExt);
 
+    //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+    const std::wstring fileFilter = filedlg::MakeFilter(TR(L"图片文件"), filedlg::kImagePatterns, TR(L"所有文件"), L"*.*");
     CFileDialog dlg(FALSE, defExt, defName,
                     OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY | OFN_EXPLORER,
-                    _T("图片文件\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0所有文件\0*.*\0\0"),
+                    fileFilter.c_str(),
                     owner);
     if (dlg.DoModal() != IDOK)
     {
@@ -46,8 +50,8 @@ bool SaveChatImageAs(HWND owner, const std::wstring& imagePath,
     if (!::CopyFileW(imagePath.c_str(), dlg.m_szFileName, FALSE))
     {
         LOG_ERROR("图片另存为失败: err=%lu.", (unsigned long)::GetLastError());
-        ::MessageBox(owner, _T("另存为失败，请重试。"),
-                     _T("图片另存为"), MB_ICONWARNING | MB_OK);
+        ::MessageBox(owner, TR(L"另存为失败，请重试。"),
+                     TR(L"图片另存为"), MB_ICONWARNING | MB_OK);
         return false;
     }
 

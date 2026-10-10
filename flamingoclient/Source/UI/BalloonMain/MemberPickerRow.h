@@ -68,6 +68,17 @@ public:
     void SetCheckVisible(bool visible);
 
     /**
+     *  设置行右端的附注：一段文字，文字左边可带一个线性小图标。批量管理消息提醒窗口用它显示
+     *  每一行的当前提醒模式（如铃铛加斜线 +「接收消息但不提醒」）。姓名放不下时在附注左边截断并
+     *  加省略号。缺省没有附注，选人对话框与转发选择窗的外观不变。
+     *    text      附注文字；NULL 或空串表示没有附注（图标也不画）。
+     *    iconKind  文字左边的小图标，取值见 MainPanelIcons.h 的 IconKind；-1 表示不画图标。
+     *    color     文字与图标的颜色。
+     *  副作用：触发重绘。
+     */
+    void SetTrailing(LPCTSTR text, int iconKind, COLORREF color);
+
+    /**
      *  DuiControl 覆写：画复选框 + 头像 + 姓名。形状走 GDI+ 抗锯齿，
      *  文字走 GDI DrawText（清晰）。
      *    hdc      目标设备上下文。
@@ -81,6 +92,9 @@ private:
     COLORREF m_avatarColor;   // 头像底色
     int      m_checkState;    // 勾选态（MemberPickerCheckState）
     bool     m_checkVisible;  // 是否画复选框；false 时条带留空（不可勾选的行）
+    CString  m_trailText;     // 行右端附注的文字；空 = 没有附注
+    int      m_trailIcon;     // 附注文字左边的小图标（MainPanelIcons 的 IconKind）；-1 = 不画
+    COLORREF m_trailColor;    // 附注文字与图标的颜色
 };
 
 } // namespace balloonmain

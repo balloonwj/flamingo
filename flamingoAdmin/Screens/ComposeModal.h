@@ -44,9 +44,32 @@ public:
     //   title / body：标题与正文。
     //   severity：级别 0/1/2；audienceType：受众类型 0-4。
     //   pinned：是否置顶；targets：已选投放目标。
+    //   scheduled：是否是尚未到点的定时公告。为 true 时发送方式回填为「定时」，否则
+    //              提交时会按「立即发布」处理，服务端随即把它发出去。
+    //   scheduledTime：服务端给的定时时间原文（如 "2026-10-05 09:30:00"）；经
+    //              NormalizeScheduleText 规整后填入时间框，无法识别时保留默认时间。
     void LoadForEdit(long long announcementId, const CString& title,
                      const CString& body, int severity, int audienceType,
-                     bool pinned, const std::vector<AnnTarget>& targets);
+                     bool pinned, const std::vector<AnnTarget>& targets,
+                     bool scheduled, const CString& scheduledTime);
+
+    // 按一条已有公告的内容回填一条新公告（公告中心点「复制」后，由 AdminFrame 取到
+    // detail.do 结果后调用）。内部先 Reset 再回填，编辑 ID 为 0（提交即新建），发送方式
+    // 为「立即」，不沿用原公告的定时状态。
+    //   title / body：标题与正文；severity：级别 0/1/2；audienceType：受众类型 0-4；
+    //   pinned：是否置顶；targets：投放目标（原样照搬）。
+    void LoadForCopy(const CString& title, const CString& body, int severity,
+                     int audienceType, bool pinned, const std::vector<AnnTarget>& targets);
+
+    // 复位成新建状态，并把受众预设为「指定企业」、目标只有给定的企业（企业详情点「发布
+    // 公告」时调用）。
+    //   enterpriseId：目标企业 ID；不大于 0 时只复位，受众保持默认的「全部企业」。
+    void PresetEnterpriseAudience(long long enterpriseId);
+
+    // 把服务端的定时时间原文规整成时间框用的「YYYY-MM-DD HH:MM」：去掉首尾空白，
+    // 取前 16 个字符（即去掉秒）。前 16 个字符不符合该格式时返回空串。
+    //   serverTime：服务端原文，如 "2026-10-05 09:30:00" 或 "2026-10-05 09:30"。
+    static CString NormalizeScheduleText(const CString& serverTime);
 
     // 校验必填项：标题与正文非空；受众为「指定企业 / 部门 / 员工」时目标非空。
     bool Validate() const;

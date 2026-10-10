@@ -30,7 +30,7 @@ const int kActionBtnW = 24;   // hover 动作按钮宽度
 const int kActionIcon = 13;   // 动作按钮内图标边长
 const int kAccentW    = 2;    // 选中行左侧强调条宽度
 const int kWheelRows  = 3;    // 滚轮一格滚动的行数
-const int kSbInset    = 3;    // 悬浮滚动条距树区右内缘的间距（像素）
+const int kSbInset    = 0;    // 悬浮滚动条距树区右内缘的间距（像素）；0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致
 
 // 递归把 node 子树里所有部门 id 收集进 set。
 void CollectDeptIds(const OrgNode* node, std::set<CString>& out)

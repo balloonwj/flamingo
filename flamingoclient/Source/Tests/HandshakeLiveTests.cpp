@@ -19,7 +19,7 @@
  *      FlamingoUnit.exe "[live]"
  *
  *  跑之前需要准备一个独立的服务端实例（不要用开发中正在联调的那个，端口会撞）：
- *    1. 把 flamingoserver/windowsproj/chatserver.exe 复制到一个空目录；
+ *    1. 把 flamingoserver/windowsproj/x64/Debug/chatserver.exe 复制到一个空目录；
  *    2. 在它的上一级建 etc/chatserver.conf，把 listenport 改成 kTestServerPort、
  *       encryption 设为 1、serverkeyfile 指向服务端真正在用的那份密钥；
  *    3. 起它，再用 kTestServerPubKey 填上该密钥对应的公钥（server_key.pub 的内容）。

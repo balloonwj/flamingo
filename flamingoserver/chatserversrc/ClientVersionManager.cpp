@@ -275,7 +275,8 @@ bool ClientVersionManager::createVersion(const ClientVersionRecord& rec, int64_t
 }
 
 bool ClientVersionManager::updateVersion(int64_t id, const std::string& minVersion,
-                                         const std::string& releaseNote, int& outErrorCode)
+                                         const std::string& releaseNote, int32_t forced,
+                                         int& outErrorCode)
 {
     outErrorCode = error_code_ok;
 
@@ -301,13 +302,15 @@ bool ClientVersionManager::updateVersion(int64_t id, const std::string& minVersi
         return false;
     }
 
-    //更新说明允许被清空（空串是合法值），最低版本号则以空串表示"不改动"
-    //——把最低版本清空会让版本门槛失去意义，不是一个有意义的操作。
+    //更新说明与最低版本号都按传入值写入，空串同样是合法值：最低版本为空表示不另设
+    //门槛，与新建时留空的含义一致。控制台编辑弹窗会预填当前值，传来空串说明是有意清空。
+    //forced 取 CLIENT_VERSION_FORCED_KEEP 时不动 f_forced，其余值按「非 0 即强制」写入。
     std::ostringstream osSql;
     osSql << "UPDATE t_client_version SET f_release_note = '"
-          << dbapi::EscapeString(releaseNote) << "'";
-    if (!minVersion.empty())
-        osSql << ", f_min_version = '" << dbapi::EscapeString(minVersion) << "'";
+          << dbapi::EscapeString(releaseNote) << "'"
+          << ", f_min_version = '" << dbapi::EscapeString(minVersion) << "'";
+    if (forced != CLIENT_VERSION_FORCED_KEEP)
+        osSql << ", f_forced = " << (forced != 0 ? 1 : 0);
     osSql << " WHERE f_id = " << id;
 
     if (!pConn->execute(osSql.str().c_str()))
@@ -317,7 +320,8 @@ bool ClientVersionManager::updateVersion(int64_t id, const std::string& minVersi
         return false;
     }
 
-    LOGI("update client version ok, id: %lld, minversion: %s", (long long)id, minVersion.c_str());
+    LOGI("update client version ok, id: %lld, minversion: %s, forced: %d",
+         (long long)id, minVersion.c_str(), (int)forced);
     return true;
 }
 

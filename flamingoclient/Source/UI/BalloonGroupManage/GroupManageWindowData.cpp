@@ -33,9 +33,12 @@
 #include "GroupAvatarDlgRequest.h"      // 打开修改群头像对话框的请求载荷
 #include "../../Session/GroupRoleRules.h"          // CanChangeGroupAvatar：谁能改群头像
 #include "../BalloonMain/AvatarSpec.h"  // avatar_kind_image：判断群头像是不是自定义图
+#include "../BalloonChatWnd/GroupBotModel.h"    // BuildBotSectionRows：本群的机器人换成「群机器人」页的行
+#include "../../Feature/Bot/BotUiBridge.h"      // botui::OpenGroupManager：打开 FlamingoBot.dll 的群机器人管理窗
 #include "../../net/ImageTransfer.h"
 #include "../../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）       // 群头像真图的本地缓存路径与下载
 #include <memory>
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using namespace balloongroupmanage;
 
@@ -135,7 +138,8 @@ void CBalloonGroupManageWindow::RefreshNavAndPage()
     InitUi();
     if (wanted != m_currentPage)
     {
-        SwitchToPage(wanted);
+        //只是恢复原来那一页，不重拉数据：本函数常由数据应答触发，再请求会形成循环
+        SwitchToPage(wanted, false);
     }
 
     //滚动位置要在布局完成、内容高度算好之后再恢复：InitUi 的 SetClientContent 与
@@ -165,6 +169,11 @@ void CBalloonGroupManageWindow::RefreshNavAndPage()
 
 int CBalloonGroupManageWindow::PickVisiblePage(int preferredPageId)
 {
+    //「群机器人」页另须企业打开机器人且插件可用，开关被关掉或插件卸载后退回成员管理页
+    if (preferredPageId == kPageBots)
+    {
+        return IsBotsPageVisible(m_model.m_myRole, m_model.m_botsAvailable) ? kPageBots : kPageMembers;
+    }
     if (IsPageVisibleForRole(preferredPageId, m_model.m_myRole))
     {
         return preferredPageId;
@@ -263,32 +272,6 @@ void CBalloonGroupManageWindow::OnJoinRequestsArrived(const net::GroupJoinReques
              (long long)requests.m_groupid, (unsigned)m_model.m_requests.size());
 }
 
-void CBalloonGroupManageWindow::OnSensitiveWordsArrived(const net::SensitiveWordsResult& words)
-{
-    if (words.m_code != 0)
-    {
-        LOG_INFO("Group manage window: get sensitive words rejected, code=%d.", words.m_code);
-        //拉失败也要把"加载中"落下去，否则界面会一直停在那句话上
-        m_model.m_sensitiveWordsLoaded = true;
-        if (m_currentPage == kPageSensitive)
-        {
-            RefreshNavAndPage();
-        }
-        return;
-    }
-
-    ApplySensitiveWords(words, NowMilliseconds(), m_model);
-
-    //只有正停在管理词库页时才重建 —— 别的页不显示词库，白重建一次没有意义
-    if (m_currentPage == kPageSensitive)
-    {
-        RefreshNavAndPage();
-    }
-
-    LOG_INFO("Group manage window: sensitive words arrived, groupid=%lld, words=%u.",
-             (long long)words.m_groupid, (unsigned)words.m_words.size());
-}
-
 void CBalloonGroupManageWindow::OnAnnouncementsArrived(const net::GroupAnnouncementsResult& result)
 {
     //先认领：1323 应答由主面板同时投给本窗口与群聊窗的公告边栏，而两边的页大小
@@ -333,7 +316,7 @@ void CBalloonGroupManageWindow::OnAnnouncementChanged(const net::GroupAnnounceme
     //
     //推送的 changetype 取值在此复制一份。本文件另抄而不 include net/Protocol.h：
     //原先是因为协议头与 v1 的 net/Msg.h 有同名枚举冲突（v1 协议头已于 2026-08-14
-    //删除，该限制不复存在），现在的理由与本文件 kCmdOperateSensitiveWord 处相同。
+    //删除，该限制不复存在），现在保持另抄，是为了不让本文件依赖整个协议头。
     const int kAnnounceChangePublish = 1;   //有新公告发布
 
     //新公告发布时回到第一页 —— 它排在最前，用户多半就是想看它；删除则留在原页，
@@ -349,20 +332,134 @@ void CBalloonGroupManageWindow::OnAnnouncementChanged(const net::GroupAnnounceme
              m_model.m_announcementPage + 1);
 }
 
+void CBalloonGroupManageWindow::OnGroupLinksArrived(const net::GroupLinksResult& result)
+{
+    if (m_groupId <= 0 || result.m_groupid != m_groupId)
+    {
+        return;
+    }
+    ApplyGroupLinks(result, NowMilliseconds(), m_model);
+    if (m_currentPage == kPageLinks)
+    {
+        RefreshNavAndPage();
+    }
+    LOG_INFO("Group manage window: group links arrived, groupid=%lld, code=%d, count=%u.",
+             (long long)m_groupId, result.m_code, (unsigned)m_model.m_links.size());
+}
+
+void CBalloonGroupManageWindow::SetGroupBots(bool available, int loadState, const std::vector<net::GroupBotInfo>& bots)
+{
+    const bool availableBefore = m_model.m_botsAvailable;
+    m_model.m_botsAvailable = available;
+    m_model.m_botsState = static_cast<LoadState>(loadState);
+    m_model.m_botRows = balloonchatwnd::BuildBotSectionRows(bots, kIdBotRowBase,
+                                                           static_cast<size_t>(kIdBotRowMax - kIdBotRowBase + 1));
+    LOG_INFO("Group manage window: group bots set, groupid=%lld, available=%d, state=%d, bots=%u.",
+             (long long)m_groupId, available ? 1 : 0, loadState, (unsigned)m_model.m_botRows.size());
+    if (!IsWindow())
+    {
+        return;
+    }
+    //导航项出现或消失、或者正停在这一页时才重建，免得别的页上的输入与滚动位置被打断
+    if (availableBefore != available || m_currentPage == kPageBots)
+    {
+        RefreshNavAndPage();
+    }
+}
+
+bool CBalloonGroupManageWindow::HandleBotsButton(UINT ctrlId)
+{
+    const bool isRow = (ctrlId >= (UINT)kIdBotRowBase && ctrlId <= (UINT)kIdBotRowMax);
+    if (ctrlId != (UINT)kIdBtnBotsManage && !isRow)
+    {
+        return false;
+    }
+    //页面只对群主、且插件可用时出现；这里再确认一次，防止页面还停着时角色或开关刚变
+    if (!IsBotsPageVisible(m_model.m_myRole, m_model.m_botsAvailable))
+    {
+        return true;
+    }
+    if (!botui::OpenGroupManager(m_hWnd, m_groupId, (LPCWSTR)m_model.m_groupName))
+    {
+        LOG_WARNING("Group manage window: bot manager not available, groupid=%lld.", (long long)m_groupId);
+        ::MessageBox(m_hWnd, TR(L"机器人管理暂时不可用，请稍后重试。"), TR(L"提示"), MB_OK | MB_ICONWARNING);
+        return true;
+    }
+    LOG_INFO("Group manage window: bot manager opened, groupid=%lld, from=%s.", (long long)m_groupId,
+             isRow ? "row" : "button");
+    return true;
+}
+
+void CBalloonGroupManageWindow::RequestGroupLinks()
+{
+    if (m_groupId <= 0)
+    {
+        return;
+    }
+    CIUSocket::GetInstance().SendGetGroupLinks(m_groupId);
+}
+
+bool CBalloonGroupManageWindow::HandleMustReadAndLinkButton(UINT ctrlId)
+{
+    //群公告页逐条「设为入群必读 / 取消入群必读」：设为时替换掉原来的必读公告，取消时已入群但还没确认的成员一并放行
+    if (ctrlId >= kIdAnnounceMustReadBase && ctrlId <= kIdAnnounceMustReadMax)
+    {
+        const size_t row = ctrlId - kIdAnnounceMustReadBase;
+        if (row >= m_model.m_announcements.size())
+        {
+            return true;
+        }
+        const GroupAnnouncement& a = m_model.m_announcements[row];
+        const bool cancel = (m_model.m_mustReadId > 0 && a.id == m_model.m_mustReadId);
+        CString tip;
+        if (cancel)
+        {
+            tip.Format(TR(L"确定取消「%s」的入群必读吗？\n\n取消后，还没有确认的新成员也可以直接发言。"), (LPCTSTR)a.title);
+        }
+        else
+        {
+            tip.Format(TR(L"确定把「%s」设为入群必读吗？\n\n之后加入的成员要先阅读并点「我已阅读」才能发言；"
+                          L"已经在群里的成员不受影响。"), (LPCTSTR)a.title);
+        }
+        if (ConfirmAction(cancel ? TR(L"取消入群必读") : TR(L"设为入群必读"), tip))
+        {
+            CIUSocket::GetInstance().SendSetMustRead(m_groupId, cancel ? 0 : a.id);
+        }
+        return true;
+    }
+
+    //加群链接页逐条「作废」：作废后链接立即失效，成功后重拉列表
+    if (ctrlId >= kIdLinkRevokeBase && ctrlId <= kIdLinkRevokeMax)
+    {
+        const size_t row = ctrlId - kIdLinkRevokeBase;
+        if (row >= m_model.m_links.size())
+        {
+            return true;
+        }
+        if (ConfirmAction(TR(L"作废链接"), TR(L"确定作废这个加群链接吗？\n\n作废后再点这个链接将无法加群。")))
+        {
+            CIUSocket::GetInstance().SendRevokeGroupLink(m_groupId, m_model.m_links[row].id);
+        }
+        return true;
+    }
+    return false;
+}
+
 void CBalloonGroupManageWindow::OnGroupOpResult(int cmd, int code, const std::string& msgUtf8)
 {
+    //作废加群链接成功：没有推送，自己重拉一次列表。命令号照本文件的惯例另抄一份（cmd_revoke_group_link）
+    const int kCmdRevokeGroupLink = 1342;
+    if (cmd == kCmdRevokeGroupLink && code == 0)
+    {
+        RequestGroupLinks();
+        return;
+    }
+
     //成功什么都不做：服务端写成功后会向全体成员推 1317 / 1318，本端也在推送
     //范围内，等推送统一刷新。若这里也改一遍，同一次操作界面会重排两次。
-    //
-    //<u>唯一的例外是敏感词增删</u>：词库变更不在 1317 / 1318 的推送范围里
-    //（它不是群资料、也不是成员变动），没有推送可等，只能靠这条应答触发重拉。
+    //（原先敏感词增删 1322 是唯一的例外，随群级敏感词于 2026-10-02 删除。）
     if (code == 0)
     {
-        const int kCmdOperateSensitiveWord = 1322;
-        if (cmd == kCmdOperateSensitiveWord && m_groupId > 0)
-        {
-            CIUSocket::GetInstance().SendGetSensitiveWords(m_groupId);
-        }
         LOG_INFO("Group manage operation succeeded, cmd=%d, waiting for notify to refresh UI.", cmd);
         return;
     }
@@ -370,7 +467,7 @@ void CBalloonGroupManageWindow::OnGroupOpResult(int cmd, int code, const std::st
     //失败没有推送，只能靠这条应答给反馈
     const CString tip = DescribeGroupOpFailure(cmd, code, msgUtf8);
     LOG_ERROR("Group manage operation failed, cmd=%d, code=%d.", cmd, code);
-    ::MessageBox(m_hWnd, (LPCTSTR)tip, _T("提示"), MB_OK | MB_ICONWARNING);
+    ::MessageBox(m_hWnd, (LPCTSTR)tip, TR(L"提示"), MB_OK | MB_ICONWARNING);
 
     //失败后本地可能已被乐观改过（如开关拨到一半），重拉一次拉回真实状态
     RequestGroupData();
@@ -409,7 +506,7 @@ bool CBalloonGroupManageWindow::OnInfoChanged(const net::GroupInfoChangedNotify&
     {
         LOG_INFO("Group manage window: group dismissed notify, groupid=%lld, closing window.",
                  (long long)notify.m_info.m_groupid);
-        ::MessageBox(m_hWnd, _T("该群聊已被解散。"), _T("提示"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, TR(L"该群聊已被解散。"), TR(L"提示"), MB_OK | MB_ICONINFORMATION);
         if (IsWindow())
         {
             DestroyWindow();
@@ -465,12 +562,12 @@ void CBalloonGroupManageWindow::ShowMuteDurationMenu(int64_t userId, POINT ancho
     const UINT kIdDurForever = 5;
 
     balloonwjui::DuiMenu menu;
-    menu.AppendItem(kIdDur10Min, _T("禁言 10 分钟"));
-    menu.AppendItem(kIdDur1Hour, _T("禁言 1 小时"));
-    menu.AppendItem(kIdDur12Hour, _T("禁言 12 小时"));
-    menu.AppendItem(kIdDur1Day, _T("禁言 1 天"));
+    menu.AppendItem(kIdDur10Min, TR(L"禁言 10 分钟"));
+    menu.AppendItem(kIdDur1Hour, TR(L"禁言 1 小时"));
+    menu.AppendItem(kIdDur12Hour, TR(L"禁言 12 小时"));
+    menu.AppendItem(kIdDur1Day, TR(L"禁言 1 天"));
     menu.AppendSeparator();
-    menu.AppendItem(kIdDurForever, _T("永久禁言"));
+    menu.AppendItem(kIdDurForever, TR(L"永久禁言"));
 
     const POINT pos = balloonmain::ClampPopupMenuToWorkArea(anchor, menu.MeasureSize());
     const UINT picked = menu.TrackPopup(pos.x, pos.y, m_hWnd);
@@ -527,6 +624,7 @@ void CBalloonGroupManageWindow::ShowMemberContextMenu(int memberIndex)
     state.m_targetRole = member.role;
     state.m_targetMuted = member.muted;
     state.m_isSelf = (member.userid != 0 && member.userid == GetMyUserId());
+    state.m_targetMustRead = member.mustReadPending;
 
     const std::vector<MemberMenuEntry> model = BuildMemberMenuModel(state);
     if (model.empty())
@@ -599,15 +697,24 @@ void CBalloonGroupManageWindow::ShowMemberContextMenu(int memberIndex)
     {
         //移出是不可撤销的，先确认
         CString tip;
-        tip.Format(_T("确定把「%s」移出本群吗？\n\n移出后该成员将无法再看到本群消息。"),
+        tip.Format(TR(L"确定把「%s」移出本群吗？\n\n移出后该成员将无法再看到本群消息。"),
                    (LPCTSTR)member.name);
-        if (!ConfirmAction(_T("移出成员"), tip))
+        if (!ConfirmAction(TR(L"移出成员"), tip))
         {
             break;
         }
         std::vector<int64_t> ids;
         ids.push_back(member.userid);
         socket.SendKickGroupMembers(m_groupId, ids);
+        break;
+    }
+
+    //代为确认入群必读：放行这位成员，界面等 1317（changetype 7）推送后重拉成员
+    case kMemberMenuReleaseMustRead:
+    {
+        std::vector<int64_t> ids;
+        ids.push_back(member.userid);
+        socket.SendReleaseMustRead(m_groupId, ids);
         break;
     }
 
@@ -632,24 +739,21 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
         return true;
     }
 
-    //---- 群公告页：优先级 / 清空 / 发布 / 逐条重新发布与撤回 ----
-    if (HandleAnnouncementButton(ctrlId))
+    //---- 群公告页逐条「设为 / 取消入群必读」、加群链接页逐条「作废」 ----
+    if (HandleMustReadAndLinkButton(ctrlId))
     {
         return true;
     }
 
-    //---- 管理词库页：逐条删除 ----
-    if (ctrlId >= kIdSensitiveDelBase && ctrlId <= kIdSensitiveDelMax)
+    //---- 群机器人页：「添加与管理机器人」与各行，打开群机器人管理窗 ----
+    if (HandleBotsButton(ctrlId))
     {
-        const size_t row = ctrlId - kIdSensitiveDelBase;
-        if (row < m_model.m_sensitiveWords.size())
-        {
-            socket.SendDeleteSensitiveWord(m_groupId, m_model.m_sensitiveWords[row].id);
-            //删除没有推送可等（敏感词库不在 1318 的范围里），本地先摘掉这一条，
-            //应答成功后再重拉一次对齐。失败时重拉会把它带回来。
-            m_model.m_sensitiveWords.erase(m_model.m_sensitiveWords.begin() + row);
-            RefreshNavAndPage();
-        }
+        return true;
+    }
+
+    //---- 群公告页：优先级 / 清空 / 发布 / 逐条重新发布与撤回 ----
+    if (HandleAnnouncementButton(ctrlId))
+    {
         return true;
     }
 
@@ -702,26 +806,7 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
     {
     //---- 基本信息：跳到群公告页 ----
     case kIdBtnAnnounceGoto:
-        SwitchToPage(kPageAnnouncement);
-        return true;
-
-    //---- 群权限：进入管理词库二级界面 ----
-    case kIdBtnSensitiveDict:
-        //每次进入都重拉一次 —— 词库可能被别的管理员改过，且它不在推送范围内
-        m_model.m_sensitiveWordsLoaded = false;
-        m_model.m_sensitiveWords.clear();
-        socket.SendGetSensitiveWords(m_groupId);
-        SwitchToPage(kPageSensitive);
-        return true;
-
-    //---- 管理词库：返回群权限 ----
-    case kIdBtnSensitiveBack:
-        SwitchToPage(kPagePerms);
-        return true;
-
-    //---- 管理词库：添加 ----
-    case kIdBtnSensitiveAdd:
-        AddSensitiveWordFromInput();
+        SwitchToPage(kPageAnnouncement, true);
         return true;
 
     //---- 成员管理：邀请成员 ----
@@ -749,10 +834,10 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
             return true;
         }
         CString tip;
-        tip.Format(accept ? _T("确定同意全部 %d 条加群申请吗？")
-                          : _T("确定拒绝全部 %d 条加群申请吗？"),
+        tip.Format(accept ? TR(L"确定同意全部 %d 条加群申请吗？")
+                          : TR(L"确定拒绝全部 %d 条加群申请吗？"),
                    (int)m_model.m_requests.size());
-        if (!ConfirmAction(accept ? _T("批量同意") : _T("批量拒绝"), tip))
+        if (!ConfirmAction(accept ? TR(L"批量同意") : TR(L"批量拒绝"), tip))
         {
             return true;
         }
@@ -796,7 +881,7 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
     case kIdBtnDismiss:
     {
         const std::wstring tip = balloonmain::BuildDismissConfirmText((LPCTSTR)m_model.m_groupName);
-        if (!ConfirmAction(_T("解散群聊"), tip.c_str()))
+        if (!ConfirmAction(TR(L"解散群聊"), tip.c_str()))
         {
             return true;
         }
@@ -819,14 +904,14 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
         }
         if (ids.empty())
         {
-            ::MessageBox(m_hWnd, _T("本群没有可移除的成员。"), _T("提示"),
+            ::MessageBox(m_hWnd, TR(L"本群没有可移除的成员。"), TR(L"提示"),
                          MB_OK | MB_ICONINFORMATION);
             return true;
         }
 
         CString tip;
-        tip.Format(_T("确定移除全部 %d 名成员吗？\n\n此操作不可恢复。"), (int)ids.size());
-        if (!ConfirmAction(_T("移除全部成员"), tip))
+        tip.Format(TR(L"确定移除全部 %d 名成员吗？\n\n此操作不可恢复。"), (int)ids.size());
+        if (!ConfirmAction(TR(L"移除全部成员"), tip))
         {
             return true;
         }
@@ -906,7 +991,7 @@ void CBalloonGroupManageWindow::RequestOpenAvatarDlg()
     //刷新界面之前有个空档），故再挡一道，免得发出去必然被服务端拒的请求。
     if (!grouprole::CanChangeGroupAvatar(UiRoleToNetRole(m_model.m_myRole)))
     {
-        ::MessageBox(m_hWnd, _T("只有群主和管理员可以修改群头像。"), _T("提示"),
+        ::MessageBox(m_hWnd, TR(L"只有群主和管理员可以修改群头像。"), TR(L"提示"),
                      MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -983,7 +1068,7 @@ void CBalloonGroupManageWindow::SaveBasicInfo()
 
     if (!params.m_hasName && !params.m_hasIntro)
     {
-        ::MessageBox(m_hWnd, _T("没有需要保存的修改。"), _T("提示"),
+        ::MessageBox(m_hWnd, TR(L"没有需要保存的修改。"), TR(L"提示"),
                      MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -1014,9 +1099,9 @@ bool CBalloonGroupManageWindow::HandleAnnouncementButton(UINT ctrlId)
         if (row < m_model.m_announcements.size())
         {
             CString tip;
-            tip.Format(_T("确定重新发布「%s」吗？\n\n全体成员会再收到一次公告提醒。"),
+            tip.Format(TR(L"确定重新发布「%s」吗？\n\n全体成员会再收到一次公告提醒。"),
                        (LPCTSTR)m_model.m_announcements[row].title);
-            if (ConfirmAction(_T("重新发布"), tip))
+            if (ConfirmAction(TR(L"重新发布"), tip))
             {
                 socket.SendRepublishGroupAnnouncement(m_groupId, m_model.m_announcements[row].id);
             }
@@ -1031,10 +1116,10 @@ bool CBalloonGroupManageWindow::HandleAnnouncementButton(UINT ctrlId)
         if (row < m_model.m_announcements.size())
         {
             CString tip;
-            tip.Format(_T("确定删除「%s」吗？\n\n删除后这条公告将从群公告里彻底消失，")
-                       _T("成员与管理员都不再看得到，且无法恢复。"),
+            tip.Format(TR(L"确定删除「%s」吗？\n\n删除后这条公告将从群公告里彻底消失，"
+                       L"成员与管理员都不再看得到，且无法恢复。"),
                        (LPCTSTR)m_model.m_announcements[row].title);
-            if (ConfirmAction(_T("删除公告"), tip))
+            if (ConfirmAction(TR(L"删除公告"), tip))
             {
                 socket.SendDeleteGroupAnnouncement(m_groupId, m_model.m_announcements[row].id);
             }
@@ -1160,7 +1245,7 @@ void CBalloonGroupManageWindow::PublishAnnouncementFromInput()
     if (title.IsEmpty())
     {
         //服务端也会拒（标题是必填项），但提前挡掉能立刻给反馈
-        ::MessageBox(m_hWnd, _T("请先填写公告标题。"), _T("提示"),
+        ::MessageBox(m_hWnd, TR(L"请先填写公告标题。"), TR(L"提示"),
                      MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -1254,6 +1339,9 @@ void CBalloonGroupManageWindow::OpenMemberPicker(int purpose)
 
     if (purpose == CCreateGroupDlg::kPurposeInvite)
     {
+        //群是否允许新成员查看入群前的历史：对话框据此决定同步选项可不可选
+        req->m_groupAllowsHistory = m_model.m_perms.newMemberSeeHistory;
+
         //邀请入群：候选来自通讯录（只有主面板有），这里只把"谁已经在群里"
         //告诉它，让它做差集 —— 已在群里的人再邀请一次没有意义，列出来只会
         //让人以为漏选了。
@@ -1292,7 +1380,7 @@ void CBalloonGroupManageWindow::OpenMemberPicker(int purpose)
 
         if (req->m_candidates.empty())
         {
-            ::MessageBox(m_hWnd, _T("没有可选的成员。"), _T("提示"),
+            ::MessageBox(m_hWnd, TR(L"没有可选的成员。"), TR(L"提示"),
                          MB_OK | MB_ICONINFORMATION);
             return;
         }
@@ -1353,13 +1441,8 @@ bool CBalloonGroupManageWindow::SendPermChange(UINT ctrlId, int value)
         {
             params.m_hasWelcomeText = true;
             params.m_welcomeText = EncodeUtil::UnicodeToUtf8(
-                std::wstring(_T("欢迎加入本群！")));
+                std::wstring(TR(L"欢迎加入本群！")));
         }
-        break;
-
-    case kIdSwitchSensitive:
-        params.m_hasSensitiveOn = true;
-        params.m_sensitiveOn = (value != 0) ? 1 : 0;
         break;
 
     default:
@@ -1370,55 +1453,4 @@ bool CBalloonGroupManageWindow::SendPermChange(UINT ctrlId, int value)
     LOG_INFO("Group permission change sent, groupid=%lld, ctrlid=%u, value=%d.",
              (long long)m_groupId, ctrlId, value);
     return true;
-}
-
-// ====================================================================
-// 管理词库
-// ====================================================================
-
-void CBalloonGroupManageWindow::AddSensitiveWordFromInput()
-{
-    if (m_groupId <= 0)
-    {
-        return;
-    }
-
-    balloonwjui::DuiControl* content = GetClientContent();
-    if (content == NULL)
-    {
-        return;
-    }
-    balloonwjui::DuiEdit* pEdit = dynamic_cast<balloonwjui::DuiEdit*>(
-        content->FindCtrlById(kIdEditSensitiveNew));
-    if (pEdit == NULL)
-    {
-        return;
-    }
-
-    CString word = pEdit->GetText();
-    word.Trim();
-    if (word.IsEmpty())
-    {
-        return;   //空词不发，让用户接着输
-    }
-
-    //本地已有同一个词就不重复发 —— 服务端也会静默忽略，但提前挡掉能立刻
-    //给用户反馈，而不是点了半天没动静。
-    for (size_t i = 0; i < m_model.m_sensitiveWords.size(); ++i)
-    {
-        if (m_model.m_sensitiveWords[i].word.CompareNoCase(word) == 0)
-        {
-            ::MessageBox(m_hWnd, _T("这个词已经在词库里了。"), _T("提示"),
-                         MB_OK | MB_ICONINFORMATION);
-            return;
-        }
-    }
-
-    CIUSocket::GetInstance().SendAddSensitiveWord(
-        m_groupId, EncodeUtil::UnicodeToUtf8(std::wstring((LPCTSTR)word)));
-
-    //清空输入框，方便接着加下一个
-    pEdit->SetText(_T(""));
-
-    LOG_INFO("Add sensitive word request sent, groupid=%lld.", (long long)m_groupId);
 }

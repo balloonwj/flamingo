@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 8 章：维护显示在群聊「问答」页签里的企业问答。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>企业问答 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a08">
+<article class="doc">
+  <h1>企业问答</h1>
+  <p class="lead">员工经常在群里问的问题，例如「报销流程怎么走」「VPN 连不上怎么办」，可以由管理员统一写成企业问答，显示在群聊的「问答」页签里，让员工随时自己查阅。本章介绍如何新增、修改和删除企业问答。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：左侧导航「企业问答」</li>
+  </ul>
+
+  <h2 id="what">企业问答显示在哪里</h2>
+  <p>企业问答会出现在所应用的群的群聊窗右侧 <b>问答</b> 页签里，带有「企业问答」标记。群成员只能查看，不能修改或删除；群主和群管理员可以另外维护本群自己的问答。员工一侧的使用方法见客户端<a href="../client/13-group-chat.html">「群聊」</a>。</p>
+  <p>企业问答还可以被机器人使用：企业机器人的规则选择「用问答作答」时，会从问答里找答案回复群成员，见<a href="09-enterprise-bots.html">「企业机器人」</a>。</p>
+
+  <h2 id="list">问答列表</h2>
+  <p>点左侧导航的 <span class="ui">企业问答</span>，页面列出本企业的全部问答：</p>
+  <figure class="shot">
+    <img src="../img/ad_qa.png" width="880" alt="企业问答列表">
+    <figcaption>企业问答列表，演示中添加了一条「报销流程怎么走？」</figcaption>
+  </figure>
+  <ul>
+    <li><span class="ui">搜索问题或答案</span> 框可以按关键字查找问答；<span class="ui">刷新</span> 重新读取列表。</li>
+    <li>列表各列依次是 <span class="ui">问题</span>（下方显示答案的开头）、<span class="ui">应用范围</span>（如「全部群」）、<span class="ui">修改人</span>、<span class="ui">修改时间</span> 和 <span class="ui">操作</span>。</li>
+  </ul>
+
+  <h2 id="add">新增问答</h2>
+  <p>点右上角的 <span class="ui">新增问答</span>，打开「新增企业问答」对话框：</p>
+  <figure class="shot">
+    <img src="../img/ad_qa_new.png" width="880" alt="新增企业问答对话框">
+    <figcaption>新增企业问答对话框，应用范围选择「全部群」</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">问题</span> 中填写问题，最多 128 个字，例如「报销流程怎么走？」。</li>
+    <li>在 <span class="ui">答案</span> 中填写答案，最多 2048 个字，可以分多行写。答案里可以写网址，群成员点击后用浏览器打开。</li>
+    <li>选择 <span class="ui">应用范围</span>：选 <span class="ui">全部群</span> 时本企业所有群都能看到；选 <span class="ui">所选的群</span> 时，在下方的群列表中勾选要显示它的群。</li>
+    <li>点 <span class="ui">保存</span>，页面提示「已保存」。</li>
+  </ol>
+
+  <h2 id="edit">修改与删除问答</h2>
+  <p>点某一行的 <span class="ui">编辑</span>，会打开同样的「编辑企业问答」对话框，修改后点 <span class="ui">保存</span>。点 <span class="ui">删除</span> 并在确认框中确认后，应用到的群里将不再显示这条问答。</p>
+  <div class="callout tip"><b>写好问答的小建议</b>问题尽量用员工的口吻来写，答案按步骤分行列出，涉及的系统可以直接附上网址；规定变化后记得及时修改，列表中的修改人和修改时间可以帮你判断哪些问答需要复查。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

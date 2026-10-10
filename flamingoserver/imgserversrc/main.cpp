@@ -11,11 +11,15 @@
 #include "../base/AsyncLog.h"
 #include "../net/EventLoop.h"
 #include "../fileserversrc/FileManager.h"
+#include "../fileserversrc/UploadPartPolicy.h"
 #include "../fileserversrc/FileServer.h"
 #include "../fileserversrc/FileMsg.h"
 #include "RelayServer.h"
+#include "P2PAddressProbe.h"     //P2P 地址探测（UDP）
 #include "../utils/AppPath.h"
 #include "../utils/ServerConfigLoader.h"
+#include "../utils/CloudRecordCtlMsg.h"       //云端录像文件名的解析（第 26 期）
+#include "../fileserversrc/CloudRecordScene.h"   //图片端口上云端录像（scene 6）的上传与下载
 
 #ifndef WIN32
 #include <string.h>
@@ -28,6 +32,35 @@ using namespace net;
 //配置文件名交给 ServerConfigLoader 去各个候选目录里找，不再写死一条相对路径
 #define SERVER_NAME              "imgserver"
 #define SERVER_CONFIG_FILE_NAME  "imgserver.conf"
+
+//云端录制目录的默认值（配置项 cloudrecorddir 缺失时）：相对路径，按可执行文件所在目录解析，与 logfiledir 相同
+#define DEFAULT_CLOUD_RECORD_DIR "cloudrecords"
+//云端录制要求的磁盘剩余空间下限的默认值（配置项 cloudrecordminfreemb 缺失或小于 0 时），单位 MB
+const long long kDefaultCloudRecordMinFreeMb = 2048;
+//MB 换算成字节
+const unsigned long long kBytesPerMb = 1024ULL * 1024ULL;
+
+//云端录像文件上传完成（FileSession 在 I/O 线程上调用）：解析出录像 id，经控制连接通知 chatserver
+static void onCloudRecordUploaded(const std::string& fileName, uint64_t bytes)
+{
+    uint64_t recordId = 0;
+    int type = 0;
+    if (!ParseCloudRecordFileName(fileName, recordId, type))
+        return;
+    Singleton<RelayServer>::Instance().notifyCloudRecordUploaded(recordId, fileName, bytes);
+}
+
+//目录末尾补一个分隔符（录制器按「目录 + 文件名」拼路径）
+static std::string withTrailingSeparator(const std::string& dir)
+{
+    if (dir.empty() || dir[dir.size() - 1] == '/' || dir[dir.size() - 1] == '\\')
+        return dir;
+#ifdef WIN32
+    return dir + "\\";
+#else
+    return dir + "/";
+#endif
+}
 
 #ifdef WIN32
 //初始化Windows socket库
@@ -137,6 +170,34 @@ int main(int argc, char* argv[])
     CAsyncLog::init(logFileFullPath.c_str());
 
     Singleton<FileManager>::Instance().init(imgcachedir.c_str());
+    //上传分片登记表由各 I/O 线程并发访问，而 Singleton::Instance() 的首次构造不加锁，
+    //故在网络线程启动之前先构造好（见 fileserversrc/UploadPartPolicy.h）
+    Singleton<fileserver::UploadPartRegistry>::Instance();
+
+    //云端录制（docs/屏幕共享与录制方案.md 12.6.2）：须在图片端口与中转端口开始接受连接之前配置好（I/O 线程会读这些设置）。
+    //屏幕共享房间的原始帧写到 cloudrecorddir，相对路径按可执行文件所在目录解析。
+    //目录建不起来时只关闭云端录制、记日志，不影响其它服务；chatserver 的控制连接报到会被拒绝，主持人开录时收到失败提示
+    const char* cloudRecordDirStr = config.getConfigName("cloudrecorddir");
+    const std::string cloudRecordDir = serverconfig::StripTrailingSeparators(
+                                           apppath::ResolveAgainstDirectory(apppath::GetExecutableDirectory(),
+                                               (cloudRecordDirStr != NULL && cloudRecordDirStr[0] != '\0')
+                                                   ? cloudRecordDirStr : DEFAULT_CLOUD_RECORD_DIR));
+    std::string cloudRecordDirError;
+    if (serverconfig::EnsureDirectoryExists(cloudRecordDir, cloudRecordDirError))
+    {
+        const char* minFreeStr = config.getConfigName("cloudrecordminfreemb");
+        long long minFreeMb = (minFreeStr != NULL) ? atoll(minFreeStr) : kDefaultCloudRecordMinFreeMb;
+        if (minFreeMb < 0)
+            minFreeMb = kDefaultCloudRecordMinFreeMb;
+        Singleton<RelayServer>::Instance().configureCloudRecord(withTrailingSeparator(cloudRecordDir),
+                                                                static_cast<unsigned long long>(minFreeMb) * kBytesPerMb);
+        //图片端口上的云端录像上传与下载（scene 6）用同一个目录；上传完成时经控制连接通知 chatserver
+        fileserver::SetCloudRecordScene(withTrailingSeparator(cloudRecordDir), &onCloudRecordUploaded);
+    }
+    else
+    {
+        LOGE("cloud record disabled: cannot create dir %s, %s", cloudRecordDir.c_str(), cloudRecordDirError.c_str());
+    }
 
     //监听地址、端口与令牌密钥在函数开头已随其它必需配置项一并取出并校验过，这里直接用。
     //filetokenkey 是上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的同名项一致。
@@ -167,15 +228,29 @@ int main(int argc, char* argv[])
     int relayIoThreadCount = serverconfig::ReadIoThreadCountConfig(
                                  config, "relayiothreadnum", RelayServer::kDefaultIoThreadCount);
 
+    //屏幕共享每个观看者的积压上限，单位字节；缺失或不大于 0 时用默认值 1 MiB（见 RoomForwardPolicy.h）
+    const char* viewerBufferBytesStr = config.getConfigName("screenshareviewerbufferbytes");
+    const long long viewerBufferBytes = (viewerBufferBytesStr != NULL) ? atoll(viewerBufferBytesStr) : 0;
+    Singleton<RelayServer>::Instance().setScreenShareViewerBufferBytes(
+        viewerBufferBytes > 0 ? static_cast<size_t>(viewerBufferBytes) : 0);
+    LOGI("screenshare relay viewer buffer limit: %lld bytes (0 = default)", viewerBufferBytes);
+
     Singleton<RelayServer>::Instance().init(
         relaylistenip != NULL ? relaylistenip : "0.0.0.0",
         relaylistenport, &g_mainLoop,
         relaytokenkey != NULL ? relaytokenkey : "",
         relayIoThreadCount);
 
+    //P2P 地址探测（docs/P2P通信方案.md 6.2）：两个 UDP 端口挂在主循环上；端口绑定失败只记日志，不影响其它服务
+    Singleton<P2PAddressProbe>::Instance().init(&g_mainLoop, P2PAddressProbe::loadConfig(config));
+
     LOGI("imgserver initialization complete, now you can use client to connect it.");
 
     g_mainLoop.loop();
+
+    //主循环退出后在主循环线程上关闭探测端口：prog_exit 是信号处理函数，在 Windows 上运行在控制台控制线程里，
+    //不能在那里操作挂在主循环上的 Channel
+    Singleton<P2PAddressProbe>::Instance().uninit();
 
     LOGI("exit imgserver.");
 

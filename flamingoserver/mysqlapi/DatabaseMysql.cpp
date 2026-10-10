@@ -5,21 +5,44 @@
 
 #include "MysqlQueryResult.h"
 #include "../base/AsyncLog.h"
+#include "../base/Singleton.h"
 #include "../dbapi/DbRetryPolicy.h"
 
-//DbRetryPolicy.h 刻意不包含 mysql/errmsg.h（测试程序不链接 MySQL 客户端库），
-//两个错误码是在那边按数值复写的。这里校验它们与官方宏定义始终一致：
+//DbRetryPolicy.h 刻意不包含 errmsg.h（测试程序不链接 MySQL 客户端库），
+//客户端错误码是在那边按数值复写的。这里校验它们与官方宏定义始终一致：
 //将来换一版客户端库若改了数值，会在本文件直接编译报错，而不是在运行期悄悄失效。
 static_assert(dbapi::DB_MYSQL_ERR_SERVER_GONE == CR_SERVER_GONE_ERROR,
-              "DB_MYSQL_ERR_SERVER_GONE must match CR_SERVER_GONE_ERROR in mysql/errmsg.h");
+              "DB_MYSQL_ERR_SERVER_GONE must match CR_SERVER_GONE_ERROR in errmsg.h");
 static_assert(dbapi::DB_MYSQL_ERR_SERVER_LOST == CR_SERVER_LOST,
-              "DB_MYSQL_ERR_SERVER_LOST must match CR_SERVER_LOST in mysql/errmsg.h");
+              "DB_MYSQL_ERR_SERVER_LOST must match CR_SERVER_LOST in errmsg.h");
+static_assert(dbapi::DB_MYSQL_ERR_TLS_CONNECTION == CR_SSL_CONNECTION_ERROR,
+              "DB_MYSQL_ERR_TLS_CONNECTION must match CR_SSL_CONNECTION_ERROR in errmsg.h");
+//DB_MYSQL_ERR_INTERACTION_TIMEOUT（4031）是 MySQL 服务端的错误码，连接器自带的 mysqld_error.h
+//按 MariaDB 的定义把 4031 给了另一个错误，没有可供校验的宏，理由见 DbRetryPolicy.h 中该常量的注释
+
+//连接池的关闭函数：池中保存的句柄就是 MYSQL*
+static void closeMysqlHandle(void* handle)
+{
+    mysql_close(static_cast<MYSQL*>(handle));
+}
+
+//连接池的探活函数。连接已断开时 mysql_ping 返回非 0。
+//本工程没有打开 MYSQL_OPT_RECONNECT（连接器默认关闭），所以 mysql_ping 只做探测，不会在内部重连
+static bool pingMysqlHandle(void* handle)
+{
+    return mysql_ping(static_cast<MYSQL*>(handle)) == 0;
+}
+
+CMysqlHandlePool::CMysqlHandlePool()
+    : DbHandlePool(closeMysqlHandle, pingMysqlHandle, DbHandlePool::Options())
+{
+}
 
 CDatabaseMysql::CDatabaseMysql(void)
 {
-    //m_Mysql = new MYSQL;
     m_Mysql = NULL;
     m_bInit = false;
+    m_bPooled = false;
     m_bInTransaction = false;
     m_uConnectionGeneration = 0;
     m_uInsertIdGeneration = 0;
@@ -27,15 +50,25 @@ CDatabaseMysql::CDatabaseMysql(void)
 
 CDatabaseMysql::~CDatabaseMysql(void)
 {
-    if (m_Mysql != NULL)
-    {
-        if (m_bInit)
-        {
-            mysql_close(m_Mysql);
-        }
+    if (m_Mysql == NULL || !m_bInit)
+        return;
 
-        //delete m_Mysql;
+    //使用连接池且连接状态正常：放回池中，供下一次 DbFactory::createConnection() 直接使用。
+    //canReturnToPool 要在 clearStoredResults 之前先判一次：后者内部调用 mysql_next_result，
+    //会把最后一次操作留下的错误码清掉；清完之后再判一次，是为了拦住清理过程本身出的错
+    if (m_bPooled && canReturnToPool())
+    {
+        clearStoredResults();
+        if (canReturnToPool())
+        {
+            Singleton<CMysqlHandlePool>::Instance().release(poolKey(), m_Mysql);
+            m_Mysql = NULL;
+            m_bInit = false;
+            return;
+        }
     }
+
+    closeConnection();
 }
 
 
@@ -73,15 +106,11 @@ bool CDatabaseMysql::abortTransactionOnDisconnect(unsigned int uMysqlErrno, cons
     return true;
 }
 
-bool CDatabaseMysql::initialize(const std::string& host, const std::string& user, const std::string& pwd, const std::string& dbname)
+bool CDatabaseMysql::initialize(const std::string& host, const std::string& user, const std::string& pwd, const std::string& dbname,
+                                bool usePool)
 {
-    //重复初始化（如断线重连）时，先关闭旧连接
-    if (m_bInit)
-    {
-        mysql_close(m_Mysql);
-    }
-    m_Mysql = NULL;
-    m_bInit = false;
+    //重复初始化时，先关闭旧连接。不放回池中：调用方要换一条连接，旧连接的状态无从保证
+    closeConnection();
 
     //旧连接一旦关闭，它上面开着的事务就不复存在了。重连拿到的是一条全新的、处于
     //自动提交状态的连接，绝不能让事务标志跨着重连留下来，否则后续语句会被误判成
@@ -93,6 +122,34 @@ bool CDatabaseMysql::initialize(const std::string& host, const std::string& user
     m_DBInfo.strHost = host;
     m_DBInfo.strUser = user;
     m_DBInfo.strPwd = pwd;
+    m_bPooled = usePool;
+
+    //使用连接池：先取一条连到同一目标的空闲连接。取到就直接使用，
+    //省掉 TCP 握手、登录认证与字符集设置（这条连接建立时已经设置过）
+    if (m_bPooled)
+    {
+        MYSQL* pooled = static_cast<MYSQL*>(Singleton<CMysqlHandlePool>::Instance().acquire(poolKey()));
+        if (pooled != NULL)
+        {
+            m_Mysql = pooled;
+            m_bInit = true;
+            //换了一条连接，此前记下的自增 ID 代数随之失效（详见 getInsertID）
+            m_uConnectionGeneration++;
+            LOGD("reuse pooled mysql connection, host: %s, user: %s, dbname: %s",
+                 host.c_str(), user.c_str(), dbname.c_str());
+            return true;
+        }
+    }
+
+    return connectFresh();
+}
+
+bool CDatabaseMysql::connectFresh()
+{
+    const std::string& host = m_DBInfo.strHost;
+    const std::string& user = m_DBInfo.strUser;
+    const std::string& pwd = m_DBInfo.strPwd;
+    const std::string& dbname = m_DBInfo.strDBName;
 
     //先分配连接句柄。句柄必须用独立变量持有——mysql_real_connect 失败时返回 NULL，
     //若像旧代码那样直接覆盖 m_Mysql，会丢失 mysql_init 分配的句柄（内存泄漏），
@@ -131,13 +188,48 @@ bool CDatabaseMysql::initialize(const std::string& host, const std::string& user
     return true;
 }
 
+bool CDatabaseMysql::reconnect()
+{
+    closeConnection();
+
+    //旧连接一旦关闭，它上面开着的事务就不复存在了，事务标志不能跨着重连留下来（理由见 initialize）
+    m_bInTransaction = false;
+    return connectFresh();
+}
+
+void CDatabaseMysql::closeConnection()
+{
+    if (m_Mysql != NULL && m_bInit)
+        mysql_close(m_Mysql);
+
+    m_Mysql = NULL;
+    m_bInit = false;
+}
+
+bool CDatabaseMysql::canReturnToPool() const
+{
+    if (m_Mysql == NULL || !m_bInit)
+        return false;
+
+    //事务没有结束：放回池中的话，下一个使用者的语句会落进这个事务里
+    if (m_bInTransaction)
+        return false;
+
+    return mysql_errno(m_Mysql) == 0;
+}
+
+std::string CDatabaseMysql::poolKey() const
+{
+    //用换行符分隔：主机名、账号与库名里都不会出现换行符，拼接结果不会有歧义
+    return m_DBInfo.strHost + "\n" + m_DBInfo.strUser + "\n" + m_DBInfo.strDBName;
+}
+
 QueryResult* CDatabaseMysql::query(const char* sql)
 {
     //连接尚未建立：尝试建立一次
     if (!m_Mysql)
     {
-        if (!initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                        m_DBInfo.strPwd, m_DBInfo.strDBName))
+        if (!reconnect())
         {
             LOGSYSE("query failed, mysql not connected and reconnect failed, sql: %s", sql);
             return NULL;
@@ -153,13 +245,12 @@ QueryResult* CDatabaseMysql::query(const char* sql)
         if (abortTransactionOnDisconnect(uErrno, "query", sql))
             return NULL;
 
-        //SELECT 重复执行没有副作用，两种断线错误码都可以重连后重跑一遍
+        //SELECT 重复执行没有副作用，所有断线错误码都可以重连后重跑一遍
         if (dbapi::ShouldRetryAfterDisconnect(uErrno, m_bInTransaction, dbapi::DB_STMT_READ_ONLY))
         {
             //连接已断开，重连后重试一次
             LOGW("query: mysql connection lost, errno: %u, reconnecting, sql: %s", uErrno, sql);
-            if (!initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                            m_DBInfo.strPwd, m_DBInfo.strDBName))
+            if (!reconnect())
             {
                 LOGSYSE("query failed, reconnect failed, sql: %s", sql);
                 return NULL;
@@ -227,8 +318,7 @@ bool CDatabaseMysql::execute(const char* sql)
     //连接尚未建立：尝试建立一次
     if (!m_Mysql)
     {
-        if (!initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                        m_DBInfo.strPwd, m_DBInfo.strDBName))
+        if (!reconnect())
         {
             LOGSYSE("execute failed, mysql not connected and reconnect failed, sql: %s", sql);
             return false;
@@ -244,15 +334,14 @@ bool CDatabaseMysql::execute(const char* sql)
         if (abortTransactionOnDisconnect(uErrno, "execute", sql))
             return false;
 
-        //写语句只在 CR_SERVER_GONE_ERROR 上重试，理由见 dbapi/DbRetryPolicy.h：
-        //CR_SERVER_LOST 说明语句已经发出去了，它有没有在服务端生效无从判断，
-        //重跑一遍可能写进两份数据（聊天消息落库就是典型的非幂等写入）
+        //写语句只在能确定语句没有到达服务端的断线错误码（2006、4031）上重试，理由见
+        //dbapi/DbRetryPolicy.h：2013、2026 说明语句可能已经发出去了，它有没有在服务端生效
+        //无从判断，重跑一遍可能写进两份数据（聊天消息落库就是典型的非幂等写入）
         if (dbapi::ShouldRetryAfterDisconnect(uErrno, m_bInTransaction, dbapi::DB_STMT_WRITE))
         {
             //连接已断开，重连后重试一次
-            LOGW("execute: mysql server gone, reconnecting, sql: %s", sql);
-            if (!initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                            m_DBInfo.strPwd, m_DBInfo.strDBName))
+            LOGW("execute: mysql connection lost before the statement ran, errno: %u, reconnecting, sql: %s", uErrno, sql);
+            if (!reconnect())
             {
                 LOGSYSE("execute failed, reconnect failed, sql: %s", sql);
                 return false;
@@ -284,8 +373,7 @@ bool CDatabaseMysql::execute(const char* sql, uint32_t& uAffectedCount, int& nEr
     //连接尚未建立：尝试建立一次
     if (!m_Mysql)
     {
-        if (!initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                        m_DBInfo.strPwd, m_DBInfo.strDBName))
+        if (!reconnect())
         {
             LOGSYSE("execute failed, mysql not connected and reconnect failed, sql: %s", sql);
             return false;
@@ -309,9 +397,8 @@ bool CDatabaseMysql::execute(const char* sql, uint32_t& uAffectedCount, int& nEr
         if (dbapi::ShouldRetryAfterDisconnect(uErrno, m_bInTransaction, dbapi::DB_STMT_WRITE))
         {
             //连接已断开，重连后重试一次
-            LOGW("execute: mysql server gone, reconnecting, sql: %s", sql);
-            if (!initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                            m_DBInfo.strPwd, m_DBInfo.strDBName))
+            LOGW("execute: mysql connection lost before the statement ran, errno: %u, reconnecting, sql: %s", uErrno, sql);
+            if (!reconnect())
             {
                 LOGSYSE("execute failed, reconnect failed, sql: %s", sql);
                 return false;

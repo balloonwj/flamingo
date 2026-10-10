@@ -3,7 +3,7 @@
  *  覆盖 CallManager 的会话表 CRUD、按角色签发 relay 令牌（用 RelayToken 校验
  *  角色 / uid / peeruid / sessionid 正确）、sessionid 不含令牌分隔符，以及相比
  *  远程桌面新增的两项：isUserBusy（“对方忙”判断）、reapTimedOutSessions（响铃
- *  超时清理）。CallManager 为 Singleton，测试间共享单例，故各用例用独立 userid
+ *  超时清理）；第 15 期补 SSRING1（响铃剩余毫秒数，随来电邀请推送下发）。CallManager 为 Singleton，测试间共享单例，故各用例用独立 userid
  *  并在末尾清理自建会话，断言以 sessionid 精确定位而非依赖全表规模。
  *  balloonwj@qq.com   2026-06-11
  */
@@ -13,6 +13,8 @@
 #include "../chatserversrc/CallProtocol.h"   // enum call_state / call_media
 #include "../utils/RelayToken.h"
 #include "../base/Singleton.h"
+#include "../jsoncpp1.9.0/json.h"   // SSRING1 解析来电邀请推送（第 15 期）
+#include <memory>
 
 TEST_CASE("CM1 createSession 登记会话、状态 ringing、sessionid 不含令牌分隔符")
 {
@@ -275,4 +277,192 @@ TEST_CASE("CM-SM6 双方同时请求：后到者以当前状态为准、不报�
     CHECK(changedB == false);
 
     mgr.removeSession(sid);
+}
+
+TEST_CASE("CM8 getUserCall：会话双方都能查到同一通会话，他人查不到，移除后查不到")
+{
+    CallManager& mgr = Singleton<CallManager>::Instance();
+    const int64_t caller = 710008;
+    const int64_t callee = 720008;
+    const int64_t other  = 730008;
+
+    std::string sid = mgr.createSession(caller, callee, call_media_audio, 1000);
+    REQUIRE(mgr.setState(sid, call_state_connected));
+
+    CallSessionInfo info;
+    REQUIRE(mgr.getUserCall(caller, info));
+    CHECK(info.sessionid == sid);
+    CHECK(info.callerId == caller);
+    CHECK(info.calleeId == callee);
+    CHECK(info.state == call_state_connected);
+
+    CallSessionInfo info2;
+    REQUIRE(mgr.getUserCall(callee, info2));
+    CHECK(info2.sessionid == sid);
+
+    CallSessionInfo none;
+    CHECK_FALSE(mgr.getUserCall(other, none));
+
+    REQUIRE(mgr.removeSession(sid));
+    CHECK_FALSE(mgr.getUserCall(caller, none));
+}
+
+TEST_CASE("CM9 掉线宽限：最后一个连接断开后超过宽限期才清理，期间重新登录则保留")
+{
+    CallManager& mgr = Singleton<CallManager>::Instance();
+    const int64_t caller = 710009;
+    const int64_t callee = 720009;
+    //宽限期 30 秒（毫秒），与默认配置一致
+    const int64_t grace = 30 * 1000;
+    const int64_t t0 = 5000000;
+    mgr.setOfflineGraceMs(grace);
+    CHECK(mgr.offlineGraceMs() == grace);
+
+    std::string sid = mgr.createSession(caller, callee, call_media_audio, t0);
+    REQUIRE(mgr.setState(sid, call_state_connected));
+
+    //被叫掉线：宽限期内不清理
+    mgr.markUserOffline(callee, t0 + 1000);
+    std::vector<CallSessionInfo> reaped;
+    mgr.reapOfflineSessions(t0 + 1000 + grace - 1, reaped);
+    CHECK(reaped.empty());
+    CHECK(mgr.isUserBusy(caller));
+
+    //宽限期内重新登录：掉线时刻清掉，过了原定期限也不清理
+    mgr.markUserOnline(callee);
+    mgr.reapOfflineSessions(t0 + 1000 + grace * 2, reaped);
+    CHECK(reaped.empty());
+
+    //再次掉线：重复调用不刷新掉线时刻（以第一次为准）
+    mgr.markUserOffline(callee, t0 + 100000);
+    mgr.markUserOffline(callee, t0 + 120000);
+    mgr.reapOfflineSessions(t0 + 100000 + grace, reaped);
+    REQUIRE(reaped.size() == 1);
+    CHECK(reaped[0].sessionid == sid);
+    CHECK(reaped[0].callerId == caller);
+    CHECK(reaped[0].calleeId == callee);
+    CHECK(reaped[0].calleeOfflineAt == t0 + 100000);
+    CHECK(reaped[0].callerOfflineAt == 0);
+    //清理后会话已不存在，双方都不再忙
+    CallSessionInfo info;
+    CHECK_FALSE(mgr.getSession(sid, info));
+    CHECK_FALSE(mgr.isUserBusy(caller));
+    CHECK_FALSE(mgr.isUserBusy(callee));
+}
+
+TEST_CASE("CM10 掉线只影响该用户参与的通话；响铃中的通话同样按宽限期清理")
+{
+    CallManager& mgr = Singleton<CallManager>::Instance();
+    const int64_t a = 710010;
+    const int64_t b = 720010;
+    const int64_t c = 730010;
+    const int64_t d = 740010;
+    //宽限期 30 秒（毫秒）
+    const int64_t grace = 30 * 1000;
+    const int64_t t0 = 6000000;
+    mgr.setOfflineGraceMs(grace);
+
+    std::string ab = mgr.createSession(a, b, call_media_video, t0);
+    REQUIRE(mgr.setState(ab, call_state_connected));
+    //c 呼叫 d，仍在响铃
+    std::string cd = mgr.createSession(c, d, call_media_audio, t0);
+
+    mgr.markUserOffline(a, t0);
+    mgr.markUserOffline(c, t0);
+    std::vector<CallSessionInfo> reaped;
+    mgr.reapOfflineSessions(t0 + grace, reaped);
+    REQUIRE(reaped.size() == 2);
+    CHECK(((reaped[0].sessionid == ab && reaped[1].sessionid == cd) ||
+           (reaped[0].sessionid == cd && reaped[1].sessionid == ab)));
+
+    //没有掉线的人参与的通话不受影响
+    std::string bd = mgr.createSession(b, d, call_media_audio, t0 + grace);
+    mgr.markUserOffline(a, t0 + grace);
+    reaped.clear();
+    mgr.reapOfflineSessions(t0 + grace * 3, reaped);
+    CHECK(reaped.empty());
+    CallSessionInfo info;
+    CHECK(mgr.getSession(bd, info));
+    mgr.removeSession(bd);
+}
+
+TEST_CASE("CM11 宽限期配置：非正数按默认 30 秒处理")
+{
+    CallManager& mgr = Singleton<CallManager>::Instance();
+    //默认宽限期（毫秒）
+    const int64_t defaultGrace = 30 * 1000;
+    mgr.setOfflineGraceMs(0);
+    CHECK(mgr.offlineGraceMs() == defaultGrace);
+    mgr.setOfflineGraceMs(-5);
+    CHECK(mgr.offlineGraceMs() == defaultGrace);
+    //其它值原样保存
+    mgr.setOfflineGraceMs(3000);
+    CHECK(mgr.offlineGraceMs() == 3000);
+    mgr.setOfflineGraceMs(defaultGrace);
+}
+
+TEST_CASE("SSRING1 来电邀请推送带剩余振铃毫秒数：随时间递减，到时为 0，接通后与不存在时为 -1")
+{
+    CallManager& mgr = Singleton<CallManager>::Instance();
+    const int64_t t0 = 5000;
+    std::string sid = mgr.createSession(710091, 720091, call_media_audio, t0);
+    CHECK(mgr.ringRemainingMs(sid, t0) == CallManager::kRingingTimeoutMs);
+    CHECK(mgr.ringRemainingMs(sid, t0 + 10000) == CallManager::kRingingTimeoutMs - 10000);
+    CHECK(mgr.ringRemainingMs(sid, t0 + CallManager::kRingingTimeoutMs) == 0);
+    CHECK(mgr.ringRemainingMs(sid, t0 + CallManager::kRingingTimeoutMs + 5000) == 0);
+    //本机时钟回拨（now 早于创建时间）：按刚创建算
+    CHECK(mgr.ringRemainingMs(sid, t0 - 1000) == CallManager::kRingingTimeoutMs);
+    //接通后不再振铃
+    REQUIRE(mgr.setState(sid, call_state_connected));
+    CHECK(mgr.ringRemainingMs(sid, t0 + 1000) == -1);
+    CHECK(mgr.ringRemainingMs("call-none", t0) == -1);
+    mgr.removeSession(sid);
+
+    //推送带 ringms；不传时不带该字段
+    Json::Value root;
+    Json::CharReaderBuilder b;
+    JSONCPP_STRING errs;
+    std::unique_ptr<Json::CharReader> reader(b.newCharReader());
+    const std::string withRing = CallProtocol::buildInviteNotify("call-1", 710091, "a", call_media_audio, 45000);
+    REQUIRE(reader->parse(withRing.c_str(), withRing.c_str() + withRing.size(), &root, &errs));
+    CHECK(root["ringms"].asInt64() == 45000);
+    const std::string noRing = CallProtocol::buildInviteNotify("call-1", 710091, "a", call_media_audio);
+    REQUIRE(reader->parse(noRing.c_str(), noRing.c_str() + noRing.size(), &root, &errs));
+    CHECK_FALSE(root.isMember("ringms"));
+}
+
+
+TEST_CASE("CM12 markConnected 把状态置为已接通并记下接通时刻；不存在的会话返回 false")
+{
+    CallManager mgr;
+    const std::string sid = mgr.createSession(5127, 5308, call_media_audio, 1000);
+    CallSessionInfo s;
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.connectTime == 0);
+    CHECK(mgr.markConnected(sid, 2500));
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.state == call_state_connected);
+    CHECK(s.connectTime == 2500);
+    CHECK_FALSE(mgr.markConnected("no-such-session", 1));
+}
+
+TEST_CASE("CM13 setCard 记下通话卡片的 msgid 与 content，会话快照与响铃超时清理收走的快照里都带着")
+{
+    CallManager mgr;
+    const std::string sid = mgr.createSession(5127, 5308, call_media_video, 1000);
+    CallSessionInfo s;
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.cardMsgId == 0);
+    CHECK(s.cardContent.empty());
+    CHECK(mgr.setCard(sid, 777, "{\"kind\":\"call\"}"));
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.cardMsgId == 777);
+    CHECK(s.cardContent == "{\"kind\":\"call\"}");
+    CHECK_FALSE(mgr.setCard("no-such-session", 1, ""));
+
+    //响铃超时清理收走的会话快照也带着卡片信息（main.cpp 据此改写卡片）
+    std::vector<CallSessionInfo> reaped;
+    mgr.reapTimedOutSessions(1000 + CallManager::kRingingTimeoutMs, reaped);
+    REQUIRE(reaped.size() == 1);
+    CHECK(reaped[0].cardMsgId == 777);
 }

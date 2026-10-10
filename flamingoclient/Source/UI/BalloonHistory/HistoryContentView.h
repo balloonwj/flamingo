@@ -114,6 +114,16 @@ public:
     void SetSingleLine(bool singleLine);
 
     /**
+     *  设置「按控件高度截断」：开启后只画控件高度能完整容下的行，放不下时末行以省略号收尾（与折叠态的省略号
+     *  同一套画法）；内容放得下时与展开态相同。用于高度固定的区域，如右下角「新公告」弹窗的正文 —— 展开态不限
+     *  行数，正文一长就画到控件下面的分隔线与按钮上。
+     *  单行模式优先于本设置，本设置优先于折叠 / 展开态。只影响绘制，不影响 MeasureHeight（仍按折叠 / 展开态量）。
+     *    fit：true=按控件高度截断；false（默认）=按折叠 / 展开态决定行数。
+     *  副作用：触发重绘。
+     */
+    void SetFitToHeight(bool fit);
+
+    /**
      *  取当前正文的「扁平文本」：各文字段原样拼接，每个内联表情占一个 U+FFFC
      *  占位字符（口径见类注释）。纯文本入口喂进来的内容原样返回。
      *
@@ -266,6 +276,10 @@ private:
     //展开态为 0（排版引擎里 0 表示不限行）。
     int EffectiveMaxLines() const;
 
+    //按控件高度截断时的行数上限：placed 是不限行数排出的放置项（坐标相对控件左上角），availHeight 是控件高度（像素）。
+    //返回下沿不超过 availHeight 的行数；全部放得下返回 0（不限行）；一行都放不下返回 1。
+    static int CountLinesFittingHeight(const std::vector<balloonchatwnd::InlinePlaced>& placed, int availHeight);
+
     //当前该给排版引擎传的表情格边长：正文里确实有表情时为 kFaceDisplayPx（28），
     //没有表情时为 0。
     //
@@ -358,6 +372,9 @@ private:
 
     //是否单行模式（只画一行、放不下补省略号）；为 true 时优先于折叠 / 展开态。
     bool m_singleLine;
+
+    //是否按控件高度截断（见 SetFitToHeight）；为 true 时绘制时按控件高度算行数上限，优先于折叠 / 展开态。
+    bool m_fitToHeight;
 
     // ---- 文字选区（扁平文本口径；换内容时清空）----
 

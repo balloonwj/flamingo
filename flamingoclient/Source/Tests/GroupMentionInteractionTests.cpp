@@ -12,7 +12,7 @@
  *    S 组 —— 选中文字（含 @ 的气泡可选、与不含 @ 的排版一致、取文本正确）
  *    R 组 —— 收敛后的渲染回归（@ 底色块画得出来、不含 @ 的不会凭空出现）
  *    M 组 —— @ 片段命中测试与右键菜单模型
- *    D 组 —— 群成员侧栏的成员行双击：投递与右键菜单「与 TA 聊天」相同的动作
+ *    D 组 —— 群成员侧栏的成员行双击：投递与右键菜单「发消息」相同的动作
  *
  *  用 Catch2 v3（amalgamated）。除 D 组外均为纯内存 + 离屏位图，不创建窗口、不要 HWND；
  *  D 组要一个真实窗口接收成员行的投递，故建一个不显示的 DuiHost。
@@ -41,7 +41,7 @@
 #include "../UI/BalloonChatWnd/GroupMentionMenu.h"
 #include "../Session/GroupRoleRules.h"
 #include "../UI/BalloonChat/BalloonChatMsgFormat.h"
-#include "../UI/BalloonMain/StarredModel.h"   // 特别关注项文案，M24 用它核对两处措辞一致
+#include "../UI/BalloonMain/NotifyModeMenu.h"   // 特别关注快捷项文案，M24 用它核对两处措辞一致
 
 using namespace balloonwjui;
 using namespace balloonchatwnd;
@@ -407,23 +407,34 @@ TEST_CASE("M3 空模型与空区间都不命中", "[mention][menu]")
     CHECK(HitTestCharRanges(layout, degenerate, 20, 10) == -1);
 }
 
-TEST_CASE("M4 @ 别人时菜单五项且顺序固定", "[mention][menu]")
+TEST_CASE("M4 @ 别人时菜单两组共七行且顺序固定", "[mention][menu]")
 {
-    //本人是普通成员：末尾的管理项不出现，菜单形态与加管理项之前完全一致
+    //本人是普通成员：没有管理项，菜单只有「沟通」与「查看与标记」两组，中间一条分隔线。
+    //2026-10-06 起第二组末尾多一项「关注 TA 在本群的发言」（docs/消息提醒模式与消息盒子方案.md §12）
     std::vector<MentionMenuEntry> items =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kMember, kMember);
 
-    REQUIRE(items.size() == 5);
+    REQUIRE(items.size() == 7);
     CHECK(items[0].id == kMentionMenuChat);
-    CHECK(items[1].id == kMentionMenuProfile);
-    CHECK(items[2].id == kMentionMenuMentionMore);
-    CHECK(items[3].id == kMentionMenuCopyName);
-    CHECK(items[4].id == kMentionMenuStarred);   //特别关注排在日常动作这一组的末尾
+    CHECK(items[1].id == kMentionMenuMentionMore);
+    CHECK(items[2].isSeparator);
+    CHECK(items[3].id == kMentionMenuProfile);
+    CHECK(items[4].id == kMentionMenuCopyName);
+    CHECK(items[5].id == kMentionMenuStarred);
+    CHECK(items[6].id == kMentionMenuGroupFollow);
     for (size_t i = 0; i < items.size(); ++i)
     {
+        if (items[i].isSeparator)
+        {
+            continue;
+        }
         INFO("行 index = " << i);
         CHECK(items[i].enabled);
     }
+
+    //「发消息」「复制名字」与主面板联系人 / 会话右键菜单同一叫法（2026-10-03 统一）
+    CHECK(std::wstring(items[0].label) == L"发消息");
+    CHECK(std::wstring(items[4].label) == L"复制名字");
 }
 
 TEST_CASE("M5 @ 自己时只留查看资料", "[mention][menu]")
@@ -439,17 +450,22 @@ TEST_CASE("M5 @ 自己时只留查看资料", "[mention][menu]")
 
 TEST_CASE("M6 成员已退群时各项照列但再 @ 一次置灰", "[mention][menu]")
 {
+    //已退群的成员没有「关注 TA 在本群的发言」：本群的关注名单只能填本群成员
     std::vector<MentionMenuEntry> items =
         BuildMentionMenuModel(kOtherUid, kMyUid, false, kMember, kMember);
 
-    REQUIRE(items.size() == 5);
-    CHECK(items[0].enabled);         // 与 TA 聊天
-    CHECK(items[1].enabled);         // 查看资料
-    CHECK(items[2].id == kMentionMenuMentionMore);
-    CHECK_FALSE(items[2].enabled);   // 人不在群里，再 @ 也送不到
-    CHECK(items[3].enabled);         // 复制 TA 的昵称
-    CHECK(items[4].id == kMentionMenuStarred);
-    CHECK(items[4].enabled);         // 关注的是这位同事本人，跟他还在不在这个群无关
+    REQUIRE(items.size() == 6);
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        CHECK((items[i].isSeparator || items[i].id != kMentionMenuGroupFollow));
+    }
+    CHECK(items[0].enabled);         // 发消息
+    CHECK(items[1].id == kMentionMenuMentionMore);
+    CHECK_FALSE(items[1].enabled);   // 人不在群里，再 @ 也送不到
+    CHECK(items[3].enabled);         // 查看资料
+    CHECK(items[4].enabled);         // 复制名字
+    CHECK(items[5].id == kMentionMenuStarred);
+    CHECK(items[5].enabled);         // 关注的是这位同事本人，跟他还在不在这个群无关
 }
 
 TEST_CASE("M7 @所有人 不弹菜单", "[mention][menu]")
@@ -463,11 +479,11 @@ TEST_CASE("M7 @所有人 不弹菜单", "[mention][menu]")
 
 TEST_CASE("M8 未登录时不把任何人误判成自己", "[mention][menu]")
 {
-    // selfUid 为 0 表示取不到本人 id，无从判定，按"不是自己"处理给全四项 ——
-    // 宁可多给一项，也不要在正常场景下莫名其妙少掉三项。
+    // selfUid 为 0 表示取不到本人 id，无从判定，按"不是自己"处理给出完整的两组 ——
+    // 宁可多给几项，也不要在正常场景下莫名其妙只剩「查看资料」一项。
     std::vector<MentionMenuEntry> items =
         BuildMentionMenuModel(kOtherUid, 0, true, kMember, kMember);
-    CHECK(items.size() == 5);
+    CHECK(items.size() == 7);
 }
 
 // =====================================================================
@@ -495,6 +511,20 @@ static bool HasEntry(const std::vector<MentionMenuEntry>& items, MentionMenuId i
     return FindEntryIndex(items, id) >= 0;
 }
 
+// 数菜单模型里有几条分隔线。
+static int CountSeparators(const std::vector<MentionMenuEntry>& items)
+{
+    int count = 0;
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        if (items[i].isSeparator)
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
 TEST_CASE("M9 群主看普通成员：有设为管理员、无撤销管理员", "[mention][menu][admin]")
 {
     std::vector<MentionMenuEntry> items =
@@ -503,16 +533,17 @@ TEST_CASE("M9 群主看普通成员：有设为管理员、无撤销管理员", 
     CHECK(HasEntry(items, kMentionMenuSetAdmin));
     CHECK_FALSE(HasEntry(items, kMentionMenuCancelAdmin));
 
-    //管理项排在日常动作那一组（五项）之后，中间隔一条分隔线。群主对普通成员能设管理员、
-    //能转让群主、也能移出，故管理项有三条：设为管理员 + 转让群主 + 移出本群（移出排最末）。
-    REQUIRE(items.size() == 9);
-    CHECK(items[5].isSeparator);
-    CHECK(items[6].id == kMentionMenuSetAdmin);
-    CHECK(items[6].enabled);
-    CHECK(items[7].id == kMentionMenuTransferOwner);
-    CHECK(items[7].enabled);
-    CHECK(items[8].id == kMentionMenuKick);
+    //群主对普通成员能设管理员、能转让群主、也能移出，四组齐全：沟通两项 | 查看与标记四项 |
+    //设为管理员 + 转让群主 | 移出本群，组间各一条分隔线，共 12 行
+    REQUIRE(items.size() == 12);
+    CHECK(items[7].isSeparator);
+    CHECK(items[8].id == kMentionMenuSetAdmin);
     CHECK(items[8].enabled);
+    CHECK(items[9].id == kMentionMenuTransferOwner);
+    CHECK(items[9].enabled);
+    CHECK(items[10].isSeparator);
+    CHECK(items[11].id == kMentionMenuKick);
+    CHECK(items[11].enabled);
 }
 
 TEST_CASE("M10 群主看管理员：有撤销管理员、无设为管理员", "[mention][menu][admin]")
@@ -532,7 +563,7 @@ TEST_CASE("M11 群主看另一个群主：两项都没有", "[mention][menu][adm
 
     CHECK_FALSE(HasEntry(items, kMentionMenuSetAdmin));
     CHECK_FALSE(HasEntry(items, kMentionMenuCancelAdmin));
-    CHECK(items.size() == 5);
+    CHECK(items.size() == 7);
 }
 
 TEST_CASE("M12 管理员看任何角色：两项都没有", "[mention][menu][admin]")
@@ -579,15 +610,17 @@ TEST_CASE("M14 角色未知时两项都不出现", "[mention][menu][admin]")
 
 TEST_CASE("M15 加了管理项后原有各项行为不变", "[mention][menu][admin]")
 {
-    //群主看普通成员：前四项的 id、顺序、可用性都与没有管理项时一致
+    //群主看普通成员：前两组的 id、顺序、分隔线位置都与没有管理项时一致
     std::vector<MentionMenuEntry> items =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kOwner, kMember);
 
-    REQUIRE(items.size() >= 4);
+    REQUIRE(items.size() >= 6);
     CHECK(items[0].id == kMentionMenuChat);
-    CHECK(items[1].id == kMentionMenuProfile);
-    CHECK(items[2].id == kMentionMenuMentionMore);
-    CHECK(items[3].id == kMentionMenuCopyName);
+    CHECK(items[1].id == kMentionMenuMentionMore);
+    CHECK(items[2].isSeparator);
+    CHECK(items[3].id == kMentionMenuProfile);
+    CHECK(items[4].id == kMentionMenuCopyName);
+    CHECK(items[5].id == kMentionMenuStarred);
 
     //「已退群时 @TA 置灰」这条既有规则在管理项出现时依然成立
     std::vector<MentionMenuEntry> left =
@@ -599,15 +632,14 @@ TEST_CASE("M15 加了管理项后原有各项行为不变", "[mention][menu][adm
 
 TEST_CASE("M16 没有管理项时不留多余的分隔线", "[mention][menu][admin]")
 {
-    //普通成员的菜单应当干干净净五项，末尾不能挂一条孤零零的分隔线
+    //普通成员的菜单只有两组，分隔线只有夹在中间的那一条，末尾不能挂一条孤零零的分隔线
     std::vector<MentionMenuEntry> items =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kMember, kMember);
 
-    for (size_t i = 0; i < items.size(); ++i)
-    {
-        INFO("行 index = " << i);
-        CHECK_FALSE(items[i].isSeparator);
-    }
+    REQUIRE_FALSE(items.empty());
+    CHECK_FALSE(items.front().isSeparator);
+    CHECK_FALSE(items.back().isSeparator);
+    CHECK(CountSeparators(items) == 1);
 
     //对自己右键时同样只有一项、没有分隔线
     std::vector<MentionMenuEntry> self =
@@ -696,33 +728,52 @@ TEST_CASE("M22 角色未知时不给移出本群", "[mention][menu][kick]")
     CHECK_FALSE(HasEntry(b, kMentionMenuKick));
 }
 
-TEST_CASE("M23 移出本群排在最末，且分隔线只有一条", "[mention][menu][kick]")
+TEST_CASE("M23 移出本群单独一组排在最末，空组不留分隔线", "[mention][menu][kick]")
 {
-    //群主看普通成员：日常五项 + 分隔线 + 设为管理员 + 转让群主 + 移出本群，共 9 行
+    //群主看普通成员：沟通两项 | 查看与标记四项 | 设为管理员 + 转让群主 | 移出本群，共 12 行、三条分隔线
     std::vector<MentionMenuEntry> byOwner =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kOwner, kMember);
-    REQUIRE(byOwner.size() == 9);
-    CHECK(byOwner[5].isSeparator);
-    CHECK(byOwner[6].id == kMentionMenuSetAdmin);
-    CHECK(byOwner[7].id == kMentionMenuTransferOwner);
-    CHECK(byOwner[8].id == kMentionMenuKick);   //不可撤销的操作放在最远处
+    REQUIRE(byOwner.size() == 12);
+    CHECK(byOwner[10].isSeparator);
+    CHECK(byOwner[11].id == kMentionMenuKick);   //不可撤销的操作放在最远处
+    CHECK(CountSeparators(byOwner) == 3);
 
-    //管理员看普通成员：没有角色项，只有移出本群 —— 分隔线仍只有一条，
-    //且不能因为少了角色项就在末尾留一条孤零零的分隔线
+    //管理员看普通成员：没有改变身份那一组，移出本群紧跟在查看那一组之后 ——
+    //两组之间只有一条分隔线，不能因为中间一组为空就连出两条
     std::vector<MentionMenuEntry> byAdmin =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kAdmin, kMember);
-    REQUIRE(byAdmin.size() == 7);
-    CHECK(byAdmin[5].isSeparator);
-    CHECK(byAdmin[6].id == kMentionMenuKick);
-    int sepCount = 0;
-    for (size_t i = 0; i < byAdmin.size(); ++i)
+    REQUIRE(byAdmin.size() == 9);
+    CHECK(byAdmin[7].isSeparator);
+    CHECK(byAdmin[8].id == kMentionMenuKick);
+    CHECK(CountSeparators(byAdmin) == 2);
+}
+
+TEST_CASE("M29 任何角色组合下菜单首尾都没有分隔线、也不会连出两条", "[mention][menu][admin]")
+{
+    //某一组整组为空时它前面的分隔线也不能出现；穷举本人与目标的角色、是否仍在群里
+    const int roles[] = { kUnknown, kMember, kAdmin, kOwner };
+    const size_t n = sizeof(roles) / sizeof(roles[0]);
+    for (size_t i = 0; i < n; ++i)
     {
-        if (byAdmin[i].isSeparator)
+        for (size_t j = 0; j < n; ++j)
         {
-            ++sepCount;
+            for (int inGroup = 0; inGroup <= 1; ++inGroup)
+            {
+                INFO("我的角色 = " << roles[i] << "，目标角色 = " << roles[j]
+                     << "，仍在群里 = " << inGroup);
+                std::vector<MentionMenuEntry> items =
+                    BuildMentionMenuModel(kOtherUid, kMyUid, inGroup != 0, roles[i], roles[j]);
+                REQUIRE_FALSE(items.empty());
+                CHECK_FALSE(items.front().isSeparator);
+                CHECK_FALSE(items.back().isSeparator);
+                for (size_t k = 1; k < items.size(); ++k)
+                {
+                    INFO("行 index = " << k);
+                    CHECK_FALSE((items[k].isSeparator && items[k - 1].isSeparator));
+                }
+            }
         }
     }
-    CHECK(sepCount == 1);
 }
 
 // =====================================================================
@@ -730,28 +781,28 @@ TEST_CASE("M23 移出本群排在最末，且分隔线只有一条", "[mention][
 // =====================================================================
 //
 // 这一项与主面板的联系人 / 会话右键菜单是同一个功能，文案由
-// balloonmain::StarredModel::GetMenuLabel 统一给出。这里只验证 @片段菜单
+// balloonmain::GetStarredMenuLabel 统一给出。这里只验证 @片段菜单
 // （群成员列表与气泡发送者头像共用同一份模型）把状态正确地传了下去。
 
-TEST_CASE("M24 特别关注项的文案随当前状态取反", "[mention][menu][starred]")
+TEST_CASE("M24 特别关注项的文案随当前状态取反，群成员菜单里叫「设为特别关注联系人」", "[mention][menu][starred]")
 {
-    //未关注：显示"特别关注"，点下去是去关注
+    //2026-10-06 起群成员菜单里这一项改叫「设为特别关注联系人 / 取消特别关注联系人」，与新增的
+    //「关注 TA 在本群的发言」区分开；主面板联系人菜单仍叫「特别关注」（docs/消息提醒模式与消息盒子方案.md §12.1）
     std::vector<MentionMenuEntry> notStarred =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kMember, kMember, false);
     const int idxNot = FindEntryIndex(notStarred, kMentionMenuStarred);
     REQUIRE(idxNot >= 0);
-    CHECK(std::wstring(notStarred[(size_t)idxNot].label) == L"特别关注");
+    CHECK(std::wstring(notStarred[(size_t)idxNot].label) == L"设为特别关注联系人");
 
-    //已关注：显示"取消特别关注"
     std::vector<MentionMenuEntry> starred =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kMember, kMember, true);
     const int idxYes = FindEntryIndex(starred, kMentionMenuStarred);
     REQUIRE(idxYes >= 0);
-    CHECK(std::wstring(starred[(size_t)idxYes].label) == L"取消特别关注");
+    CHECK(std::wstring(starred[(size_t)idxYes].label) == L"取消特别关注联系人");
 
-    //文案必须与主面板两处菜单逐字一致 —— 同一个动作不该有两种叫法
-    CHECK(std::wstring(balloonmain::StarredModel::GetMenuLabel(false)) == L"特别关注");
-    CHECK(std::wstring(balloonmain::StarredModel::GetMenuLabel(true)) == L"取消特别关注");
+    //主面板的叫法不变
+    CHECK(std::wstring(balloonmain::GetStarredMenuLabel(false)) == L"特别关注");
+    CHECK(std::wstring(balloonmain::GetStarredMenuLabel(true)) == L"取消特别关注");
 }
 
 TEST_CASE("M25 右键自己时没有特别关注项", "[mention][menu][starred]")
@@ -778,7 +829,7 @@ TEST_CASE("M26 成员已退群仍可特别关注", "[mention][menu][starred]")
 // =====================================================================
 // D 组：群成员侧栏的成员行双击 —— 打开与该成员的单聊窗
 //
-//   成员行被双击时，向宿主群聊窗投递一条与右键菜单「与 TA 聊天」完全相同的
+//   成员行被双击时，向宿主群聊窗投递一条与右键菜单「发消息」完全相同的
 //   WM_CHAT_MENTION_ACTION，后续由群聊窗转请主面板打开或激活单聊窗（那一段是
 //   右键菜单一直在用的既有路径，不在本组范围）。本组建一个不显示的 DuiHost 作为
 //   宿主，直接调用成员行的 OnLButtonDblClk，再从宿主窗口的消息队列里取出消息
@@ -889,7 +940,7 @@ void DeleteMentionActions(std::vector<MentionActionData*>& actions)
 
 } // anonymous namespace
 
-TEST_CASE("D1 双击普通成员行投递「与 TA 聊天」，群主与管理员行同样有效", "[groupmember][dblclick]")
+TEST_CASE("D1 双击普通成员行投递「发消息」，群主与管理员行同样有效", "[groupmember][dblclick]")
 {
     ScopedHiddenHost host;
     REQUIRE(host.Host().IsWindow());
@@ -903,7 +954,7 @@ TEST_CASE("D1 双击普通成员行投递「与 TA 聊天」，群主与管理�
 
         CHECK(row->OnLButtonDblClk(kDblClkPt, 0));
 
-        //与右键菜单选「与 TA 聊天」投的是同一条消息、同样的负载
+        //与右键菜单选「发消息」投的是同一条消息、同样的负载
         std::vector<MentionActionData*> actions = TakeMentionActions(host.Host().m_hWnd);
         REQUIRE(actions.size() == 1);
         CHECK(actions[0]->id == kMentionMenuChat);
@@ -915,7 +966,7 @@ TEST_CASE("D1 双击普通成员行投递「与 TA 聊天」，群主与管理�
 
 TEST_CASE("D2 双击本人那一行什么都不做", "[groupmember][dblclick]")
 {
-    //主面板本来就拒绝和自己聊天，右键自己时菜单里也没有「与 TA 聊天」
+    //主面板本来就拒绝和自己聊天，右键自己时菜单里也没有「发消息」
     ScopedHiddenHost host;
     REQUIRE(host.Host().IsWindow());
     std::unique_ptr<GroupMemberItem> row = MakeMemberRow(&host.Host(), kMyUid, true, kMember);

@@ -21,16 +21,14 @@
 
 #include <algorithm>
 #include <map>
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonmain {
 
 namespace {
 
 // "未分组"节点的显示名 —— 收拢那些没有出现在任何部门里的联系人。
-const TCHAR* const kUngroupedLabel = _T("未分组");
-
-// 取不到昵称与账号时的兜底显示名格式。
-const TCHAR* const kFmtFallbackName = _T("用户%u");
+const TCHAR* const kUngroupedLabel = TR_NOOP(L"未分组");
 
 // UTF-8 → CString。空串安全。
 CString Utf8ToCStr(const std::string& utf8)
@@ -324,7 +322,7 @@ std::vector<MemberPickerNode> BuildMemberPickerTree(
         MemberPickerNode groupNode;
         groupNode.m_depth = 0;
         groupNode.m_kind  = kPickerNodeDept;
-        groupNode.m_label = kUngroupedLabel;
+        groupNode.m_label = TR(kUngroupedLabel);
         nodes.push_back(groupNode);
 
         for (size_t i = 0; i < ungrouped.size(); ++i)

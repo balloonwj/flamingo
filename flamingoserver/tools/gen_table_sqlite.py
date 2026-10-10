@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-由 table.sql（MySQL 方言）生成 table_sqlite.sql（SQLite 方言）。
+由 table_mysql.sql（MySQL 方言）生成 table_sqlite.sql（SQLite 方言）。
 
 balloonwj@qq.com   2026-07-31
 
@@ -9,9 +9,9 @@ balloonwj@qq.com   2026-07-31
     python tools/gen_table_sqlite.py
 
 为什么要有这个脚本：两种后端的建表语句必须描述同一套结构，手工维护两份迟早会失配。
-table.sql 是结构的权威定义（MysqlManager.cpp 里那份运行期自动建表的定义历史上会漏列，
-见 migrations/ 下几个补列脚本的说明），所以以它为源头单向生成 SQLite 版本。
-**改了 table.sql 之后请重跑本脚本**，生成结果需人工过一遍再提交。
+table_mysql.sql 是结构的权威定义（MysqlManager.cpp 里那份运行期自动建表的定义历史上会漏列），
+所以以它为源头单向生成 SQLite 版本。
+**改了 table_mysql.sql 之后请重跑本脚本**，生成结果需人工过一遍再提交。
 
 两种方言之间需要处理的差异：
   1. 类型：bigint(N) / int(N) 一律转成 INTEGER；varchar/blob/text/datetime/timestamp 保留原样
@@ -63,7 +63,7 @@ TYPE_RULES = [
 
 
 def strip_note_lines(text):
-    """去掉 table.sql 里以 // 开头的笔记行。它们不是合法 SQL，只是作者的备注。"""
+    """去掉 table_mysql.sql 里以 // 开头的笔记行。它们不是合法 SQL，只是作者的备注。"""
     kept = []
     for line in text.split('\n'):
         if line.strip().startswith('//'):
@@ -82,7 +82,7 @@ def split_top_level(text, sep=','):
     parts = []
     depth = 0
     #当前所处字符串字面量的引号字符，None 表示不在字面量内。
-    #table.sql 里单引号与双引号两种写法都有（MySQL 两种都接受），必须都认
+    #table_mysql.sql 里单引号与双引号两种写法都有（MySQL 两种都接受），必须都认
     quote_char = None
     current = []
     for ch in text:
@@ -137,7 +137,7 @@ def parse_column(line):
     rest = ' '.join(match.group(2).split())
 
     #先摘出 COMMENT 子句，它可能包含逗号与关键字，必须最先剥离。
-    #table.sql 里单引号与双引号两种写法都有，两种都要认
+    #table_mysql.sql 里单引号与双引号两种写法都有，两种都要认
     comment = ''
     comment_match = re.search(r"COMMENT\s+'((?:[^']|'')*)'", rest, re.I)
     if comment_match is None:
@@ -239,7 +239,7 @@ def parse_keys(key_lines):
 
 
 def parse_table_sql(path):
-    """解析 table.sql，返回 [(表名, [列 dict...], 索引定义行 [...])]。"""
+    """解析 table_mysql.sql，返回 [(表名, [列 dict...], 索引定义行 [...])]。"""
     text = strip_note_lines(io.open(path, encoding='utf-8-sig').read())
     tables = []
     pattern = re.compile(
@@ -443,43 +443,6 @@ def escape_c_bytes(text):
     return ''.join(chunk)
 
 
-def make_add_column_clause(table, column, auto_column):
-    """
-    生成 ALTER TABLE ... ADD COLUMN 用的列定义片段，返回 None 表示该列不适合走补列路径。
-
-    SQLite 对 ADD COLUMN 有额外限制，必须在这里处理掉：
-      - 新列不能是 PRIMARY KEY，所以自增主键列不参与补列（主键列都缺了的表已经没救，
-        补一列也修不回来，只能重建）；
-      - 新列若声明 NOT NULL，其默认值必须是**常量**，不能是括号表达式。
-        本项目里 timestamp 列的默认值是 datetime('now','localtime')，属于表达式，
-        因此补这类列时只能退而求其次：去掉 NOT NULL 与默认值，存量行取 NULL。
-    """
-    if auto_column is not None and column['name'] == auto_column:
-        return None
-
-    parts = [map_type(column['type'])]
-
-    if (table, column['name']) in NOCASE_COLUMNS:
-        parts.append('COLLATE NOCASE')
-
-    default = normalize_default(column['default'])
-    is_expression_default = (default is not None and default.startswith('('))
-
-    if is_expression_default:
-        #表达式默认值在 ADD COLUMN 里不被接受，连带 NOT NULL 也只能放弃
-        return ' '.join(parts)
-
-    if column['not_null']:
-        #NOT NULL 必须配常量默认值，否则存量行无值可填，SQLite 会直接拒绝
-        if default is None or default == 'NULL':
-            return ' '.join(parts)
-        parts.append('NOT NULL')
-    if default is not None:
-        parts.append('DEFAULT %s' % default)
-
-    return ' '.join(parts)
-
-
 def render_schema_source(tables, statements):
     """生成 sqliteapi/SqliteSchema.cpp 的内容（纯 ASCII）。"""
     lines = []
@@ -487,8 +450,8 @@ def render_schema_source(tables, statements):
     lines.append(' *  SQLite 库结构数据，SqliteSchema.cpp')
     lines.append(' *  balloonwj@qq.com   2026-07-31')
     lines.append(' *')
-    lines.append(' *  本文件由 tools/gen_table_sqlite.py 从 table.sql 自动生成，请勿手工编辑。')
-    lines.append(' *  改了 table.sql 之后重跑该脚本：python tools/gen_table_sqlite.py')
+    lines.append(' *  本文件由 tools/gen_table_sqlite.py 从 table_mysql.sql 自动生成，请勿手工编辑。')
+    lines.append(' *  改了 table_mysql.sql 之后重跑该脚本：python tools/gen_table_sqlite.py')
     lines.append(' *')
     lines.append(' *  文件内容与同时生成的 table_sqlite.sql 一致，只是把语句嵌进了程序，')
     lines.append(' *  这样 chatserver 建表时不依赖运行期能否读到那个 .sql 文件。')
@@ -499,8 +462,8 @@ def render_schema_source(tables, statements):
     lines.append('namespace sqliteapi {')
     lines.append('')
 
-    #建表语句与「索引 / 触发器」语句必须分开：存量库补列时，索引可能建在尚未补上的列上，
-    #所以执行顺序必须是 建表 -> 补列 -> 建索引与触发器。合成一个数组就没法插入补列这一步。
+    #建表语句与「索引 / 触发器」语句分成两组：索引与触发器建在表上，执行顺序必须是先建表、
+    #再建索引与触发器（CSqliteManager::init 按这个顺序执行）。
     table_statements = []
     post_statements = []
     for statement in statements:
@@ -536,27 +499,6 @@ def render_schema_source(tables, statements):
     lines.append('const int SCHEMA_TABLE_COUNT = %d;' % len(tables))
     lines.append('')
 
-    column_entries = []
-    for name, columns, key_lines in tables:
-        auto_columns = [c['name'] for c in columns if c['auto_increment']]
-        auto_column = auto_columns[0] if auto_columns else None
-        for column in columns:
-            clause = make_add_column_clause(name, column, auto_column)
-            if clause is None:
-                continue
-            column_entries.append((name, column['name'], clause))
-
-    lines.append('const SchemaColumn SCHEMA_COLUMNS[] =')
-    lines.append('{')
-    for table, column, clause in column_entries:
-        #clause 里可能带中文默认值（如 DEFAULT '我的好友'），同样要按字节转义，
-        #理由见 render_c_string 的注释
-        lines.append('    { "%s", "%s", "%s" },'
-                     % (table, column, escape_c_bytes(clause)))
-    lines.append('};')
-    lines.append('')
-    lines.append('const int SCHEMA_COLUMN_COUNT = %d;' % len(column_entries))
-    lines.append('')
     lines.append('} // namespace sqliteapi')
     lines.append('')
 
@@ -599,7 +541,7 @@ def split_statements(sql_text):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
-    source = os.path.join(root, 'table.sql')
+    source = os.path.join(root, 'table_mysql.sql')
     target = os.path.join(root, 'table_sqlite.sql')
 
     tables = parse_table_sql(source)
@@ -612,12 +554,12 @@ def main():
     out.append('--  FlamingoIM 本地 SQLite 模式的建表脚本')
     out.append('--  balloonwj@qq.com   2026-07-31')
     out.append('--')
-    out.append('--  本文件由 tools/gen_table_sqlite.py 从 table.sql 自动生成，请勿手工编辑。')
-    out.append('--  改了 table.sql 之后重跑该脚本即可：python tools/gen_table_sqlite.py')
+    out.append('--  本文件由 tools/gen_table_sqlite.py 从 table_mysql.sql 自动生成，请勿手工编辑。')
+    out.append('--  改了 table_mysql.sql 之后重跑该脚本即可：python tools/gen_table_sqlite.py')
     out.append('--')
     out.append('--  chatserver 在 dbtype=sqlite 时启动会执行本脚本建表；语句全部是')
-    out.append('--  IF NOT EXISTS 形式，重复执行安全。缺列的自动补齐由 CSqliteManager')
-    out.append('--  用 PRAGMA table_info 比对后 ALTER TABLE ADD COLUMN 完成，不在本文件里。')
+    out.append('--  IF NOT EXISTS 形式，重复执行安全；已有的表不做任何改动（不补列），')
+    out.append('--  表结构有变化时，已有的库须手工修改或重建。')
     out.append('-- ============================================================')
     out.append('')
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 平台超级管理员第 2 章：企业列表、新增企业、审核 / 停用 / 删除企业、企业设置与企业管理员、企业详情。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>企业管理 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="p02">
+<article class="doc">
+  <h1>企业管理</h1>
+  <p class="lead">平台上的每家企业都由平台超级管理员开通。本章介绍如何查找企业、新增企业并审核通过、停用或删除企业、修改企业信息和企业管理员，以及进入某家企业的详情替它管理组织架构。</p>
+  <ul class="facts">
+    <li>适用：平台超级管理员</li>
+    <li>位置：左侧导航「企业管理」</li>
+  </ul>
+
+  <h2 id="list">所有企业</h2>
+  <p>点左侧导航的 <span class="ui">企业管理</span>，页面列出入驻平台的全部企业：</p>
+  <figure class="shot">
+    <img src="../img/sa_enterprises.png" width="880" alt="所有企业列表">
+    <figcaption>「所有企业」页面，演示平台上有 4 家企业</figcaption>
+  </figure>
+  <ul>
+    <li><b>右上角</b>：<span class="ui">导出 CSV</span> 把企业列表保存为 CSV 文件；<span class="ui">新增企业</span> 见下一节。</li>
+    <li><b>统计卡</b>：<span class="ui">企业总数</span>、<span class="ui">活跃企业</span>（附活跃占比）、<span class="ui">待审核</span>、<span class="ui">总用户数</span>（全平台员工）和 <span class="ui">今日审计事件</span>。</li>
+    <li><b>查找</b>：在 <span class="ui">搜索企业名称、行业…</span> 框中输入关键字；用 <span class="ui">全部</span>、<span class="ui">活跃</span>、<span class="ui">待审核</span>、<span class="ui">已停用</span> 按状态筛选。点 <span class="ui">更多筛选</span> 还可以按行业、套餐和开通日期范围（格式 YYYY-MM-DD）筛选，<span class="ui">清除</span> 恢复全部条件；<span class="ui">刷新</span> 重新读取列表。</li>
+    <li><b>列表</b>：<span class="ui">企业</span>（名称与企业 ID）、<span class="ui">行业 · 地区</span>、<span class="ui">规模</span>（人数与部门数）、<span class="ui">套餐</span>、<span class="ui">主管理员</span>（姓名与邮箱）、<span class="ui">状态</span> 和 <span class="ui">开通日期</span>。双击某一行进入该企业的详情。</li>
+  </ul>
+
+  <h2 id="new">新增企业</h2>
+  <p>点右上角的 <span class="ui">新增企业</span>，打开新增企业对话框：</p>
+  <figure class="shot">
+    <img src="../img/sa_enterprise_new.png" width="880" alt="新增企业对话框">
+    <figcaption>新增企业对话框，顶部提示企业创建后进入「待审核」状态</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>填写 <span class="ui">企业全称</span>（必填），例如「明远科技有限公司」。员工在客户端自助注册时填写的公司名称必须与它完全一致。</li>
+    <li>按需填写 <span class="ui">简称</span>，选择 <span class="ui">所属行业</span>，填写 <span class="ui">主要地区</span>，选择 <span class="ui">套餐</span>（基础版、专业版或旗舰版）。</li>
+    <li>填写 <span class="ui">主管理员姓名</span> 和 <span class="ui">管理员邮箱</span>（均为必填）。这个邮箱就是该企业管理员登录管理控制台的账户。</li>
+    <li>点 <span class="ui">创建企业</span>。</li>
+  </ol>
+  <p>创建成功后弹出「企业创建成功」对话框，显示初始管理员密码，点 <span class="ui">复制密码</span> 可以复制。请把管理员邮箱和这个密码转告该企业的管理员。</p>
+  <div class="callout warn"><b>初始密码只显示一次</b>关闭对话框后就无法再看到这个密码，请先妥善保存再关闭。</div>
+  <div class="callout note"><b>新企业要先审核通过</b>企业创建后进入「待审核」状态，审核通过后该企业的员工才能使用 FlamingoIM 客户端。审核方法见下一节。</div>
+
+  <h2 id="menu">审核、停用与删除企业</h2>
+  <p>每一行末尾的「···」按钮会弹出该企业的操作菜单：</p>
+  <figure class="shot">
+    <img src="../img/sa_enterprise_menu.png" width="880" alt="企业操作菜单">
+    <figcaption>活跃企业的操作菜单，「打开详情」展开了子菜单</figcaption>
+  </figure>
+  <table>
+    <tr><th>菜单项</th><th>作用</th></tr>
+    <tr><td>打开详情 ▸</td><td>子菜单中选择 <span class="ui">组织架构</span>、<span class="ui">服务号</span> 或 <span class="ui">功能开关</span>，直接打开企业详情的对应页签</td></tr>
+    <tr><td>企业设置…</td><td>修改企业信息、管理企业管理员，见下一节</td></tr>
+    <tr><td>审核通过</td><td>只在企业处于「待审核」时出现，把企业改为「活跃」，员工随即可以使用客户端</td></tr>
+    <tr><td>停用企业</td><td>只在企业处于「活跃」时出现。停用后该企业全体员工会被立即下线，在恢复为活跃之前都无法登录</td></tr>
+    <tr><td>启用企业</td><td>只在企业处于「已停用」时出现，把企业恢复为「活跃」</td></tr>
+    <tr><td>删除企业</td><td>删除该企业，它的组织、成员等数据会被一并物理删除，不可恢复</td></tr>
+    <tr><td>复制企业 ID</td><td>把企业 ID 复制到剪贴板</td></tr>
+    <tr><td>导出该企业为 CSV</td><td>只导出这一家企业的信息</td></tr>
+  </table>
+  <div class="callout warn"><b>删除企业不可恢复</b>停用和删除都会先弹出确认框。只是暂时不让企业使用时请选择「停用企业」，以后可以随时启用；「删除企业」会清除该企业的全部组织与成员数据。</div>
+
+  <h2 id="settings">企业设置与企业管理员</h2>
+  <p>在操作菜单中选择 <span class="ui">企业设置…</span>（或在企业详情页点 <span class="ui">企业设置</span>），打开企业设置对话框：</p>
+  <figure class="shot">
+    <img src="../img/sa_enterprise_settings.png" width="880" alt="企业设置对话框">
+    <figcaption>明远科技有限公司的企业设置</figcaption>
+  </figure>
+  <h3>修改企业信息</h3>
+  <ol class="steps">
+    <li>在 <span class="ui">企业信息</span> 中按需修改 <span class="ui">企业全称</span>（必填）、<span class="ui">企业简称</span>、<span class="ui">所属行业</span>、<span class="ui">主要地区</span> 和 <span class="ui">套餐</span>。</li>
+    <li>按需填写 <span class="ui">账号前缀</span>：由字母和点号组成，1~10 个字符，例如 <code>HW.</code>；不填时为 <code>EMP</code>。账号前缀用于生成该企业新员工的登录账号，只影响以后新建的账号，已有账号不变。</li>
+    <li>点 <span class="ui">保存企业信息</span>。</li>
+  </ol>
+  <div class="callout tip"><b>修改企业全称时</b>员工在客户端自助注册时，填写的公司名称必须与企业全称完全一致。修改企业全称后，请把新名称告诉需要自助注册的员工。</div>
+  <h3>管理企业管理员</h3>
+  <p>对话框下半部分的 <span class="ui">企业管理员</span> 列出该企业的全部管理员，每人显示姓名、邮箱和状态（正常或停用）。一家企业可以有多位管理员。</p>
+  <ul>
+    <li><b>新增管理员</b>：在 <span class="ui">新增管理员</span> 一行填写管理员姓名和管理员邮箱，点 <span class="ui">添加</span>，立即生效（不需要再点「保存企业信息」）。成功后弹出「管理员新增成功」对话框，显示初始登录密码，同样只显示一次。</li>
+    <li><b>移除管理员</b>：点某位管理员右侧的 <span class="ui">移除</span> 并确认，该账号立即失去本企业控制台的管理权限。</li>
+  </ul>
+
+  <h2 id="detail">企业详情</h2>
+  <p>双击企业列表中的某一行，或在操作菜单中选择「打开详情」，进入该企业的详情页面：</p>
+  <figure class="shot">
+    <img src="../img/sa_enterprise_detail.png" width="880" alt="超管看到的企业详情">
+    <figcaption>超管打开的明远科技有限公司详情，比企业管理员多出返回箭头、「企业设置」和「发布公告」</figcaption>
+  </figure>
+  <p>企业详情与企业管理员看到的「本企业」页面相同，组织架构、服务号、在线用户和功能开关的用法见第二部分：<a href="../admin/02-organization.html">「组织架构与员工」</a>、<a href="../admin/03-service-accounts.html">「服务号」</a>、<a href="../admin/04-groups-online.html">「建群与在线用户」</a>、<a href="../admin/05-feature-switches.html">「功能开关」</a>。超管额外多出：</p>
+  <ul>
+    <li>企业头像左侧的返回箭头，点它回到企业列表。</li>
+    <li><span class="ui">企业设置</span>：打开上一节的企业设置对话框。</li>
+    <li><span class="ui">发布公告</span>：打开新建公告对话框，受众已预先设为「指定企业」并选中这家企业，用法见<a href="03-announcements.html">「平台公告」</a>。</li>
+  </ul>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

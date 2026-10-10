@@ -32,7 +32,14 @@
 #include "../../net/ImageTransfer.h"                       // 图片下载与缓存路径
 #include "../../net/FileTransfer.h"                        // 文件下载与缓存路径
 #include "../../net/CurrentUserAccount.h"                  // 缓存目录按登录账号区分
+#include "../../net/UserCachePath.h"                       // UserCacheDir：取当前账号的语音缓存目录 ChatVoice
+#include "../BalloonChatWnd/ChatVoiceBubble.h"             // DecideVoiceClick 等：语音条的点击判定与提示文字
+#include "../BalloonChatWnd/ChatVoiceStrip.h"              // ChatVoiceStrip：就地更新播放与下载状态
+#include "../BalloonMarkdown/MarkdownEditorManager.h"      // 点 Markdown 卡片打开预览窗口
+#include "../BalloonMarkdown/MarkdownEditorModel.h"        // MarkdownPreviewMeta：预览窗口的「发送者 · 时间」
+#include "../BalloonCode/CodeViewerWindow.h"                // 点代码卡片打开代码查看窗
 #include "../../net/Protocol.h"                            // ::message_type_*
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using namespace balloonwjui;
 using namespace balloonhistory;
@@ -41,8 +48,10 @@ namespace {
 
 //窗口初始客户区尺寸与最小尺寸（像素）。比消息记录窗窄：这里没有筛选栏与分页栏，
 //宽度只需放下一行正文
-const int kViewerWidth     = 600;
-const int kViewerHeight    = 640;
+// 含标题栏的整窗初始尺寸（逻辑像素）。2026-10-02 修复 ResizeClient 多叠加系统边框的问题时由 600×640 加上
+// 修复前多叠加的 18×47（120 DPI 实测），保持修复前的窗口大小。
+const int kViewerWidth     = 618;
+const int kViewerHeight    = 687;
 const int kViewerMinWidth  = 420;
 const int kViewerMinHeight = 360;
 
@@ -61,7 +70,6 @@ const int kHeaderPadTop   = 8;    // 顶部一行的上内边距
 const int kHeaderPadBot   = 6;    // 顶部一行的下内边距
 const int kHeaderH        = 32;   // 顶部一行的总高
 const int kSubLineH       = 18;   // "共 N 条消息"文字高
-const int kListScrollBarW = 10;   // 列表滚动条宽，与消息记录窗一致
 
 //一秒的毫秒数：time() 返回秒，"今天"的日期键按毫秒换算
 const int64_t kMsPerSecond = 1000;
@@ -78,9 +86,9 @@ int g_liveViewerCount = 0;
 const INT_PTR kShellExecOkThreshold = 32;
 
 //标题取不到时的缺省标题，与聊天窗合并卡片的缺省标题一致
-const wchar_t* const kDefaultTitle = L"聊天记录";
+const wchar_t* const kDefaultTitle = TR_NOOP(L"聊天记录");
 //提示框标题
-const wchar_t* const kMsgBoxTitle = L"聊天记录";
+const wchar_t* const kMsgBoxTitle = TR_NOOP(L"聊天记录");
 
 //UTF-8 转 CString（UTF-16）。空串安全
 CString Utf8ToCStr(const std::string& utf8)
@@ -108,6 +116,7 @@ CMergedRecordWindow::CMergedRecordWindow()
     , m_hostPanel(NULL)
     , m_pendingOpenMsgid(0)
     , m_hTitleIcon(NULL)
+    , m_playingVoiceMsgid(0)
 {
 }
 
@@ -146,7 +155,7 @@ bool CMergedRecordWindow::Open(const std::string& contentJson,
     m_fileStates.Clear();
     m_pendingOpenMsgid = 0;
 
-    const CString title = m_record.m_title.empty() ? CString(kDefaultTitle)
+    const CString title = m_record.m_title.empty() ? CString(TR(kDefaultTitle))
                                                    : Utf8ToCStr(m_record.m_title);
     if (!IsWindow())
     {
@@ -162,7 +171,7 @@ bool CMergedRecordWindow::Open(const std::string& contentJson,
     if (label != NULL)
     {
         CString sub;
-        sub.Format(_T("共 %u 条消息"), (unsigned)m_record.m_messages.size());
+        sub.Format(TR(L"共 %u 条消息"), (unsigned)m_record.m_messages.size());
         label->SetText(sub);
     }
     RebuildList(true);
@@ -176,7 +185,7 @@ bool CMergedRecordWindow::Open(const std::string& contentJson,
 
 bool CMergedRecordWindow::BuildWindow()
 {
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"), WS_OVERLAPPEDWINDOW, 0) == NULL)
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("merged record viewer: Create failed.");
         return false;
@@ -199,10 +208,13 @@ bool CMergedRecordWindow::BuildWindow()
     {
         SetIcon(m_hTitleIcon);
     }
+    //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+    m_taskIcons.ApplyTaskIcons(m_hWnd);
     SetButtons(true, true, true);   //最小化 / 最大化 / 关闭
     SetResizable(true);
     SetMinSize(kViewerMinWidth, kViewerMinHeight);
-    //双击行打开图片、文件或下一层记录要靠双击合成，DuiHost 默认不发双击
+    //双击行打开图片、文件或下一层记录要靠双击
+    //（2026-10-06 更正：balloonui 窗口的窗口类其实带 CS_DBLCLKS，系统本就会投递双击，这里的双击合成实际不起作用，保留无害）
     EnableDoubleClick(true);
 
     BuildClient();
@@ -250,7 +262,7 @@ void CMergedRecordWindow::BuildClient()
     //窗口缩放边框让出位置，否则滚动条贴着窗口右缘，鼠标移到滑块上只会变成缩放箭头
     std::unique_ptr<DuiScrollView> scroll(new DuiScrollView());
     scroll->SetAutoContentHeight(true);
-    scroll->SetScrollBarWidth(kListScrollBarW);
+    // 滚动条用 balloonui 统一的悬浮式细滑块与默认命中带宽（2026-10-04 起不再单独设宽）
     m_pScroll = scroll.get();
     root->AddChild(std::unique_ptr<DuiControl>(scroll.release()),
                    Hint().Weight(1).Margin(0, 0, ListRightInset(), 0));
@@ -276,6 +288,22 @@ int CMergedRecordWindow::ListWidth() const
 void CMergedRecordWindow::FillRowStates(std::vector<HistoryRowView>& rows) const
 {
     const std::wstring account = net::CurrentUserAccount();
+    //语音条：按当前账号的缓存目录补本机文件状态，再套上本窗口记下的下载中、播放中（第 4c 步）
+    const std::wstring voiceDir = net::UserCacheDir(g_szDataRoot, account, L"ChatVoice");
+    for (size_t v = 0; v < rows.size(); ++v)
+    {
+        if (!rows[v].m_isVoice)
+        {
+            continue;
+        }
+        ResolveVoiceRowLocalState(rows[v], voiceDir);
+        if (rows[v].m_voice.voiceState != balloonchatwnd::kVoiceStateReady
+            && m_downloadingVoices.count(rows[v].m_voice.voiceMd5) > 0)
+        {
+            rows[v].m_voice.voiceState = balloonchatwnd::kVoiceStateDownloading;
+        }
+        rows[v].m_voice.voicePlaying = (m_playingVoiceMsgid != 0 && rows[v].m_voice.msgid == m_playingVoiceMsgid);
+    }
     for (size_t i = 0; i < rows.size() && i < m_record.m_messages.size(); ++i)
     {
         HistoryRowView& row = rows[i];
@@ -340,7 +368,7 @@ void CMergedRecordWindow::RebuildList(bool force)
     FillRowStates(rows);
 
     //查看窗是只读的，行上不会出现 Pin / 定位按钮，不给它们预留位置，正文用满整行
-    m_pScroll->SetContent(BuildListContent(rows, _T("这份聊天记录是空的"), _T(""), listWidth, false));
+    m_pScroll->SetContent(BuildListContent(rows, TR(L"这份聊天记录是空的"), _T(""), listWidth, false));
     m_pScroll->ForceLayout(m_pScroll->GetRect());
     m_pScroll->Invalidate();
 }
@@ -411,9 +439,9 @@ void CMergedRecordWindow::StartDownload(int row, bool openAfter)
         return;
     }
     const net::MessageNotify& sub = m_record.m_messages[(size_t)row];
-    //调试入口没有登录态，算不出缓存目录、也连不上服务端
+    //调试入口没有登录态，算不出缓存目录、也连不上服务端；在线直传的文件服务器上没有副本，无从下载
     const std::wstring account = net::CurrentUserAccount();
-    if (account.empty() || sub.m_msgid <= 0)
+    if (account.empty() || sub.m_msgid <= 0 || (sub.m_msgtype == ::message_type_file && sub.m_fileDirect))
     {
         return;
     }
@@ -434,7 +462,7 @@ void CMergedRecordWindow::StartDownload(int row, bool openAfter)
     {
         if (sub.m_imageFileId.empty() || sub.m_imageMd5.empty())
         {
-            ::MessageBoxW(m_hWnd, L"这条消息缺少图片信息，无法下载原图。", kMsgBoxTitle,
+            ::MessageBoxW(m_hWnd, TR(L"这条消息缺少图片信息，无法下载原图。"), TR(kMsgBoxTitle),
                           MB_OK | MB_ICONWARNING);
             return;
         }
@@ -447,7 +475,7 @@ void CMergedRecordWindow::StartDownload(int row, bool openAfter)
     {
         if (sub.m_fileFileId.empty())
         {
-            ::MessageBoxW(m_hWnd, L"这条消息缺少文件信息，无法下载。", kMsgBoxTitle,
+            ::MessageBoxW(m_hWnd, TR(L"这条消息缺少文件信息，无法下载。"), TR(kMsgBoxTitle),
                           MB_OK | MB_ICONWARNING);
             return;
         }
@@ -494,6 +522,12 @@ void CMergedRecordWindow::OnRowDoubleClicked(int row)
         return;
     }
 
+    //在线直传的文件（2026-10-05 起）：只是一行说明文字，服务器上没有副本，没有可打开或下载的东西
+    if (sub.m_msgtype == ::message_type_file && sub.m_fileDirect)
+    {
+        return;
+    }
+
     //图片与文件：本地有就直接打开，没有就先下载、下完自动打开
     if (IsImageType(sub.m_msgtype) || sub.m_msgtype == ::message_type_file)
     {
@@ -514,7 +548,7 @@ void CMergedRecordWindow::OnRowDoubleClicked(int row)
                                            SW_SHOWNORMAL);
             if ((INT_PTR)hr <= kShellExecOkThreshold)
             {
-                ::MessageBoxW(m_hWnd, L"打开文件失败，可能没有关联的打开方式。", kMsgBoxTitle,
+                ::MessageBoxW(m_hWnd, TR(L"打开文件失败，可能没有关联的打开方式。"), TR(kMsgBoxTitle),
                               MB_OK | MB_ICONWARNING);
             }
         }
@@ -599,8 +633,8 @@ void CMergedRecordWindow::OnFileDownloadFinished(int64_t msgid, bool ok,
                                            SW_SHOWNORMAL);
             if ((INT_PTR)hr <= kShellExecOkThreshold)
             {
-                ::MessageBoxW(m_hWnd, L"文件已下载，但打开失败，可能没有关联的打开方式。",
-                              kMsgBoxTitle, MB_OK | MB_ICONWARNING);
+                ::MessageBoxW(m_hWnd, TR(L"文件已下载，但打开失败，可能没有关联的打开方式。"),
+                              TR(kMsgBoxTitle), MB_OK | MB_ICONWARNING);
             }
         }
         return;
@@ -831,11 +865,187 @@ LRESULT CMergedRecordWindow::OnImageReadyMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+balloonchatwnd::ChatVoiceStrip* CMergedRecordWindow::FindVoiceStrip(long long msgid)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || msgid == 0)
+    {
+        return NULL;
+    }
+    //语音条按「基址 + 行下标」编号，行下标就是子消息下标
+    for (size_t i = 0; i < m_record.m_messages.size() && i < (size_t)kIdHistoryVoiceCapacity; ++i)
+    {
+        balloonchatwnd::ChatVoiceStrip* strip = dynamic_cast<balloonchatwnd::ChatVoiceStrip*>(
+            content->FindCtrlById((UINT)(kIdHistoryVoiceBase + i)));
+        if (strip != NULL && strip->VoiceMessage().msgid == msgid)
+        {
+            return strip;
+        }
+    }
+    return NULL;
+}
+
+LRESULT CMergedRecordWindow::OnChatOpenCodeViewer(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                  BOOL& /*bHandled*/)
+{
+    balloonchatwnd::CodeViewerOpenRequest* pReq = (balloonchatwnd::CodeViewerOpenRequest*)lParam;
+    if (pReq == NULL)
+    {
+        return 0;
+    }
+    ballooncode::CCodeViewerWindow::Show(m_hWnd, pReq->m_code, pReq->m_lang, pReq->m_key, pReq->m_notes);
+    delete pReq;
+    return 0;
+}
+
+LRESULT CMergedRecordWindow::OnChatOpenMarkdownPreview(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                       BOOL& /*bHandled*/)
+{
+    //lParam 为堆上的请求，用完在这里释放
+    std::unique_ptr<balloonchatwnd::MarkdownPreviewOpenRequest> req((balloonchatwnd::MarkdownPreviewOpenRequest*)lParam);
+    if (!req)
+    {
+        return 0;
+    }
+    //合并记录里卡片不区分本人，预览窗口显示原发送者的名字
+    balloonmd::MarkdownPreviewDoc doc;
+    doc.m_sourceUtf8 = req->m_sourceUtf8;
+    doc.m_title = req->m_title;
+    doc.m_meta = balloonmd::MarkdownPreviewMeta(req->m_sender, req->m_timestampMs);
+    doc.m_key = req->m_key;
+    balloonmd::CMarkdownEditorManager::GetInstance().OpenPreview(doc);
+    LOG_INFO("merged record window: open markdown preview, key=%s, bytes=%u.", req->m_key.c_str(),
+             (unsigned)req->m_sourceUtf8.size());
+    return 0;
+}
+
+LRESULT CMergedRecordWindow::OnChatVoiceActionMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                  BOOL& /*bHandled*/)
+{
+    balloonchatwnd::VoiceActionRequest* req = reinterpret_cast<balloonchatwnd::VoiceActionRequest*>(lParam);
+    if (req == NULL)
+    {
+        return 0;
+    }
+    const long long msgid = req->m_msgid;
+    delete req;
+    balloonchatwnd::ChatVoiceStrip* strip = FindVoiceStrip(msgid);
+    if (strip == NULL)
+    {
+        return 0;
+    }
+    const balloonchatwnd::ChatMessage msg = strip->VoiceMessage();
+    balloonvoice::CVoiceHub& hub = balloonvoice::CVoiceHub::GetInstance();
+    switch (balloonchatwnd::DecideVoiceClick(msg))
+    {
+    //就绪的语音：开始播放；合并记录里没有已听状态，不写本地库
+    case balloonchatwnd::kVoiceClickPlay:
+    {
+        balloonvoice::VoicePlayKey key;
+        key.m_msgid = msg.msgid;
+        if (!hub.StartPlay(this, key, std::wstring((LPCWSTR)msg.voiceLocalPath)))
+        {
+            ::MessageBoxW(m_hWnd, balloonchatwnd::VoicePlayFailedHint().c_str(), TR(L"聊天记录"),
+                          MB_OK | MB_ICONWARNING);
+            LOG_WARNING("merged viewer: voice play failed, msgid=%lld.", msg.msgid);
+            break;
+        }
+        m_playingVoiceMsgid = msg.msgid;
+        balloonchatwnd::ChatMessage playing = msg;
+        playing.voicePlaying = true;
+        playing.voicePlayFrame = 0;
+        strip->SetVoiceMessage(playing, false);
+        LOG_INFO("merged viewer: voice playing, msgid=%lld.", msg.msgid);
+        break;
+    }
+    //正在播放：停止；语音中心通知本窗口播放结束，语音条在 OnVoicePlayEnded 里退出播放中
+    case balloonchatwnd::kVoiceClickStop:
+        hub.StopPlay();
+        break;
+    //还在下载：语音条已画成下载中，不另外提示
+    case balloonchatwnd::kVoiceClickWaitDownload:
+        break;
+    //本机没有：下载到 ChatVoice\<md5>.ogg，结果按 md5 经主面板转回来（OnVoiceDownloadFinished）
+    case balloonchatwnd::kVoiceClickRetryDownload:
+    {
+        const std::wstring voiceDir = net::UserCacheDir(g_szDataRoot, net::CurrentUserAccount(), L"ChatVoice");
+        if (msg.voiceFileId.empty() || msg.voiceMd5.empty() || voiceDir.empty())
+        {
+            break;
+        }
+        m_downloadingVoices.insert(msg.voiceMd5);
+        net::FileTransfer::GetInstance().EnqueueVoiceDownload(msg.voiceFileId, msg.voiceMd5, msg.voiceSize,
+                                                              balloonvoice::VoiceCachePath(voiceDir, msg.voiceMd5));
+        balloonchatwnd::ChatMessage downloading = msg;
+        downloading.voiceState = balloonchatwnd::kVoiceStateDownloading;
+        strip->SetVoiceMessage(downloading, false);
+        LOG_INFO("merged viewer: voice download started, md5=%s.", msg.voiceMd5.c_str());
+        break;
+    }
+    //其它取值不会出现
+    default:
+        break;
+    }
+    return 0;
+}
+
+void CMergedRecordWindow::OnVoicePlayProgress(const balloonvoice::VoicePlayKey& key, int64_t playedMs,
+                                              int64_t /*totalMs*/)
+{
+    balloonchatwnd::ChatVoiceStrip* strip = FindVoiceStrip(key.m_msgid);
+    if (strip == NULL)
+    {
+        return;
+    }
+    const int frame = balloonchatwnd::VoicePlayFrame(playedMs);
+    //帧没变时不重画：进度约每 100 毫秒来一次，图标每 kVoicePlayFrameMs 毫秒才换一帧
+    if (strip->VoiceMessage().voicePlayFrame != frame)
+    {
+        balloonchatwnd::ChatMessage m = strip->VoiceMessage();
+        m.voicePlayFrame = frame;
+        strip->SetVoiceMessage(m, false);
+    }
+}
+
+void CMergedRecordWindow::OnVoicePlayEnded(const balloonvoice::VoicePlayKey& key, int /*reason*/)
+{
+    if (m_playingVoiceMsgid == key.m_msgid)
+    {
+        m_playingVoiceMsgid = 0;
+    }
+    balloonchatwnd::ChatVoiceStrip* strip = FindVoiceStrip(key.m_msgid);
+    if (strip != NULL)
+    {
+        balloonchatwnd::ChatMessage m = strip->VoiceMessage();
+        m.voicePlaying = false;
+        m.voicePlayFrame = 0;
+        strip->SetVoiceMessage(m, false);
+    }
+}
+
+void CMergedRecordWindow::OnVoiceDownloadFinished(const std::string& md5, bool ok)
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+    const bool mine = m_downloadingVoices.erase(md5) > 0;
+    if (mine && !ok)
+    {
+        LOG_ERROR("merged viewer: voice download failed, md5=%s.", md5.c_str());
+    }
+    //语音条的本机文件状态在重建列表时重新判断（FillRowStates）
+    PostForceRebuild();
+}
+
 LRESULT CMergedRecordWindow::OnDestroyMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                           LPARAM /*lParam*/, BOOL& bHandled)
 {
     //放在 WM_DESTROY 而不是 WM_CLOSE：主面板登出时会直接 DestroyWindow，不经过 WM_CLOSE
     balloonchatwnd::ChatImageCache::Inst().UnregisterListener(m_hWnd);
+    //本窗口正在播放语音时一并停止，之后语音中心不再给本窗口发播放通知（语音消息第 4c 步）
+    balloonvoice::CVoiceHub::GetInstance().DetachPlayListener(this);
+    m_playingVoiceMsgid = 0;
     if (g_liveViewerCount > 0)
     {
         --g_liveViewerCount;

@@ -30,6 +30,7 @@
 #include "../UI/BalloonMain/MainPanelStatusMenu.h"   // GetPresenceVisual（断言圆点配色仍与状态菜单同源）
 #include "../UI/BalloonMain/OnlineCapability.h"      // ConnectionUiState / GetConnectionMenuLabel
 #include "../net/Protocol.h"                      // presence_type（构造各种"当前状态"入参）
+#include "../Feature/Screenshot/ScreenshotHotkey.h"   // TrayScreenshotLabel：托盘「截图」一项的文字（TRAY25）
 
 using namespace balloonmain;
 
@@ -608,4 +609,210 @@ TEST_CASE("TRAY17 三种连接态 × 四个在线状态：当前项恒为一项�
             }
         }
     }
+}
+
+TEST_CASE("TRAY18 录屏模块可用时「打开主面板」之后多一项「发起录制」，录制中为「停止录制」", "[traymenu][record]")
+{
+    const std::vector<TrayMenuEntry> base = BuildTrayMenuModel(kTrayNormal, false, kCurrentOnline, kConnOnline);
+    const std::vector<TrayMenuEntry> start =
+        BuildTrayMenuModel(kTrayNormal, false, kCurrentOnline, kConnOnline, kRecordMenuStart);
+    const std::vector<TrayMenuEntry> stop =
+        BuildTrayMenuModel(kTrayNormal, false, kCurrentOnline, kConnOnline, kRecordMenuStop);
+    REQUIRE(start.size() == base.size() + 1);
+    size_t panelAt = start.size();
+    for (size_t i = 0; i < start.size(); ++i)
+    {
+        if (start[i].id == kTrayMenuOpenPanel)
+            panelAt = i;
+    }
+    REQUIRE(panelAt + 1 < start.size());
+    CHECK(start[panelAt + 1].id == kTrayMenuRecord);
+    //2026-10-05 起改名「发起录制」（屏幕共享第 17 期，方案第 2 节第 42 条）
+    CHECK(::wcscmp(start[panelAt + 1].label, L"发起录制") == 0);
+    CHECK(start[panelAt + 1].iconKind == kIconRecord);
+    CHECK(::wcscmp(stop[panelAt + 1].label, L"停止录制") == 0);
+    //未登录与锁定形态没有这一项
+    const std::vector<TrayMenuEntry> before =
+        BuildTrayMenuModel(kTrayBeforeLogin, false, kCurrentOnline, kConnOnline, kRecordMenuStart);
+    for (size_t i = 0; i < before.size(); ++i)
+        CHECK(before[i].id != kTrayMenuRecord);
+}
+
+// =====================================================================
+// TRAY19 ~ TRAY21 —— 锁屏（docs/锁屏方案.md）：锁屏不依赖登录，三种形态都在「打开主面板」紧下面多一项「锁屏」
+// =====================================================================
+
+namespace {
+
+// 找某个命令 id 所在的行号；没有时返回 items.size()
+size_t FindTrayRow(const std::vector<TrayMenuEntry>& items, int id)
+{
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        if (!items[i].isSeparator && items[i].id == id)
+            return i;
+    }
+    return items.size();
+}
+
+} // anonymous namespace
+
+TEST_CASE("TRAY19 锁屏模块可用时三种形态都在「打开主面板」紧下面多一项「锁屏」", "[traymenu][lock]")
+{
+    const TrayMenuKind kinds[3] = { kTrayBeforeLogin, kTrayNormal, kTrayLocked };
+    for (int k = 0; k < 3; ++k)
+    {
+        INFO("形态 = " << (int)kinds[k]);
+        const std::vector<TrayMenuEntry> base = BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline);
+        const std::vector<TrayMenuEntry> lock =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, true);
+        REQUIRE(lock.size() == base.size() + 1);
+        const size_t panelAt = FindTrayRow(lock, kTrayMenuOpenPanel);
+        REQUIRE(panelAt + 1 < lock.size());
+        CHECK(lock[panelAt + 1].id == kTrayMenuLockScreen);
+        CHECK(::wcscmp(lock[panelAt + 1].label, L"锁屏") == 0);
+        CHECK(lock[panelAt + 1].iconKind == kIconLock);
+        CHECK(lock[panelAt + 1].enabled);
+    }
+}
+
+TEST_CASE("TRAY20 锁屏模块不可用时三种形态与原来完全相同", "[traymenu][lock]")
+{
+    const TrayMenuKind kinds[3] = { kTrayBeforeLogin, kTrayNormal, kTrayLocked };
+    for (int k = 0; k < 3; ++k)
+    {
+        INFO("形态 = " << (int)kinds[k]);
+        const std::vector<TrayMenuEntry> base = BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline);
+        const std::vector<TrayMenuEntry> noLock =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, false);
+        REQUIRE(noLock.size() == base.size());
+        for (size_t i = 0; i < base.size(); ++i)
+        {
+            CHECK(noLock[i].id == base[i].id);
+            CHECK(noLock[i].isSeparator == base[i].isSeparator);
+        }
+        CHECK(FindTrayRow(noLock, kTrayMenuLockScreen) == noLock.size());
+    }
+}
+
+TEST_CASE("TRAY21 锁屏项的命令 id 为 12，与其它项（含录制、屏幕共享）都不重复", "[traymenu][lock]")
+{
+    CHECK((int)kTrayMenuLockScreen == 12);
+    const std::vector<TrayMenuEntry> all =
+        BuildTrayMenuModel(kTrayNormal, false, kCurrentOnline, kConnOnline, kRecordMenuStart, true, true);
+    std::vector<int> ids;
+    for (size_t i = 0; i < all.size(); ++i)
+    {
+        if (!all[i].isSeparator)
+            ids.push_back(all[i].id);
+    }
+    std::vector<int> sorted = ids;
+    std::sort(sorted.begin(), sorted.end());
+    CHECK(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());
+    //同时带录制与屏幕共享时，锁屏仍紧跟在「打开主面板」之后
+    const size_t panelAt = FindTrayRow(all, kTrayMenuOpenPanel);
+    REQUIRE(panelAt + 1 < all.size());
+    CHECK(all[panelAt + 1].id == kTrayMenuLockScreen);
+}
+
+TEST_CASE("TRAY22 Markdown 模块可用时三种形态都多一项「Markdown 编辑器」，排在锁屏之后", "[traymenu][mdentry]")
+{
+    const TrayMenuKind kinds[3] = { kTrayBeforeLogin, kTrayNormal, kTrayLocked };
+    for (int k = 0; k < 3; ++k)
+    {
+        INFO("形态 = " << (int)kinds[k]);
+        //有锁屏：排在锁屏之后
+        const std::vector<TrayMenuEntry> base =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, true);
+        const std::vector<TrayMenuEntry> md =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, true, true);
+        REQUIRE(md.size() == base.size() + 1);
+        const size_t lockAt = FindTrayRow(md, kTrayMenuLockScreen);
+        REQUIRE(lockAt + 1 < md.size());
+        CHECK(md[lockAt + 1].id == kTrayMenuMarkdownEditor);
+        CHECK(::wcscmp(md[lockAt + 1].label, L"Markdown 编辑器") == 0);
+        CHECK(md[lockAt + 1].iconKind == kIconMarkdown);
+        CHECK(md[lockAt + 1].enabled);
+        //没有锁屏：紧跟在「打开主面板」之后
+        const std::vector<TrayMenuEntry> noLock =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, false, true);
+        const size_t panelAt = FindTrayRow(noLock, kTrayMenuOpenPanel);
+        REQUIRE(panelAt + 1 < noLock.size());
+        CHECK(noLock[panelAt + 1].id == kTrayMenuMarkdownEditor);
+        //模块不可用时不出现
+        CHECK(FindTrayRow(base, kTrayMenuMarkdownEditor) == base.size());
+    }
+}
+
+TEST_CASE("TRAY23 Markdown 编辑器项的命令 id 为 13，与其它项都不重复", "[traymenu][mdentry]")
+{
+    CHECK((int)kTrayMenuMarkdownEditor == 13);
+    const std::vector<TrayMenuEntry> all =
+        BuildTrayMenuModel(kTrayNormal, false, kCurrentOnline, kConnOnline, kRecordMenuStart, true, true, true);
+    std::vector<int> ids;
+    for (size_t i = 0; i < all.size(); ++i)
+    {
+        if (!all[i].isSeparator)
+            ids.push_back(all[i].id);
+    }
+    std::vector<int> sorted = ids;
+    std::sort(sorted.begin(), sorted.end());
+    CHECK(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());
+    CHECK(FindTrayRow(all, kTrayMenuMarkdownEditor) < all.size());
+}
+
+// =====================================================================
+// TRAY24 / TRAY25 —— 托盘菜单「截图」（docs/截图独立模块方案.md 3.6 节、第 4 节，2026-10-07 与用户确认）
+// =====================================================================
+
+TEST_CASE("TRAY24 传入截图文字时三种形态都在「打开主面板」紧下面多一项「截图」，排在锁屏之前；不传时不出现",
+          "[traymenu][shotentry]")
+{
+    const wchar_t* const label = L"截图（Alt+Z）";
+    const TrayMenuKind kinds[3] = { kTrayBeforeLogin, kTrayNormal, kTrayLocked };
+    for (int k = 0; k < 3; ++k)
+    {
+        INFO("形态 = " << (int)kinds[k]);
+        const std::vector<TrayMenuEntry> base =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, true, true);
+        const std::vector<TrayMenuEntry> shot =
+            BuildTrayMenuModel(kinds[k], false, kCurrentOnline, kConnOnline, kRecordMenuHidden, false, true, true, label);
+        REQUIRE(shot.size() == base.size() + 1);
+        const size_t panelAt = FindTrayRow(shot, kTrayMenuOpenPanel);
+        REQUIRE(panelAt + 2 < shot.size());
+        CHECK(shot[panelAt + 1].id == kTrayMenuScreenshot);
+        CHECK(::wcscmp(shot[panelAt + 1].label, label) == 0);
+        CHECK(shot[panelAt + 1].iconKind == kIconScreenshot);
+        CHECK(shot[panelAt + 1].enabled);
+        CHECK(shot[panelAt + 2].id == kTrayMenuLockScreen);
+        //截图功能不可用（不传文字）时不出现
+        CHECK(FindTrayRow(base, kTrayMenuScreenshot) == base.size());
+    }
+}
+
+TEST_CASE("TRAY25 截图项文字随快捷键：注册成功时带快捷键，停用或注册失败时只写「截图」；命令 id 为 14、不重复",
+          "[traymenu][shotentry]")
+{
+    using balloonscreenshot::kDefaultScreenshotHotkey;
+    CHECK(balloonscreenshot::TrayScreenshotLabel(kDefaultScreenshotHotkey, true)
+          == balloonscreenshot::ScreenshotCommandText(kDefaultScreenshotHotkey));
+    CHECK(balloonscreenshot::TrayScreenshotLabel(kDefaultScreenshotHotkey, true) == CString(L"截图（Alt+Z）"));
+    //注册失败（多为被其他程序占用）
+    CHECK(balloonscreenshot::TrayScreenshotLabel(kDefaultScreenshotHotkey, false) == CString(L"截图"));
+    //停用
+    CHECK(balloonscreenshot::TrayScreenshotLabel(0, true) == CString(L"截图"));
+
+    CHECK((int)kTrayMenuScreenshot == 14);
+    const std::vector<TrayMenuEntry> all = BuildTrayMenuModel(kTrayNormal, false, kCurrentOnline, kConnOnline,
+                                                              kRecordMenuStart, true, true, true, L"截图");
+    std::vector<int> ids;
+    for (size_t i = 0; i < all.size(); ++i)
+    {
+        if (!all[i].isSeparator)
+            ids.push_back(all[i].id);
+    }
+    std::vector<int> sorted = ids;
+    std::sort(sorted.begin(), sorted.end());
+    CHECK(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());
+    CHECK(FindTrayRow(all, kTrayMenuScreenshot) < all.size());
 }

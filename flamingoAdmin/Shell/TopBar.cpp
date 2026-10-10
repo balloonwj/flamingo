@@ -11,7 +11,6 @@
 #include "Widgets/UiHelpers.h"
 #include "Widgets/IconRenderer.h"
 #include "Widgets/CommonWidgets.h"
-#include "Mock/DataStore.h"
 
 using namespace balloonwjui;
 
@@ -29,7 +28,7 @@ const int kCrumbWidth    = 96;    // 面包屑文字固定宽度
 const int kLogoutSize    = 30;    // 登出按钮边长（与折叠按钮同尺寸，视觉对齐）
 // 右上角账户区（姓名 + 账号·角色两行）。两行高度合计 34，顶栏高 46（见
 // theme::kTopBarHeight），垂直居中后上下各余 6，放得下。
-const int kAccountWidth      = 150;  // 账户区宽度；姓名过长时由 DuiLabel 自行截断
+const int kAccountWidth      = 220;  // 账户区宽度：放得下「姓名 · 企业管理员」与常见长度的邮箱，更长的在末尾显示省略号
 const int kAccountNameHeight = 18;   // 第一行「姓名」行高
 const int kAccountRoleHeight = 16;   // 第二行「账号 · 角色」行高
 
@@ -43,16 +42,48 @@ const int kTickerCycle   = 6;
 //
 // 自绘：一个级别圆点 + 一行「最新审计 · <操作者> <说明>」文字。每隔数秒由
 // AdminFrame 的定时器调 Advance() 切到下一条，循环展示最近 kTickerCycle 条
-// 审计记录。数据实时取自 DataStore。
+// 审计记录。数据由 AdminFrame 单独拉取后经 SetLogs 交给本控件。
 // ===========================================================================
 class AuditTicker : public DuiControl
 {
 public:
-    // 前进到下一条并重绘。
-    void Advance()
+    // 前进到下一条并重绘。返回 true 表示刚好转完一整圈（回到第一条）。
+    bool Advance()
     {
-        ++m_index;
         Invalidate();
+        const int cycle = Cycle();
+        if (cycle == 0)
+        {
+            // 没有数据时不报告「转完一圈」：否则调用方每一拍都去拉一次审计，太频繁。
+            // 空列表由进入主界面、仪表板加载这两条路径补上数据。
+            m_index = 0;
+            return false;
+        }
+        m_index = (m_index + 1) % cycle;
+        return m_index == 0;
+    }
+
+    // 换一批审计记录，并从第一条重新开始。
+    void SetLogs(const std::vector<AuditLog>& logs)
+    {
+        m_logs  = logs;
+        m_index = 0;
+        Invalidate();
+    }
+
+    // 当前显示的文字；没有数据时为「暂无审计」。
+    CString CurrentText() const
+    {
+        if (m_logs.empty())
+        {
+            return CString(_T("最新审计 · 暂无审计"));
+        }
+        const AuditLog& l = m_logs[m_index % Cycle()];
+        CString text;
+        text.Format(_T("最新审计 · %s  %s"),
+                    static_cast<LPCTSTR>(l.m_actor),
+                    static_cast<LPCTSTR>(l.m_detail));
+        return text;
     }
 
     void OnPaint(HDC hdc, const RECT& /*rcDirty*/) override
@@ -61,33 +92,34 @@ public:
         {
             return;
         }
-        const std::vector<AuditLog>& logs = DataStore::Instance().AuditLogs();
-        if (logs.empty())
+        const int textLeftWithDot = 18;   // 有级别圆点时文字的左缩进
+        const int textLeftNoDot   = 2;    // 没有数据（不画圆点）时文字的左缩进
+        int textLeft = textLeftNoDot;
+        if (!m_logs.empty())
         {
-            return;
+            const int cy = (m_rcItem.top + m_rcItem.bottom) / 2;
+            ui::DrawSeverityDot(hdc, m_rcItem.left + 5, cy,
+                                m_logs[m_index % Cycle()].m_severity);
+            textLeft = textLeftWithDot;
         }
-        // 审计日志最新者在前；循环展示最近 kTickerCycle 条。
-        const int cycle = (static_cast<int>(logs.size()) < kTickerCycle)
-                          ? static_cast<int>(logs.size()) : kTickerCycle;
-        const AuditLog& l = logs[m_index % cycle];
-
-        const int cy = (m_rcItem.top + m_rcItem.bottom) / 2;
-        ui::DrawSeverityDot(hdc, m_rcItem.left + 5, cy, l.m_severity);
-
-        CString text;
-        text.Format(_T("最新审计 · %s  %s"),
-                    static_cast<LPCTSTR>(l.m_actor),
-                    static_cast<LPCTSTR>(l.m_detail));
-        RECT rcText = { m_rcItem.left + 18, m_rcItem.top,
+        RECT rcText = { m_rcItem.left + textLeft, m_rcItem.top,
                         m_rcItem.right - 8, m_rcItem.bottom };
-        ui::DrawTextLine(hdc, text, rcText, theme::kInk400,
+        ui::DrawTextLine(hdc, CurrentText(), rcText, theme::kInk400,
                          ui::UiFont(theme::kFontSizeSmall, false),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX
                          | DT_END_ELLIPSIS);
     }
 
 private:
-    int m_index = 0;   // 当前展示条目（对 cycle 取模）
+    // 循环展示的条数：最新的 kTickerCycle 条，不足时取全部。
+    int Cycle() const
+    {
+        return (static_cast<int>(m_logs.size()) < kTickerCycle)
+               ? static_cast<int>(m_logs.size()) : kTickerCycle;
+    }
+
+    std::vector<AuditLog> m_logs;        // 展示的审计记录（最新在前），由 SetLogs 整体替换
+    int                   m_index = 0;   // 当前展示条目，取值 [0, Cycle())
 };
 
 // ===========================================================================
@@ -129,36 +161,25 @@ TopBar::TopBar()
     m_ticker = ticker.get();
     AddChild(std::move(ticker), Hint().Weight(1));
 
-    // 当前管理员的姓名与角色。与登出按钮一同从侧边栏页脚移来，两行右对齐紧靠
-    // 登出按钮，构成右上角常见的「账户区」。
+    // 当前管理员的账户区：第一行「姓名 · 角色」，第二行完整的登录账户（登录邮箱）。与登出
+    // 按钮一同从侧边栏页脚移来，两行右对齐紧靠登出按钮。
     //
-    // 内容取自 AdminSession 而不是像原页脚那样写死"李正阳 / admin · 超管" ——
-    // 顶栏与侧栏一样是登录成功后才构建的，此时会话已填好，直接显示真实登录者
-    // 更有意义（写死的名字在换账号登录时是错的）。
+    // 内容取自 AdminSession 而不是写死。顶栏只在第一次登录时构建，换账号登录时由
+    // AdminFrame 调 SetAccount 刷新这两行。
     {
         const AdminSession& session = AdminSession::Instance();
-
-        //第二行形如「li · 超管」：取邮箱 @ 之前的部分作账号名，与角色拼在一起。
-        //邮箱异常（无 @）时退化为整串，不做额外处理 —— 这里只是展示。
-        CString account = session.Email();
-        const int atPos = account.Find(_T('@'));
-        if (atPos > 0)
-        {
-            account = account.Left(atPos);
-        }
-        CString roleLine;
-        roleLine.Format(_T("%s · %s"), (LPCTSTR)account,
-                        session.IsPlatformAdmin() ? _T("超管") : _T("企业管理员"));
-
-        const UINT kRightAlign = DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+        const UINT kRightAlign = DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
 
         std::unique_ptr<DuiVBox> account_box(new DuiVBox());
-        account_box->AddChild(ui::MakeLabel(session.Name(), theme::kFontSizeNormal, true,
-                                            theme::kInk700, kRightAlign),
-                              Hint().Fixed(kAccountNameHeight));
-        account_box->AddChild(ui::MakeLabel(roleLine, theme::kFontSizeSmall, false,
-                                            theme::kInk400, kRightAlign),
-                              Hint().Fixed(kAccountRoleHeight));
+        std::unique_ptr<DuiLabel> nameLabel = ui::MakeLabel(
+            MakeNameRoleLine(session.Name(), session.IsPlatformAdmin()),
+            theme::kFontSizeNormal, true, theme::kInk700, kRightAlign);
+        m_nameLine = nameLabel.get();
+        account_box->AddChild(std::move(nameLabel), Hint().Fixed(kAccountNameHeight));
+        std::unique_ptr<DuiLabel> accountLabel = ui::MakeLabel(
+            session.Email(), theme::kFontSizeSmall, false, theme::kInk400, kRightAlign);
+        m_accountLine = accountLabel.get();
+        account_box->AddChild(std::move(accountLabel), Hint().Fixed(kAccountRoleHeight));
         AddChild(std::unique_ptr<DuiControl>(account_box.release()),
                  Hint().Fixed(kAccountWidth, kAccountNameHeight + kAccountRoleHeight)
                        .AlignC(DuiLayout::AlignCenter));
@@ -185,12 +206,56 @@ void TopBar::SetBreadcrumb(LPCTSTR text)
     }
 }
 
-void TopBar::AdvanceTicker()
+bool TopBar::AdvanceTicker()
+{
+    return (m_ticker != nullptr) ? m_ticker->Advance() : false;
+}
+
+void TopBar::SetTickerAudits(const std::vector<AuditLog>& logs)
 {
     if (m_ticker != nullptr)
     {
-        m_ticker->Advance();
+        m_ticker->SetLogs(logs);
     }
+}
+
+void TopBar::SetAccount(const CString& name, const CString& email, bool platformAdmin)
+{
+    if (m_nameLine != nullptr)
+    {
+        m_nameLine->SetText(MakeNameRoleLine(name, platformAdmin));
+    }
+    if (m_accountLine != nullptr)
+    {
+        m_accountLine->SetText(email);
+    }
+}
+
+CString TopBar::GetNameLine() const
+{
+    return (m_nameLine != nullptr) ? m_nameLine->GetText() : CString();
+}
+
+CString TopBar::GetAccountLine() const
+{
+    return (m_accountLine != nullptr) ? m_accountLine->GetText() : CString();
+}
+
+CString TopBar::GetTickerText() const
+{
+    return (m_ticker != nullptr) ? m_ticker->CurrentText() : CString();
+}
+
+CString TopBar::MakeNameRoleLine(const CString& name, bool platformAdmin)
+{
+    const LPCTSTR role = platformAdmin ? _T("平台超管") : _T("企业管理员");
+    if (name.IsEmpty())
+    {
+        return CString(role);
+    }
+    CString line;
+    line.Format(_T("%s · %s"), static_cast<LPCTSTR>(name), role);
+    return line;
 }
 
 } // namespace flamingoadmin

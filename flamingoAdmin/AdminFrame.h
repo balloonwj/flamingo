@@ -28,6 +28,11 @@
 #include "Widgets/Toast.h"
 #include "Util/AdminApi.h"   // ApiTag / HttpResult / AdminSession / 领域结构
 #include "Util/AppConfig.h"  // LoginConfig（"记住密码"暂存成员需完整类型）
+#include "Screens/SensitiveWordsScreen.h"  // 敏感词界面请求的排队成员需要 UiRequest 的完整类型
+#include "Screens/EnterpriseQaScreen.h"    // 企业问答界面请求的排队成员需要 UiRequest 的完整类型
+#include "Screens/EnterpriseBotScreen.h"   // 机器人界面请求的排队成员需要 UiRequest 的完整类型
+#include "Screens/FileShareUi.h"           // 文件共享管理界面请求的排队成员需要 fsui::UiRequest 的完整类型
+#include "Util/TextFileSave.h"             // SaveTextToFile 的存盘规格 filesave::SaveFileSpec
 
 #include <memory>
 #include <string>
@@ -63,12 +68,20 @@
 // 过滤将永不生效,而过滤消息的 wParam(0)还会被当成 NodeModal* 去 delete。
 #define WM_APP_DELETE_NODE_MODAL       (WM_APP + 8)
 
+// 键盘回车：单行输入框里按了回车，要「点」一下所在窗口的提交按钮。为免在输入框的按键处理
+// 过程中重入控件通知，延迟到本轮通知派发结束之后再做。wParam 为要点的按钮 ctrlId。
+#define WM_APP_CLICK_BUTTON            (WM_APP + 9)
+
 // 组织树搜索:把"按搜索框文本过滤组织树"延迟到本轮通知派发结束之后再做。
 // 早先搜索框内嵌真 Win32 输入框子窗口,若在文本变化的同一消息周期里同步过滤
 // (触发树重绘),刚输入的文字画不出来(须再点一下),故延迟一拍。搜索框改为无
 // 窗口控件之后该现象不再出现,延迟仍保留 —— 与上文 (1) 所述"改动控件树的动作
 // 延迟到事件派发结束之后"的约定一致。详见 OnOrgFilter。
 #define WM_APP_ORG_FILTER              (WM_APP + 7)
+
+// FlamingoLink.dll 报告长连接鉴权时 token 已失效（ILinkHost::OnSessionExpired 投递）：
+// 与 HTTP 接口返回「会话已过期」同样处理，回到登录页（2026-10-04，docs/FlamingoLink方案.md）。
+#define WM_APP_LINK_EXPIRED            (WM_APP + 10)
 
 namespace flamingoadmin {
 
@@ -94,6 +107,15 @@ class EmployeeEditDialog;
 class EnterpriseSettingsModal;
 class ClientVersionsScreen;
 class ClientVersionModal;
+class SensitiveWordModal;
+class SensitiveImportModal;
+class EnterpriseQaModal;
+class EnterpriseBotModal;
+class BotRuleModal;
+class BotDomainsModal;
+class FileSharesScreen;
+class FileShareAuditScreen;
+class FileShareCenterScreen;
 
 // 屏路由枚举。前 5 个对应侧边栏导航项（数值顺序与导航项一致）；
 // EnterpriseDetail 是「企业管理」的子屏（点企业行进入），不在侧栏。
@@ -108,11 +130,26 @@ enum class Screen
     // 前 6 项与侧栏导航项 kIdNav* 一一对应且数值连续，EnterpriseDetail 是
     // 没有导航项的子屏，只能挂在末尾。
     ClientVersions,   // 客户端版本（发布升级包、发布 / 撤回）
+    // 敏感词：平台超管与企业管理员都可见。同样必须排在 EnterpriseDetail 之前，
+    // 且与 kIdNavSensitiveWords 在导航项里的序号一致（见上面的说明）。
+    SensitiveWords,   // 敏感词（词库维护与拦截记录）
+    // 文件共享：平台超管与企业管理员都可见，与 kIdNavFileShares 在导航项里的序号一致，同样必须排在 EnterpriseDetail 之前。
+    // 2026-10-08 起「共享审计」并入文件共享页成为第二个页签，侧栏不再有这一项；FileShareAudit 保留下来是为了
+    // 不改动后面各项的序号（kIdNavFileShareAudit 的编号同样保留、不再建导航项），切到它等同于打开文件共享页的
+    // 「共享审计」页签，两者显示的是同一个界面（FileShareCenterScreen）。
+    FileShares,       // 文件共享页，停在上次看的页签
+    FileShareAudit,   // 文件共享页的「共享审计」页签
+    // 企业问答（docs/群问答方案.md）：平台超管与企业管理员都可见，与 kIdNavEnterpriseQa 在导航项里的序号一致，
+    // 同样必须排在 EnterpriseDetail 之前。
+    EnterpriseQa,     // 企业问答（显示在群聊「问答」页签里的问答）
+    // 机器人（docs/机器人方案.md 第 7 节）：平台超管与企业管理员都可见，与 kIdNavEnterpriseBot 在导航项里的序号一致，
+    // 同样必须排在 EnterpriseDetail 之前。
+    EnterpriseBot,    // 机器人（企业机器人的列表、编辑、规则与外部服务域名白名单）
     EnterpriseDetail, // 企业详情（企业管理的子屏）
 };
 
 // 主界面数量（与 Screen 枚举值数量一致）。
-const int kScreenCount = 7;
+const int kScreenCount = 12;
 
 // 主窗口。
 class AdminFrame : public balloonwjui::DuiFrameWindow
@@ -140,6 +177,8 @@ public:
         MESSAGE_HANDLER(WM_APP_DELETE_CONFIRM_DIALOG,  OnDeleteConfirmDialog)
         MESSAGE_HANDLER(WM_APP_DELETE_NODE_MODAL,      OnDeleteNodeModal)
         MESSAGE_HANDLER(WM_APP_ORG_FILTER,             OnOrgFilter)
+        MESSAGE_HANDLER(WM_APP_CLICK_BUTTON,           OnClickButtonMsg)
+        MESSAGE_HANDLER(WM_APP_LINK_EXPIRED,           OnLinkExpired)
         MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
@@ -151,6 +190,12 @@ public:
     // 切换调试控制台窗口的显隐。F12 键（由 WinMain 消息循环拦截）与顶栏
     // 「调试控制台」按钮共用此入口；窗口懒创建，重复调用安全。
     void ToggleDebugConsole();
+
+    // 处理主窗口里按下的 Esc（由 WinMain 的消息循环在派发之前调用）：当前有叠层弹窗时，
+    // 让它的关闭按钮发一次点击通知，与用户点关闭按钮走同一条路径。新建公告弹窗里已经
+    // 写了标题或正文时不关闭，以免误丢内容。
+    //   返回：true 表示已处理（消息循环不再派发这条按键）；false 表示没有弹窗可关。
+    bool HandleEscapeKey();
 
 private:
     // 主窗口销毁 → 退出消息循环。
@@ -194,6 +239,38 @@ private:
     // PostMessage(WM_APP_ORG_FILTER) 触发,延后一拍按搜索框文本过滤组织树,
     // 不在文本变化通知的同一周期里改动控件树(缘由见 WM_APP_ORG_FILTER 说明)。
     LRESULT OnOrgFilter(UINT, WPARAM, LPARAM, BOOL& bHandled);
+
+    // 延迟执行的「点按钮」（由 WM_APP_CLICK_BUTTON 触发）：在当前可见的弹窗或登录页里按
+    // wParam 的 ctrlId 找到按钮，可见且可用时让它发一次点击通知。
+    LRESULT OnClickButtonMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled);
+
+    // FlamingoLink.dll 报告 token 已失效（由 WM_APP_LINK_EXPIRED 触发）：仍在登录状态时
+    // 按会话过期处理（HandleSessionExpired），已经退出登录时忽略。
+    LRESULT OnLinkExpired(UINT, WPARAM, LPARAM, BOOL& bHandled);
+
+    // 让 FlamingoLink.dll 的「在线用户」页面与界面一致：把企业详情屏当前的企业、占位控件的
+    // 位置、页面是否活动 / 被叠层弹窗盖住转交 DLL。在切换界面、切换子 tab、页面与弹窗显隐
+    // 变化、登录与退出时调用。DLL 不可用时什么都不做。
+    void SyncLinkPage();
+
+    // 企业详情屏切到「功能开关」子 tab 时调用：读取该企业的全部功能设置。平台超管读详情屏当前的企业，
+    // 企业管理员传 0、由服务端按本企业处理（见 FeatureSwitchesPage::EnterpriseIdForLoad）。
+    void LoadFeaturesPage();
+
+    // 根容器显示层变化（页面切换、弹窗开关）的回调转接，转到 SyncLinkPage。
+    //   user：AdminFrame*。
+    static void LinkLayerChangedThunk(void* user);
+
+    // 「在线用户」占位控件排版后的回调转接：把新位置转交 DLL。
+    //   user：AdminFrame*。rc：占位控件的矩形（主窗口客户区坐标）。
+    static void LinkSlotBoundsThunk(void* user, const RECT& rc);
+
+    // 处理单行输入框的回车通知（DUIN_EDIT_ENTER）：按 kEnterSubmitRules 查出该输入框对应
+    // 的提交按钮，经 WM_APP_CLICK_BUTTON 延迟「点」它。
+    //   n：通知（code 已是 DUIN_EDIT_ENTER）。
+    //   返回：true 表示该输入框在对照表里且发送者确是输入框，已安排提交；false 表示不归
+    //         本函数处理，调用方应继续往下派发。
+    bool HandleEditEnter(const balloonwjui::DuiNotify* n);
 
     // 鼠标左键按下：默认不拦截左键（列表选中、双击等照常），只「附加」一件
     // 事 —— 在企业管理界面点中某行「操作」列的三个点时，弹出该行的操作菜单。
@@ -252,10 +329,11 @@ private:
     // 发起企业列表导出（export.do）。
     void StartEnterpriseExport();
 
-    // 弹出保存对话框，把 CSV 文本（UTF-8 字节）写入用户所选文件。
-    //   csvUtf8：CSV 文本，UTF-8 字节。
-    //   defaultName：保存对话框预填的默认文件名。
-    void SaveCsvToFile(const std::string& csvUtf8, LPCTSTR defaultName);
+    // 弹出「另存为」对话框，把一段文字写入用户所选的文件，成功后按规格给出提示。
+    // 用户取消对话框不算失败；文件打不开或写不全时给出错误提示。
+    //   content：要写的内容，UTF-8 字节；是否补 BOM 由 spec 决定。
+    //   spec：存盘规格（预填文件名、文件类型、成功提示等），见 Util/TextFileSave.h。
+    void SaveTextToFile(const std::string& content, const filesave::SaveFileSpec& spec);
 
     // 把单个企业导成一行 CSV 并弹保存对话框（本地数据，无需联网）。
     //   ent：要导出的企业记录。
@@ -321,6 +399,69 @@ private:
     void HideClientVersionModal();
     // 提交新建版本。publish 为 true 直接发布，false 存为草稿。
     void SubmitClientVersionModal(bool publish);
+
+    // ---- 敏感词（模块 11，docs/敏感词方案.md 第 7 节）----
+    // 敏感词界面的请求出口：补上服务器地址与回传窗口后交给 HttpWorker。
+    //   user：本窗口指针。request：界面构造好的请求，m_tag 已填好。
+    static void SensitiveRequestThunk(void* user, HttpRequest& request);
+    // 敏感词界面的界面请求：先排进 m_swUiQueue，再推迟到事件派发结束后由 HandleSensitiveUiRequests 处理
+    // （开关弹窗会改动控件树，不能在通知派发的过程中做）。
+    //   user：本窗口指针。request：界面请求。
+    static void SensitiveUiRequestThunk(void* user, const SensitiveWordsScreen::UiRequest& request);
+    // 依次处理排队的敏感词界面请求：开关弹窗、弹确认框、显示弹窗内错误与提示。
+    void HandleSensitiveUiRequests();
+    // 关闭添加 / 编辑敏感词弹窗。
+    void HideSensitiveWordModal();
+    // 弹窗里点了「保存」：本地校验通过后交给敏感词界面提交。
+    void SubmitSensitiveWordModal();
+    // 企业问答界面的界面请求：先排进 m_qaUiQueue，再推迟到事件派发结束后由 HandleQaUiRequests 处理（理由同敏感词界面）。
+    //   user：本窗口指针。request：界面请求。
+    static void QaUiRequestThunk(void* user, const EnterpriseQaScreen::UiRequest& request);
+    // 依次处理排队的企业问答界面请求：开关弹窗、弹确认框、显示弹窗内错误与提示、补上弹窗的群列表。
+    void HandleQaUiRequests();
+    // 关闭新增 / 编辑企业问答弹窗。
+    void HideQaModal();
+    // 企业问答弹窗里点了「保存」：本地校验通过后交给企业问答界面提交。
+    void SubmitQaModal();
+
+    // ---- 机器人（模块 14，docs/机器人方案.md 第 7 节）----
+    // 机器人界面的界面请求：先排进 m_botUiQueue，再推迟到事件派发结束后由 HandleBotUiRequests 处理（理由同敏感词界面）。
+    //   user：本窗口指针。request：界面请求。
+    static void BotUiRequestThunk(void* user, const EnterpriseBotScreen::UiRequest& request);
+    // 依次处理排队的机器人界面请求：开关编辑窗与白名单窗、弹确认框、显示窗口内错误与提示、补上群列表与白名单、
+    // 显示「试一试」结果与重新生成的令牌。
+    void HandleBotUiRequests();
+    // 关闭机器人编辑窗（规则编辑窗开着时一并关闭）。
+    void HideBotModal();
+    // 机器人编辑窗里点了「保存」：本地校验通过后交给机器人界面提交。
+    void SubmitBotModal();
+    // 机器人编辑窗里点了规则的「添加」（isNew 为 true）或「编辑」与双击：取得要编辑的规则后打开规则编辑窗，
+    // 机器人编辑窗暂时隐藏（内容保留）。
+    void OpenBotRuleModal(bool isNew);
+    // 关闭规则编辑窗，回到机器人编辑窗（不写回）。
+    void CloseBotRuleModal();
+    // 规则编辑窗里点了「确定」：本地校验通过后写回机器人编辑窗，再回到机器人编辑窗。
+    void SubmitBotRuleModal();
+    // 机器人编辑窗里点了「试一试」：交给机器人界面发请求，编辑窗先显示「正在判定…」。
+    void RunBotTry();
+    // 关闭外部服务域名白名单窗。
+    void HideBotDomainsModal();
+    // 白名单窗里点了「保存」：本地校验通过后交给机器人界面提交。
+    void SubmitBotDomainsModal();
+    // 关闭批量导入弹窗；导入进行中时不关闭。
+    void HideSensitiveImportModal();
+    // 导入弹窗里点了主按钮：显示结果之后关闭弹窗，否则把输入框里的内容交给敏感词界面分批提交。
+    void SubmitSensitiveImportModal();
+    // 导入弹窗里点了「从文件读取」：选一个文本文件（不超过 2 MB），按 BOM / UTF-8 / GBK 解码后填进输入框。
+    void ReadSensitiveImportFile();
+
+    // ---- 文件共享管理（模块 12，docs/文件共享方案.md 第 10 节）----
+    // 功能开关面板、「文件共享」页、「共享审计」页的请求出口复用 SensitiveRequestThunk（它与界面无关）。
+    // 三者的界面请求（提示、确认框）：先排进 m_fsUiQueue，再推迟到事件派发结束后由 HandleFileShareUiRequests 处理。
+    //   user：本窗口指针。request：界面请求。
+    static void FileShareUiRequestThunk(void* user, const fsui::UiRequest& request);
+    // 依次处理排队的文件共享管理界面请求：显示提示、弹确认框（结果经 m_fsConfirmTarget 回告发起方）。
+    void HandleFileShareUiRequests();
 
 
 
@@ -400,6 +541,25 @@ private:
     // 处理「编辑公告」的 detail.do 应答：把既有公告回填新建公告弹窗并打开。
     void OnAnnEditFetchLoaded(const HttpResult& http);
 
+    // 公告中心点「重新推送」：当前选中的是已发布公告时弹确认框，确认后经 SubmitAnnouncementRepush
+    // 发请求；不是已发布状态时只给出提示。
+    void ConfirmAnnouncementRepush();
+
+    // 发出重新推送请求（announcement/repush.do），应答见 OnAnnRepushed。
+    //   annId：公告 ID。公告写操作进行中时只提示稍候，不重复发。
+    void SubmitAnnouncementRepush(const CString& annId);
+
+    // 处理重新推送应答：成功时提示推送人数，失败时弹出错误提示。
+    void OnAnnRepushed(const HttpResult& http);
+
+    // 发起「复制公告」：拉取原公告详情（announcement/detail.do），应答见 OnAnnCopyFetchLoaded。
+    //   annId：被复制的公告 ID，空串时不做任何事。
+    void StartAnnouncementCopy(const CString& annId);
+
+    // 处理「复制公告」的 detail.do 应答：按原公告的标题、正文、级别、受众、置顶与投放目标
+    // 打开一条新建公告（发送方式为立即）；失败时弹出错误提示。
+    void OnAnnCopyFetchLoaded(const HttpResult& http);
+
     // 展示新建公告弹窗（预拉企业列表 + 隐藏外壳 EDIT + 显示弹窗）。
     // 由 ShowComposeModal（新建）与 OnAnnEditFetchLoaded（编辑）共用。
     void PresentComposeModal();
@@ -460,6 +620,28 @@ private:
 
     // 提交「新增管理员」（enterprise/addadmin.do）。
     void SubmitAddAdmin();
+
+    // ---- 危险操作经确认框确认之后才调用的提交函数 ----
+
+    // 修改企业状态（enterprise/setstatus.do）。
+    //   enterpriseId：企业 ID；newStatus：目标状态（活跃 / 停用，取值见 AdminFrame.cpp 的 kEntStatus*）。
+    void SubmitEnterpriseStatus(const CString& enterpriseId, int newStatus);
+
+    // 移除一位企业管理员（enterprise/removeadmin.do）。
+    //   adminId：管理员 ID。
+    void SubmitRemoveAdmin(long long adminId);
+
+    // 让一名员工的全部设备下线（user/kickdevice.do，deviceid 传空）。
+    //   userId：员工 ID。
+    void SubmitKickDevices(const CString& userId);
+
+    // 把员工详情面板上已选的角色落库（user/setrole.do）。
+    //   userId：员工 ID；角色取自 OrgDetailPanel::GetUserRole。
+    void SubmitUserRole(const CString& userId);
+
+    // 修改服务号状态（service/setstatus.do）。
+    //   serviceId：服务号 ID；target：0 正常 / 1 停用。
+    void SubmitServiceStatus(const CString& serviceId, int target);
 
     // 重新拉取当前企业的管理员列表（enterprise/admins.do）。
     void FireEnterpriseAdmins();
@@ -540,6 +722,40 @@ private:
 
     // 处理服务号列表重拉应答：覆盖 DataStore 的服务号并刷新企业详情屏。
     void OnServiceListReloaded(const HttpResult& http);
+
+    // 登出与会话失效共用的复位：停掉顶栏滚动提示，关闭叠层弹窗与独立对话框，复位全部
+    // 「请求进行中」标志与待处理状态，各界面放下指向缓存数据的指针、回到初始状态，最后
+    // 清空 DataStore。换账号登录后不会看到上一位管理员的数据，也不会有界面卡在「加载中」。
+    void ResetSessionState();
+
+    // 单独拉取最近几条审计（audit/list.do 第 1 页）喂给顶栏滚动提示。进入主界面时、滚动
+    // 提示转完一圈时调用；与审计页的翻页、筛选互不影响。
+    void FetchTickerAudits();
+
+    // 处理 FetchTickerAudits 的应答：成功则交给顶栏；失败只记日志，保留原来展示的内容。
+    void OnTickerAuditLoaded(const HttpResult& http);
+
+    // 发起拉取某个服务号的详情（service/detail.do），以读到它的绑定范围。列表接口
+    // 不带绑定，绑定只能从这里读。
+    //   serviceId：服务号 ID；
+    //   forBinding：true 表示用户点了「修改绑定」，读到之后才打开绑定弹窗（读取
+    //               失败则不打开，避免从空集合开始保存而清掉原有绑定）；false 表示
+    //               面板选中项变化后只为显示而读取。
+    void FetchServiceDetail(const CString& serviceId, bool forBinding);
+
+    // 服务号面板当前选中的服务号若还没读到绑定，就发起一次读取（只为显示）。
+    // 企业详情首次装配、服务号列表重拉、面板切换选中项之后调用。
+    void FetchSelectedServiceBindingsIfNeeded();
+
+    // 处理 service/detail.do 应答：把绑定翻译成带显示名的绑定项写入 DataStore 并刷新
+    // 面板；forBinding 为 true 时再打开绑定弹窗。应答到达时企业或服务号已切换的，
+    // 只更新缓存、不打开弹窗。
+    //   http：HTTP 结果；forBinding：同 FetchServiceDetail。
+    void OnServiceDetailLoaded(const HttpResult& http, bool forBinding);
+
+    // 处理 service/setbindings.do 应答：成功时先把刚保存的绑定写入 DataStore（列表
+    // 接口不带绑定，重拉列表不会更新它），再提示并重拉列表；失败只提示。
+    void OnServiceBindingsSaved(const HttpResult& http);
 
     // ---- 企业详情子屏：角色与权限（模块 6）----
 
@@ -629,11 +845,17 @@ private:
     bool                     m_auditExportBusy = false;        // 导出审计日志请求是否进行中
     bool                     m_updateProfileBusy = false;      // 保存个人资料请求是否进行中
     bool                     m_changePwBusy = false;           // 修改密码请求是否进行中
+    CString                  m_pendingNewPassword;             // 已提交修改、等待应答的新口令明文；仅内存，应答处理后清空
     bool                     m_annActionBusy = false;          // 公告撤回/删除/置顶请求是否进行中
     bool                     m_composeSubmitBusy = false;      // 新建公告 save+send 链是否进行中
+    CString                  m_composePresetEntId;             // 企业详情点「发布公告」时记下的企业 ID，ShowComposeModal 据此预设受众后清空
     CString                  m_composeTreeEntId;               // 目标选择器在途组织树请求所属企业 ID
     bool                     m_nodeSubmitBusy = false;         // 新增部门/员工请求是否进行中
     bool                     m_svcSubmitBusy = false;          // 新建服务号请求是否进行中
+    bool                     m_svcBindingFetchBusy = false;    // 「修改绑定」前读取当前绑定的请求是否进行中（防连点）
+    CString                  m_bindingModalSvcId;              // 绑定弹窗正在编辑的服务号 ID：打开时记下，保存时用它，不取面板的当前选中项
+    CString                  m_pendingBindingsSvcId;           // 已提交 setbindings.do、等待应答的服务号 ID；应答处理后清空
+    std::vector<ServiceBinding> m_pendingBindings;             // 与上一项配套：提交的绑定列表，成功后写入 DataStore
     Screen                   m_route      = Screen::Dashboard; // 当前界面
     ui::RootContainer*       m_root       = nullptr;  // 客户区根容器（借用，frame 持有）
     balloonwjui::DuiToast*   m_toast      = nullptr;  // Toast 层(借用; balloonwjui::DuiToast)
@@ -651,6 +873,25 @@ private:
     AuditScreen*             m_auditScreen = nullptr; // 审计日志（借用，在 m_screenHost 内）
     ClientVersionsScreen*    m_clientVersionsScreen = nullptr; // 客户端版本（借用，在 m_screenHost 内）
     ClientVersionModal*      m_clientVersionModal = nullptr;   // 新建版本弹窗（借用，在 m_root 弹窗层内）
+    SensitiveWordsScreen*    m_sensitiveWordsScreen = nullptr; // 敏感词（借用，在 m_screenHost 内）
+    SensitiveWordModal*      m_swModal = nullptr;   // 添加 / 编辑敏感词弹窗（借用，在 m_root 弹窗层内）
+    SensitiveImportModal*    m_swImportModal = nullptr; // 批量导入敏感词弹窗（借用，在 m_root 弹窗层内）
+    std::vector<SensitiveWordsScreen::UiRequest> m_swUiQueue;  // 待处理的敏感词界面请求，见 SensitiveUiRequestThunk
+    EnterpriseQaScreen*      m_qaScreen = nullptr;  // 企业问答（借用，在 m_screenHost 内）
+    EnterpriseQaModal*       m_qaModal = nullptr;   // 新增 / 编辑企业问答弹窗（借用，在 m_root 弹窗层内）
+    std::vector<EnterpriseQaScreen::UiRequest> m_qaUiQueue;  // 待处理的企业问答界面请求，见 QaUiRequestThunk
+    EnterpriseBotScreen*     m_botScreen = nullptr;        // 机器人（借用，在 m_screenHost 内）
+    EnterpriseBotModal*      m_botModal = nullptr;         // 新建 / 编辑企业机器人的编辑窗（借用，在 m_root 弹窗层内）
+    BotRuleModal*            m_botRuleModal = nullptr;     // 添加 / 编辑规则的规则编辑窗（借用，在 m_root 弹窗层内）
+    BotDomainsModal*         m_botDomainsModal = nullptr;  // 外部服务域名白名单窗（借用，在 m_root 弹窗层内）
+    std::vector<EnterpriseBotScreen::UiRequest> m_botUiQueue;  // 待处理的机器人界面请求，见 BotUiRequestThunk
+    FileShareCenterScreen*   m_fileShareCenter = nullptr;      // 文件共享页（「文件共享」「共享审计」两个页签的外层页面；借用，在 m_screenHost 内）
+    FileSharesScreen*        m_fileSharesScreen = nullptr;     // 「文件共享」页签（借用，在 m_fileShareCenter 内）
+    FileShareAuditScreen*    m_fileShareAuditScreen = nullptr; // 「共享审计」页签（借用，在 m_fileShareCenter 内）
+    std::vector<fsui::UiRequest> m_fsUiQueue;  // 待处理的文件共享管理界面请求，见 FileShareUiRequestThunk
+    // 当前确认框的发起方（功能开关面板或「文件共享」页，借用、随主窗口常驻）；只在 m_confirmTarget 为
+    // 文件共享管理的确认框时有效，确认框关闭后清空
+    fsui::ConfirmTarget*     m_fsConfirmTarget = nullptr;
     SettingsScreen*          m_settingsScreen = nullptr; // 平台设置（借用，在 m_screenHost 内）
     NewEnterpriseModal*      m_modal        = nullptr; // 新增企业弹窗（借用，在 m_root 内）
     // 组织节点对话框(新增部门 / 新增员工):独立顶层窗口,on-demand 创建/销毁。
@@ -675,6 +916,9 @@ private:
     // 企业设置弹窗当前操作的企业记录。企业列表行菜单与企业详情屏头部两个
     // 入口都先把目标企业拷进此处，再据此拉管理员列表、填充弹窗。
     Enterprise               m_entSettingsEnt;
+    // 正在保存的企业记录：SubmitEnterpriseUpdate 按表单新值填好，OnEnterpriseUpdated 成功时写回企业缓存与
+    // m_entSettingsEnt（2026-10-06 起；此前保存后缓存里仍是旧记录）
+    Enterprise               m_entUpdatePending;
 
     // 组织节点弹窗提交时，新部门 / 员工要挂载到的父部门 ID。
     CString                  m_nodeModalParentId;

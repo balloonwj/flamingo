@@ -52,7 +52,9 @@ public:
 private:
 	bool isDBExist();
 	bool createDB();
-	bool checkTable(const STableInfo& table);
+	//表不存在时按 table 的定义建表；表已存在则不做任何改动（不补列、不改列）。
+	//返回 false 表示连接不可用或建表失败
+	bool ensureTable(const STableInfo& table);
 	bool createTable(const STableInfo& table);
 	bool updateTable(const STableInfo& table);
 

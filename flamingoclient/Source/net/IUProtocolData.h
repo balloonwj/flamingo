@@ -293,22 +293,53 @@ public:
 public:
 	long m_LoginResultCode;
 	UINT m_uAccountID;
-	char m_szAccountName[32];
-	char m_szNickName[32];
-	char m_szSignature[256];
-	long m_nFace;
-    char m_szCustomFace[64];
-    int  m_nGender;
-    int  m_nBirthday;
-    char m_szAddress[512];
-    char m_szPhoneNumber[64];
-    char m_szMail[256];
+    //以下文字字段都是 UTF-8，原样取自登录应答（见 net/LoginResultFill.h）。2026-10-04 之前是
+    //固定长度的 char 数组（昵称 32 字节、签名 256 字节），用 strcpy_s 拷贝：资料超出数组长度时
+    //strcpy_s 调用无效参数处理程序，登录线程所在的进程直接终止。改为 std::string 后长度不受限制
+    std::string m_strAccountName;   //登录账号
+    std::string m_strNickName;      //昵称，服务端上限 64 字
+    std::string m_strSignature;     //个性签名，服务端上限 256 字
+	long m_nFace;                   //头像类型
+    std::string m_strCustomFace;    //头像标识：字形头像为 "glyph|colorIdx"，自定义图为 fileid
+    int  m_nGender;                 //性别，取值见 net/Protocol.h 的 enum profile_gender
+    int  m_nBirthday;               //生日，YYYYMMDD；0 表示未填
+    std::string m_strAddress;       //所在地，服务端上限 256 字
+    std::string m_strPhoneNumber;   //手机号
+    std::string m_strMail;          //邮箱，服务端上限 256 字
+    std::string m_strLandline;      //座机，服务端上限 64 字；老服务端不下发时为空串
+    std::string m_strPost;          //岗位，服务端上限 64 字；老服务端不下发时为空串
+    int  m_nPhoneVisible;           //手机号对同事的公开范围，取值见 net/Protocol.h 的 enum profile_visibility
+    int  m_nLandlineVisible;        //座机对同事的公开范围，取值同上
 	long m_nStatus;
     //发起这次登录时拿到的轮次号，由登录线程原样带回。登录窗据它判断这个结果
     //是不是自己还在等的那一个——用户点过取消、或已发起了新的一轮时，
     //迟到的旧结果必须丢弃。详见 BalloonAuth/LoginProgressState.h。
     //0 表示"不带轮次号"，用于自动登录这类不经登录窗的路径。
     unsigned int m_uLoginGeneration;
+    //登录应答里的 features.fileshare：1 表示本人所属企业的文件共享开关打开，0 表示关闭
+    //（服务端没有下发 features 字段时同样为 0，见 docs/文件共享方案.md 5.8）
+    int m_nFileShareFeature;
+    //登录应答里的 features.inviteconfirm：1 表示本人所属企业打开了「邀请入群需被邀请人同意」，0 表示关闭
+    //（服务端没有下发该项时同样为 0，见 docs/邀请入群方案.md §3.5）
+    int m_nInviteConfirmFeature;
+    //登录应答里的 features.groupcall：1 表示本人所属企业打开了群语音 / 群视频通话，0 表示关闭（服务端没有下发该项时同样为 0）
+    int m_nGroupCallFeature;
+    //登录应答里的 features.caption：1 表示本人所属企业打开了语音字幕，0 表示关闭（服务端没有下发该项时同样为 0）
+    int m_nCaptionFeature;
+    //登录应答里的 features.cloudrecord：1 表示本人所属企业开通了云端录制，0 表示没开通（服务端没有下发该项时同样为 0）
+    int m_nCloudRecordFeature;
+    //登录应答里的 features.secretchat：1 表示本人所属企业打开了单聊密聊，0 表示关闭（服务端没有下发该项时同样为 0）
+    int m_nSecretChatFeature;
+    //登录应答里的 features.threadgroup：1 表示本人所属企业打开了帖子群，0 表示关闭（服务端没有下发该项时同样为 0）
+    int m_nThreadGroupFeature;
+    //登录应答里的 features.bot：1 表示本人所属企业打开了机器人，0 表示关闭（服务端没有下发该项时同样为 0）
+    int m_nBotFeature;
+    //登录应答里的 features.botgroup：1 表示允许群主添加群机器人
+    int m_nBotGroupFeature;
+    //登录应答里的 features.botpersonal：1 表示允许员工配置个人机器人
+    int m_nBotPersonalFeature;
+    //登录应答里的 features.botgroupexternal：1 表示允许群主给群机器人配置外部服务
+    int m_nBotGroupExternalFeature;
 };
 
 class CUserBasicInfoRequest : public CNetData

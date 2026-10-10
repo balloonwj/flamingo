@@ -49,7 +49,13 @@ std::vector<balloonchatwnd::ChatClipSegment> BuildImageViewerCopySegments(const 
 class ImageCanvas : public balloonwjui::DuiControl
 {
 public:
-    ImageCanvas();
+    // 单击了图片以外的空白处时的回调（只看不存模式的大图浮层据此关闭）。ctx 为 SetBlankClickHandler 传入的上下文
+    typedef void (*BlankClickFn)(void* ctx);
+
+    // 构造。
+    //   viewOnly：「只看不存」模式（密聊图片的大图浮层，docs/密聊方案.md 4.10）：工具栏只有缩放、1:1、适应窗口与
+    //             旋转，没有复制、另存与识别文字；图片不可平移时按住拖动不移动宿主窗口。构造后不变。
+    explicit ImageCanvas(bool viewOnly = false);
     ~ImageCanvas() override;
 
     // 从本地文件加载图片，并重置为"适应窗口"居中显示。解码失败则清空当前图
@@ -57,6 +63,16 @@ public:
     //   path：图片本地完整路径（UTF-16，非空）。
     //   返回：解码成功返回 true，失败返回 false。
     bool LoadImageFromFile(LPCTSTR path);
+
+    // 从内存里的图片文件字节（PNG / JPEG 等）加载图片，并重置为"适应窗口"居中显示。解码后复制成一张独立的位图，
+    // 不保留对 bytes 的引用，调用方随后可以清零自己的缓冲区。没有源文件路径，所以另存、复制图片、识别文字都不可用。
+    //   bytes：整张图片文件的字节；为空时清空当前图并返回 false。
+    //   返回：解码成功返回 true。
+    bool LoadImageFromMemory(const std::vector<unsigned char>& bytes);
+
+    // 登记单击空白处的回调：按下后没有拖动就松开、且按下点不在图片上时调用（工具栏上的点击由工具栏自己处理，不会走到这里）。
+    //   fn：回调，传 NULL 取消；ctx：原样传回的上下文（借用，不拥有）。
+    void SetBlankClickHandler(BlankClickFn fn, void* ctx);
 
     // 当前是否已成功载入一张图片。
     bool HasImage() const;
@@ -87,6 +103,11 @@ public:
     // 内容或剪贴板被占用时弹失败提示。
     void CopyImage();
 
+    // 图片文字识别：按当前旋转方向识别源文件里的文字，打开识别结果窗口（经 ocr::LaunchOcrForFile，
+    // 系统不支持或没有识别语言时弹提示）。无图或无源路径时静默返回。由底部工具栏「图片文字识别」调用，
+    // 该按钮只在图片文字识别模块可用时出现（docs/图片文字识别方案.md 第 8.5 节）。
+    void RecognizeText();
+
     // 当前缩放比的百分数读数（形如 "96%"），供工具栏显示。
     CString GetZoomReadout() const;
 
@@ -115,6 +136,9 @@ private:
     void ApplyZoomAtAnchor(double newScale, POINT anchorLocal);
     // 图片是否在任一维大于视口（即可平移）。无图时为 false。
     bool IsPannable() const;
+
+    // 宿主客户区坐标点是否落在当前显示的图片上（按缩放、平移后的在屏矩形算）。无图时为 false。
+    bool IsPointOnImage(POINT ptHost) const;
 
     // 把底部悬浮工具栏摆到画布底部中央（在 Layout 里调用）。
     void PositionToolbar();
@@ -146,6 +170,9 @@ private:
     CString  m_sourcePath;          // 当前图片的源文件路径（另存为、复制图片用）；空表示无图
     ImageViewerToolbar* m_pToolbar; // 底部悬浮工具栏（子控件，所有权在控件树）
     balloonwjui::DuiToast* m_pToast; // 顶部轻提示（复制成功后显示「已复制」；子控件，所有权在控件树）
+    bool     m_viewOnly;            // 是否「只看不存」模式（构造时决定，之后不变），含义见构造函数
+    BlankClickFn m_blankClickFn;    // 单击空白处的回调；NULL 表示没有登记
+    void*    m_blankClickCtx;       // 上面回调的上下文（借用，不拥有）
 };
 
 } // namespace balloonimageviewer

@@ -141,7 +141,7 @@ void UpdateLog::Write(const std::wstring& text)
 void UpdateLog::WriteWithError(const std::wstring& text, DWORD lastError)
 {
     wchar_t buf[kTimestampBufLen] = { 0 };
-    ::swprintf_s(buf, L"，错误码 %u", lastError);
+    ::swprintf_s(buf, L", error %u", lastError);
     Write(text + buf);
 }
 

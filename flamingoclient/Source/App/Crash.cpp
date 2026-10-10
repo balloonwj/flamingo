@@ -3,6 +3,7 @@
 #include "..\Session\UserSessionData.h"
 #include "..\Common\Log\IULog.h"
 #include <Dbghelp.h>
+#include "../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 #pragma comment(lib, "DbgHelp")
 
@@ -145,6 +146,17 @@ void ConfigureCrashDumpEnvironment()
     }
 }
 
+std::wstring PrepareCrashDumpDirectory()
+{
+    if (!EnsureDumpDirExists())
+    {
+        return std::wstring();
+    }
+    TCHAR szDumpDir[MAX_PATH] = { 0 };
+    BuildDumpDir(szDumpDir, MAX_PATH);
+    return std::wstring(szDumpDir);
+}
+
 // Dumps
 /////////////////////////////////////////////////////////////////////////////////////////////////
 class AutoUnhandleExceptionFilter
@@ -163,7 +175,7 @@ public:
 		              ? (unsigned int)ExceptionInfo->ExceptionRecord->ExceptionCode : 0u);
 		CIULog::Flush(kIULogFlushTimeoutMs);
 
-		if(IDYES ==::MessageBox(NULL, _T("程序遇到一个致命的问题，需要关闭，我们对此表示非常的抱歉。我们将帮您重启，现在就重新启动吗？"), _T("程序出错"), MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL))
+		if(IDYES ==::MessageBox(NULL, TR(L"程序遇到一个致命的问题，需要关闭，我们对此表示非常的抱歉。我们将帮您重启，现在就重新启动吗？"), TR(L"程序出错"), MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL))
 		{
 			::ShellExecute(NULL,NULL, _T("Flamingo.exe"), NULL, g_szHomePath, SW_SHOW);
 		}

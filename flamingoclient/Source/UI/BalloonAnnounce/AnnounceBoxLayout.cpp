@@ -1,5 +1,5 @@
 /**
- *  「消息盒子」窗口——balloonui 客户区布局实现，AnnounceBoxLayout.cpp
+ *  「公告中心」窗口——balloonui 客户区布局实现，AnnounceBoxLayout.cpp
  *
  *  程序化搭建：左栏（顶部信息 + 公告列表）、右栏（标题 + 发布者·时间 + 正文）、
  *  底部（全部标为已读）。除列表行用 AnnounceRow（DuiHBox 子类，补悬停 / 选中态与
@@ -52,6 +52,7 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonannounce {
 
@@ -117,7 +118,7 @@ std::unique_ptr<DuiControl> MakeLabel(LPCTSTR text, COLORREF color, DWORD dtAlig
 
 // 右栏没选中任何一条公告时，正文位置显示的占位提示。
 // 建树与定点更新两条路都用它，免得两处文案对不上。
-const TCHAR* const kDetailPlaceholder = _T("从左侧选择一条公告查看详情。");
+const TCHAR* const kDetailPlaceholder = TR_NOOP(L"从左侧选择一条公告查看详情。");
 
 // 拼左栏顶部那行「共 N 条 · N 条未读」。同样是建树与定点更新共用。
 CString MakeSummaryText(const AnnounceBoxViewData& data)
@@ -125,12 +126,12 @@ CString MakeSummaryText(const AnnounceBoxViewData& data)
     CString summary;
     if (data.m_unreadCount > 0)
     {
-        summary.Format(_T("共 %d 条 · %d 条未读"), data.m_totalCount, data.m_unreadCount);
+        summary.Format(TR(L"共 %d 条 · %d 条未读"), data.m_totalCount, data.m_unreadCount);
     }
     else
     {
         //一条未读都没有时不显示「0 条未读」——那是句废话，反而让人以为出了错。
-        summary.Format(_T("共 %d 条"), data.m_totalCount);
+        summary.Format(TR(L"共 %d 条"), data.m_totalCount);
     }
     return summary;
 }
@@ -174,7 +175,7 @@ std::unique_ptr<DuiControl> MakeRow(const AnnounceRowView& row, int index, bool 
 
     //置顶的公告在标题前加一个标记，让它在一列里能与普通公告区分开
     //（置顶本来就排在最前，但翻到列表中段时看不出边界在哪）。
-    CString titleText = row.m_pinned ? (CString(_T("[置顶] ")) + row.m_title) : row.m_title;
+    CString titleText = row.m_pinned ? CString(TRF(L"[置顶] {0}", row.m_title).c_str()) : row.m_title;
     //这两行字铺满了整行，滚轮几乎总落在它们身上。裸 DuiLabel 不消化滚轮、如实返回
     //false，事件随即由 DuiHost::DispatchMouseWheel 沿父链上冒到外层滚动视口。
     texts->AddChild(MakeLabel(titleText,
@@ -318,7 +319,7 @@ std::unique_ptr<DuiControl> BuildAnnounceBoxBody(const AnnounceBoxViewData& data
     std::unique_ptr<balloonhistory::HistoryContentView> bodyLbl(
         new balloonhistory::HistoryContentView());
     //公告是服务端原样存的纯文本，走纯文本入口（不解析聊天消息那套 '/' 转义）。
-    bodyLbl->SetPlainContent(hasSelection ? data.m_detailBody : CString(kDetailPlaceholder));
+    bodyLbl->SetPlainContent(hasSelection ? data.m_detailBody : CString(TR(kDetailPlaceholder)));
     bodyLbl->SetTextColor(hasSelection ? kColorBody : kColorEmptySub);
     //正文一律画全，不要消息记录窗那套"折叠成 5 行"。
     bodyLbl->SetExpanded(true);
@@ -346,7 +347,7 @@ std::unique_ptr<DuiControl> BuildAnnounceBoxBody(const AnnounceBoxViewData& data
 
     std::unique_ptr<DuiButton> markAll(new DuiButton());
     markAll->SetButtonType(DuiButton::StylePushButton);
-    markAll->SetText(_T("全部标为已读"));
+    markAll->SetText(TR(L"全部标为已读"));
     markAll->SetCtrlId(kIdAnnMarkAllRead);
     //一条未读都没有时按钮禁用 —— 点了也没有任何效果，留着可点会让人以为没生效。
     markAll->SetEnabled(data.m_unreadCount > 0);
@@ -430,7 +431,7 @@ void ApplyAnnounceDetail(DuiControl* root, const AnnounceBoxViewData& data)
     if (body != NULL)
     {
         //公告是服务端原样存的纯文本，走纯文本入口（不解析聊天消息那套 '/' 转义）。
-        body->SetPlainContent(hasSelection ? data.m_detailBody : CString(kDetailPlaceholder));
+        body->SetPlainContent(hasSelection ? data.m_detailBody : CString(TR(kDetailPlaceholder)));
         body->SetTextColor(hasSelection ? kColorBody : kColorEmptySub);
     }
 

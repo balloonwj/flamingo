@@ -2,9 +2,10 @@
  *  PresenceBadge.h
  *
  *  在线状态徽标（presence badge）的统一绘制入口 —— 把"某个在线状态长什么样"这件事
- *  收在一处，供全客户端六个显示点共用：通讯录 / 收藏树的行状态点、主面板 Header 状态
+ *  收在一处，供全客户端六个显示点共用：通讯录 / 收藏树 / 会话列表头像右下角的角标
+ *  （MainPanelTreeView，只画离开、忙碌两种；2026-10-07 之前通讯录画在行右端）、主面板 Header 状态
  *  胶囊、登录窗 Banner 状态胶囊、聊天窗对方状态胶囊、状态菜单 / 托盘菜单的行图标、
- *  会话列表头像右下角的角标。
+ *  搜索下拉与托盘浮窗列表项头像右下角的状态点。
  *
  *  改版背景（2026-08-12 与用户确认）：改版前四个状态<u>共用同一个形状</u>（实心圆点），
  *  仅靠颜色区分，于是 10px 下离开的琥珀与忙碌的红几乎同色、红绿色盲用户完全分不出
@@ -15,7 +16,7 @@
  *  典型用法（自绘控件里，调用方已开好抗锯齿的 Graphics）：
  *      balloonmain::DrawPresenceBadge(g, presence, false, x, y, 12.0f);
  *
- *  典型用法（需要一张位图交给 balloonui 控件时，如 DuiTreeView::SetItemStatusIcon）：
+ *  典型用法（需要一张位图时，如交给只收 HBITMAP 的 balloonui 控件）：
  *      HBITMAP hBadge = balloonmain::CreatePresenceBadgeBitmap(presence, 12);
  *      // …用完由调用方 DeleteObject
  *
@@ -65,7 +66,9 @@ void DrawPresenceBadge(Gdiplus::Graphics& g, int presence, bool markCurrent,
 
 /**
  *  造一张只画了状态徽标的 32bpp 预乘 alpha 位图，供只收 HBITMAP 的 balloonui 控件
- *  使用（当前唯一用处是 DuiTreeView::SetItemStatusIcon）。徽标外的像素为全透明
+ *  使用。2026-10-07 之前主面板的树用它往行右端挂状态徽标（DuiTreeView 的状态位图接口），
+ *  之后改由 MainPanelTreeView 在头像右下角直接绘制，产品代码已不再调用本函数，目前只有单元测试
+ *  用它核对字形。徽标外的像素为全透明
  *  (a=0, r=g=b=0)，正好满足 AlphaBlend(AC_SRC_OVER + AC_SRC_ALPHA) 对源位图的要求。
  *
  *    presence：v2 在线状态（presence_type）；越界取值按"离线"画。
@@ -75,8 +78,7 @@ void DrawPresenceBadge(Gdiplus::Graphics& g, int presence, bool markCurrent,
  *          参数非法或分配失败时返回 NULL。
  *
  *  注意：本函数每次调用都新建一张位图。四个状态各自的徽标是常量图形，调用方应当
- *        按状态<u>缓存复用</u>（如 CBalloonMainPanel 只造 4 张给整棵树共用），
- *        不要逐行创建 —— 树里有几百个联系人时那是几百次 DIB 分配。
+ *        按状态<u>缓存复用</u>，不要逐行创建 —— 树里有几百个联系人时那是几百次 DIB 分配。
  */
 HBITMAP CreatePresenceBadgeBitmap(int presence, int sizePx);
 

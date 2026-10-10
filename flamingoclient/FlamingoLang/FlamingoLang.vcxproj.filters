@@ -1,0 +1,43 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="lang">
+      <UniqueIdentifier>{7572559c-a86e-781b-a8fe-8073a0b725c6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="LangModule.cpp" />
+    <ClCompile Include="LangTable.cpp" />
+    <ClCompile Include="PoParser.cpp" />
+    <ClCompile Include="PseudoLang.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="FlamingoLangApi.h" />
+    <ClInclude Include="LangModule.h" />
+    <ClInclude Include="LangTable.h" />
+    <ClInclude Include="PoParser.h" />
+    <ClInclude Include="PseudoLang.h" />
+    <ClInclude Include="ScopedLock.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoLang.rc" />
+    <ResourceCompile Include="FlamingoLangVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoLang.def" />
+    <None Include="lang\zh-TW.po">
+      <Filter>lang</Filter>
+    </None>
+    <None Include="lang\en-US.po">
+      <Filter>lang</Filter>
+    </None>
+    <None Include="lang\ja-JP.po">
+      <Filter>lang</Filter>
+    </None>
+    <None Include="lang\ko-KR.po">
+      <Filter>lang</Filter>
+    </None>
+  </ItemGroup>
+</Project>

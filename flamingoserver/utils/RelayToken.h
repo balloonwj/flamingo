@@ -64,6 +64,42 @@ public:
     //1 条控制通道 + N 条数据通道，通道序号 lane 由各连接在中转握手帧
     //（cmd_folder_relay_hello）里自报，<u>不</u>写进令牌，故不必按通道逐条签发。
     static const int role_folder_receiver = 6;
+    //角色：屏幕共享的发起人，连上 imgserver 房间中转后推送屏幕画面（也收发声音、摄像头与标注）。
+    //与前三组两端配对不同，屏幕共享是一个房间挂多名成员：令牌的 sessionid 为房间号，peeruid 字段
+    //承载本人在房间里的座位号（发起人固定为 0），imgserver 据此把连接挂进房间、校验帧头的发送者编号。
+    static const int role_screenshare_host = 7;
+    //角色：屏幕共享的观看者，连上房间中转后接收屏幕画面、收发声音、摄像头与标注；peeruid 为座位号（1~254）。
+    static const int role_screenshare_member = 8;
+    //角色：文件共享的分享者一端，连上 fileserver 中转后应答访问者的列目录、读写文件等请求
+    //（共享的文件位于这一端的电脑上）。取 9 而不是续接 7：7 / 8 已归屏幕共享（见上），
+    //两个功能谁先落地都不会撞号，见 docs/文件共享方案.md 5.2。
+    //中转 sessionid 一律带 "share-" 前缀，fileserver 据此与本角色做一致性校验。
+    static const int role_share_owner = 9;
+    //角色：文件共享的访问者一端，连上中转后发出列目录、下载、上传等请求（打开共享的成员）。
+    //同一次访问的两端令牌：sessionid 相同、role 相反（9 对 10）、uid 与 peeruid 对调。
+    //与文件夹传输相同，lane 由各连接在 cmd_folder_relay_hello 里自报、不写进令牌。
+    static const int role_share_visitor = 10;
+    //角色：P2P 链路的发起方在回落中转时使用。打洞超时后双方改连 imgserver 的一对一中转
+    //（cmd_p2p_relay_hello），令牌的 sessionid 即 P2P 会话号（带 "p2p-" 前缀），两端令牌
+    //role 相反（11 对 12）、uid 与 peeruid 对调。中转上承载的是两端之间端到端加密的报文，
+    //imgserver 只做配对与转发（docs/P2P通信方案.md 6.4）。
+    static const int role_p2p_controlling = 11;
+    //角色：P2P 链路的应答方在回落中转时使用，与 role_p2p_controlling 配对。
+    static const int role_p2p_controlled = 12;
+    //角色：群通话房间的成员（docs/群音视频通话方案.md）。与屏幕共享一样走 imgserver 的房间中转（1859 / 1860），
+    //但群通话里没有发起人与观看者之分，所有已加入的人都用这一个角色：sessionid 为房间号（gc- 开头），peeruid 字段
+    //承载座位号（1~254）。imgserver 不允许同一房间里混入屏幕共享的 7 / 8，也不接受它做一对一报到。
+    static const int role_groupcall_member = 13;
+
+    //屏幕共享房间里「只推流」的连接（第 22 期多人共享）：主持人以外的共享者另连一条中转连接推自己的屏幕，peeruid 承载这块画面的
+    //座位号（1~254，与成员座位号不重复）。imgserver 只把发给这个座位的控制帧（关键帧请求、键鼠输入）转给它，房间里的其它画面、
+    //声音与标注一律不转给它
+    static const int role_screenshare_publisher = 14;
+
+    //角色：云端录制的控制连接（屏幕共享与录制方案 12.6.2，第 26 期）。不是客户端的角色：chatserver 主动连 imgserver 的中转端口，
+    //用 cmd_cloudrec_ctl_hello（1863）报到后经这条连接通知开始 / 停止录制、删除文件，imgserver 经它回报录制结束与上传完成。
+    //sessionid 为 "srvctl-<毫秒>"，uid 与 peeruid 为 0，有效期 60 秒，每次重连重签。imgserver 的一对一报到与房间报到都拒绝本角色
+    static const int role_server_control = 15;
 
     /**
      *  按 payload 与密钥签发一枚令牌。

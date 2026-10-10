@@ -100,6 +100,16 @@ public:
     void updateCachedMemberPosition(int64_t userId, const std::string& position);
 
     /**
+     *  把某用户在组织架构缓存里<u>所有</u>部门成员条目的账号状态就地改为 accountStatus。管理控制台启用 / 停用员工
+     *  （EmployeeManager::setEmployeeStatus）只写 t_user.f_status、不经本类的写方法，缓存不会自行重载；不同步这一份，
+     *  tree.do 里该成员的 accountstatus 要等下次重载才变，管理台的「已停用」标记与启用 / 停用按钮随之出错。
+     *  仅改内存缓存，不写库（库已由调用方更新）。
+     *  @param userId        被启用 / 停用的用户ID。
+     *  @param accountStatus 新的账号状态：0=启用 1=停用。
+     */
+    void updateCachedMemberAccountStatus(int64_t userId, int32_t accountStatus);
+
+    /**
      *  把某用户从组织架构缓存的<u>所有</u>部门成员列表里就地移除。管理控制台删除员工
      *  （user/delete.do）时，其部门成员记录是被 EmployeeManager 直接 DELETE 掉的、
      *  不经本类的写方法，缓存不会自行重载；不同步这一份，被删的人会继续留在

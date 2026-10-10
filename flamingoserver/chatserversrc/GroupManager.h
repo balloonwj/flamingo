@@ -16,10 +16,13 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#include <map>        //m_sensitiveCache
-#include <mutex>      //m_sensitiveMutex
+#include <map>        //getUserMemberships 的出参
 #include <utility>    //std::pair，refreshAutoGroupNamesOfMember 的出参
 #include "GroupProtocol.h"
+
+//本人所在的一个群及能看到的历史下界，定义在 MessageManager.h；这里只用作引用参数，前向声明即可，
+//免得让包含本头文件的编译单元都跟着引入 MessageManager.h
+struct GroupSearchScope;
 
 //群组存储管理器；全局单例，经 Singleton<GroupManager> 访问
 class GroupManager final
@@ -46,10 +49,11 @@ public:
      *  @param ownerid    群主userid
      *  @param memberids  初始成员userid列表（不含群主；调用方须已去重 / 去掉无效项）
      *  @param createTime 创建时间，Unix毫秒
+     *  @param groupType  群类型，取值见 Protocol.h 的 group_type（docs/帖子群方案.md）；缺省为普通群
      *  @return 成功返回新群ID；失败返回 0
      */
     int64_t createGroup(const std::string& name, int32_t ownerid,
-                        const std::vector<int64_t>& memberids, int64_t createTime);
+                        const std::vector<int64_t>& memberids, int64_t createTime, int groupType = 0);
 
     /**
      *  创建群（admin 控制台版）：分配群ID，写入 t_group，并按角色写入群主、管理员、
@@ -69,10 +73,10 @@ public:
                         const std::vector<int64_t>& memberids, int64_t createTime);
 
     /**
-     *  解散群：在一个事务里删除该群的 t_group 行、全部成员行、群公告、加群申请、敏感词、群文件条目，
-     *  以及各成员对该群的收藏行（t_favorite）与会话设置行（t_conversation），任何一步失败都整体回滚。
+     *  解散群：在一个事务里删除该群的 t_group 行、全部成员行、群公告、加群申请、群文件条目、关注名单
+     *  （t_group_follow），以及各成员对该群的收藏行（t_favorite）与会话设置行（t_conversation），
+     *  任何一步失败都整体回滚。
      *  群消息（t_chatmsg）保留不删，供企业审计追溯；被钉住的消息由调用方另行清理。
-     *  成功后同时丢弃该群在内存里的敏感词缓存。
      *  @param groupid 目标群ID
      *  @return 全部删除成功并提交时返回 true；失败时库里的数据保持原样
      */
@@ -94,6 +98,36 @@ public:
      *  @return 数据库访问成功返回 true
      */
     bool getGroupMembers(int64_t groupid, std::vector<GroupMemberRecord>& out);
+
+    /**
+     *  取某用户在某群的成员行（只填 t_group_member 的字段）。拉历史、会话内搜索、Pin 列表据此算本人能看到的
+     *  历史消息范围（GroupProtocol::computeHistoryBound），一次主键查询，比取整个成员列表再查找省事。
+     *  @param groupid 群ID
+     *  @param userid  用户ID
+     *  @param out     [出参] 成员行；返回 false 时不修改
+     *  @return 是该群成员且查询成功返回 true；不是成员或查询失败返回 false
+     */
+    bool getMember(int64_t groupid, int32_t userid, GroupMemberRecord& out);
+
+    /**
+     *  一次取出某用户在他所在的全部群里的成员行（只填 t_group_member 的字段）。全局搜索要按群算本人能看到的
+     *  历史消息范围，逐群调用 getMember 会随群数线性增加查询次数，故一次查完。
+     *  @param userid 用户ID
+     *  @param out    [出参] 群ID → 本人在该群的成员行；先清空
+     *  @return 查询成功返回 true（一个群都不在也算成功）
+     */
+    bool getUserMemberships(int32_t userid, std::map<int64_t, GroupMemberRecord>& out);
+
+    /**
+     *  取某用户<u>当前</u>所在的全部群，以及他在每个群里能看到的历史消息下界（入群时间下界、邀请时选择
+     *  「同步最近 N 条」得出的 msgid 下界，规则见 GroupProtocol::computeHistoryBound）。跨会话按本人视角取消息的
+     *  地方都用它划定群聊的范围：全局搜索（cmd_global_search）、按改写序号同步（cmd_sync_rewritten_messages）。
+     *  内部各查一次群列表与本人的成员行，不随群数逐个查询。
+     *  @param userid 用户ID
+     *  @param out    [出参] 每个群一项；先清空。成员行缺失（并发退群）的群仍列出，不设下界，与原全局搜索一致
+     *  @return 群列表查询成功返回 true（一个群都不在也算成功）；成员行查询失败时不设下界，不影响返回值
+     */
+    bool getUserHistoryScopes(int32_t userid, std::vector<GroupSearchScope>& out);
 
     /**
      *  取某用户加入的全部群（cmd_get_contacts / 群列表用）。
@@ -150,7 +184,30 @@ public:
      *  @return 是群成员返回 true（此时各出参才有效）
      */
     bool getMemberRoleAndMuted(int64_t groupid, int32_t userid, int& role, int& muted,
-                               int64_t* muteUntil = NULL);
+                               int64_t* muteUntil = NULL, int* mustRead = NULL);
+
+    /**
+     *  设置或取消本群的入群必读（docs/群公告接入方案.md §14）。取消（announcementId 为 0）时把全部待确认的成员清零，
+     *  被清零的人记进 cleared，调用方据此推成员变更。设置与清零在一个事务里。
+     *  @param groupid        群ID
+     *  @param announcementId 必读公告ID，0 表示取消；调用方已校验它属于本群
+     *  @param cleared        [出参] 因取消而解除限制的成员；设置时为空
+     *  @return 全部写入成功返回 true
+     */
+    bool setMustRead(int64_t groupid, int64_t announcementId, std::vector<int64_t>& cleared);
+
+    /**
+     *  把一批成员标为入群必读待确认（新成员入群收尾时调用）。不是本群成员的 userid 不受影响。
+     *  @return 数据库访问成功返回 true
+     */
+    bool markMustReadPending(int64_t groupid, const std::vector<int64_t>& userids);
+
+    /**
+     *  把一批成员的入群必读标为已确认（本人确认、群主或管理员代为确认）。只改其中待确认的人，
+     *  实际被改的人记进 cleared。
+     *  @return 数据库访问成功返回 true
+     */
+    bool clearMustReadPending(int64_t groupid, const std::vector<int64_t>& userids, std::vector<int64_t>& cleared);
 
     /**
      *  把某成员已过期的定时禁言从库里清掉（f_muted 置 0、到期时间与原因清空）。
@@ -178,13 +235,17 @@ public:
      *  @param groupid  目标群ID
      *  @param userids  待加入的用户userid列表
      *  @param joinTime 入群时间，Unix毫秒
+     *  @param historyFrom 这批新成员能看到的最早一条群消息 msgid（写进 f_history_from），由
+     *                     MessageManager::computeGroupHistoryFrom 按邀请时选择的条数算出；0 表示不限
      *  @return 数据库访问成功返回 true
      */
-    bool addMembers(int64_t groupid, const std::vector<int64_t>& userids, int64_t joinTime);
+    bool addMembers(int64_t groupid, const std::vector<int64_t>& userids, int64_t joinTime,
+                    int64_t historyFrom = 0);
 
     /**
-     *  批量移除群成员（用于退群 / 踢人）：在一个事务里删除这些人的成员行，以及他们对该群的收藏行
-     *  （t_favorite）与会话设置行（t_conversation），任何一步失败都整体回滚。其他成员的数据不动。
+     *  批量移除群成员（用于退群 / 踢人）：在一个事务里删除这些人的成员行，他们对该群的收藏行
+     *  （t_favorite）与会话设置行（t_conversation），以及本群关注名单（t_group_follow）里由他们发起
+     *  或以他们为对象的行，任何一步失败都整体回滚。其他成员的其余数据不动。
      *  @param groupid 目标群ID
      *  @param userids 待移除的用户userid列表；为空时直接返回 true；其中已不在群里的人不影响结果
      *  @return 全部删除成功并提交时返回 true；失败时库里的数据保持原样
@@ -199,10 +260,14 @@ public:
      *  @param createTime  申请时间，Unix毫秒
      *  @param source      申请来源，取值见 group_join_source；缺省为群搜索
      *  @param recommender 推荐人userid，0 表示无；仅 source 为好友邀请时才该非 0
+     *  @param historyLimit 通过后可看的入群前消息条数（写进 f_history_limit），由邀请转来的申请传邀请人的选择，
+     *                      取值见 kInviteHistoryLimitAll / kInviteHistoryLimitMax；缺省为全部
+     *  @param inviteId    由入群邀请卡片转来时传邀请 id（写进 f_invite_id，审批结果据此回写卡片）；缺省 0 表示不是
      */
     int64_t addJoinRequest(int64_t groupid, int32_t userid,
                            const std::string& verifymsg, int64_t createTime,
-                           int source = group_join_source_search, int64_t recommender = 0);
+                           int source = group_join_source_search, int64_t recommender = 0,
+                           int historyLimit = kInviteHistoryLimitAll, int64_t inviteId = 0);
 
     /**
      *  按申请ID取一条加群申请。
@@ -213,15 +278,18 @@ public:
     bool getJoinRequestById(int64_t requestid, GroupJoinRequestRecord& out);
 
     /**
-     *  更新加群申请的处理状态、处理时间与处理人。
+     *  处理一条加群申请：仅当它仍是待处理时，更新状态、处理时间与处理人。
+     *  两位管理员同时处理同一条申请时，两个请求都可能通过「仍是待处理」的检查，这里在 SQL 里再判一次并看实际改到的行数，
+     *  只有一个请求能改到（2026-10-04 用例 JQ1 复现过后写的覆盖先写的，见 docs/邀请入群方案.md 第 4 期）。
      *  @param requestid  申请ID
      *  @param status     新状态：1 已通过 2 已拒绝
      *  @param handleTime 处理时间，Unix毫秒
      *  @param handler    处理人userid
-     *  @return 数据库访问成功返回 true
+     *  @param changed    [出参] 是否真的改到了这条申请；申请已被处理过或不存在时为 false，调用方据此判定本次处理无效
+     *  @return 数据库访问成功返回 true（含没改到的情况）
      */
     bool updateJoinRequestStatus(int64_t requestid, int status,
-                                 int64_t handleTime, int32_t handler);
+                                 int64_t handleTime, int32_t handler, bool& changed);
 
     /**
      *  取某群全部待处理（status=0）的加群申请，按申请时间倒序。
@@ -334,6 +402,17 @@ public:
     bool getAnnouncement(int64_t id, GroupAnnouncementRecord& out);
 
     /**
+     *  在若干个群的群公告里按关键字搜索（cmd_global_search 用）：标题或正文含关键字的公告。
+     *  @param groupids 要搜的群（本人所在的群）；为空时直接返回成功、结果为空
+     *  @param keyword  关键字（UTF-8，非空）
+     *  @param limit    最多返回几条，须大于 0
+     *  @param out      [出参] 命中的公告，按发布时间倒序（同一时刻按 id 倒序）；publishername 留空
+     *  @return 数据库访问成功返回 true
+     */
+    bool searchAnnouncements(const std::vector<int64_t>& groupids, const std::string& keyword, int limit,
+                             std::vector<GroupAnnouncementRecord>& out);
+
+    /**
      *  发布一条新公告：插入 t_group_announcement，并同步刷新 t_group 上的快照四列。
      *  "重新发布"走的也是本方法 —— 调用方先按ID读回旧公告，再把它的标题 / 正文 /
      *  优先级原样传进来，于是历史里留下的是两条记录而不是一条被改过时间的。
@@ -369,72 +448,6 @@ public:
      */
     bool refreshLatestAnnouncement(int64_t groupid);
 
-    // ================================================================
-    // 群敏感词库
-    // ================================================================
-    //
-    // 群开启 f_sensitive_on 后，群内文本消息发送前按本群词库做子串匹配、命中即拒发。
-    // 发消息是最热的路径，每条都查一次库不可接受，故词库按群缓存在 m_sensitiveCache
-    // 里，增删时把该群的缓存条目抹掉、下次用到时重新装载。
-
-    /**
-     *  取某群的敏感词库（管理界面用，带词条ID供删除）。总是直查数据库，
-     *  不走缓存 —— 管理界面打开频率极低，且要拿到最新的、含 ID 的完整列表。
-     *  @param groupid 群ID
-     *  @param out     [出参] 词条列表，按添加时间升序；调用前不会被清空
-     *  @return 数据库访问成功返回 true
-     */
-    bool getSensitiveWords(int64_t groupid, std::vector<GroupSensitiveWordRecord>& out);
-
-    /**
-     *  往某群词库新增一条敏感词，返回新词条ID；失败返回 0。
-     *  同群下重复的词会被静默忽略并返回 0 —— 调用方据返回值区分不了"重复"与"出错"，
-     *  但两者对调用方的处置相同（都不需要额外动作），故不细分。
-     *  @param groupid    群ID
-     *  @param word       敏感词，非空
-     *  @param createTime 添加时间，Unix毫秒
-     */
-    int64_t addSensitiveWord(int64_t groupid, const std::string& word, int64_t createTime);
-
-    /**
-     *  按词条ID删除一条敏感词。
-     *  @param groupid 群ID；与 id 一起作为条件，防止跨群删除别的群的词条
-     *  @param id      词条ID
-     *  @return 数据库访问成功返回 true（词条本就不存在也算成功）
-     */
-    bool deleteSensitiveWord(int64_t groupid, int64_t id);
-
-    /**
-     *  判断一段文本是否命中某群的敏感词。命中判定为子串匹配、不区分大小写。
-     *  走 m_sensitiveCache，首次用到某群时装载一次。
-     *  @param groupid 群ID
-     *  @param text    待检文本（UTF-8）
-     *  @param hitWord [出参] 命中的那个词，可传 NULL 表示不关心；未命中时不写
-     *  @return 命中返回 true
-     */
-    bool hitSensitiveWord(int64_t groupid, const std::string& text, std::string* hitWord);
-
-private:
-    /**
-     *  确保某群的敏感词缓存已装载。调用方须已持有 m_sensitiveMutex。
-     *  @param groupid 群ID
-     */
-    void ensureSensitiveCacheLoaded(int64_t groupid);
-
-    /**
-     *  抹掉某群的敏感词缓存，使其下次使用时重新装载。词库增删后调用。
-     *  @param groupid 群ID
-     */
-    void invalidateSensitiveCache(int64_t groupid);
-
 private:
     std::atomic<int64_t> m_baseGroupId{ 0 };  //群ID分配器，取已有最大群ID，新建群在此基础上递增
-
-
-    //群敏感词缓存：群ID -> 该群全部敏感词（已转小写，供不区分大小写匹配）。
-    //只在发消息路径上读、在词库增删时失效，故用一把普通互斥量保护即可；
-    //键不存在表示"尚未装载"，装载后即便词库为空也会留一个空 vector 占位，
-    //避免每条消息都为"这个群没有敏感词"再查一次库。
-    std::map<int64_t, std::vector<std::string> > m_sensitiveCache;
-    std::mutex                                   m_sensitiveMutex;  //保护 m_sensitiveCache
 };

@@ -5,6 +5,7 @@
 #include "GroupProtocolClient.h"
 #include <stdlib.h>                     // strtoll
 #include "../third-party/jsoncpp-1.9.0/json.h"
+#include "Protocol.h"                   // group_type：群对象的 grouptype 字段
 
 namespace net {
 
@@ -38,10 +39,6 @@ static bool parseObject(const std::string& json, Json::Value& root)
     return ok && errs.empty() && root.isObject();
 }
 
-//cmd_operate_sensitive_word 的 operation 取值，与服务端 sensitive_word_operation 对齐
-static const int kSensitiveWordAdd    = 1;   //新增一条敏感词（请求带 word）
-static const int kSensitiveWordDelete = 2;   //删除一条敏感词（请求带 id）
-
 //从一个含群资料字段的 JSON 对象里填出 GroupInfoResult 的资料部分（不含 code/msg）。
 //
 //服务端的 cmd_get_group_info 应答与 cmd_group_info_changed_notify 推送共用同一个
@@ -67,7 +64,7 @@ static void fillGroupInfoFromValue(const Json::Value& root, GroupInfoResult& out
     if (root["myrole"].isInt())
         out.m_myrole = root["myrole"].asInt();
 
-    //以下七项为群管理功能新增。老服务端不回这些字段，此时保留构造函数里设好的
+    //以下六项为群管理功能新增。老服务端不回这些字段，此时保留构造函数里设好的
     //默认值（与服务端各列 DEFAULT 一致），而不是一律填 0 —— 否则界面上会把
     //"新成员可看历史"错显成关闭。
     if (root["intro"].isString())
@@ -82,8 +79,6 @@ static void fillGroupInfoFromValue(const Json::Value& root, GroupInfoResult& out
         out.m_welcomeon = root["welcomeon"].asInt();
     if (root["welcometext"].isString())
         out.m_welcometext = root["welcometext"].asString();
-    if (root["sensitiveon"].isInt())
-        out.m_sensitiveon = root["sensitiveon"].asInt();
 
     //以下三项为群公告功能新增的"最新公告快照"。老服务端不回这些字段，此时保留
     //构造函数里的 0 / 空串（即"本群还没有公告"），界面上表现为不显示公告摘要行。
@@ -93,13 +88,25 @@ static void fillGroupInfoFromValue(const Json::Value& root, GroupInfoResult& out
         out.m_announcetitle = root["announcetitle"].asString();
     if (root.isMember("announcetime"))
         out.m_announcetime = jsonToInt64(root["announcetime"]);
+
+    //入群必读的公告ID（2026-10-07 起）；老服务端不带时保留 0
+    if (root.isMember("mustreadid"))
+        out.m_mustreadid = jsonToInt64(root["mustreadid"]);
+
+    //群类型（2026-10-07 起，docs/帖子群方案.md 6.3）；老服务端不带、或取值不认识时都按普通群
+    if (root["grouptype"].isInt() && root["grouptype"].asInt() == group_type_thread)
+        out.m_grouptype = group_type_thread;
 }
 
 std::string GroupProtocolClient::buildCreateGroupRequest(const std::string& groupname,
-                                                         const std::vector<int64_t>& memberids)
+                                                         const std::vector<int64_t>& memberids,
+                                                         int grouptype)
 {
     Json::Value root;
     root["groupname"] = groupname;
+    //群类型只在建帖子群时带上：普通群的请求与 2026-10-07 之前完全相同，老服务端照常处理
+    if (grouptype == group_type_thread)
+        root["grouptype"] = grouptype;
     //成员 userid 列表以字符串数组编码（避免大整数精度丢失）；不含创建者自己。
     Json::Value arr(Json::arrayValue);
     for (size_t i = 0; i < memberids.size(); ++i)
@@ -269,6 +276,8 @@ bool GroupProtocolClient::parseGroupMembersResponse(const std::string& jsonbody,
             m.m_jointime   = jsonToInt64(jm["jointime"]);
             m.m_muteuntil  = jsonToInt64(jm["muteuntil"]);
             m.m_mutereason = jm["mutereason"].isString() ? jm["mutereason"].asString() : std::string();
+            //入群必读的确认状态（2026-10-07 起）；老服务端不带时为 0
+            m.m_mustread   = jm["mustread"].isInt() ? jm["mustread"].asInt() : 0;
 
             //userid 非法的成员跳过。
             if (m.m_userid <= 0)
@@ -314,6 +323,13 @@ bool GroupProtocolClient::parseUserGroupsResponse(const std::string& jsonbody, U
             g.m_customface  = jg["customface"].isString() ? jg["customface"].asString() : std::string();
             //本人的置顶状态；老服务端不带时按未置顶处理。
             g.m_pinned      = (jg["pinned"].isInt() && jg["pinned"].asInt() != 0) ? 1 : 0;
+            //群简介；老服务端不带时取空串，群聊窗头部那一行留空。
+            g.m_intro       = jg["intro"].isString() ? jg["intro"].asString() : std::string();
+            //仅通知模式开关；老服务端不带时按关闭处理。
+            g.m_muteall     = (jg["muteall"].isInt() && jg["muteall"].asInt() != 0) ? 1 : 0;
+            //群类型；老服务端不带、或取值不认识时都按普通群。
+            g.m_grouptype   = (jg["grouptype"].isInt() && jg["grouptype"].asInt() == group_type_thread)
+                              ? group_type_thread : group_type_normal;
 
             //groupid 非法的群跳过。
             if (g.m_groupid <= 0)
@@ -329,7 +345,8 @@ bool GroupProtocolClient::parseUserGroupsResponse(const std::string& jsonbody, U
 // ====================================================================
 
 std::string GroupProtocolClient::buildGroupMembersOpRequest(int64_t groupid,
-                                                            const std::vector<int64_t>& userids)
+                                                            const std::vector<int64_t>& userids,
+                                                            int historyLimit)
 {
     Json::Value root;
     root["groupid"] = std::to_string(groupid);
@@ -341,7 +358,28 @@ std::string GroupProtocolClient::buildGroupMembersOpRequest(int64_t groupid,
         arr.append(std::to_string(userids[i]));
     }
     root["userids"] = arr;
+
+    //同步全部（-1）时不带，与老客户端的请求相同；其余取值原样带上，由服务端校验范围
+    const int kHistoryLimitAll = -1;
+    if (historyLimit != kHistoryLimitAll)
+        root["historylimit"] = historyLimit;
     return writeCompact(root);
+}
+
+void GroupProtocolClient::parseInviteToGroupCounts(const std::string& jsonbody, GroupOpResult& out)
+{
+    out.m_added = 0;
+    out.m_invited = 0;
+    out.m_pending = 0;
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return;
+    if (root["added"].isInt())
+        out.m_added = root["added"].asInt();
+    if (root["invited"].isInt())
+        out.m_invited = root["invited"].asInt();
+    if (root["pending"].isInt())
+        out.m_pending = root["pending"].asInt();
 }
 
 std::string GroupProtocolClient::buildUpdateGroupInfoRequest(const UpdateGroupInfoParams& req)
@@ -376,8 +414,6 @@ std::string GroupProtocolClient::buildUpdateGroupInfoRequest(const UpdateGroupIn
         root["welcomeon"] = req.m_welcomeOn;
     if (req.m_hasWelcomeText)
         root["welcometext"] = req.m_welcomeText;
-    if (req.m_hasSensitiveOn)
-        root["sensitiveon"] = req.m_sensitiveOn;
 
     return writeCompact(root);
 }
@@ -430,25 +466,6 @@ std::string GroupProtocolClient::buildHandleJoinGroupRequest(int64_t requestid, 
     Json::Value root;
     root["requestid"] = std::to_string(requestid);
     root["action"]    = accept ? 1 : 0;
-    return writeCompact(root);
-}
-
-std::string GroupProtocolClient::buildAddSensitiveWordRequest(int64_t groupid,
-                                                              const std::string& word)
-{
-    Json::Value root;
-    root["groupid"]   = std::to_string(groupid);
-    root["operation"] = kSensitiveWordAdd;
-    root["word"]      = word;
-    return writeCompact(root);
-}
-
-std::string GroupProtocolClient::buildDeleteSensitiveWordRequest(int64_t groupid, int64_t id)
-{
-    Json::Value root;
-    root["groupid"]   = std::to_string(groupid);
-    root["operation"] = kSensitiveWordDelete;
-    root["id"]        = std::to_string(id);
     return writeCompact(root);
 }
 
@@ -505,46 +522,6 @@ bool GroupProtocolClient::parseJoinRequestsResponse(const std::string& jsonbody,
     return true;
 }
 
-bool GroupProtocolClient::parseSensitiveWordsResponse(const std::string& jsonbody,
-                                                      SensitiveWordsResult& out)
-{
-    Json::Value root;
-    if (!parseObject(jsonbody, root))
-        return false;
-
-    if (!root["code"].isInt())
-        return false;
-
-    out.m_code = root["code"].asInt();
-    out.m_msg  = root["msg"].isString() ? root["msg"].asString() : std::string();
-    if (out.m_code != 0)
-        return true;
-
-    out.m_groupid = jsonToInt64(root["groupid"]);
-
-    const Json::Value& arr = root["words"];
-    if (!arr.isArray())
-        return true;
-
-    for (Json::ArrayIndex i = 0; i < arr.size(); ++i)
-    {
-        const Json::Value& jo = arr[i];
-        if (!jo.isObject())
-            continue;
-
-        SensitiveWordItem item;
-        item.m_id   = jsonToInt64(jo["id"]);
-        item.m_word = jo["word"].isString() ? jo["word"].asString() : std::string();
-        //没有词条ID就删不掉、空词也没有展示价值，两者都跳过
-        if (item.m_id <= 0 || item.m_word.empty())
-            continue;
-
-        item.m_timestamp = jsonToInt64(jo["timestamp"]);
-        out.m_words.push_back(item);
-    }
-    return true;
-}
-
 bool GroupProtocolClient::parseJoinGroupRequestNotify(const std::string& jsonbody,
                                                       GroupJoinRequestItem& out)
 {
@@ -597,6 +574,59 @@ bool GroupProtocolClient::parseGroupMemberChangedNotify(const std::string& jsonb
                 out.m_userids.push_back(uid);
         }
     }
+    return true;
+}
+
+bool GroupProtocolClient::parseGroupInviteChangedNotify(const std::string& jsonbody, GroupInviteChangedNotify& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+    out.m_inviteid  = jsonToInt64(root["inviteid"]);
+    out.m_msgid     = jsonToInt64(root["msgid"]);
+    out.m_inviterid = jsonToInt64(root["inviterid"]);
+    out.m_inviteeid = jsonToInt64(root["inviteeid"]);
+    if (out.m_inviteid <= 0 || out.m_msgid <= 0 || !root["state"].isInt())
+        return false;
+    out.m_state = root["state"].asInt();
+    return true;
+}
+
+bool GroupProtocolClient::parseJoinRequestHandledNotify(const std::string& jsonbody, JoinRequestHandledNotify& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+    out.m_groupid   = jsonToInt64(root["groupid"]);
+    out.m_requestid = jsonToInt64(root["requestid"]);
+    out.m_handler   = jsonToInt64(root["handler"]);
+    if (out.m_groupid <= 0 || out.m_requestid <= 0 || !root["status"].isInt())
+        return false;
+    out.m_status = root["status"].asInt();
+    out.m_handlerName = root["handlername"].isString() ? root["handlername"].asString() : std::string();
+    return true;
+}
+
+std::string GroupProtocolClient::buildAcceptGroupInviteRequest(int64_t inviteid)
+{
+    Json::Value root;
+    //邀请 id 以字符串编码，与群组段其它报文一致
+    root["inviteid"] = std::to_string(inviteid);
+    return writeCompact(root);
+}
+
+bool GroupProtocolClient::parseAcceptGroupInviteResponse(const std::string& jsonbody, AcceptGroupInviteResult& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+    if (!root["code"].isInt())
+        return false;
+    out.m_code     = root["code"].asInt();
+    out.m_msg      = root["msg"].isString() ? root["msg"].asString() : std::string();
+    out.m_inviteid = jsonToInt64(root["inviteid"]);
+    out.m_groupid  = jsonToInt64(root["groupid"]);
+    out.m_joined   = root["joined"].isInt() && root["joined"].asInt() != 0;
     return true;
 }
 
@@ -776,6 +806,50 @@ bool GroupProtocolClient::parseAnnouncementNotify(const std::string& jsonbody,
     if (out.m_groupid <= 0)
         out.m_groupid = out.m_announcement.m_groupid;
 
+    //公告卡片（删除推送才带）：msgid 与改写后的卡片要成对出现才有用，缺一个就都不认
+    out.m_cardMsgId = 0;
+    out.m_cardContent.clear();
+    const int64_t cardMsgId = jsonToInt64(root["cardmsgid"]);
+    if (cardMsgId > 0 && root["card"].isObject())
+    {
+        out.m_cardMsgId = cardMsgId;
+        out.m_cardContent = writeCompact(root["card"]);
+    }
+
+    return out.m_groupid > 0;
+}
+
+// ====================================================================
+// 入群必读（docs/群公告接入方案.md §14）
+// ====================================================================
+
+std::string GroupProtocolClient::buildSetMustReadRequest(int64_t groupId, int64_t announceId)
+{
+    Json::Value root;
+    root["groupid"]        = std::to_string(groupId);
+    root["announcementid"] = std::to_string(announceId);
+    return writeCompact(root);
+}
+
+bool GroupProtocolClient::parseGetMustReadResponse(const std::string& jsonbody, MustReadResult& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root) || !root["code"].isInt())
+        return false;
+    out.m_code = root["code"].asInt();
+    out.m_msg = root["msg"].isString() ? root["msg"].asString() : std::string();
+    out.m_groupid = jsonToInt64(root["groupid"]);
+    out.m_mustreadid = jsonToInt64(root["mustreadid"]);
+    out.m_pending = root["pending"].isBool() ? root["pending"].asBool() : false;
+    out.m_hasAnnouncement = false;
+    const Json::Value& jo = root["announcement"];
+    if (jo.isObject())
+    {
+        fillAnnouncementFromValue(jo, out.m_announcement);
+        out.m_hasAnnouncement = (out.m_announcement.m_id > 0);
+    }
+    if (out.m_code != 0)
+        return true;
     return out.m_groupid > 0;
 }
 

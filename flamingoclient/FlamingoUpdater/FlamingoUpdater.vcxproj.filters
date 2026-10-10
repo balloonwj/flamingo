@@ -39,6 +39,12 @@
     <ClCompile Include="UpdateLog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\App\BrandText.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c">
       <Filter>zlib</Filter>
     </ClCompile>
@@ -77,12 +83,24 @@
     <ClInclude Include="UpdateLog.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\App\BrandText.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLang\FlamingoLangApi.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="FlamingoUpdater.rc">
+      <Filter>资源文件</Filter>
+    </ResourceCompile>
+    <ResourceCompile Include="FlamingoUpdaterVersion.rc">
       <Filter>资源文件</Filter>
     </ResourceCompile>
   </ItemGroup>

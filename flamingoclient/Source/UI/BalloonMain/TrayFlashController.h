@@ -168,4 +168,15 @@ private:
     std::vector<TrayFlashEntry> m_entries;
 };
 
+/**
+ *  托盘悬停时是否应显示系统提示（昵称 / 账号 / 状态三行）。有未读会话、且未读提醒放行时，悬停由
+ *  自绘的未读消息浮窗处理（见 CTrayController::OnTrayIcon_MouseHover，它按同一个条件决定弹不弹浮窗），
+ *  系统提示此时必须为空，否则两者同时出现、叠在一起。重连期间与连上后的等待期里未读提醒暂停（见
+ *  CTrayUnreadHold），悬停不弹浮窗，改为显示系统提示（2026-10-03）。
+ *    flash：        未读会话集合，只读。
+ *    unreadAllowed：未读提醒此刻是否放行（CTrayUnreadHold::AllowUnread）。
+ *  @return 应显示返回 true；有未读且放行时返回 false。本函数无副作用。
+ */
+bool ShouldShowTraySystemTip(const CTrayFlashController& flash, bool unreadAllowed);
+
 } // namespace balloonmain

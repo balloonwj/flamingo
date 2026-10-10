@@ -13,6 +13,11 @@
  *    FWD-C18c 共用文件卡片（ChatFileCard）：各状态的卡片高度，完成态与未下载态的操作链接个数、
  *             顺序与位置，以及点中判断（链接中心返回对应下标，卡片头部返回 -1）。
  *
+ *    DFC9  在线直传等待接收的卡片：两个链接依次为「发送离线文件」「取消」，文字取自 FileCardLinkLabel。
+ *    DFC10 「P2P」徽章与加粗的状态文字之间保持设计间距（kP2PBadgeGapPx，允许 1 像素抗锯齿误差）。
+ *    DFC13 发送方取消的在线直传文件卡片：不画进度条（高度只有头部区与按钮行），只有「重新发送」一个链接。
+ *          2026-10-05 联调发现状态文字按常规字重量宽、按加粗字重绘制，字越多徽章越贴近文字。
+ *
  *  用 Catch2 v3（amalgamated 形态）。全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义。
  *
  *  balloonwj@qq.com   2026-10-01
@@ -30,6 +35,9 @@
 #include "../UI/BalloonChatWnd/ChatFileStateModel.h"
 #include "../UI/BalloonChatWnd/ChatFileCard.h"
 #include "../UI/BalloonChatWnd/ChatFileAction.h"
+#include "../UI/BalloonChatWnd/ChatPaintUtil.h"
+#include "../UI/BalloonMain/P2PBadge.h"
+#include "../net/Protocol.h"   // folder_state_canceled：发送方取消直传时记下的原因
 
 using namespace balloonchatwnd;
 
@@ -290,4 +298,191 @@ TEST_CASE("FWD-C18c 共用文件卡片：各状态的高度、操作链接与点
     ::SelectObject(memDC, oldBmp);
     ::DeleteObject(bmp);
     ::DeleteDC(memDC);
+}
+
+namespace {
+
+// 在白底画布上画一张卡片的文字部分，读回 32 位自上而下的像素（每像素 BGRA 四字节）
+std::vector<unsigned char> PaintCardPixels(const ChatMessage& m, const RECT& card, FileCardLinks& links)
+{
+    std::vector<unsigned char> pixels;
+    HDC screenDC = ::GetDC(NULL);
+    if (screenDC == NULL)
+    {
+        return pixels;
+    }
+    HDC memDC = ::CreateCompatibleDC(screenDC);
+    HBITMAP bmp = ::CreateCompatibleBitmap(screenDC, kCanvasW, kCanvasH);
+    ::ReleaseDC(NULL, screenDC);
+    if (memDC == NULL || bmp == NULL)
+    {
+        if (bmp != NULL)
+        {
+            ::DeleteObject(bmp);
+        }
+        if (memDC != NULL)
+        {
+            ::DeleteDC(memDC);
+        }
+        return pixels;
+    }
+    HGDIOBJ oldBmp = ::SelectObject(memDC, bmp);
+    RECT all = { 0, 0, kCanvasW, kCanvasH };
+    ::FillRect(memDC, &all, (HBRUSH)::GetStockObject(WHITE_BRUSH));
+    {
+        Gdiplus::Graphics g(memDC);
+        PaintFileCardText(memDC, g, card, m, -1, links);
+    }
+    ::SelectObject(memDC, oldBmp);
+
+    BITMAPINFO bi;
+    ::ZeroMemory(&bi, sizeof(bi));
+    bi.bmiHeader.biSize        = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth       = kCanvasW;
+    bi.bmiHeader.biHeight      = -kCanvasH;   // 负值表示自上而下
+    bi.bmiHeader.biPlanes      = 1;
+    bi.bmiHeader.biBitCount    = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    pixels.resize((size_t)kCanvasW * kCanvasH * 4);
+    if (::GetDIBits(memDC, bmp, 0, kCanvasH, &pixels[0], &bi, DIB_RGB_COLORS) != kCanvasH)
+    {
+        pixels.clear();
+    }
+    ::DeleteObject(bmp);
+    ::DeleteDC(memDC);
+    return pixels;
+}
+
+// 白底上「有笔画」的判定阈值：三个分量都不低于它就当作背景（容下 ClearType 在空白处留下的极淡杂色）
+const int kInkThreshold = 245;
+
+// 某一列在 [top, bottom] 行之间有没有笔画
+bool ColumnHasInk(const std::vector<unsigned char>& px, int x, int top, int bottom)
+{
+    for (int y = top; y <= bottom; ++y)
+    {
+        const unsigned char* p = &px[((size_t)y * kCanvasW + x) * 4];
+        if (p[0] < kInkThreshold || p[1] < kInkThreshold || p[2] < kInkThreshold)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // anonymous namespace
+
+TEST_CASE("DFC9 在线直传等待接收的卡片：链接依次为「发送离线文件」「取消」", "[directfilechat][filecard]")
+{
+    ScopedGdiplusForCard gdiplus;
+    REQUIRE(gdiplus.Ok());
+
+    ChatMessage waiting = MakeSnapFile(true, kFileDirectWaiting, 0, false);
+    waiting.fileDirect = true;
+    const RECT card = { kCardLeft, kCardTop, kCardLeft + kFileCardWidth, kCardTop + FileCardHeight(waiting) };
+    FileCardLinks links;
+    const std::vector<unsigned char> pixels = PaintCardPixels(waiting, card, links);
+    REQUIRE_FALSE(pixels.empty());
+    REQUIRE(links.m_count == 2);
+    CHECK(links.m_action[0] == kChatFileSendOffline);
+    CHECK(links.m_action[1] == kChatFileCancel);
+    CHECK(FileCardLinkLabel(waiting, kChatFileSendOffline) == CString(L"发送离线文件"));
+    CHECK(FileCardLinkLabel(waiting, kChatFileCancel) == CString(L"取消"));
+
+    // 其余动作的文字保持原样：收到的失败文件重试是「重新下载」
+    ChatMessage failedIn = MakeSnapFile(false, kFileFailed, kSnapDownloadPct, false);
+    CHECK(FileCardLinkLabel(failedIn, kChatFileRetry) == CString(L"\x21BB 重新下载"));
+    CHECK(FileCardLinkLabel(failedIn, kChatFileAccept) == CString(L"接收"));
+    CHECK(FileCardLinkLabel(failedIn, kChatFileReject) == CString(L"拒绝"));
+    CHECK(FileCardLinkLabel(failedIn, kChatFileOpen) == CString(L"打开文件"));
+}
+
+TEST_CASE("DFC10 「P2P」徽章与加粗的状态文字之间保持设计间距", "[directfilechat][filecard]")
+{
+    ScopedGdiplusForCard gdiplus;
+    REQUIRE(gdiplus.Ok());
+
+    // 本端发出、对方已接收：状态文字「对方已接收」加粗，五个字，常规字重量宽时误差最明显
+    ChatMessage sent = MakeSnapFile(true, kFileNormal, 0, false);
+    sent.fileDirect    = true;
+    sent.fileLinkPath  = 1;   // 局域网直连
+    sent.filePeerState = kFilePeerReceived;
+    const RECT card = { kCardLeft, kCardTop, kCardLeft + kFileCardWidth, kCardTop + FileCardHeight(sent) };
+    FileCardLinks links;
+    const std::vector<unsigned char> px = PaintCardPixels(sent, card, links);
+    REQUIRE_FALSE(px.empty());
+
+    // 徽章底色的像素圈出徽章所在的行与最左一列
+    const BYTE kBadgeR = GetRValue(balloonmain::kP2PBadgeBgColor);
+    const BYTE kBadgeG = GetGValue(balloonmain::kP2PBadgeBgColor);
+    const BYTE kBadgeB = GetBValue(balloonmain::kP2PBadgeBgColor);
+    int minX = kCanvasW;
+    int minY = kCanvasH;
+    int maxY = -1;
+    for (int y = 0; y < kCanvasH; ++y)
+    {
+        for (int x = 0; x < kCanvasW; ++x)
+        {
+            const unsigned char* p = &px[((size_t)y * kCanvasW + x) * 4];
+            if (p[2] == kBadgeR && p[1] == kBadgeG && p[0] == kBadgeB)
+            {
+                minX = (x < minX) ? x : minX;
+                minY = (y < minY) ? y : minY;
+                maxY = (y > maxY) ? y : maxY;
+            }
+        }
+    }
+    REQUIRE(maxY >= 0);
+
+    // 从底色最左列向左越过徽章圆角处的过渡色，得到徽章左边；再往左数连续的空白列，就是徽章与文字的间距
+    int badgeLeft = minX;
+    while (badgeLeft - 1 > card.left && ColumnHasInk(px, badgeLeft - 1, minY, maxY))
+    {
+        --badgeLeft;
+    }
+    int gap = 0;
+    int x = badgeLeft - 1;
+    while (x > card.left && !ColumnHasInk(px, x, minY, maxY))
+    {
+        ++gap;
+        --x;
+    }
+    REQUIRE(x > card.left);   // 左边确实有状态文字
+    INFO("gap between status text and badge: " << gap << " px");
+    CHECK(gap >= chatpaint::kP2PBadgeGapPx - 1);
+    CHECK(gap <= chatpaint::kP2PBadgeGapPx + 1);
+}
+
+TEST_CASE("DFC13 发送方取消的直传文件卡片：没有进度条，只有「重新发送」", "[directfilechat][filecard]")
+{
+    ScopedGdiplusForCard gdiplus;
+    REQUIRE(gdiplus.Ok());
+
+    //本端发出、等对方接收时自己取消了：已取消、仍是直传、记下取消原因
+    ChatMessage canceled = MakeFileMessage(true, _T("季度报告-最终版.xlsx"), kSnapFileBytes,
+                                           _T("C:\\data\\季度报告-最终版.xlsx"), "cmid-dfc13", kFileCancelled);
+    canceled.fileDirect = true;
+    canceled.fileDirectEnd = folder_state_canceled;
+    //高度：头部区 + 按钮行，没有进度条那一截；普通文件的已取消照旧带进度条
+    CHECK(FileCardHeight(canceled) == kCardHeaderH + kCardButtonRow);
+    ChatMessage normal = canceled;
+    normal.fileDirect = false;
+    normal.fileDirectEnd = 0;
+    CHECK(FileCardHeight(normal) == kCardHeaderH + kCardProgressH + kCardButtonRow);
+
+    //只有一个链接：重新发送（本端刚发出的那笔，带 clientMsgId 与本地源文件）
+    const RECT card = { kCardLeft, kCardTop, kCardLeft + kFileCardWidth, kCardTop + FileCardHeight(canceled) };
+    FileCardLinks links;
+    const std::vector<unsigned char> pixels = PaintCardPixels(canceled, card, links);
+    REQUIRE_FALSE(pixels.empty());
+    REQUIRE(links.m_count == 1);
+    CHECK(links.m_action[0] == kChatFileRetry);
+    CHECK(FileCardLinkLabel(canceled, kChatFileRetry) == CString(L"\x21BB 重新发送"));
+    //链接行不留进度条的位置：比普通文件已取消的那张卡片正好高出一个进度条的高度
+    const RECT normalCard = { kCardLeft, kCardTop, kCardLeft + kFileCardWidth, kCardTop + FileCardHeight(normal) };
+    FileCardLinks normalLinks;
+    const std::vector<unsigned char> normalPixels = PaintCardPixels(normal, normalCard, normalLinks);
+    REQUIRE_FALSE(normalPixels.empty());
+    REQUIRE(normalLinks.m_count == 1);
+    CHECK(normalLinks.m_rect[0].top - links.m_rect[0].top == kCardProgressH);
 }

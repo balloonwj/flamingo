@@ -36,7 +36,7 @@ enum GmFontWeight
 enum GmTextStyle
 {
     kGmTextPageTitle = 0,   // 页面大标题、顶栏群名：15px 粗体
-    kGmTextCardTitle = 1,   // 卡片标题、成员名、公告条目标题、敏感词：14px 粗体
+    kGmTextCardTitle = 1,   // 卡片标题、成员名、公告条目标题：14px 粗体
     kGmTextItemTitle = 2,   // 导航项、设置行标题、表单标签：14px 常规（导航选中项另行加粗）
     kGmTextBody      = 3,   // 页面副标题、卡片说明、公告正文、分组标题、普通按钮：13px 常规
     kGmTextCaption   = 4    // 设置行说明、顶栏角色与人数、导航分组标题、成员职务、时间、

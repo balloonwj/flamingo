@@ -21,6 +21,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiBadge.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using namespace balloonwjui;
 
@@ -70,17 +71,17 @@ LPCTSTR SeverityBadgeStyle(int severity, COLORREF& bgOut, COLORREF& fgOut)
     {
         bgOut = RGB(0xFD, 0xE3, 0xE3);
         fgOut = RGB(0xD9, 0x3F, 0x3F);
-        return _T("紧急");
+        return TR(L"紧急");
     }
     if (severity == balloongroupmanage::kSeverityImportant)
     {
         bgOut = RGB(0xFD, 0xE9, 0xDD);
         fgOut = RGB(0xE0, 0x6A, 0x2E);
-        return _T("重要");
+        return TR(L"重要");
     }
     bgOut = RGB(0xE6, 0xEC, 0xFB);
     fgOut = RGB(0x45, 0x6C, 0xDF);
-    return _T("通知");
+    return TR(L"通知");
 }
 
 // 注：标题栏图标的合成逻辑已抽到 BalloonMain/TitleBarIcon.h 共用，见下方调用处。
@@ -95,13 +96,64 @@ CBalloonAnnouncePopupDlg::CBalloonAnnouncePopupDlg()
     : m_panelHwnd(NULL)
     , m_groupId(0)
     , m_built(false)
+    , m_mustReadMode(false)
+    , m_confirmMsg(0)
+    , m_ownedByHost(false)
     , m_groupLabel(NULL)
     , m_severity(NULL)
     , m_title(NULL)
     , m_content(NULL)
     , m_meta(NULL)
+    , m_btnViewAll(NULL)
+    , m_btnGotIt(NULL)
     , m_titleIconBmp(NULL)
 {
+}
+
+void CBalloonAnnouncePopupDlg::SetOwnedByHost(bool owned)
+{
+    m_ownedByHost = owned;
+}
+
+void CBalloonAnnouncePopupDlg::SetMustReadMode(bool on, UINT confirmMsg)
+{
+    m_mustReadMode = on;
+    m_confirmMsg = on ? confirmMsg : 0;
+    ApplyButtonsForMode();
+}
+
+void CBalloonAnnouncePopupDlg::ApplyButtonsForMode()
+{
+    if (m_btnViewAll == NULL || m_btnGotIt == NULL)
+    {
+        return;
+    }
+    m_btnViewAll->SetVisible(!m_mustReadMode);
+    m_btnGotIt->SetText(m_mustReadMode ? TR(L"我已阅读") : TR(L"知道了"));
+    //SetVisible 不会重排：对按钮栏按当前矩形 ForceLayout（开发约定文档 UI 约定 5）
+    DuiControl* row = m_btnGotIt->GetParent();
+    if (row != NULL)
+    {
+        row->ForceLayout(row->GetRect());
+        row->Invalidate();
+    }
+}
+
+void CBalloonAnnouncePopupDlg::SetCaption(LPCTSTR caption)
+{
+    m_caption = (caption != NULL) ? caption : _T("");
+    ApplyCaption();
+}
+
+void CBalloonAnnouncePopupDlg::ApplyCaption()
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+    const CString text = m_caption.IsEmpty() ? CString(TR(L"新群公告")) : m_caption;
+    SetTitle(text);
+    SetWindowText(text);
 }
 
 CBalloonAnnouncePopupDlg::~CBalloonAnnouncePopupDlg()
@@ -127,14 +179,16 @@ void CBalloonAnnouncePopupDlg::ShowAnnouncement(HWND ownerPanel, int64_t groupId
 
     if (!IsWindow())
     {
-        // owner 传 NULL：让子控件通知自路由回本对话框（与关闭确认 / 新建群对话框同处理）。
-        if (Create(NULL, CWindow::rcDefault, _T("新群公告"),
+        // 所有者：入群必读（SetOwnedByHost(true)）以群聊窗为所有者，保证弹窗不会被随后激活的群聊窗压在
+        // 下面；主面板的新群公告不设所有者，主面板收在托盘里时它照样能弹出来。两种情况都用
+        // WS_OVERLAPPEDWINDOW，有所有者时 GetParent 仍为空，子控件通知照常发回本对话框（UI 约定第 11 条）。
+        HWND owner = (m_ownedByHost && ::IsWindow(ownerPanel)) ? ownerPanel : NULL;
+        if (Create(owner, CWindow::rcDefault, TR(L"新群公告"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR(_T("新群公告提示窗 Create 失败。"));
             return;
         }
-        SetTitle(_T("新群公告"));
         SetTitleBarHeight(kDlgTitleBarH);
         SetButtons(false, false, true);   // 只留关闭按钮
         SetResizable(false);
@@ -148,12 +202,19 @@ void CBalloonAnnouncePopupDlg::ShowAnnouncement(HWND ownerPanel, int64_t groupId
         {
             SetIcon(m_titleIconBmp);
         }
+        //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         m_built = false;
         BuildUiOnce();
-        ResizeClient(kDlgWidth, kDlgHeight);
+        //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+        ResizeClient(kDlgWidth, kDlgHeight + kDlgTitleBarH);
         CenterWindow(m_panelHwnd);
     }
+
+    //标题每次显示时按当前设置刷新：窗口刚创建时还没有设过标题
+    ApplyCaption();
+    ApplyButtonsForMode();
 
     // 换上这一条公告的内容。骨架不重建 —— 上一条还没关就又来一条时，直接换内容
     // 并前置，弹一摞窗口出来比漏掉一条更糟。
@@ -286,15 +347,17 @@ void CBalloonAnnouncePopupDlg::BuildUiOnce()
 
         std::unique_ptr<DuiButton> viewAll(new DuiButton());
         viewAll->SetCtrlId(kIdBtnViewAll);
-        viewAll->SetText(_T("查看全部"));
+        viewAll->SetText(TR(L"查看全部"));
         viewAll->SetButtonType(DuiButton::StylePushButton);
+        m_btnViewAll = viewAll.get();
         row->AddChild(std::move(viewAll), Hint().Fixed(96, kButtonH));
 
         std::unique_ptr<DuiButton> gotIt(new DuiButton());
         gotIt->SetCtrlId(kIdBtnGotIt);
-        gotIt->SetText(_T("知道了"));
+        gotIt->SetText(TR(L"知道了"));
         gotIt->SetButtonType(DuiButton::StylePushButton);
         gotIt->SetVariant(DuiButton::Variant::Primary);
+        m_btnGotIt = gotIt.get();
         row->AddChild(std::move(gotIt), Hint().Fixed(96, kButtonH));
 
         root->AddChild(std::move(row), Hint().Fixed(kButtonH));
@@ -332,13 +395,20 @@ LRESULT CBalloonAnnouncePopupDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
     switch (pNotify->ctrlId)
     {
+    //「知道了」关窗；入群必读模式下是「我已阅读」，先请宿主群聊窗发送确认再关窗
     case kIdBtnGotIt:
+        if (m_mustReadMode && m_confirmMsg != 0 && m_panelHwnd != NULL && ::IsWindow(m_panelHwnd))
+        {
+            ::PostMessage(m_panelHwnd, m_confirmMsg, 0, 0);
+            LOG_INFO("Announcement popup: must-read confirmed by user, groupid=%lld.", (long long)m_groupId);
+        }
         if (IsWindow())
         {
             ShowWindow(SW_HIDE);
         }
         return 0;
 
+    //「查看全部」：请宿主打开群聊窗的公告边栏
     case kIdBtnViewAll:
         // 打开群聊窗并切到公告边栏归主面板管（群聊窗集合在它手里），本窗口只发
         // 一条窗口间消息请它代劳。没有宿主面板时静默跳过。
@@ -353,6 +423,7 @@ LRESULT CBalloonAnnouncePopupDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
         return 0;
 
+    //其它控件的点击：不处理，交给基类
     default:
         break;
     }

@@ -4,9 +4,10 @@
  *  命令行契约（见 docs/客户端自动更新方案.md 6.4）：
  *
  *      FlamingoUpdater.exe --zip "<升级包绝对路径>" --target "<安装目录>"
- *                      --exec "<要重启的exe>" --pid <主进程PID> [--silent]
+ *                      --exec "<要重启的exe>" --pid <主进程PID> [--silent] [--lang <语言代码>]
  *
- *  四个带值参数都是必填，`--silent` 可选。参数顺序不限。
+ *  四个带值参数都是必填，`--silent` 可选；`--lang`（多语言第 3c 步）可选，取主程序当前生效的界面语言，
+ *  如 zh-CN、en-US，省略时跟随系统界面语言。参数顺序不限。
  *
  *  之所以做成"传 argc / argv 的纯函数"而不是直接读 GetCommandLineW()：这样它不依赖
  *  进程环境，可以被 FlamingoUnit 直接喂各种参数组合断言。真实入口在 Main.cpp 里用
@@ -35,6 +36,8 @@ struct UpdateArgs
     unsigned long m_pid;
     //静默模式：不弹任何提示框，失败只写日志。供无人值守场景使用。
     bool          m_silent;
+    //界面语言代码（--lang 的值）；没有给出时为空串，表示跟随系统界面语言。
+    std::wstring  m_language;
 
     UpdateArgs()
         : m_pid(0), m_silent(false)
@@ -48,7 +51,7 @@ struct UpdateArgs
  *    argc：   参数个数，含 argv[0]（程序自身路径）
  *    argv：   参数数组，元素为宽字符串；argc > 0 时 argv 不得为 NULL
  *    out：    [出参] 解析结果；返回 false 时其内容未定义，调用方不应使用
- *    errmsg： [出参] 失败原因（中文，可直接写日志或提示给用户）
+ *    errmsg： [出参] 失败原因（当前界面语言，可直接写日志或提示给用户）
  *
  *  @return 四个必填参数齐备且取值合法时返回 true。
  *
@@ -57,5 +60,16 @@ struct UpdateArgs
  */
 bool ParseCommandLine(int argc, wchar_t* const* argv,
                       UpdateArgs& out, std::wstring& errmsg);
+
+/**
+ *  只取出 --lang 的值，不检查其它参数（多语言第 3c 步）。入口要先据它确定界面语言，再做完整解析，
+ *  这样解析失败时的提示也是对应语言的文字。
+ *
+ *    argc：参数个数，含 argv[0]
+ *    argv：参数数组；argc > 0 时不得为 NULL
+ *
+ *  @return 第一个 --lang 之后的那个参数；没有 --lang、或它后面没有值时返回空串。
+ */
+std::wstring PeekLanguageArg(int argc, wchar_t* const* argv);
 
 } // namespace iupdate

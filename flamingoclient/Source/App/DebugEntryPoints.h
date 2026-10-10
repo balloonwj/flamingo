@@ -38,14 +38,13 @@
 #include "../UI/BalloonMain/BalloonGroupInfoDlg.h"
 #include "../UI/BalloonMain/ForwardTargetDlg.h"
 #include "../UI/BalloonImageViewer/BalloonImageViewerWindow.h"
-#include "../Feature/RemoteDesktop/RdSelfTestWindow.h"
-#include "../UI/BalloonRemoteDesktop/BalloonRemoteDesktopDlg.h"
-#include "../UI/BalloonRemoteDesktop/RdControlledBar.h"
+#include "../UI/BalloonCode/CodeSnippetDemoWindow.h"
 
 class CFlamingoClient;
 class CBalloonMainPanel;
 
 namespace balloonmain { class CTrayController; }
+namespace flamingomedia { class IMediaModule; }
 
 namespace balloonapp {
 
@@ -85,6 +84,11 @@ struct DebugEntryContext
     //托盘控制器。--kickout 用它取托盘图标位置，好让提示框贴着托盘弹出。可为 NULL。
     balloonmain::CTrayController* m_pTray;
 
+    //FlamingoMedia.dll 的模块接口。已随代码迁入 DLL 的调试入口（2026-10-02 起为一对一通话的 7 个与远程桌面的 8 个）
+    //由它运行：TryRun 先把命令行交给它，它未命中才检查本类自己的开关。可为 NULL（DLL 未加载），
+    //此时这批入口不生效。
+    flamingomedia::IMediaModule* m_pMediaModule;
+
     //[出参] --mainpanel 模拟的是「已经登录、主面板已打开」这个局面，它会把这一项置真，
     //宿主据此把自己的登录标志一并置真 —— 托盘右键菜单的形态就是据登录标志选的。
     //其余入口不改动本项。
@@ -94,6 +98,7 @@ struct DebugEntryContext
         : m_hHost(NULL)
         , m_pPanel(NULL)
         , m_pTray(NULL)
+        , m_pMediaModule(NULL)
         , m_bFakeLoggedIn(false)
     {
     }
@@ -153,9 +158,7 @@ private:
     balloonmain::CForwardTargetDlg m_forwardPickerDlg;  //--forwardpicker：转发目标选择窗预览（压测数据）
     CMergedRecordWindow m_mergedViewer;                 //--mergedviewer：合并转发聊天记录查看窗预览（构造的记录）
     CBalloonImageViewerWindow m_imageViewerWindow;      //--imageviewer：聊天图片放大看图窗预览
-    CRdSelfTestWindow m_rdSelfTestWindow;               //--rdpselftest：远程桌面引擎自环测试窗
-    CBalloonRemoteDesktopDlg m_rdDlg;                   //--rddlg：远程桌面会话提示框预览
-    CRdControlledBar m_rdControlledBar;                 //--rdbar：被控端受控提示条预览
+    ballooncode::CCodeSnippetDemoWindow m_codeSnippetDemo;  //--codesnippet：代码片段效果演示窗（粘贴代码对照现状与新方案）
 };
 
 } // namespace balloonapp

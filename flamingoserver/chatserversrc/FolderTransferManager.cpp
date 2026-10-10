@@ -3,6 +3,7 @@
  *  balloonwj@qq.com   2026-08-13
  */
 #include "FolderTransferManager.h"
+#include "FolderTransferProtocol.h"   //enum folder_transfer_kind（单文件直传会话，2026-10-04 起）
 #include "Protocol.h"                   // enum folder_transfer_state / enum error_code
 #include "../utils/RelayToken.h"
 #include "../base/AsyncLog.h"
@@ -19,6 +20,8 @@ FolderTransferManager::FolderTransferManager()
     , m_maxSessionsPerUser(kDefaultMaxSessionsPerUser)
     , m_inviteTimeoutMs(kDefaultInviteTimeoutMs)
     , m_retryWindowMs(kDefaultRetryWindowMs)
+    , m_directFileInviteTimeoutMs(kDefaultDirectFileInviteTimeoutMs)
+    , m_directFileMaxPerUser(kDefaultDirectFileMaxPerUser)
 {
 }
 
@@ -130,7 +133,7 @@ int FolderTransferManager::checkScale(int64_t totalFiles, int64_t totalSize) con
     return error_code_ok;
 }
 
-int FolderTransferManager::collectUserSessionsLocked(int64_t userId,
+int FolderTransferManager::collectUserSessionsLocked(int64_t userId, int kindFilter,
                                                      std::vector<FolderTransferSessionInfo>* out) const
 {
     int hit = 0;
@@ -142,6 +145,10 @@ int FolderTransferManager::collectUserSessionsLocked(int64_t userId,
         //会话表里除了进行中的传输，还留着失败待重试的会话；后者同样占着这个人的
         //每用户名额（重试要接着往同一个目录续传），故一并算作命中
         if (it->second.senderId != userId && it->second.receiverId != userId)
+            continue;
+
+        //只数指定种类：文件夹传输与单文件直传各有各的名额（2026-10-04 起）
+        if (kindFilter != kAnyKind && it->second.kind != kindFilter)
             continue;
 
         ++hit;
@@ -157,7 +164,19 @@ int FolderTransferManager::collectUserSessionsLocked(int64_t userId,
 int FolderTransferManager::getUserSessionCount(int64_t userId)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
-    return collectUserSessionsLocked(userId, NULL);
+    return collectUserSessionsLocked(userId, folder_kind_folder, NULL);
+}
+
+int FolderTransferManager::countFolderSessionsLocked() const
+{
+    int count = 0;
+    for (std::map<std::string, FolderTransferSessionInfo>::const_iterator it = m_sessions.begin();
+         it != m_sessions.end(); ++it)
+    {
+        if (it->second.kind == folder_kind_folder)
+            ++count;
+    }
+    return count;
 }
 
 int FolderTransferManager::findSessionsByUser(int64_t userId,
@@ -168,7 +187,7 @@ int FolderTransferManager::findSessionsByUser(int64_t userId,
 
     {
         std::lock_guard<std::mutex> guard(m_mutex);
-        collectUserSessionsLocked(userId, &out);
+        collectUserSessionsLocked(userId, kAnyKind, &out);
     }
 
     //本方法只在连接断开 / 退出登录的收尾路径上被调用，命中即意味着有传输要被作废，
@@ -187,7 +206,8 @@ int FolderTransferManager::findSessionsByUser(int64_t userId,
 bool FolderTransferManager::isServerBusy()
 {
     std::lock_guard<std::mutex> guard(m_mutex);
-    return (int)m_sessions.size() >= m_maxSessions;
+    //这道闸门防的是 fileserver 中转连接被占满，单文件直传不用中转，不计入
+    return countFolderSessionsLocked() >= m_maxSessions;
 }
 
 size_t FolderTransferManager::getActiveSessionCount()
@@ -215,7 +235,7 @@ int FolderTransferManager::checkInvite(int64_t senderId, int64_t receiverId,
     //每个用户同时可参与的笔数有上限，作发送方与作接收方各算一笔。
     //两道闸门（每用户上限、服务器总数上限）同时到顶时先报每用户上限：等自己那几笔里
     //有一笔传完就能继续，比"服务器繁忙"更有指导性
-    int senderCount = collectUserSessionsLocked(senderId, NULL);
+    int senderCount = collectUserSessionsLocked(senderId, folder_kind_folder, NULL);
     if (senderCount >= m_maxSessionsPerUser)
     {
         LOGI("folder invite rejected, sender %lld already has %d folder transfers, limit %d.",
@@ -223,7 +243,7 @@ int FolderTransferManager::checkInvite(int64_t senderId, int64_t receiverId,
         return error_code_folder_busy;
     }
 
-    int receiverCount = collectUserSessionsLocked(receiverId, NULL);
+    int receiverCount = collectUserSessionsLocked(receiverId, folder_kind_folder, NULL);
     if (receiverCount >= m_maxSessionsPerUser)
     {
         LOGI("folder invite rejected, receiver %lld already has %d folder transfers, limit %d.",
@@ -231,10 +251,10 @@ int FolderTransferManager::checkInvite(int64_t senderId, int64_t receiverId,
         return error_code_folder_busy;
     }
 
-    if ((int)m_sessions.size() >= m_maxSessions)
+    const int folderSessions = countFolderSessionsLocked();
+    if (folderSessions >= m_maxSessions)
     {
-        LOGW("folder invite rejected, active sessions %d reached limit %d.",
-             (int)m_sessions.size(), m_maxSessions);
+        LOGW("folder invite rejected, active folder sessions %d reached limit %d.", folderSessions, m_maxSessions);
         return error_code_folder_server_busy;
     }
 
@@ -260,6 +280,7 @@ std::string FolderTransferManager::createSession(int64_t senderId, int64_t recei
     info.totalDirs  = scale.totalDirs;
     info.totalFiles = scale.totalFiles;
     info.totalSize  = scale.totalSize;
+    info.kind       = scale.kind;
     info.state      = folder_state_ringing;
     info.createTime = now;
     info.stateTime  = now;
@@ -268,9 +289,9 @@ std::string FolderTransferManager::createSession(int64_t senderId, int64_t recei
 
     m_sessions[sid] = info;
 
-    LOGI("folder session created, sessionid: %s, sender: %lld, receiver: %lld, "
+    LOGI("folder session created, sessionid: %s, kind: %d, sender: %lld, receiver: %lld, "
          "dirs: %lld, files: %lld, size: %lld, active sessions: %d.",
-         sid.c_str(), (long long)senderId, (long long)receiverId,
+         sid.c_str(), scale.kind, (long long)senderId, (long long)receiverId,
          (long long)scale.totalDirs, (long long)scale.totalFiles, (long long)scale.totalSize,
          (int)m_sessions.size());
 
@@ -334,8 +355,9 @@ bool FolderTransferManager::finishAttempt(const std::string& sessionid, int atte
                                           int terminalState, int64_t now)
 {
     //终态之外的取值一律是调用方参数写错：真按它登记的话，这一次尝试此后再走到真正的
-    //终态时会被当成重复而丢掉整条记录，故此处既不登记也不改状态，只记一条告警
-    if (terminalState < folder_state_rejected || terminalState > folder_state_completed)
+    //终态时会被当成重复而丢掉整条记录，故此处既不登记也不改状态，只记一条告警。
+    //终态的范围与协议层同口径（3~9，9 是 2026-10-04 起单文件直传的「已改为离线发送」）
+    if (!FolderTransferProtocol::isTerminalState(terminalState))
     {
         LOGW("folder finish attempt rejected, state %d is not a terminal state, sessionid: %s, "
              "attempt: %d.",
@@ -454,15 +476,17 @@ void FolderTransferManager::tick(int64_t now,
     {
         //（1）邀请超时：仍在响铃、且响铃时长已达阈值。回填给调用方的那份状态改写成
         //超时态，调用方照它推 cmd_folder_state_notify 即可，不必自己再改一遍
+        //单文件直传的邀请超时另行配置（默认 5 分钟，超时后发送端改为上传服务器的离线文件）
+        const int64_t inviteTimeoutMs = (it->second.kind == folder_kind_file) ? m_directFileInviteTimeoutMs : m_inviteTimeoutMs;
         if (it->second.state == folder_state_ringing
-            && now - it->second.createTime >= m_inviteTimeoutMs)
+            && now - it->second.createTime >= inviteTimeoutMs)
         {
             it->second.state     = folder_state_timeout;
             it->second.stateTime = now;
             outTimedOut.push_back(it->second);
 
-            LOGI("folder session invite timed out, sessionid: %s, sender: %lld, receiver: %lld.",
-                 it->second.sessionid.c_str(),
+            LOGI("folder session invite timed out, sessionid: %s, kind: %d, sender: %lld, receiver: %lld.",
+                 it->second.sessionid.c_str(), it->second.kind,
                  (long long)it->second.senderId, (long long)it->second.receiverId);
 
             //erase 返回下一个迭代器，避免失效
@@ -558,4 +582,51 @@ bool FolderTransferManager::canRetry(const std::string& sessionid, int64_t uid,
          sessionid.c_str(), (long long)s.senderId, (long long)s.receiverId);
 
     return true;
+}
+
+//类内初始化的静态常量的类外定义：单元测试按引用使用它们（doctest 的 CHECK）构成 ODR 使用，g++ 链接时需要定义
+const int64_t FolderTransferManager::kDefaultDirectFileInviteTimeoutMs;
+const int FolderTransferManager::kDefaultDirectFileMaxPerUser;
+
+//==== 2026-10-04 单文件直传 ====
+
+void FolderTransferManager::configureDirectFile(int64_t inviteTimeoutMs, int maxPerUser)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    //配置项缺失或写成 0 / 负数时按默认值走
+    m_directFileInviteTimeoutMs = (inviteTimeoutMs > 0) ? inviteTimeoutMs : kDefaultDirectFileInviteTimeoutMs;
+    m_directFileMaxPerUser      = (maxPerUser > 0) ? maxPerUser : kDefaultDirectFileMaxPerUser;
+    LOGI("direct file transfer configured, invitetimeout: %lld ms, maxperuser: %d.",
+         (long long)m_directFileInviteTimeoutMs, m_directFileMaxPerUser);
+}
+
+int64_t FolderTransferManager::getDirectFileInviteTimeoutMs() const
+{
+    return m_directFileInviteTimeoutMs;
+}
+
+int FolderTransferManager::getDirectFileMaxPerUser() const
+{
+    return m_directFileMaxPerUser;
+}
+
+int FolderTransferManager::checkDirectFileInvite(int64_t senderId, int64_t receiverId)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    //只数单文件直传会话；先判发送方再判接收方，与 checkInvite 的口径一致
+    const int senderCount = collectUserSessionsLocked(senderId, folder_kind_file, NULL);
+    if (senderCount >= m_directFileMaxPerUser)
+    {
+        LOGI("direct file invite rejected, sender %lld already has %d direct transfers, limit %d.",
+             (long long)senderId, senderCount, m_directFileMaxPerUser);
+        return error_code_folder_busy;
+    }
+    const int receiverCount = collectUserSessionsLocked(receiverId, folder_kind_file, NULL);
+    if (receiverCount >= m_directFileMaxPerUser)
+    {
+        LOGI("direct file invite rejected, receiver %lld already has %d direct transfers, limit %d.",
+             (long long)receiverId, receiverCount, m_directFileMaxPerUser);
+        return error_code_folder_busy;
+    }
+    return error_code_ok;
 }

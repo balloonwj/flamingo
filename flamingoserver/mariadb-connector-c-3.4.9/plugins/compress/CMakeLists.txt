@@ -1,0 +1,23 @@
+SET(COMPRESS_PLUGIN_DIR ${CC_SOURCE_DIR}/plugins/compress)
+
+INCLUDE_DIRECTORIES(${COMPRESS_PLUGIN_DIR})
+INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/include)
+
+#zlib compression
+
+REGISTER_PLUGIN(TARGET zlib
+                TYPE COMPRESSION
+                CONFIGURATIONS STATIC
+                DEFAULT STATIC
+                SOURCES ${COMPRESS_PLUGIN_DIR}/c_zlib.c)
+
+#zstd compression
+IF(${ZSTD_FOUND})
+  INCLUDE_DIRECTORIES(${ZSTD_INCLUDE_DIRS})
+  REGISTER_PLUGIN(TARGET zstd
+                  TYPE COMPRESSION
+                  CONFIGURATIONS DYNAMIC STATIC OFF
+                  DEFAULT DYNAMIC
+                  SOURCES ${COMPRESS_PLUGIN_DIR}/c_zstd.c
+                  LIBRARIES ${ZSTD_LIBRARIES})
+ENDIF()

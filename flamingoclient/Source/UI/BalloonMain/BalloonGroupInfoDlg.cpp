@@ -9,33 +9,36 @@
 #include "stdafx.h"
 
 #include "BalloonGroupInfoDlg.h"
+#include "../../App/BrandText.h"   // g_strAppTitle（窗口与弹窗标题用的产品名称）
 #include "BalloonGroupInfoLayout.h"
 #include "BalloonMainPanel.h"            // CBalloonMainPanel::SetGroupConversation / RequestLeaveGroup / RequestDismissGroup(写操作回投宿主)
+#include "NotifyModeMenu.h"              // NotifyModeOfChoice:「消息提醒」下拉框下标换算成提醒模式
 #include "../../App/FlamingoClient.h"            // CFlamingoClient::IsOffline
 #include "../../resource.h"                  // IDR_MAINFRAME(标题栏 / 任务栏程序图标)
 #include "../../Common/Util/EncodeUtil.h"                // CString → UTF-8(发往服务端)
 #include "../../Common/Log/IULog.h"                     // LOG_INFO / LOG_ERROR
 #include "../../net/IUSocket.h"             // CIUSocket::SendSetConversation / SendSetMemberCard / SendLeaveGroup
+#include "../../net/Protocol.h"             // notify_mode_allow（只改置顶时提醒模式字段的占位值）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 「消息提醒」下拉框 GetCurSel
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"   // 复制后的轻提示条
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h" // 轻提示条挂在客户区根容器（DuiVBox）上
 #include "../../Common/Util/ClipboardText.h"   // 点击群名 / 群号复制到剪贴板
+#include "SensitiveWordTips.h"                 // GroupCardSaveFailureText（改群昵称失败按错误码给提示）
+#include "InlineEditKeys.h"                    // ClassifyInlineEditNotify：群名片输入框回车提交、Esc 取消
 
 #include <vector>                        // CStrToUtf8 缓冲
 #include <windowsx.h>                    // GET_X_LPARAM / GET_Y_LPARAM(鼠标消息取坐标)
 #include <gdiplus.h>                     // 退群按钮浅红圆角底位图用 GDI+ 抗锯齿绘制
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 #pragma comment(lib, "gdiplus.lib")
 
 namespace balloonmain {
 
-// ---- 对话框尺寸(逻辑像素,对照 design/群资料.png) ----
-static const int kGroupInfoWidth        = 460;
-static const int kGroupInfoHeight       = 408;
-static const int kGroupInfoTitleBarH    = 36;
-static const int kGroupInfoMinWidth     = 460;
-static const int kGroupInfoMinHeight    = 408;
+// ---- 对话框尺寸：kGroupInfoWidth / kGroupInfoHeight / kGroupInfoTitleBarH / kGroupInfoMin* 在 BalloonGroupInfoLayout.h，
+// 布局单测按同一组尺寸检查排得下 ----
 
 // ---- 退群按钮圆角底圆角半径(与 footer 按钮 9-grid 切片一致) ----
 static const int kQuitBtnRadius         = 8;
@@ -54,7 +57,7 @@ static const int kTitleIconSize         = 16;
 
 namespace {
 
-// CString(UTF-16) → UTF-8 std::string。空串安全。与 BalloonProfileDlg 同口径:
+// CString(UTF-16) → UTF-8 std::string。空串安全。与原 BalloonProfileDlg(2026-10-07 已删除)同口径:
 // 发往服务端的文本一律走 UTF-8。
 std::string CStrToUtf8(const CString& text)
 {
@@ -86,7 +89,7 @@ void EnsureGdiplus()
 }
 
 // 生成 side×side 的 32bpp 预乘 alpha 圆角矩形位图(内填 color、四角圆角 radius、
-// 圆角外透明),用作退群按钮 9-grid 底图。与 BalloonProfileDlg::MakeRoundRectBitmap
+// 圆角外透明),用作退群按钮 9-grid 底图。与原 BalloonProfileDlg::MakeRoundRectBitmap(已删除)
 // 同口径(GDI+ 抗锯齿 + PARGB)。失败返 NULL,所有权归调用方。
 HBITMAP MakeRoundRectBitmap(COLORREF color, int side, int radius)
 {
@@ -151,7 +154,7 @@ HBITMAP MakeRoundRectBitmap(COLORREF color, int side, int radius)
 }
 
 // 把 HICON 合成到 sizePx×sizePx 的位图上、底色填 bgColor,返回 HBITMAP。
-// 与 BalloonProfileDlg::MakeTitleIconBitmap 同口径(标题栏 SRCCOPY 不混 alpha,
+// 与原 BalloonProfileDlg::MakeTitleIconBitmap(已删除)同口径(标题栏 SRCCOPY 不混 alpha,
 // 故图标透明区呈现底色)。所有权归调用方。
 HBITMAP MakeTitleIconBitmap(HICON hIcon, int sizePx, COLORREF bgColor)
 {
@@ -469,13 +472,13 @@ void CBalloonGroupInfoDlg::OpenForGroup(HWND hParent, CFlamingoClient* pFMGClien
 
     // owner 传 NULL:成为无 owner 顶层窗口,任务栏 / Alt-Tab 有独立条目(与个人信息
     // 对话框同模式);仍用 hParent 做居中参照。
-    if (Create(NULL, CWindow::rcDefault, _T("群资料"),
+    if (Create(NULL, CWindow::rcDefault, TR(L"群资料"),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         return;
     }
 
-    SetTitle(_T("群资料"));
+    SetTitle(TR(L"群资料"));
     SetTitleBarHeight(kGroupInfoTitleBarH);
     //最小化 + 关闭。本窗口是无属主的独立顶层窗口（上面 Create 的第一个参数为 NULL、
     //也没有 WS_EX_TOOLWINDOW），最小化后在任务栏上有自己的按钮，点回来即可还原；
@@ -581,6 +584,27 @@ void CBalloonGroupInfoDlg::ApplyData(const GroupInfoViewData& data)
     }
 }
 
+void CBalloonGroupInfoDlg::ApplyNotifyMode(int mode)
+{
+    m_data.notifyMode = mode;
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiComboBox* combo = dynamic_cast<balloonwjui::DuiComboBox*>(
+        content->FindCtrlById(kIdGroupNotifyCombo));
+    if (combo == NULL)
+    {
+        return;
+    }
+    combo->SetCurSel(balloonmain::NotifyModeChoiceIndex(/*isGroup*/true, mode), /*notify*/false);
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
 void CBalloonGroupInfoDlg::EnterCardEdit()
 {
     balloonwjui::DuiControl* content = GetClientContent();
@@ -658,6 +682,23 @@ void CBalloonGroupInfoDlg::CommitCardEdit()
     }
 }
 
+void CBalloonGroupInfoDlg::CancelCardEdit()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    // 只切回查看态:m_data.myCard 没动,查看态仍显示原名片;输入框里这次敲的内容在下次进入编辑时被原名片覆盖
+    m_cardEditing = false;
+    SetGroupInfoCardEditMode(content, false);
+    LOG_INFO("group info dialog: card edit cancelled, group=%lld.", (long long)m_data.groupid);
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
 void CBalloonGroupInfoDlg::OnCardSaveResult(int code, const CString& msg)
 {
     if (!m_cardSavePending)
@@ -684,10 +725,9 @@ void CBalloonGroupInfoDlg::OnCardSaveResult(int code, const CString& msg)
     if (IsWindow())
     {
         ::InvalidateRect(m_hWnd, NULL, FALSE);
-        CString prompt = msg.IsEmpty()
-            ? CString(_T("修改群昵称失败，请稍后重试。"))
-            : (CString(_T("修改群昵称失败：")) + msg);
-        ::MessageBox(m_hWnd, prompt, _T("FlamingoIM"), MB_OK | MB_ICONWARNING);
+        //群昵称命中敏感词有专门的说法，其余情况附上服务端原文
+        const CString prompt = balloonmain::GroupCardSaveFailureText(code, msg);
+        ::MessageBox(m_hWnd, prompt, g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
     }
 }
 
@@ -706,10 +746,10 @@ void CBalloonGroupInfoDlg::ConfirmAndLeave()
 
     // 无宿主（调试入口）：退化为本对话框自己确认后直接发协议
     CString prompt;
-    CString name = m_data.groupName.IsEmpty() ? CString(_T("本群")) : m_data.groupName;
-    prompt.Format(_T("确定退出群聊「%s」吗？退出后将不再接收该群消息。"),
+    CString name = m_data.groupName.IsEmpty() ? CString(TR(L"本群")) : m_data.groupName;
+    prompt.Format(TR(L"确定退出群聊「%s」吗？退出后将不再接收该群消息。"),
                   static_cast<LPCTSTR>(name));
-    int ret = ::MessageBox(m_hWnd, prompt, _T("退出群聊"),
+    int ret = ::MessageBox(m_hWnd, prompt, TR(L"退出群聊"),
                            MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
     if (ret != IDYES)
     {
@@ -718,8 +758,8 @@ void CBalloonGroupInfoDlg::ConfirmAndLeave()
 
     if (m_lpFMGClient != NULL && m_lpFMGClient->IsOffline())
     {
-        ::MessageBox(m_hWnd, _T("您当前处于离线状态，无法退出群聊，请上线后重试。"),
-                     _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, TR(L"您当前处于离线状态，无法退出群聊，请上线后重试。"),
+                     g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         return;
     }
 
@@ -747,27 +787,33 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
     if (pNotify->code == balloonwjui::DUIN_VALUECHANGED)
     {
-        // 开关翻转:从控件读最新态(不依赖 extra 语义),乐观更新 m_data 并发协议。
-        if (pNotify->ctrlId == kIdGroupMuteSwitch && content != NULL)
+        // 「消息提醒」下拉框选了一项:从控件读当前下标(不依赖 extra 语义)换算成提醒模式,
+        // 乐观更新 m_data 并发协议。特别关注已达上限时宿主会提示并拒绝,随后按模式表刷新
+        // 本窗口,下拉框恢复为原来的选项。
+        if (pNotify->ctrlId == kIdGroupNotifyCombo && content != NULL)
         {
-            balloonwjui::DuiSwitch* sw = dynamic_cast<balloonwjui::DuiSwitch*>(
-                content->FindCtrlById(kIdGroupMuteSwitch));
-            bool on = (sw != NULL) && sw->IsChecked();
-            m_data.mute = on;
-            // 有宿主：经主面板更新会话缓存(让消息列表即时反映)并发协议;无宿主(调试入口)
+            balloonwjui::DuiComboBox* combo = dynamic_cast<balloonwjui::DuiComboBox*>(
+                content->FindCtrlById(kIdGroupNotifyCombo));
+            if (combo == NULL || combo->GetCurSel() < 0)
+                return 0;
+            const int mode = balloonmain::NotifyModeOfChoice(/*isGroup*/true, combo->GetCurSel());
+            if (mode == m_data.notifyMode)
+                return 0;
+            m_data.notifyMode = mode;
+            // 有宿主：经主面板更新模式表(让各列表的徽章与未读即时反映)并发协议;无宿主(调试入口)
             // 退化为直接发协议。
             if (m_pHost != NULL)
             {
-                m_pHost->SetGroupConversation(m_data.groupid, /*hasMute*/true, on,
+                m_pHost->SetGroupConversation(m_data.groupid, /*hasNotifyMode*/true, mode,
                                               /*hasPinned*/false, false);
             }
             else
             {
                 CIUSocket::GetInstance().SendSetConversation(
-                    2 /*群聊*/, m_data.groupid, /*hasPinned*/false, false, /*hasMute*/true, on);
+                    2 /*群聊*/, m_data.groupid, /*hasPinned*/false, false, /*hasNotifyMode*/true, mode);
             }
-            LOG_INFO(_T("切换群消息免打扰，group=%lld，mute=%d。"),
-                     (long long)m_data.groupid, (int)on);
+            LOG_INFO("group info: notify mode changed, group=%lld, mode=%d.",
+                     (long long)m_data.groupid, mode);
             return 0;
         }
         if (pNotify->ctrlId == kIdGroupPinSwitch && content != NULL)
@@ -778,13 +824,14 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             m_data.pinned = on;
             if (m_pHost != NULL)
             {
-                m_pHost->SetGroupConversation(m_data.groupid, /*hasMute*/false, false,
+                m_pHost->SetGroupConversation(m_data.groupid, /*hasNotifyMode*/false, notify_mode_allow,
                                               /*hasPinned*/true, on);
             }
             else
             {
                 CIUSocket::GetInstance().SendSetConversation(
-                    2 /*群聊*/, m_data.groupid, /*hasPinned*/true, on, /*hasMute*/false, false);
+                    2 /*群聊*/, m_data.groupid, /*hasPinned*/true, on, /*hasNotifyMode*/false,
+                    notify_mode_allow);
             }
             LOG_INFO(_T("切换群置顶，group=%lld，pinned=%d。"),
                      (long long)m_data.groupid, (int)on);
@@ -831,7 +878,7 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
                     {
                         m_pToast->SetTopOffset(topOffset);
                     }
-                    m_pToast->Show(pNotify->ctrlId == kIdGroupName ? _T("已复制群名") : _T("已复制群号"));
+                    m_pToast->Show(pNotify->ctrlId == kIdGroupName ? TR(L"已复制群名") : TR(L"已复制群号"));
                 }
                 LOG_INFO("group info dialog: copy %s, group=%lld, length %d, ok=%d.",
                          pNotify->ctrlId == kIdGroupName ? "name" : "number",
@@ -857,19 +904,33 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
     }
 
-    if (pNotify->code == balloonwjui::DUIN_KILLFOCUS)
+    // 群名片输入框:回车提交、Esc 取消、失焦去抖提交(2026-10-07 补上回车与 Esc,此前按了没有反应)
+    switch (ClassifyInlineEditNotify(pNotify->code, pNotify->ctrlId, (UINT)kIdGroupCardEdit, m_cardEditing))
     {
-        // 群名片编辑框失焦 → 去抖提交:不立即提交,延后一拍(PostMessage)。用户在编辑框内
-        // 重新点击会让 EDIT 短暂失焦再得焦,延后后在 OnCardCommitDeferred 里看焦点是否
-        // 回到 EDIT,回到则不提交、仍留编辑态;真正离开才提交。直接提交会"点一下就退回"。
-        if (pNotify->ctrlId == kIdGroupCardEdit && m_cardEditing)
+    //回车:立即提交,再摘掉已隐藏输入框的 DUI 焦点(随之而来的失焦通知因已不在编辑态而被忽略)
+    case inline_edit_commit:
+        CommitCardEdit();
+        SetDuiFocus(NULL);
+        return 0;
+
+    //Esc:不提交,恢复显示原名片
+    case inline_edit_cancel:
+        CancelCardEdit();
+        SetDuiFocus(NULL);
+        return 0;
+
+    //失焦:不立即提交,延后一拍(PostMessage)。用户在编辑框内重新点击会让 EDIT 短暂失焦再得焦,
+    //延后后在 OnCardCommitDeferred 里看焦点是否回到 EDIT,回到则不提交、仍留编辑态;真正离开才提交
+    case inline_edit_blur:
+        if (IsWindow())
         {
-            if (IsWindow())
-            {
-                ::PostMessage(m_hWnd, WM_GROUPINFO_CARD_COMMIT, 0, 0);
-            }
-            return 0;
+            ::PostMessage(m_hWnd, WM_GROUPINFO_CARD_COMMIT, 0, 0);
         }
+        return 0;
+
+    //不是群名片输入框的回车、Esc、失焦通知,或当前不在编辑态:交回基类
+    default:
+        break;
     }
 
     bHandled = FALSE;

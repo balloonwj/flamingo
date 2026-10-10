@@ -11,7 +11,8 @@
  */
 #pragma once
 
-#include <mysql/mysql.h>
+//MariaDB Connector/C 的公共头文件。连接器以源码形式随仓库提交（mariadb-connector-c-3.4.9），这些头文件在其 include 目录下，不再带 mysql/ 前缀
+#include <mysql.h>
 #include <stdint.h>
 
 #include "../dbapi/QueryResult.h"

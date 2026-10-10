@@ -59,7 +59,17 @@ public:
     HBITMAP Get(const std::wstring& path, int sizePx, int radiusPx);
 
     /**
-     *  作废 path 对应的所有缓存（各种尺寸），下次 Get 时重新解码。
+     *  取同一张头像的灰度副本（发送者离线、或本端掉线时本人的头像，2026-10-03）。参数含义同 Get。
+     *
+     *  第一次取时先经 Get 取彩色位图，再由 balloonmain::MakeGrayAvatarBitmap 生成灰度副本并缓存，
+     *  之后直接返回同一张；生成灰度副本不会再解码图片文件，DecodeCount 不因此增加。
+     *  @return 32 位预乘透明通道的 DIB 位图，归缓存所有，调用方<u>不得</u>删除；彩色位图取不到
+     *          （解码失败）或灰度副本生成失败时返回 NULL，调用方退回画彩色位图或字形。
+     */
+    HBITMAP GetGray(const std::wstring& path, int sizePx, int radiusPx);
+
+    /**
+     *  作废 path 对应的所有缓存（各种尺寸，彩色与灰度副本），下次 Get 时重新解码。
      *  用于同一路径的文件内容变了的场合：头像下载完成（原先不存在或是旧图）。
      *    path：图片文件完整路径。
      */
@@ -77,12 +87,13 @@ private:
     ChatAvatarBitmapCache(const ChatAvatarBitmapCache&);
     ChatAvatarBitmapCache& operator=(const ChatAvatarBitmapCache&);
 
-    // 缓存键：路径 + 边长 + 圆角半径。
+    // 缓存键：路径 + 边长 + 圆角半径 + 是否灰度副本。
     struct Key
     {
         std::wstring m_path;       // 图片文件完整路径
         int          m_sizePx;     // 位图边长（像素）
         int          m_radiusPx;   // 圆角半径（像素）
+        bool         m_gray;       // true 表示这一项是灰度副本（GetGray 生成），false 为彩色原图
 
         bool operator<(const Key& rhs) const;
     };

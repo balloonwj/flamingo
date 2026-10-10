@@ -429,15 +429,23 @@ TEST_CASE("MENTION22 at 字段类型异常时安全降级为空，不崩", "[men
 // MENTION23-29. @所有人
 // =====================================================================
 
-TEST_CASE("MENTION23 只有群主与管理员能 @所有人", "[mention]")
+TEST_CASE("MENTION23 @所有人按群设置判定：群主、管理员恒可，普通成员只在「所有人」时可以", "[mention]")
 {
-    REQUIRE_FALSE(CanMentionAll(kGroupRoleMemberVal));   // 普通成员不行
-    REQUIRE(CanMentionAll(kGroupRoleAdminVal));          // 管理员可以
-    REQUIRE(CanMentionAll(kGroupRoleOwnerVal));          // 群主可以
+    // 群设为仅群主和管理员（默认）
+    REQUIRE_FALSE(CanMentionAll(kGroupRoleMemberVal, kGroupAtAllOwnerAdminVal));   // 普通成员不行
+    REQUIRE(CanMentionAll(kGroupRoleAdminVal, kGroupAtAllOwnerAdminVal));          // 管理员可以
+    REQUIRE(CanMentionAll(kGroupRoleOwnerVal, kGroupAtAllOwnerAdminVal));          // 群主可以
 
-    // 越界 / 未知角色一律按普通成员处理，宁可少给权限也不错给。
-    REQUIRE_FALSE(CanMentionAll(-1));
-    REQUIRE_FALSE(CanMentionAll(99));
+    // 群主放开给所有人（此前浮层不看这项设置，普通成员始终看不到「所有人」）
+    REQUIRE(CanMentionAll(kGroupRoleMemberVal, kGroupAtAllEveryoneVal));
+    REQUIRE(CanMentionAll(kGroupRoleAdminVal, kGroupAtAllEveryoneVal));
+    REQUIRE(CanMentionAll(kGroupRoleOwnerVal, kGroupAtAllEveryoneVal));
+
+    // 越界 / 未知角色按普通成员处理：跟着群设置走（与服务端 canMentionAll 相同）
+    REQUIRE_FALSE(CanMentionAll(-1, kGroupAtAllOwnerAdminVal));
+    REQUIRE_FALSE(CanMentionAll(99, kGroupAtAllOwnerAdminVal));
+    REQUIRE(CanMentionAll(-1, kGroupAtAllEveryoneVal));
+    REQUIRE(CanMentionAll(99, kGroupAtAllEveryoneVal));
 }
 
 TEST_CASE("MENTION24 「@所有人」能被重扫出来，uid 为 0", "[mention]")

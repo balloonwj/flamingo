@@ -16,6 +16,9 @@
 
 #include "FavoriteProtocol.h"   //FavoriteItem（收藏项 = ctype + cid）
 
+//UserManager.h 里的用户记录；fillContactFromUser 从它取联系人资料
+struct User;
+
 //部门成员归属记录：描述某用户在某部门内的身份，不含用户资料本身
 struct DeptMemberRef
 {
@@ -51,6 +54,8 @@ struct ContactInfo
     std::string address;      //所在地
     std::string phonenumber;  //电话
     std::string mail;         //邮箱
+    std::string landline;     //座机，未填为空串
+    std::string post;         //岗位：本人填写的自由文本，与部门职位无关；未填为空串
     int         presence;     //在线状态，取值见 enum presence_type
     int         clienttype;   //在线设备类型，取值见 enum platform_type
     //本人给该联系人起的备注名（cmd_set_friend_remark 设的那个），空串表示未设置。
@@ -84,7 +89,6 @@ struct ContactsData
     std::vector<DepartmentInfo> departments;     //企业部门（扁平数组，靠 parentdeptid 还原成树）
     std::vector<ContactInfo>    contacts;        //去重的联系人资料池
     std::vector<FavoriteItem>   favorites;       //「我的收藏」列表，含联系人与群组两类，按收藏时间倒序
-    std::vector<int64_t>        starred;         //「特别关注」的联系人userid列表，按标记时间倒序。只装人（群没有上下线，标记它没意义），故不带 ctype；客户端据它决定这些人上下线时弹不弹右下角提示
     std::vector<int64_t>        serviceaccounts; //服务号的用户ID列表
     std::vector<GroupInfo>      groups;          //登录用户所属的群组列表
 };
@@ -100,6 +104,18 @@ public:
      *  @return 紧凑格式的应答 JSON 文本
      */
     static std::string buildContactsResponse(const ContactsData& data);
+
+    /**
+     *  把用户记录里的资料字段填进通讯录里的一项，并按查看者处理手机号与座机：查看者就是这个联系人
+     *  本人时号码完整，否则按其公开范围隐藏（见 ProfileProtocol::maskNumbersForViewer，
+     *  docs/联系人资料字段扩充方案.md 第 9 节）。通讯录里不下发公开范围标志。
+     *  在线状态、设备类型、备注名、标签不在此处填写：前两项取自会话表，后两项属于查看者，
+     *  由会话层另行填写，调用后这四项保持调用前的值。
+     *  @param c            [入出] 通讯录里的一项
+     *  @param u            联系人的用户记录（UserManager 缓存）
+     *  @param viewerUserId 本次请求通讯录的用户ID
+     */
+    static void fillContactFromUser(ContactInfo& c, const User& u, int64_t viewerUserId);
 
 private:
     ContactsProtocol() = delete;

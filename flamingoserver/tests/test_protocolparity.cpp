@@ -14,7 +14,9 @@
  *          命名空间，客户端收到 308 无从分辨服务端指的是哪一种）；
  *    - PP3 两侧的符号集合差异必须逐条登记在白名单里并写明理由；
  *    - PP4 错误码的取值必须落在它所处的号段横幅（形如 //==== 群组 300-399 ====）
- *          划定的区间内，即 docs/协议设计-v2.md 第 8 节那份错误码号段规约。
+ *          划定的区间内，即 docs/协议设计-v2.md 第 8 节那份错误码号段规约；
+ *    - PP5 消息内容类型 enum message_type 与文件共享新增的七个枚举，以及群接龙、屏幕共享、
+ *          消息提醒模式、P2P 通信的业务枚举（完整清单见 kExtraGuardedEnums），逐个做 PP1~PP3 那三项检查。
  *
  *  找不到、打不开任何一个头文件都直接判失败，而不是跳过 —— 守卫悄悄不干活，
  *  正是本组用例要防的那类问题本身。
@@ -44,10 +46,57 @@ const int kMaxParentWalkDepth = 10;
 const char* const kServerProtocolRelativePath = "flamingoserver/chatserversrc/Protocol.h";
 const char* const kClientProtocolRelativePath = "flamingoclient/Source/net/Protocol.h";
 
-//被比对的两个枚举名。其余枚举（presence_type、message_type 等）取值范围小、
-//改动少，且一侧改错时客户端界面会立刻显出来，暂不纳入守卫。
+//PP1~PP4 比对的两个枚举名。
 const char* const kEnumMsgType = "msg_type";
 const char* const kEnumErrorCode = "error_code";
+
+//PP5 另行比对的枚举名。其余枚举（presence_type 等）取值范围小、改动少，且一侧改错时
+//客户端界面会立刻显出来，暂不纳入守卫。
+//
+//message_type 原先也不纳入，2026-10-02 起纳入：文件共享与屏幕共享两个功能并行往里追加取值，
+//一侧漏改时客户端会把一种卡片当成另一种来解析，界面上未必立刻看得出来。其余七个是文件共享
+//（docs/文件共享方案.md 5.7）新增的枚举，服务端与客户端的 FlamingoFileShare.dll 都按它们解读
+//卡片状态、权限位与审计动作，取值一旦两侧不一致，表现为卡片状态或权限判断错位。
+const char* const kExtraGuardedEnums[] =
+{
+    "message_type",
+    "share_kind",
+    "share_perm",
+    "share_state",
+    "share_unavailable_reason",
+    "share_invalid_reason",
+    "share_audit_action",
+    "share_audit_source",
+    "relay_state",          //群接龙的接龙状态（docs/群接龙方案.md §4.1）
+    "screenshare_track",          //屏幕共享房间中转帧头的轨道类型（docs/屏幕共享与录制方案.md 5.4）
+    "screenshare_frame_flag",     //屏幕共享房间中转帧头的标志位
+    "screenshare_control_type",   //屏幕共享控制帧的类型
+    "screenshare_seat",           //屏幕共享座位号的特殊取值
+    "screenshare_source_state",   //屏幕共享控制帧里的共享内容状态
+    "conversation_notify_mode",   //会话的消息提醒模式（docs/消息提醒模式与消息盒子方案.md §3）
+    "p2p_role",                   //P2P 会话里本方的角色（docs/P2P通信方案.md 第 5 节）
+    "p2p_path",                   //P2P 链路最终选定的路径
+    "p2p_close_reason",           //P2P 会话结束的原因
+    "memo_repeat_type",           //备忘的重复方式（docs/备忘与提醒方案.md 第 3 节）
+    "memo_style",                 //备忘的提醒方式
+    "memo_change_type",           //备忘变更推送的类型
+    "group_invite_state",         //入群邀请卡片的状态（docs/邀请入群方案.md §4.3）
+    "cloudrecord_source",         //云端录像的来源（docs/屏幕共享与录制方案.md 12.6）
+    "cloudrecord_status",         //云端录像的状态
+    "cloudrecord_control_action", //共享中云端录制的开始 / 暂停 / 继续 / 停止
+    "cloudrecord_op_type",        //对一条云端录像的操作
+    "cloudrecord_notify_type",    //云端录像推送的类型
+    "group_type",                 //群类型：普通群 / 帖子群（docs/帖子群方案.md 第 5 节）
+    "thread_reply_kind",          //帖子动态卡片的种类：留言、回复、楼主补充
+    "thread_target_type",         //帖子群互动的目标类型
+    "thread_change_type",         //帖子群内容变化推送的类型
+    "thread_sort",                //帖子列表的排序方式
+    "secret_state",               //密聊会话状态（docs/密聊方案.md 5.2）
+    "secret_end_reason",          //密聊结束原因
+    "secret_protect_level",       //本机的防截图级别
+};
+
+const size_t kExtraGuardedEnumCount = sizeof(kExtraGuardedEnums) / sizeof(kExtraGuardedEnums[0]);
 
 //号段横幅的识别标记。协议头里每个功能段前都有一行形如
 //"    //==== 群组 300-399 ====" 的注释，本守卫据此取出该段的取值区间。
@@ -86,7 +135,7 @@ struct EnumEntry
 //C++ 不允许零长度数组。
 struct NameDifferenceAllowance
 {
-    const char* m_enumName;    //所属枚举名，取 kEnumMsgType 或 kEnumErrorCode
+    const char* m_enumName;    //所属枚举名，取 kEnumMsgType、kEnumErrorCode 或 kExtraGuardedEnums 中的一个
     const char* m_symbolName;  //允许只出现在一侧的符号名
     bool        m_serverOnly;  //true 表示允许只在服务端出现，false 表示允许只在客户端出现
     const char* m_reason;      //允许的理由；结束标记行取 NULL
@@ -96,7 +145,7 @@ const NameDifferenceAllowance kNameDifferenceAllowances[] =
 {
     //结束标记。2026-08-16 补齐客户端缺失的 error_code_at_all_denied /
     //error_code_cannot_operate_owner / error_code_sensitive_word 之后，两侧符号集合
-    //已完全一致，本表为空。这三条都会经应答下发给客户端（前两条走群管理与群发言校验，
+    //已完全一致，本表一度为空（之后只有上面那条临时豁免）。这三条都会经应答下发给客户端（前两条走群管理与群发言校验，
     //第三条走敏感词拦截），不属于「服务端内部错误码」，故不能靠登记豁免了事。
     { NULL, NULL, false, NULL },
 };
@@ -620,4 +669,44 @@ TEST_CASE("PP4 错误码的取值必须落在它所处号段横幅划定的区�
     //（cmd_file_upload = 1851），按横幅逐条卡区间会误报，故不纳入。
     CheckSegmentRange("server", pair.m_serverErrorCode);
     CheckSegmentRange("client", pair.m_clientErrorCode);
+}
+
+// ---------------------------------------------------------------------------
+// PP5  消息内容类型与文件共享的各个枚举两侧一致
+// ---------------------------------------------------------------------------
+
+TEST_CASE("PP5 消息内容类型与文件共享的各个枚举在两份协议头里必须一致")
+{
+    std::string root = ResolveRepoRoot();
+    if (root.empty())
+    {
+        FAIL("cannot locate flamingo repository root; __FILE__ = " << __FILE__
+             << ", exe dir = " << apppath::GetExecutableDirectory());
+        return;
+    }
+
+    std::string serverPath = root + "/" + kServerProtocolRelativePath;
+    std::string clientPath = root + "/" + kClientProtocolRelativePath;
+
+    for (size_t i = 0; i < kExtraGuardedEnumCount; ++i)
+    {
+        std::string enumName = kExtraGuardedEnums[i];
+        std::vector<EnumEntry> serverEntries;
+        std::vector<EnumEntry> clientEntries;
+
+        //任一侧解析不出来都判失败而不是跳过，理由见 LoadProtocolHeaders 的注释；
+        //继续检查下一个枚举，让一次运行就把缺失的枚举全部列出来
+        bool serverParsed = ParseEnumFromFile(serverPath, kExtraGuardedEnums[i], serverEntries);
+        bool clientParsed = ParseEnumFromFile(clientPath, kExtraGuardedEnums[i], clientEntries);
+        CHECK_MESSAGE(serverParsed, "cannot parse enum " << enumName << " from " << serverPath);
+        CHECK_MESSAGE(clientParsed, "cannot parse enum " << enumName << " from " << clientPath);
+        if (!serverParsed || !clientParsed)
+            continue;
+
+        CheckValuesMatch(enumName, serverEntries, clientEntries);
+        CheckNoDuplicateValue(enumName, "server", serverEntries);
+        CheckNoDuplicateValue(enumName, "client", clientEntries);
+        CheckNameSetDifference(enumName, true, serverEntries, clientEntries);
+        CheckNameSetDifference(enumName, false, clientEntries, serverEntries);
+    }
 }

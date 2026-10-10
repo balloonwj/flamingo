@@ -61,6 +61,14 @@ bool FileCardCanResend(const ChatMessage& m);
  */
 int FileCardHeight(const ChatMessage& m);
 
+/**
+ *  卡片底部某个操作链接的文字（已经过 TR 翻译）。绘制与单测共用这一处，按钮文字只在这里定义。
+ *  @param m   文件消息（「接收」与「下载」、「重新发送」与「重新下载」要看它）
+ *  @param act 链接的动作，取值见 ChatFileActionKind
+ *  @return 链接文字；未知动作按「重试」处理
+ */
+CString FileCardLinkLabel(const ChatMessage& m, int act);
+
 //卡片底部各操作链接的排版结果：由 PaintFileCardText 写出，供点击判断与悬停反馈使用。
 struct FileCardLinks
 {

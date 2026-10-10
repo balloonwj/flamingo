@@ -8,6 +8,7 @@
  *  balloonwj@qq.com   2026-08-05
  */
 #include "ContactRemarkModel.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -46,7 +47,7 @@ CString ResolveContactRealName(const CString& nickname,
     }
 
     //两者都没有：拼一个能让人对上号的兜底名，总好过显示空白。
-    name.Format(_T("用户%u"), userid);
+    name.Format(TR(L"用户%u"), userid);
     return name;
 }
 
@@ -76,6 +77,31 @@ CString ResolveContactDisplayName(const CString& remark,
     display += trimmedRemark;
     display += _T("）");
     return display;
+}
+
+CString ResolveContactSpeakerName(const CString& remark,
+                                  const CString& nickname,
+                                  const CString& username,
+                                  UINT userid)
+{
+    //有备注就只用备注（已去掉首尾空白）；没有备注时与真名的取法相同
+    CString trimmedRemark;
+    if (PickNonBlank(remark, trimmedRemark))
+    {
+        return trimmedRemark;
+    }
+    return ResolveContactRealName(nickname, username, userid);
+}
+
+CString AppendSelfMark(const CString& name, bool isSelf)
+{
+    if (!isSelf)
+    {
+        return name;
+    }
+    CString text = name;
+    text += TR(L"（我）");
+    return text;
 }
 
 RemarkCommitDecision DecideRemarkCommit(const CString& edited,

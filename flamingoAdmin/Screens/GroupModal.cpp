@@ -44,8 +44,8 @@ const int kNameBlockH = kLabelH + kFieldGap + kNameEditH;
 
 // 成员列表内容上 / 下内边距（可视高度 = kListH - 2×该值）。
 const int kListInnerPadV = 4;
-// 悬浮滚动条距列表面板右内缘的间距。
-const int kListSbInset = 3;
+// 悬浮滚动条距列表面板右内缘的间距（像素）。0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致。
+const int kListSbInset = 0;
 
 // 行内勾选框 / 群主单选 / 管理员复选的尺寸与可点区宽度。
 const int kCheckSz    = 18;   // 勾选框边长

@@ -350,3 +350,74 @@ TEST_CASE("GFP7 畸形输入安全失败不崩")
     //非法 JSON
     CHECK_FALSE(GroupFileProtocolClient::parseGroupFilesChangedNotify("###", n));
 }
+
+// ============================ 按文件名搜索群文件 cmd_search_group_files(1807) ============================
+// 主面板全局搜索「文件」标签用。字段与服务端 GroupFileProtocol::buildSearchGroupFilesResponse 对齐。
+
+TEST_CASE("GFP8 buildSearchGroupFilesRequest 带关键字原文与条数上限", "[groupfile][globalsearch]")
+{
+    Json::Value root;
+    REQUIRE(parseJsonText(GroupFileProtocolClient::buildSearchGroupFilesRequest("设计稿", 30), root));
+    CHECK(root["keyword"].asString() == "设计稿");
+    CHECK(root["limit"].asInt() == 30);
+}
+
+TEST_CASE("GFP9 parseSearchGroupFilesResponse 成功应答：关键字回显、hasmore、每项带 groupid 与完整条目", "[groupfile][globalsearch]")
+{
+    const std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"keyword\":\"设计稿\",\"hasmore\":true,\"files\":["
+        "{\"groupid\":\"268435457\",\"entryid\":\"31\",\"fileid\":\"9007199254741001\",\"name\":\"设计稿.pdf\","
+        "\"ext\":\"pdf\",\"size\":5368709120,\"md5\":\"9b1c0a7f2e3d4c5b6a7980e1f2a3b4c5\",\"filetype\":1,"
+        "\"uploaderid\":\"100007\",\"uploadername\":\"谢知行\",\"uploadtime\":1716268800000},"
+        "{\"groupid\":\"268435458\",\"entryid\":\"32\",\"fileid\":\"10006\",\"name\":\"设计稿2.sketch\","
+        "\"ext\":\"sketch\",\"size\":1,\"md5\":\"\",\"filetype\":6,"
+        "\"uploaderid\":\"100008\",\"uploadername\":\"\",\"uploadtime\":1716268700000}]}";
+
+    SearchGroupFilesResult out;
+    REQUIRE(GroupFileProtocolClient::parseSearchGroupFilesResponse(body, out));
+    CHECK(out.m_code == error_code_ok);
+    CHECK(out.m_keyword == "设计稿");
+    CHECK(out.m_hasmore);
+    REQUIRE(out.m_files.size() == 2);
+    CHECK(out.m_files[0].m_groupid == "268435457");
+    CHECK(out.m_files[0].m_entry.m_entryid == "31");
+    //大整数 ID 按字符串原样保留，不经过 double
+    CHECK(out.m_files[0].m_entry.m_fileid == "9007199254741001");
+    CHECK(out.m_files[0].m_entry.m_name == "设计稿.pdf");
+    //超过 4GB 的大小不丢精度
+    CHECK(out.m_files[0].m_entry.m_size == 5368709120LL);
+    CHECK(out.m_files[0].m_entry.m_uploadername == "谢知行");
+    CHECK(out.m_files[0].m_entry.m_uploadtime == 1716268800000LL);
+    CHECK(out.m_files[1].m_groupid == "268435458");
+    CHECK(out.m_files[1].m_entry.m_ext == "sketch");
+
+    //没有命中：files 为空数组
+    SearchGroupFilesResult empty;
+    REQUIRE(GroupFileProtocolClient::parseSearchGroupFilesResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"keyword\":\"x\",\"hasmore\":false,\"files\":[]}", empty));
+    CHECK(empty.m_code == error_code_ok);
+    CHECK(empty.m_files.empty());
+    CHECK_FALSE(empty.m_hasmore);
+}
+
+TEST_CASE("GFP10 parseSearchGroupFilesResponse 失败应答只取 code 与 msg，畸形输入安全失败", "[groupfile][globalsearch]")
+{
+    SearchGroupFilesResult out;
+    REQUIRE(GroupFileProtocolClient::parseSearchGroupFilesResponse(
+        "{\"code\":400,\"msg\":\"bad request\"}", out));
+    CHECK(out.m_code == 400);
+    CHECK(out.m_msg == "bad request");
+    CHECK(out.m_keyword.empty());
+    CHECK(out.m_files.empty());
+
+    //缺 code、非法 JSON、顶层不是对象：返回 false
+    CHECK_FALSE(GroupFileProtocolClient::parseSearchGroupFilesResponse("{\"msg\":\"ok\"}", out));
+    CHECK_FALSE(GroupFileProtocolClient::parseSearchGroupFilesResponse("not a json", out));
+    CHECK_FALSE(GroupFileProtocolClient::parseSearchGroupFilesResponse("[1]", out));
+
+    //files 里混进非对象项：跳过它，其余照常解析
+    REQUIRE(GroupFileProtocolClient::parseSearchGroupFilesResponse(
+        "{\"code\":0,\"keyword\":\"a\",\"files\":[1,{\"groupid\":\"5\",\"entryid\":\"6\"}]}", out));
+    REQUIRE(out.m_files.size() == 1);
+    CHECK(out.m_files[0].m_groupid == "5");
+}

@@ -40,6 +40,7 @@ extern CAppModule _Module;
 #include "ChatMockData.h"
 #include "../../net/Protocol.h"        // presence_type（把对方真实 presence 映射到状态点颜色/文字）
 #include "../BalloonMain/PresenceBadge.h"   // DrawPresenceBadge（对方状态徽标，与列表 / 菜单同源）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -93,7 +94,7 @@ const Gdiplus::Color kPillFill(255, 0xF0, 0xF3, 0xF0);
 // 与在线绿 / 离开橙那一档明显区分，用户一眼能看出这是临时状态而非在线状态。
 const COLORREF kTypingColor = RGB(0xFF, 0x7A, 0x45);
 // "正在输入…"的胶囊文字。末尾用省略号表示动作仍在进行。
-const wchar_t* const kTypingText = L"正在输入…";
+const wchar_t* const kTypingText = TR_NOOP(L"正在输入…");
 
 // ---- 几何 --------------------------------------------------------------
 
@@ -115,10 +116,10 @@ LPCWSTR StatusText(int status)
 {
     switch (status)
     {
-    case kChatOnline: return L"在线";
-    case kChatAway:   return L"离开";
-    case kChatBusy:   return L"忙碌";
-    default:          return L"离线";
+    case kChatOnline: return TR(L"在线");
+    case kChatAway:   return TR(L"离开");
+    case kChatBusy:   return TR(L"忙碌");
+    default:          return TR(L"离线");
     }
 }
 
@@ -136,7 +137,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -165,7 +166,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;
@@ -228,7 +229,7 @@ void ChatHeaderInfo::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     // 重复画昵称；状态胶囊左对齐到信息块左侧。
     // 对方正在输入时，这枚胶囊改说"正在输入…"并整体换成主题色 —— 输入是个转瞬即逝
     // 的状态，压过在线 / 离开那一档显示，输入停止后自然恢复。
-    LPCWSTR statusText = m_typing ? kTypingText : StatusText(drawStatus);
+    LPCWSTR statusText = m_typing ? TR(kTypingText) : StatusText(drawStatus);
     const COLORREF statusTextColor = m_typing ? kTypingColor : kPillText;
     const int statusTextW = MeasureTextWidth(hdc, statusText, kPillTextPx, false);
     const int pillW = 8 + kStatusDot + 5 + statusTextW + 8;

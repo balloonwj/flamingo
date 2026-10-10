@@ -26,6 +26,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "CacheCleanPlan.h"
+#include "../BalloonMain/TitleBarIcon.h"   // m_programIcons：标题栏与任务栏的程序图标
 
 class CFlamingoClient;
 
@@ -74,4 +75,6 @@ private:
     // 本次打开时算出的清理计划，以及与之一一对应的各类占用量（字节）。
     std::vector<balloonsettings::CacheCleanEntry> m_plan;
     std::vector<unsigned long long>               m_sizes;
+    // 标题栏左侧与任务栏的程序图标（2026-10-07 起，开发约定文档 UI 约定第 10 条），随本对象释放，关窗再开时复用
+    balloonmain::ProgramWindowIcons m_programIcons;
 };

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="@PRODUCT_NAME@" Language="1033" 
+    Version="@PRODUCT_VERSION@"
+    Manufacturer="@PRODUCT_MANUFACTURER@" UpgradeCode="@PRODUCT_UPGRADE_CODE@">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="@WIXPLATFORM@"/>
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of @PRODUCT_NAME@ is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <UIRef Id="WixUI_Mondo" />
+    <WixVariable Id="WixUILicenseRtf" Value="@CMAKE_SOURCE_DIR@/win/packaging/license.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="@CMAKE_SOURCE_DIR@/win/packaging/WixUIBannerBmp.jpg" />
+    <WixVariable Id="WixUIDialogBmp" Value="@CMAKE_SOURCE_DIR@/win/packaging/WixUIDialogBmp.jpg" />
+
+    <Feature Id="ProductFeature" Title="@PRODUCT_NAME@ @PRODUCT_VERSION@" Level="1">
+      <ComponentRef Id="RegistryKeys" />
+      <ComponentRef Id="Library"/>
+      <ComponentRef Id="Plugins"/>
+      <ComponentRef Id="Binaries" />
+    </Feature>
+    <Feature Id="IncludeFeature" Title="Include Files" Level="1">
+      <ComponentRef Id="Includes"/>
+      <ComponentRef Id="MysqlIncludes"/>
+      <ComponentRef Id="MariadbIncludes"/>
+    </Feature>
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="@FOLDER@">
+        <Directory Id="Mariadb" Name="@PRODUCT_INSTALL_DIR@">
+          <Directory Id="INSTALLFOLDER" Name="@PRODUCT_NAME@" >
+            <Directory Id="inst_bin" Name="bin"/>
+            <Directory Id="instlib" Name="lib">
+              <Directory Id="instlib_debug" Name="debug"/>
+              <Directory Id="instlib_plugin" Name="plugin"/>
+            </Directory>
+            <Directory Id="instinclude" Name="include" >
+              <Directory Id="instincludemysql" Name="mysql"/>
+              <Directory Id="instincludemariadb" Name="mariadb"/>
+            </Directory>
+          </Directory>  
+        </Directory>  
+      </Directory>
+    </Directory>
+  </Fragment>
+
+<Fragment>
+    <Component Id="RegistryKeys" Guid="755726EA-9706-413D-86B3-E70582FF2819" DiskId="1" Directory="INSTALLFOLDER" Win64="@IS_WIN64@">
+      <RegistryKey Id="Version" Root="HKLM" Key="SOFTWARE\@PRODUCT_MANUFACTURER@\@PRODUCT_NAME@" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+        <RegistryValue Name="Version" Type="string" Value="@PRODUCT_VERSION@"/>
+      </RegistryKey>
+    </Component>
+    <Component Id="Library" Guid="89E28283-23AE-4F10-B743-B5FA485E9F9A" KeyPath="yes" DiskId="1" Directory="instlib" Win64="@IS_WIN64@">
+      <Environment Id="LIB_PATH" Name="PATH" Value="[instlib]" Permanent="no" Action="set" Part="last" System="yes"/>
+      <File Id="libdll" Name="libmariadb.dll"  DiskId="1"  Source="@CLIENT_LIB_DIR@/libmariadb.dll" />
+      <File Id="libdllimp" Name="libmariadb.lib"  DiskId="1"  Source="@CLIENT_LIB_DIR@/libmariadb.lib" />
+      <File Id="libstatic" Name="mariadbclient.lib"  DiskId="1"  Source="@CLIENT_LIB_DIR@/mariadbclient.lib" />
+      <File Id="libpdb" Name="libmariadb.pdb"  DiskId="1"  Source="@CLIENT_LIB_DIR@/libmariadb.pdb" />
+    </Component>
+    <Component Id="Binaries" Guid="4b074269-7d81-11e5-8cf9-a0a8cd7fad46" KeyPath="yes" DiskId="1" Directory="inst_bin" Win64="@IS_WIN64@">
+      <!--
+      <File Id="mariadb_client_plugin_info" Name="mariadb_clent_plugin_info.exe"  DiskId="1"
+        Source="@CLIENT_BIN_DIR@/mariadb_client_plugin_info.exe" />
+      -->
+    </Component>
+    <Component Id="Plugins" Guid="5B2E98C9-DFF2-4129-8360-C6AD16F6BBEA" KeyPath="yes" DiskId="1" Directory="instlib_plugin" Win64="@IS_WIN64@">
+      <Environment Id="PLUGIN_PATH" Name="PATH" Value="[instlib_plugin]" Permanent="no" Action="set" Part="last" System="yes"/>
+      @MARIADB_PLUGINS@
+    </Component>
+    <Component Id="Includes" Guid="5CFB93CC-FC30-4E13-B665-E52690AB56E3" KeyPath="yes" Directory="instinclude" DiskId="1" Win64="@IS_WIN64@">
+      @MARIADB_INCLUDE_FILES@
+    </Component>
+    <Component Id="MysqlIncludes" Guid="6BD3D62D-8013-4C0A-B032-61AA04A98EDE" Directory="instincludemysql" DiskId="1" Win64="@IS_WIN64@">
+      <CreateFolder/>
+      @MARIADB_INCLUDEMYSQL_FILES@
+    </Component>
+    <Component Id="MariadbIncludes" Guid="DEFD4D6B-0143-442A-BEB8-C041F7156BF1" Directory="instincludemariadb" DiskId="1" Win64="@IS_WIN64@">
+      <CreateFolder/>
+      @MARIADB_INCLUDEMARIADB_FILES@
+    </Component>
+</Fragment>
+</Wix>
+

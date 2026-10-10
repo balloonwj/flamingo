@@ -14,6 +14,8 @@
 #include "Mock/DataStore.h"
 #include "DuiNotify.h"
 #include "Widgets/OverlayScrollbar.h"   // 表格区 / 详情区的悬浮 auto-hide 滚动条子控件
+#include "Widgets/PagerBar.h"           // 表格下方的共用分页条
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 
 using namespace balloonwjui;
@@ -43,15 +45,16 @@ const int kStatCount   = 4;   // 统计卡数量
 // 以契合「翻页浏览」体验。
 const int kAuditPageSize = 20;
 
-// 悬浮滚动条距其所在滚动区右边缘的内缩间距（像素）。
-const int kSbInset = 3;
+// 悬浮滚动条距其所在滚动区右边缘的内缩间距（像素）。0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致。
+const int kSbInset = 0;
 
-// 表格各列左偏移（相对表格区左边）。
+// 表格各列左偏移（相对表格区左边）。时间列显示「YYYY-MM-DD HH:MM:SS」，宽 160；
+// 其后各列依次右移（2026-10-04 之前时间只显示「MM-DD HH:MM:SS」，时间列宽 130）。
 const int kColTime   = 0;
-const int kColSev    = 130;
-const int kColAction = 166;
-const int kColActor  = 296;
-const int kColDetail = 446;
+const int kColSev    = 160;
+const int kColAction = 196;
+const int kColActor  = 326;
+const int kColDetail = 476;
 
 const TCHAR* const kSevFilters[]   = { _T("全部"), _T("普通"), _T("警告"), _T("危险") };
 const TCHAR* const kActorFilters[] = { _T("全部"), _T("管理员"), _T("系统") };
@@ -98,17 +101,6 @@ void DrawSegmented(HDC hdc, const RECT& box, const TCHAR* const* labels,
     }
 }
 
-// 画一个分页小按钮（上一页 / 下一页）。禁用态用灰底灰字。
-void DrawPagerButton(HDC hdc, const RECT& rc, LPCTSTR text, bool enabled)
-{
-    ui::FillRoundRect(hdc, rc, enabled ? theme::kInk0 : theme::kInk25, 6);
-    ui::StrokeRoundRect(hdc, rc, theme::kInk100, 6, 1.0f);
-    ui::DrawTextLine(hdc, text, rc,
-                     enabled ? theme::kInk600 : theme::kInk300,
-                     ui::UiFont(theme::kFontSizeSmall, false),
-                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-}
-
 } // anonymous namespace
 
 AuditScreen::AuditScreen()
@@ -144,6 +136,23 @@ AuditScreen::AuditScreen()
     m_detailSb = detailSb.get();
     m_detailSb->SetOnScroll(&AuditScreen::OnDetailSbScroll, this);
     AddChild(std::move(detailSb));
+
+    // 表格下方的分页条：与企业列表、敏感词页共用，左侧「共 N 条」、右侧翻页。
+    auto pager = std::make_unique<ui::PagerBar>();
+    pager->SetPageCallback(&AuditScreen::OnPagerThunk, this);
+    m_pager = pager.get();
+    AddChild(std::move(pager));
+}
+
+void AuditScreen::OnPagerThunk(void* user, int newPage)
+{
+    AuditScreen* self = static_cast<AuditScreen*>(user);
+    if (newPage != self->m_page)
+    {
+        self->m_page = newPage;
+        self->m_pager->SetPageInfo(self->m_page, self->m_totalCount, kAuditPageSize);
+        self->RequestReload();
+    }
 }
 
 int AuditScreen::GetPageSize() const
@@ -151,15 +160,10 @@ int AuditScreen::GetPageSize() const
     return kAuditPageSize;
 }
 
-int AuditScreen::PageCount() const
-{
-    const int n = (m_totalCount + kAuditPageSize - 1) / kAuditPageSize;
-    return n < 1 ? 1 : n;
-}
-
 void AuditScreen::SetPageData(int totalCount)
 {
     m_totalCount = totalCount;
+    m_pager->SetPageInfo(m_page, m_totalCount, kAuditPageSize);
     // 新页数据已由 AdminFrame 注入 DataStore；选中行重置到新页首行，滚动复位。
     const std::vector<AuditLog>& logs = DataStore::Instance().AuditLogs();
     m_selectedId   = logs.empty() ? -1 : logs.front().m_id;
@@ -205,6 +209,7 @@ void AuditScreen::Layout(const RECT& rcAvail)
     m_tableRc  = RECT{ bodyL, bodyT, bodyR - kDetailW, bodyB - kFooterH };
     m_footerRc = RECT{ bodyL, bodyB - kFooterH, bodyR - kDetailW, bodyB };
     m_detailRc = RECT{ bodyR - kDetailW, bodyT, bodyR, bodyB };
+    m_pager->ForceLayout(m_footerRc);
 
     // 表格区悬浮滚动条：摆在表格区右内缘的细竖条上，纵向只覆盖数据行区
     // （表头之下），与 OnMouseWheel 夹取滚动量用的可视区高度保持一致。
@@ -348,7 +353,7 @@ void AuditScreen::OnPaint(HDC hdc, const RECT& rcDirty)
         PaintTable(hdc, m_tableRc);
         ::RestoreDC(hdc, saved);
     }
-    PaintFooter(hdc, m_footerRc);
+    // 分页页脚由子控件 m_pager 绘制。
     {
         int saved = ::SaveDC(hdc);
         ::IntersectClipRect(hdc, m_detailRc.left, m_detailRc.top,
@@ -424,7 +429,7 @@ void AuditScreen::PaintTable(HDC hdc, const RECT& rc)
         const int cy = top + kRowH / 2;
         HFONT rf = ui::UiFont(theme::kFontSizeSmall, false);
         // 时间。
-        ui::DrawTextLine(hdc, l.m_ts.Mid(5),
+        ui::DrawTextLine(hdc, timetext::FormatTimeText(l.m_ts, timetext::TimeStyle::Second),
                          RECT{ rc.left + 16 + kColTime, top, rc.left + kColSev, top + kRowH },
                          theme::kInk500, rf,
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -471,59 +476,6 @@ void AuditScreen::PaintTable(HDC hdc, const RECT& rc)
         }
     }
     ::RestoreDC(hdc, saved);
-}
-
-void AuditScreen::PaintFooter(HDC hdc, const RECT& rc)
-{
-    // 顶部分隔线。
-    ui::FillLine(hdc, rc.left, rc.top, rc.right - rc.left, 1, theme::kInk100);
-    const int cy = (rc.top + rc.bottom) / 2;
-    HFONT f = ui::UiFont(theme::kFontSizeSmall, false);
-
-    // 左侧：服务端报告的总条数。
-    CString totalText;
-    totalText.Format(_T("共 %d 条"), m_totalCount);
-    ui::DrawTextLine(hdc, totalText,
-                     RECT{ rc.left + 16, cy - 10, rc.left + 200, cy + 10 },
-                     theme::kInk400, f,
-                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-    const int pageCount = PageCount();
-
-    // 右侧：[上一页]  第 X / 共 Y 页  [下一页]。
-    const int btnW = 64;
-    const int btnH = 26;
-    RECT next = { rc.right - 16 - btnW, cy - btnH / 2,
-                  rc.right - 16,        cy + btnH / 2 };
-    const bool canNext = (m_page < pageCount);
-    DrawPagerButton(hdc, next, _T("下一页"), canNext);
-    if (canNext)
-    {
-        Hit h;
-        h.m_rc = next;
-        h.m_kind = 4;
-        h.m_arg = 0;
-        m_hits.push_back(h);
-    }
-
-    CString pageText;
-    pageText.Format(_T("第 %d / 共 %d 页"), m_page, pageCount);
-    RECT pageRc = { next.left - 8 - 140, cy - 10, next.left - 8, cy + 10 };
-    ui::DrawTextLine(hdc, pageText, pageRc, theme::kInk600, f,
-                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-    RECT prev = { pageRc.left - 8 - btnW, cy - btnH / 2,
-                  pageRc.left - 8,        cy + btnH / 2 };
-    const bool canPrev = (m_page > 1);
-    DrawPagerButton(hdc, prev, _T("上一页"), canPrev);
-    if (canPrev)
-    {
-        Hit h;
-        h.m_rc = prev;
-        h.m_kind = 3;
-        h.m_arg = 0;
-        m_hits.push_back(h);
-    }
 }
 
 void AuditScreen::PaintDetail(HDC hdc, const RECT& rc)
@@ -680,22 +632,6 @@ bool AuditScreen::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
             {
                 m_actorFilter = h.m_arg;
                 m_page = 1;
-                RequestReload();
-            }
-        }
-        else if (h.m_kind == 3)       // 上一页
-        {
-            if (m_page > 1)
-            {
-                --m_page;
-                RequestReload();
-            }
-        }
-        else if (h.m_kind == 4)       // 下一页
-        {
-            if (m_page < PageCount())
-            {
-                ++m_page;
                 RequestReload();
             }
         }

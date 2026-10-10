@@ -13,6 +13,11 @@
  *  DUIN_LISTITEM_LOCATE 而<u>不</u>发基类的 DUIN_CLICK，宿主据此把通讯录树滚动
  *  定位到这个人，而不是打开会话。
  *
+ *  更一般地，SetHoverActions 可以给行右侧配一组悬停态小按钮（定位、打开文件、打开所在
+ *  文件夹），从左到右排开，每个按钮点击时发各自的通知码，同样不发 DUIN_CLICK。搜索结果
+ *  的聊天文件行用「打开文件」「打开所在文件夹」两个。按钮显示时，第一行右侧的时间文字
+ *  隐藏、名称与副行的右界让到按钮左边，免得叠在一起。
+ *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
  *  balloonwj@qq.com   2026-05-21
@@ -21,6 +26,8 @@
 #pragma once
 
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+
+#include <vector>
 
 namespace balloonmain {
 
@@ -44,6 +51,19 @@ public:
     {
         // 悬停态的「定位」小按钮被点击 —— 请求把通讯录树定位到本行代表的联系人。
         DUIN_LISTITEM_LOCATE = balloonwjui::DUIN_CUSTOM + 70,
+        // 悬停态的「打开文件」小按钮被点击 —— 请求用系统关联的程序打开本行代表的本机文件。
+        DUIN_LISTITEM_OPEN_FILE = balloonwjui::DUIN_CUSTOM + 71,
+        // 悬停态的「打开所在文件夹」小按钮被点击 —— 请求在资源管理器里打开本行代表的文件
+        // 所在的文件夹（文件夹传输记录则打开那个文件夹本身）。
+        DUIN_LISTITEM_OPEN_FOLDER = balloonwjui::DUIN_CUSTOM + 72,
+    };
+
+    // 行右侧悬停态小按钮的种类，SetHoverActions 的参数取这些值。
+    enum HoverAction
+    {
+        kHoverActionLocate     = 0,   // 地图定位针，点击发 DUIN_LISTITEM_LOCATE（搜索结果的联系人行）
+        kHoverActionOpenFile   = 1,   // 方框加右上箭头，点击发 DUIN_LISTITEM_OPEN_FILE（本机有文件的聊天文件行）
+        kHoverActionOpenFolder = 2,   // 文件夹轮廓，点击发 DUIN_LISTITEM_OPEN_FOLDER（本机有文件或文件夹的行）
     };
 
     MainPanelListItem();
@@ -75,6 +95,15 @@ public:
     // 设置副行文字（职位 / 群人数 / 末条消息等）。
     void SetSubText(LPCTSTR sub);
 
+    // 设置副行内的"命中高亮"字符区间，口径同 SetNameHighlight：start 为起始字符下标，
+    // len 为字符数；len<=0 表示清除高亮，下标越界会被安全裁剪。搜索下拉「消息」标签
+    // 用它标出命中的那句话里的关键字。
+    void SetSubHighlight(int start, int len);
+
+    // 设置本行是否被键盘选中（搜索下拉里用上下方向键移到的那一行）。选中时画与悬停相同的
+    // 底色（SetHoverFill 设的颜色）。on：true 选中，false 取消。
+    void SetKeySelected(bool on);
+
     // 设置头像状态点：show 为是否显示，status 取值见 MockData 的 MockStatus。
     void SetStatus(bool show, int status);
 
@@ -104,20 +133,41 @@ public:
      */
     void SetLocateButtonVisible(bool show);
 
-    // DuiControl 覆写：绘制头像 + 名称 + 副行（+ 状态点 / 时间 / 角标 / 定位按钮）。
+    /**
+     *  设置行右侧的一组悬停态小按钮（SetLocateButtonVisible 是只有「定位」一个按钮时的写法）。
+     *  按钮从左到右排开，最右一个贴着行右内距；鼠标移到本行上（或本行被键盘选中）时才绘制。
+     *  按下与松开都落在同一个按钮上时发该按钮的通知码，不发 DUIN_CLICK。按钮显示期间，第一行
+     *  右侧的时间文字隐藏，名称与副行的右界让到按钮左边。
+     *    actions：按钮种类，取 HoverAction 的值，从左到右；空表示不要按钮。未知取值忽略。
+     */
+    void SetHoverActions(const std::vector<int>& actions);
+
+    /**
+     *  第 index 个悬停按钮的图标矩形（宿主客户区坐标，与 GetRect 同一坐标系）。绘制与命中判定
+     *  都用这一份。index 越界、或本行尚未布局时返回全 0 的空矩形。
+     */
+    RECT HoverActionRect(size_t index) const;
+
+    /**
+     *  pt 落在哪个悬停按钮上：返回按钮下标（SetHoverActions 传入的顺序），不在任何按钮上返回 -1。
+     *  不看鼠标是否悬停在本行上，只按矩形判定。pt 为宿主客户区坐标。
+     */
+    int HitTestHoverAction(POINT pt) const;
+
+    // DuiControl 覆写：绘制头像 + 名称 + 副行（+ 状态点 / 时间 / 角标 / 悬停按钮）。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 
-    // DuiControl 覆写：跟踪鼠标是否落在「定位」图标上，仅在该状态翻转时重绘。
+    // DuiControl 覆写：跟踪鼠标落在哪个悬停按钮上，仅在该状态变化时重绘。
     // 鼠标在行内移动是高频事件，每次都重绘会让整个宿主不停刷新。
     bool OnMouseMove(POINT pt, UINT mkFlags) override;
 
-    // DuiButton 覆写：记下本次按下的落点在不在「定位」图标内，供 OnLButtonUp 判定。
+    // DuiButton 覆写：记下本次按下的落点在哪个悬停按钮上，供 OnLButtonUp 判定。
     // 只判松开点是不够的：在行的空白处按下、拖到图标上再松开，本该是一次普通的行
     // 点击（打开会话），只判松开点会把它当成定位。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
 
-    // DuiButton 覆写：按下与松开的落点<u>都</u>在「定位」图标内时，发
-    // DUIN_LISTITEM_LOCATE 并拦截基类的 DUIN_CLICK；否则行为与基类完全一致。
+    // DuiButton 覆写：按下与松开的落点<u>都</u>在同一个悬停按钮上时，发该按钮的通知码
+    // 并拦截基类的 DUIN_CLICK；否则行为与基类完全一致。
     bool OnLButtonUp(POINT pt, UINT mkFlags) override;
 
     // DuiControl 覆写：鼠标进入 / 离开时，除基类维护 hover 态外主动重绘本行。
@@ -131,10 +181,8 @@ public:
     bool OnSetCursor(POINT pt) override { return false; }
 
 private:
-    // 算出「定位」小按钮的图标矩形（宿主客户区坐标，与 m_rcItem 同一坐标系）。
-    // 绘制、鼠标命中判定都取这一份，免得两处各算一遍慢慢对不上。本行高度非正时
-    // 返回全 0 的空矩形，调用方须自行判空。
-    RECT LocateIconRect() const;
+    // 悬停按钮此刻是否应当显示：配了按钮，且鼠标悬停在本行上或本行被键盘选中。
+    bool HoverActionsShown() const;
 
 private:
     CString  m_avatarText;    // 头像内的字 / emoji
@@ -146,21 +194,24 @@ private:
     int      m_nameHiStart;   // 名称高亮起始字符下标，-1 表示无高亮
     int      m_nameHiLen;     // 名称高亮字符数
     CString  m_subText;       // 副行文字
+    int      m_subHiStart;    // 副行高亮起始字符下标，-1 表示无高亮
+    int      m_subHiLen;      // 副行高亮字符数
+    bool     m_keySelected;   // 是否被键盘选中（搜索下拉的上下方向键）；行随刷新重建，状态随之重置
     CString  m_rightText;     // 右上角文字（时间），空 = 不显示
     bool     m_showStatus;    // 是否显示头像状态点
     int      m_status;        // 在线状态（MockStatus）
     int      m_badgeCount;    // 未读角标数字，0 = 不显示
     COLORREF m_hoverFill;     // 悬停底色（默认 design --hover 浅灰）
-    // 本行是否提供悬停态的「定位」小按钮。false（默认）时该按钮既不绘制也不参与
-    // 鼠标命中判定，本行的行为与改造前完全一致。
-    bool     m_showLocate;
-    // 鼠标此刻是否正落在「定位」图标矩形内。仅在 m_showLocate 为 true 时有意义，
-    // 用于决定图标画常态色还是加深色 + 浅色圆底；鼠标离开本行时复位为 false。
-    bool     m_locateHot;
-    // 本次左键<u>按下</u>时落点在不在「定位」图标内。OnLButtonDown 写入、
-    // OnLButtonUp 判完即复位；鼠标离开本行时也复位，免得一次没收到松开事件的
-    // 按下（例如按住拖出窗口）把状态一直留着，影响下一次点击的判定。
-    bool     m_locatePressed;
+    // 行右侧的悬停按钮（HoverAction 取值，从左到右）。为空（默认）时既不绘制也不参与鼠标
+    // 命中判定，本行的行为与没有按钮时完全一致。
+    std::vector<int> m_hoverActions;
+    // 鼠标此刻落在第几个悬停按钮上（m_hoverActions 下标），不在任何按钮上为 -1。用于决定
+    // 图标画常态色还是加深色 + 浅色圆底；鼠标离开本行时复位为 -1。
+    int      m_hotAction;
+    // 本次左键<u>按下</u>时落在第几个悬停按钮上，-1 表示不在按钮上。OnLButtonDown 写入、
+    // OnLButtonUp 判完即复位；鼠标离开本行时也复位，免得一次没收到松开事件的按下（例如
+    // 按住拖出窗口）把状态一直留着，影响下一次点击的判定。
+    int      m_pressedAction;
 };
 
 } // namespace balloonmain

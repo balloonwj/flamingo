@@ -217,6 +217,20 @@ public:
     int32_t recallAnnouncementAndNotify(int64_t announcementId);
 
     /**
+     *  把一条已发布的平台公告重新推送给受众里当前在线、且还没读过它的人（管理控制台的
+     *  「重新推送」）。推送包与发布时相同（announcement_change_published），客户端按公告ID
+     *  更新本地记录并再弹一次提示，不会重复插入。
+     *
+     *  与 broadcastAnnouncementPublished 同理放在 ChatServer：在线名单与 v2 报文都在这一侧。
+     *
+     *  @param announcementId  公告ID
+     *  @param outPushedCount  [出参] 实际推送的人数；失败时为 0
+     *  @return AnnouncementManager::checkRepushable 的错误码（按 AdminApiCodes.h 的 error_code
+     *          语义：0 成功，140 不是已发布状态，1 公告不存在等），供 HttpSession 直接回给控制台
+     */
+    int32_t repushAnnouncement(int64_t announcementId, int32_t& outPushedCount);
+
+    /**
      *  admin 控制台建群的整体编排：解析包体 -> 校验并规整角色（群主/管理员/普通成员）
      *  -> 逐一校验成员的企业归属 -> 落库 -> 给在线成员推送 cmd_group_member_changed_notify，
      *  使其立即看到新群。本方法在 ChatServer.cpp（Protocol.h 世界）实现，让 HttpSession
@@ -233,6 +247,37 @@ public:
     int32_t getUserStatusByUserId(int32_t userid);
     //获取用户客户端类型，如果该用户不存在，则返回0
     int32_t getUserClientTypeByUserId(int32_t userid);
+
+    /**
+     *  以指定用户的身份写入一条消息并推送给接收方：单聊推给对方与发送者自己的其它设备，群聊推给全体群成员。
+     *  不经过发言权限与敏感词检查，供服务端模块（机器人、仓库通知）主动发消息（docs/机器人方案.md §5.1）。
+     *  可在任意线程调用；调用时不得持有 m_sessionMutex。
+     *  @param ctype       会话类型：1 单聊 2 群聊（Protocol.h 的 conversation_type）
+     *  @param fromUserId  发送者 userid（机器人账号，或个人机器人代答时的主人）
+     *  @param targetId    单聊为对方 userid，群聊为群号
+     *  @param msgtype     消息内容类型（Protocol.h 的 message_type）
+     *  @param contentJson content 对象的紧凑 JSON
+     *  @param clientMsgId 判重用的客户端消息 ID；同一发送者的同一 ID 只写一次。为空时不判重
+     *  @return 新消息的 msgid；clientMsgId 已存在时返回已有消息的 msgid；失败返回 0
+     */
+    int64_t postMessageAs(int32_t ctype, int32_t fromUserId, int64_t targetId, int32_t msgtype,
+                          const std::string& contentJson, const std::string& clientMsgId);
+
+    /**
+     *  某用户全部在线设备合并后的在线状态：在线 > 忙碌 > 离开，没有在线设备为离线（docs/机器人方案.md §3.5）。
+     *  与 getUserStatusByUserId 的区别：后者只取找到的第一个会话。
+     *  @param userid 用户
+     *  @return Protocol.h 的 presence_type
+     */
+    int32_t getMergedPresence(int32_t userid);
+
+    /**
+     *  企业机器人有变化（管理台新建、修改、停用、删除）后，向该企业全部在线客户端推 cmd_group_bots_changed_notify，
+     *  groupid 为 "0" 表示本企业的全部群；打开着的群聊窗据此重拉 2801。放在这里而不是 HttpSession，理由同
+     *  broadcastAnnouncementPublished：HttpSession 引不进 Protocol.h。
+     *  @param enterpriseId 企业ID；为 0 时不推送
+     */
+    void broadcastBotsChanged(int64_t enterpriseId);
 
 private:
     //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用

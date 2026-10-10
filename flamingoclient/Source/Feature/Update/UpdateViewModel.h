@@ -49,6 +49,9 @@ struct UpdateViewState
     bool           canDownload;      //是否给「立即更新」入口
     std::wstring   title;            //标题文案
     std::wstring   versionLine;      //版本行文案；无更新 / 失败时为空串
+    std::string    releaseNoteUtf8;  //更新说明正文，UTF-8，原样取自服务端（行间可能只有 CR）；只有有可用新版本
+                                     //（普通或强制）时非空。界面转成宽串后填进说明框（曾经只有 ShowResult
+                                     //一条路径填写，关于页「检查更新」的结果呈现时说明框一直是空的）
 
     UpdateViewState()
         : kind(update_view_failed), showLaterButton(true)

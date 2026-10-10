@@ -66,6 +66,7 @@ static void MemberToJson(const DepartmentMember& m, Json::Value& out)
     out["position"]    = m.position;
     out["isprimary"]   = m.isprimary;
     out["memberorder"] = m.memberorder;
+    out["accountstatus"] = m.accountstatus;
 }
 
 //从一个 Json::Value 对象读出一个 DepartmentMember。
@@ -81,6 +82,7 @@ static void MemberFromJson(const Json::Value& in, DepartmentMember& m)
     m.position    = GetString(in, "position");
     m.isprimary   = static_cast<int32_t>(GetInt64(in, "isprimary"));
     m.memberorder = static_cast<int32_t>(GetInt64(in, "memberorder"));
+    m.accountstatus = static_cast<int32_t>(GetInt64(in, "accountstatus"));
 }
 
 bool ParseOperateDepartmentReq(const std::string& json, OperateDepartmentReq& out)

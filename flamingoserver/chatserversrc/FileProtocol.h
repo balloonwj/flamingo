@@ -107,6 +107,15 @@ public:
      */
     static std::string buildSimpleResponse(int code, const std::string& msg);
 
+    /**
+     *  申请上传（cmd_request_upload）时，该场景的文件名是否要做敏感词检查
+     *  （docs/敏感词方案.md 第 6.3 节）。聊天文件与群文件的文件名会显示在聊天记录与
+     *  群文件库里，要检查；头像与图片消息的文件名不展示给别人，不检查。
+     *  @param scene 文件用途场景，取值见 enum file_scene
+     *  @return 需要检查返回 true
+     */
+    static bool isNameCheckedScene(int scene);
+
 private:
     FileProtocol() = delete;
     ~FileProtocol() = delete;

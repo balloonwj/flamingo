@@ -29,21 +29,21 @@ using namespace balloonmain;
 
 TEST_CASE("ABOUT1 标题栏标题形如「关于 FlamingoIM [pid]」", "[about]")
 {
-    REQUIRE(BuildAboutTitle(12345UL) == L"关于 FlamingoIM [12345]");
+    REQUIRE(BuildAboutTitle(L"FlamingoIM", 12345UL) == L"关于 FlamingoIM [12345]");
 }
 
 TEST_CASE("ABOUT2 不同进程 id 拼出对应方括号串", "[about]")
 {
-    REQUIRE(BuildAboutTitle(1UL) == L"关于 FlamingoIM [1]");
-    REQUIRE(BuildAboutTitle(99999UL) == L"关于 FlamingoIM [99999]");
+    REQUIRE(BuildAboutTitle(L"FlamingoIM", 1UL) == L"关于 FlamingoIM [1]");
+    REQUIRE(BuildAboutTitle(L"FlamingoIM", 99999UL) == L"关于 FlamingoIM [99999]");
 }
 
-TEST_CASE("ABOUT3 标题以「关于 FlamingoIM 」开头、以右方括号结尾", "[about]")
+TEST_CASE("ABOUT3 标题以「关于 <产品名称> 」开头、以右方括号结尾", "[about]")
 {
-    std::wstring title = BuildAboutTitle(42UL);
+    std::wstring title = BuildAboutTitle(L"FlamingoIM", 42UL);
 
-    // 前缀固定为「关于 」+ 应用名 +「 [」。
-    std::wstring prefix = std::wstring(L"关于 ") + kAboutAppName + L" [";
+    // 前缀固定为「关于 」+ 产品名称 +「 [」。
+    std::wstring prefix = std::wstring(L"关于 ") + L"FlamingoIM" + L" [";
     REQUIRE(title.compare(0, prefix.size(), prefix) == 0);
 
     // 末字符是右方括号，把进程 id 包住。
@@ -144,4 +144,22 @@ TEST_CASE("ABOUT9 上限小于最小宽度时以上限为准", "[about]")
     // 宁可按钮比预期窄，也不能超出行宽——超出会把左侧标题挤没，那是更糟的结果。
     REQUIRE(ComputeLinkButtonWidth(10, 56, 40, 8) == 40);
     REQUIRE(ComputeLinkButtonWidth(400, 56, 40, 8) == 40);
+}
+
+// =====================================================================
+// ABOUT. 产品名称可配置（flamingo.ini 的 [ui] apptitle）
+// =====================================================================
+
+TEST_CASE("ABOUT10 标题栏与「关于 <产品名称>」按传入的产品名称拼装", "[about][brand]")
+{
+    REQUIRE(BuildAboutTitle(L"火烈鸟办公", 7UL) == L"关于 火烈鸟办公 [7]");
+    REQUIRE(BuildAboutCaption(L"火烈鸟办公") == L"关于 火烈鸟办公");
+    REQUIRE(BuildAboutCaption(L"FlamingoIM") == L"关于 FlamingoIM");
+}
+
+TEST_CASE("ABOUT11 产品名称为空时按 FlamingoIM 拼装", "[about][brand]")
+{
+    REQUIRE(BuildAboutCaption(NULL) == L"关于 FlamingoIM");
+    REQUIRE(BuildAboutCaption(L"") == L"关于 FlamingoIM");
+    REQUIRE(BuildAboutTitle(NULL, 3UL) == L"关于 FlamingoIM [3]");
 }

@@ -46,6 +46,31 @@ struct ImageSendProgress
     }
 };
 
+//通用上传 / 下载的结果（帖子群的图片用，2026-10-07，docs/帖子群方案.md 7.2）：投递到调用方指定的窗口与消息号，
+//lParam 为本结构的堆对象，由接收窗口处理后 delete（接收窗口必须在 exe 里，不能在插件 DLL 里：两边的堆不同）。
+struct PlainTransferResult
+{
+    uint32_t     m_requestId;   //调用方给的请求号，原样带回
+    bool         m_ok;          //是否成功
+    int          m_errcode;     //失败错误码（见 enum error_code）
+    std::string  m_fileid;      //上传：服务端给的 fileid；下载：请求的 fileid
+    std::string  m_md5;         //内容 MD5（小写十六进制）
+    int          m_width;       //上传：图片宽（像素）
+    int          m_height;      //上传：图片高（像素）
+    int64_t      m_size;        //字节数
+    std::wstring m_localpath;   //成功时：本地缓存文件完整路径（上传与下载都写进 ChatImage 缓存）
+
+    PlainTransferResult()
+        : m_requestId(0)
+        , m_ok(false)
+        , m_errcode(0)
+        , m_width(0)
+        , m_height(0)
+        , m_size(0)
+    {
+    }
+};
+
 //收图（下载）最终结果（回投 UI，堆对象由 UI 处理后 delete）。
 struct ImageDownloadResult
 {
@@ -205,6 +230,29 @@ public:
     void EnqueueAvatarDownload(const std::string& fileid, const std::wstring& selfAccount);
 
     /**
+     *  通用上传：把一张本地图片上传到 imgserver（scene=聊天图片），<b>不发任何消息</b>，成功后写进 ChatImage 缓存，
+     *  结果以 PlainTransferResult* 投递到 notifyWnd 的 notifyMsg。帖子群发帖、补充用它（docs/帖子群方案.md 7.2）。
+     *  线程安全，立即返回。
+     *  @param requestId 调用方的请求号，原样带回
+     *  @param localPath 本地图片完整路径
+     *  @param notifyWnd 接收结果的窗口（必须在 exe 里）
+     *  @param notifyMsg 结果消息号
+     */
+    void EnqueuePlainUpload(uint32_t requestId, const std::wstring& localPath, HWND notifyWnd, UINT notifyMsg);
+
+    /**
+     *  通用下载：按 fileid 把图片下载到 ChatImage 缓存，结果以 PlainTransferResult* 投递到 notifyWnd 的 notifyMsg。
+     *  md5 已知且缓存里已有时不下载，直接投递成功。线程安全，立即返回。
+     *  @param requestId 调用方的请求号，原样带回
+     *  @param fileid    图片文件 ID
+     *  @param md5       期望 MD5（可空，空时不能命中缓存、下载后也不校验）
+     *  @param notifyWnd 接收结果的窗口（必须在 exe 里）
+     *  @param notifyMsg 结果消息号
+     */
+    void EnqueuePlainDownload(uint32_t requestId, const std::string& fileid, const std::string& md5, HWND notifyWnd,
+                              UINT notifyMsg);
+
+    /**
      *  由 CIUSocket::HandleV2Frame 在收到 cmd_request_upload(1801) 应答时调用，
      *  把信令应答交给正在等待该 seq 的工作线程。可能在网络接收线程上调用。
      *  @param seq 申请上传请求所用的帧 seq（RequestUpload 返回值）
@@ -242,6 +290,8 @@ private:
         task_download     = 1,   //收图：申请下载→拉字节→校验→落地缓存
         task_avatar_upload = 2,  //传头像：读本地图片→申请上传(scene=avatar)→传字节→落地缓存(不发消息)
         task_avatar_download = 3, //下头像：按 fileid 申请下载→拉字节→落地 Avatar 缓存→回投 fileid
+        task_plain_upload = 4,   //通用上传：读本地图片→申请上传→传字节→落地 ChatImage 缓存（不发消息）→投递给指定窗口
+        task_plain_download = 5, //通用下载：按 fileid 申请下载→拉字节→落地 ChatImage 缓存→投递给指定窗口
     };
 
     //一项 worker 队列任务。按 m_kind 区分发图 / 收图，对应字段才有意义。
@@ -262,12 +312,20 @@ private:
         int64_t      m_expectSize;   //期望字节数（日志用，可为 0）
         std::wstring m_selfAccount;  //当前登录账号（决定落地到 Users\<账号>\ 下哪个缓存目录）
 
+        //==== 通用上传 / 下载（task_plain_*）字段 ====
+        uint32_t     m_requestId;    //调用方的请求号
+        HWND         m_notifyWnd;    //接收结果的窗口
+        UINT         m_notifyMsg;    //结果消息号
+
         Task()
             : m_kind(task_send)
             , m_ctype(0)
             , m_cid(0)
             , m_msgid(0)
             , m_expectSize(0)
+            , m_requestId(0)
+            , m_notifyWnd(NULL)
+            , m_notifyMsg(0)
         {
         }
     };
@@ -314,6 +372,15 @@ private:
 
     //处理一项头像下载任务（按 fileid 申请下载→拉字节→落地 Avatar 缓存→回投 fileid），全程串行。
     void ProcessAvatarDownload(const Task& task);
+
+    //处理一项通用上传任务（读图→申请上传→传字节→落地缓存→投递结果），全程串行。
+    void ProcessPlainUpload(const Task& task);
+
+    //处理一项通用下载任务（申请下载→拉字节→校验→落地缓存→投递结果），全程串行。
+    void ProcessPlainDownload(const Task& task);
+
+    //把通用任务的结果投递给调用方指定的窗口；窗口已不存在时丢弃。
+    static void PostPlainResult(const Task& task, PlainTransferResult* result);
 
     //向 UI 回投发图最终结果（成功/失败统一走此）。
     void PostSendResult(const Task& task, bool ok, int errcode, const std::string& errmsg,

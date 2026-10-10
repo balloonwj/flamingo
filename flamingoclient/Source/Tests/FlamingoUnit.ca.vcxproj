@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoUnit.vcxproj — Flamingo 客户端单元测试工程
+  balloonwj@qq.com   2026.05.21
+
+  控制台测试 exe，用 Catch2 v3（amalgamated 形态）作框架。覆盖客户端
+  UI 布局的"控件点名契约"，以及 v2 net/协议层（FrameCodec / Sha256 /
+  LoginProtocolClient）的纯逻辑。
+
+  关键约束：
+   · CharacterSet=Unicode —— 必须与 balloonui_static 一致，否则 CString
+     (CStringA vs CStringW) ABI 不匹配。
+   · CRT 静态（Debug /MTd、Release /MT）—— 必须与 balloonui_static 一致，
+     否则 _ITERATOR_DEBUG_LEVEL / RuntimeLibrary 链接冲突。
+   · 通过 <ProjectReference> 引用 balloonui_static，MSBuild 自动按依赖
+     先编 balloonui_static.lib 再链接进来。
+   · 每个 (Configuration, Platform) 独立 OutDir / IntDir，互不覆盖。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A7C3E1F2-9D84-4B6E-8F25-1C3A5D7E9B40}</ProjectGuid>
+    <RootNamespace>FlamingoUnit</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\..\Debug_Win32\Tests\</OutDir>
+    <IntDir>Unit_Debug_Win32\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\..\Release_Win32\Tests\</OutDir>
+    <IntDir>Unit_Release_Win32\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\..\Debug\Tests\</OutDir>
+    <IntDir>Unit_Debug_x64\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\..\Release\Tests\</OutDir>
+    <IntDir>Unit_Release_x64\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\Win32\Debug\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\x64\Debug\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\Win32\Release\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\x64\Release\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- 中转通道联调用例要自己签一枚中转令牌，直接编进服务端 utils/ 下那份签发实现，
+         而不是在测试里按同样算法重写一遍：令牌格式改动时两边不会各错各的。
+         RelayToken 是纯逻辑，只依赖同目录的 MD5，故连它一起编进来即可。 -->
+    <ClCompile Include="CallMediaFramingTests.cpp" />
+    <ClCompile Include="..\Common\I18n\I18n.cpp" />
+    <ClCompile Include="catch_amalgamated.cpp" />
+    <!-- 消息号守卫用例要在运行期打开 Source\ 下的四个消息定义头文件，靠 __FILE__
+         定位源码目录，故单独加 /FC 让 __FILE__ 展开成绝对路径（默认是相对项目
+         目录的相对路径，测试 exe 的工作目录与之无关，用不了）。 -->
+    <ClCompile Include="CallP2PFramingTests.cpp" />
+    <ClCompile Include="..\Common\Util\EncodeUtil.cpp" />
+    <ClCompile Include="..\Common\Log\IULog.cpp" />
+    <ClCompile Include="..\Common\Log\AsyncLog.cpp" />
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatIcons.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\AudioPcmUtils.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallMediaFraming.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallP2PFraming.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallNetStats.cpp" />
+    <ClCompile Include="CallNetStatsTests.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallNetQuality.cpp" />
+    <ClCompile Include="CallNetQualityTests.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\OpusAudioCodec.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\SpeexAudioProcessor.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\SpeexResampler.cpp" />
+    <!-- 第 3 步（docs/文件共享方案.md）之后这三个文件不再依赖 CIUSocket，测试工程可以直接编译与链接，
+         这本身就验证了它们能被文件共享 DLL 编译同一份源文件 -->
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallButtonArt.cpp" />
+    <ClCompile Include="CallButtonArtTests.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\AudioStreamMixer.cpp" />
+    <ClCompile Include="AudioStreamMixerTests.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallAudioEngine.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Call\WasapiAudioIo.cpp" />
+    <ClCompile Include="CallAudioEngineTests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj">
+      <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\third-party\opus-1.5.2\opus_static.vcxproj">
+      <Project>{b1e2c3d4-0a1b-4c2d-9e3f-0a1b2c3d4e5f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\third-party\speexdsp-1.2.1\speexdsp_static.vcxproj">
+      <Project>{c2d3e4f5-1b2c-4d3e-af40-1b2c3d4e5f60}</Project>
+    </ProjectReference>
+    <!-- FlamingoMedia.dll 由 MediaModuleLoaderTests 动态加载：引用它只为保证先编出 DLL，
+         不链接导入库（LinkLibraryDependencies=false）。 -->
+    <ProjectReference Include="..\..\FlamingoMedia\FlamingoMedia.vcxproj">
+      <Project>{4f46e4f4-5a27-4d82-9888-25812a9f4b48}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <!-- FlamingoFileShare.dll 由 FileShareModuleTests 动态加载：引用它只为保证先编出 DLL，
+         不链接导入库（LinkLibraryDependencies=false）。 -->
+    <ProjectReference Include="..\..\FlamingoFileShare\FlamingoFileShare.vcxproj">
+      <Project>{dcacf0de-4119-4e38-9a91-922aec58c084}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <!-- FlamingoP2P.dll 由 P2PModuleTests 动态加载：引用它只为保证先编出 DLL，
+         不链接导入库（LinkLibraryDependencies=false）。 -->
+    <ProjectReference Include="..\..\FlamingoP2P\FlamingoP2P.vcxproj">
+      <Project>{4ae31503-ad37-47b9-960e-069e10166093}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <!-- FlamingoLang.dll（界面语言包）由 Common\I18n 在启动时按需加载：引用它只为保证先编出 DLL，
+         不链接导入库（LinkLibraryDependencies=false）。 -->
+    <ProjectReference Include="..\..\FlamingoLang\FlamingoLang.vcxproj">
+      <Project>{33b54ec8-de3a-48d9-a269-3c718b71f903}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <!-- 程序主图标（与主程序同编号 IDR_MAINFRAME），供 TitleBarIconTests 与文件共享窗口的图标用例加载。 -->
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoUnitIcon.rc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+  <!-- 构建完成后把同配置的 FlamingoMedia.dll 复制到测试程序所在目录，供 MediaModuleLoaderTests 加载。
+       DLL 的输出目录与 Flamingo.exe 相同：Debug|x64 在 Debug\，Release|x64 在 Release\，
+       Win32 两个配置在 <配置>_Win32\。 -->
+  <Target Name="CopyFlamingoMediaDll" AfterTargets="Build">
+    <PropertyGroup>
+      <FlamingoMediaDllDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\Debug\</FlamingoMediaDllDir>
+      <FlamingoMediaDllDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\Release\</FlamingoMediaDllDir>
+      <FlamingoMediaDllDir Condition="'$(Platform)'=='Win32'">..\..\$(Configuration)_Win32\</FlamingoMediaDllDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(FlamingoMediaDllDir)FlamingoMedia.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(FlamingoMediaDllDir)FlamingoMedia.dll')" />
+  </Target>
+  <!-- 构建完成后把同配置的 FlamingoFileShare.dll 复制到测试程序所在目录，供 FileShareModuleTests 加载。
+       输出目录规则与 FlamingoMedia.dll 相同：Debug|x64 在 Debug\，Release|x64 在 Release\，
+       Win32 两个配置在 <配置>_Win32\。 -->
+  <Target Name="CopyFlamingoFileShareDll" AfterTargets="Build">
+    <PropertyGroup>
+      <FlamingoFileShareDllDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\Debug\</FlamingoFileShareDllDir>
+      <FlamingoFileShareDllDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\Release\</FlamingoFileShareDllDir>
+      <FlamingoFileShareDllDir Condition="'$(Platform)'=='Win32'">..\..\$(Configuration)_Win32\</FlamingoFileShareDllDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(FlamingoFileShareDllDir)FlamingoFileShare.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(FlamingoFileShareDllDir)FlamingoFileShare.dll')" />
+  </Target>
+  <!-- 构建完成后把同配置的 FlamingoP2P.dll 复制到测试程序所在目录，供 P2PModuleTests 加载。
+       输出目录规则与 FlamingoMedia.dll 相同：Debug|x64 在 Debug\，Release|x64 在 Release\，
+       Win32 两个配置在 <配置>_Win32\。 -->
+  <Target Name="CopyFlamingoP2PDll" AfterTargets="Build">
+    <PropertyGroup>
+      <FlamingoP2PDllDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\Debug\</FlamingoP2PDllDir>
+      <FlamingoP2PDllDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\Release\</FlamingoP2PDllDir>
+      <FlamingoP2PDllDir Condition="'$(Platform)'=='Win32'">..\..\$(Configuration)_Win32\</FlamingoP2PDllDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(FlamingoP2PDllDir)FlamingoP2P.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(FlamingoP2PDllDir)FlamingoP2P.dll')" />
+  </Target>
+  <!-- 构建完成后把同配置的 FlamingoLang.dll 复制到测试程序所在目录，供 I18nTests 的 I11 加载。
+       输出目录规则与 FlamingoP2P.dll 相同。 -->
+  <Target Name="CopyFlamingoLangDll" AfterTargets="Build">
+    <PropertyGroup>
+      <FlamingoLangDllDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\Debug\</FlamingoLangDllDir>
+      <FlamingoLangDllDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\Release\</FlamingoLangDllDir>
+      <FlamingoLangDllDir Condition="'$(Platform)'=='Win32'">..\..\$(Configuration)_Win32\</FlamingoLangDllDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(FlamingoLangDllDir)FlamingoLang.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(FlamingoLangDllDir)FlamingoLang.dll')" />
+  </Target>
+</Project>

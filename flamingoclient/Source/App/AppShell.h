@@ -23,6 +23,8 @@
 #include "../UI/BalloonMain/BalloonMainPanel.h"
 #include "../UI/BalloonMain/MainPanelSessionController.h"   // balloonmain::ISessionAppHost（本类实现它）
 #include "DebugEntryPoints.h"                               // 命令行调试入口（本类按值持有）
+#include "MediaModuleLoader.h"                              // FlamingoMedia.dll 加载器（本类按值持有）
+#include "MediaHostAdapter.h"                               // 交给 FlamingoMedia.dll 的宿主接口（本类按值持有）
 
 namespace balloonapp {
 
@@ -48,6 +50,13 @@ public:
     bool Startup(HWND hOwnerWindow);
 
     /**
+     *  记下启动命令行里的加群链接（docs/邀请入群方案.md §12），Startup 建好主面板后交给它，登录成功后处理。
+     *  须在 Startup 之前调用；传空串表示没有。
+     *    url：链接文本，如 flamingo://joingroup?code=abcdefghjkmn。
+     */
+    void SetPendingJoinUrl(const std::wstring& url);
+
+    /**
      *  收尾：销毁全部窗口、落盘用户配置与最近联系人列表、反初始化网络层与绘图资源。
      *  须在消息循环返回之后调用一次；未 Startup 过时调用也安全，可重复调用。
      */
@@ -65,6 +74,24 @@ public:
     virtual void RequestAppExit();
 
 private:
+    //加载并初始化 FlamingoMedia.dll。加载或初始化失败只记日志，不影响进程启动。
+    void LoadMediaModule();
+
+    //关闭并卸载 FlamingoMedia.dll。未加载时调用是安全的。
+    void UnloadMediaModule();
+
+    //加载并初始化 FlamingoP2P.dll（经 balloonp2p::CP2PHost）。加载或初始化失败只记日志，不影响进程启动，
+    //各业务继续走原来的中转。须在 LoadMediaModule 之前调用：另外两个 DLL 以后要从宿主取它的服务接口。
+    void LoadP2PModule();
+
+    //加载并初始化 FlamingoLock.dll（经 balloonlock::CLockHost）。加载或初始化失败只记日志，不影响进程启动，
+    //托盘菜单随之不显示「锁屏」。
+    void LoadLockModule();
+
+    //加载并初始化 FlamingoScreenshot.dll（经 balloonscreenshot::CScreenshotHost，docs/截图独立模块方案.md 3.3 节）。
+    //未登录时也要能截图，所以放在启动阶段；加载或初始化失败只记日志，不影响进程启动。
+    void LoadScreenshotModule();
+
     CFlamingoClient m_FMGClient;                //网络客户端，进程内唯一的一个，本类拥有
     CBalloonMainPanel m_panel;                  //主面板，进程启动即建好并隐藏，是真正的主窗口
 
@@ -77,6 +104,15 @@ private:
 
     //Shutdown 是否已经执行过。Startup 失败与正常结束都会走到它，故做成可重复调用。
     bool m_bShutdownDone;
+
+    //启动命令行里的加群链接（docs/邀请入群方案.md §12）；没有时为空。Startup 建好主面板后交给它
+    std::wstring m_pendingJoinUrl;
+
+    //FlamingoMedia.dll 的宿主接口实现。须比 DLL 活得久：Startup 里交给模块，Shutdown 里先关模块再随本类析构。
+    CMediaHostAdapter m_mediaHost;
+
+    //FlamingoMedia.dll 加载器。Startup 时加载（失败则音视频类功能不可用），Shutdown 时关闭并卸载。
+    CMediaModuleLoader m_mediaLoader;
 };
 
 } // namespace balloonapp

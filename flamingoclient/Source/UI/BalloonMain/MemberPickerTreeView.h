@@ -58,6 +58,16 @@ public:
     int GetToggledNodeId() const { return m_toggledNodeId; }
 
     /**
+     *  设置点在行内容区（复选框条带以外）时是否也当作切换勾选。缺省为 false：只有点复选框条带才切换，点行身上交回基类
+     *  选中这一行（选人对话框的行为）。为 true 时点在行内容区任何位置都发 DUIN_PICKER_CHECK_TOGGLE；展开箭头在内容区
+     *  左侧，仍由基类展开 / 收起。
+     *  之所以要在树里判定：挂在节点上的 MemberPickerRow 会按 DuiControl 的默认处理「消耗」鼠标松开，DuiTreeView 因此
+     *  不再发行级 DUIN_CLICK，宿主收不到「点了行身上」（2026-10-08 选择部门小窗实机核对时发现）。
+     *    on：true 点整行切换勾选，false 只有复选框条带切换。
+     */
+    void SetToggleOnRowClick(bool on) { m_toggleOnRowClick = on; }
+
+    /**
      *  DuiControl 覆写：左键按下。落在复选框条带内则发通知并消费；否则交回基类。
      *    pt       命中点（客户区坐标，由 DuiHost 路由时已转换）。
      *    mkFlags  鼠标按键 / 修饰键状态位。
@@ -68,6 +78,8 @@ public:
 private:
     // 最近一次被点中复选框的节点 id；-1 表示还没发生过。仅供宿主在收到通知后取用。
     int m_toggledNodeId;
+    // 点在行内容区（复选框条带以外）时是否也切换勾选；缺省 false，见 SetToggleOnRowClick
+    bool m_toggleOnRowClick;
 };
 
 } // namespace balloonmain

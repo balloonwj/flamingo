@@ -3,7 +3,7 @@
  *  cmd_announcement_notify）的编解码，AnnouncementProtocol.h
  *
  *  这三条报文负责把企业管理控制台(flamingoAdmin)发布的平台公告投递给 IM 客户端，
- *  在 PC 主面板的「消息盒子」里展示。典型用法：会话层收到 cmd_get_announcements
+ *  在 PC 主面板的「公告中心」里展示。典型用法：会话层收到 cmd_get_announcements
  *  后先用 parseGetAnnouncementsRequest 取出请求参数，交 AnnouncementManager 做受众
  *  匹配拿到公告列表，再用 buildGetAnnouncementsResponse 编回应答。
  *
@@ -31,7 +31,7 @@
  *
  *  与管理侧的 AnnouncementInfo（AnnouncementManager.h）<u>不是</u>同一个结构，
  *  两者不要混用：那个是给管理控制台看的，带草稿状态、受众类型、投放目标、已读
- *  人数等运营字段；这个只装普通用户在消息盒子里该看到的内容。
+ *  人数等运营字段；这个只装普通用户在公告中心里该看到的内容。
  */
 struct AnnouncementPushItem
 {
@@ -40,7 +40,7 @@ struct AnnouncementPushItem
     std::string body;            //公告正文
     int         severity;        //级别，取值见 Protocol.h 的 announcement_severity（0 普通 1 提醒 2 警告）
     std::string senderName;      //发布者名称（如「平台运营」），冗余自 t_announcement.f_sender_name
-    int         pinned;          //是否置顶：0 否 1 是；置顶的公告在消息盒子列表里排最前
+    int         pinned;          //是否置顶：0 否 1 是；置顶的公告在公告中心列表里排最前
     int64_t     sentTime;        //实际发布时间，Unix 毫秒（表里存的是 datetime，由 Manager 转换）
     int         read;            //本人是否已读：0 未读 1 已读；据 t_announcement_read 有无对应行算出
 
@@ -122,7 +122,7 @@ public:
     /**
      *  构造 cmd_mark_announcement_read 应答：{ code, msg, announcementid }。
      *
-     *  比通用应答多回带一个 announcementid，是为了让客户端<u>对上号</u>：用户在消息盒子里
+     *  比通用应答多回带一个 announcementid，是为了让客户端<u>对上号</u>：用户在公告中心里
      *  连点几条公告时会有多条已读上报在途，应答里不带ID的话，失败了也不知道是哪条失败、
      *  没法重试。与 cmd_set_favorite 原样回带 ctype/cid/favorite 是同一个道理。
      *

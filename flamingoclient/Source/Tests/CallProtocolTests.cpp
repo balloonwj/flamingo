@@ -11,7 +11,7 @@
  *  balloonwj@qq.com   2026-06-11
  */
 #include "catch_amalgamated.hpp"
-#include "../net/CallProtocolClient.h"
+#include "../../FlamingoMedia/Call/CallProtocolClient.h"
 #include "../net/Protocol.h"   // error_code_call_*（切换媒体的失败码断言）
 #include "../third-party/jsoncpp-1.9.0/json.h"
 
@@ -95,6 +95,62 @@ TEST_CASE("CC3 parseInviteNotify 解析会话/发起方/昵称/media")
     CHECK(notify.m_fromId == 5002);
     CHECK(notify.m_fromName == u8"苏沐辰");
     CHECK(notify.m_media == call_media_audio);
+}
+
+TEST_CASE("CC3b parseInviteNotify 取剩余振铃毫秒数 ringms（第 15 期），没有或不是整数时为 -1")
+{
+    Json::Value v;
+    v["sessionid"] = "sess-abc-002";
+    v["fromid"]    = "5002";
+    v["fromname"]  = u8"苏沐辰";
+    v["media"]     = call_media_video;
+    v["ringms"]    = static_cast<Json::Int64>(42000);
+
+    CallInviteNotify notify;
+    REQUIRE(CallProtocolClient::parseInviteNotify(ccWriteCompact(v), notify));
+    CHECK(notify.m_ringMs == 42000);
+
+    //老服务端不带：-1，来电弹窗按缺省时长倒数
+    v.removeMember("ringms");
+    CallInviteNotify withoutRing;
+    REQUIRE(CallProtocolClient::parseInviteNotify(ccWriteCompact(v), withoutRing));
+    CHECK(withoutRing.m_ringMs == -1);
+
+    //不是整数、或是负数：同样按没有处理
+    v["ringms"] = "abc";
+    CallInviteNotify badRing;
+    REQUIRE(CallProtocolClient::parseInviteNotify(ccWriteCompact(v), badRing));
+    CHECK(badRing.m_ringMs == -1);
+    v["ringms"] = static_cast<Json::Int64>(-5);
+    CallInviteNotify negativeRing;
+    REQUIRE(CallProtocolClient::parseInviteNotify(ccWriteCompact(v), negativeRing));
+    CHECK(negativeRing.m_ringMs == -1);
+}
+
+TEST_CASE("CC10 邀请应答与来电推送的 p2psessionid：有就取出，没有时为空串（P2P 方案第 6 期）")
+{
+    CallInviteResponse resp;
+    REQUIRE(CallProtocolClient::parseInviteResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"sessionid\":\"s1\",\"p2psessionid\":\"p2p-1-2-3-4\"}", resp));
+    CHECK(resp.m_sessionId == "s1");
+    CHECK(resp.m_p2pSessionId == "p2p-1-2-3-4");
+    CallInviteResponse plain;
+    REQUIRE(CallProtocolClient::parseInviteResponse("{\"code\":0,\"msg\":\"ok\",\"sessionid\":\"s1\"}", plain));
+    CHECK(plain.m_p2pSessionId.empty());
+
+    Json::Value v;
+    v["sessionid"] = "s1";
+    v["fromid"] = "5002";
+    v["fromname"] = "x";
+    v["media"] = call_media_video;
+    v["p2psessionid"] = "p2p-1-2-3-4";
+    CallInviteNotify notify;
+    REQUIRE(CallProtocolClient::parseInviteNotify(ccWriteCompact(v), notify));
+    CHECK(notify.m_p2pSessionId == "p2p-1-2-3-4");
+    v.removeMember("p2psessionid");
+    CallInviteNotify without;
+    REQUIRE(CallProtocolClient::parseInviteNotify(ccWriteCompact(v), without));
+    CHECK(without.m_p2pSessionId.empty());
 }
 
 TEST_CASE("CC4 buildResponse 接听/拒绝两态")

@@ -1,0 +1,290 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoP2P.vcxproj — 客户端 P2P 通信的 DLL 工程（由 flamingoclient/tools/gen_p2p_vcxproj.py 生成，不要手改）
+  balloonwj@qq.com   2026-10-03
+
+  产出 FlamingoP2P.dll，由 Flamingo.exe 在启动时用 LoadLibrary 动态加载（不链接导入库）。
+  接口约定见 FlamingoP2PApi.h，方案见 docs/P2P通信方案.md。
+
+  关键约束：
+   · CharacterSet=Unicode、CRT 静态（Debug /MTd、Release /MT），与 Flamingo.exe 及另外两个 DLL 一致。
+     exe 与 DLL 因此各有独立的堆，接口只用纯虚类与基本类型。
+   · 四种配置都定义 WIN32（仓库代码判断的是它而不是 _WIN32）与 SODIUM_STATIC（libsodium 静态链接），
+     由单元测试 P2PG2 守住。
+   · 四种配置的 OutDir 与 Flamingo.exe 相同：Debug|x64 输出到资源齐全的 ..\Debug\，其余三个分别输出到 ..\Release\、..\Debug_Win32\、..\Release_Win32\。
+   · 导出名由 FlamingoP2P.def 固定；导入库与 .exp 放进中间目录，不污染输出目录。
+   · 所有配置都带 /utf-8：源文件为 UTF-8 无 BOM。
+   · 日志：DLL 不编译 exe 的 IULog.cpp，由 Host\HostLogBridge.cpp 实现 CIULog::Log，经宿主写日志。
+   · 没有界面：不引用 balloonui，也不需要 WTL；DllMain 里没有 ATL 模块对象。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{4AE31503-AD37-47B9-960E-069E10166093}</ProjectGuid>
+    <RootNamespace>FlamingoP2P</RootNamespace>
+    <ProjectName>FlamingoP2P</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\Debug_Win32\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <TargetName>FlamingoP2P</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\Release_Win32\</OutDir>
+    <IntDir>Release\</IntDir>
+    <TargetName>FlamingoP2P</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\Debug\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <TargetName>FlamingoP2P</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\Release\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <TargetName>FlamingoP2P</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoP2P.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoP2P.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoP2P.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoP2P.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="FlamingoP2PApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h" />
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h" />
+    <ClInclude Include="third-party\kcp\ikcp.h" />
+    <ClInclude Include="Host\P2PLog.h" />
+    <ClInclude Include="Host\P2PModule.h" />
+    <ClInclude Include="Host\P2PService.h" />
+    <ClInclude Include="Core\P2PCrypto.h" />
+    <ClInclude Include="Core\P2PPacket.h" />
+    <ClInclude Include="Core\P2PReplayWindow.h" />
+    <ClInclude Include="Ice\P2PAddressProber.h" />
+    <ClInclude Include="Ice\P2PCandidate.h" />
+    <ClInclude Include="Ice\P2PConnectivityChecker.h" />
+    <ClInclude Include="Ice\P2PStunClient.h" />
+    <ClInclude Include="Link\P2PLinkSession.h" />
+    <ClInclude Include="Link\P2PSignalCodec.h" />
+    <ClInclude Include="Io\P2PAdapters.h" />
+    <ClInclude Include="Io\P2PEngine.h" />
+    <ClInclude Include="Io\P2PRelayConn.h" />
+    <ClInclude Include="Io\P2PUdpPort.h" />
+    <ClInclude Include="Chan\P2PBbrCc.h" />
+    <ClInclude Include="Chan\P2PChannelMux.h" />
+    <ClInclude Include="Chan\P2PDatagramFrag.h" />
+    <ClInclude Include="Chan\P2PReliableChannel.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp" />
+    <ClCompile Include="third-party\kcp\ikcp.c" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="..\Source\net\FrameCodec.cpp" />
+    <ClCompile Include="..\Source\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\Source\net\FramePayload.cpp" />
+    <ClCompile Include="..\Source\net\HandshakeRunner.cpp" />
+    <ClCompile Include="..\Source\Common\Util\ZlibUtil.cpp" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\compress.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\deflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzclose.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzlib.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\infback.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\trees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\uncompr.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c" />
+    <ClCompile Include="Host\HostLogBridge.cpp" />
+    <ClCompile Include="Host\P2PLog.cpp" />
+    <ClCompile Include="Host\P2PModule.cpp" />
+    <ClCompile Include="Host\P2PService.cpp" />
+    <ClCompile Include="Core\P2PCrypto.cpp" />
+    <ClCompile Include="Core\P2PPacket.cpp" />
+    <ClCompile Include="Core\P2PReplayWindow.cpp" />
+    <ClCompile Include="Ice\P2PAddressProber.cpp" />
+    <ClCompile Include="Ice\P2PCandidate.cpp" />
+    <ClCompile Include="Ice\P2PConnectivityChecker.cpp" />
+    <ClCompile Include="Ice\P2PStunClient.cpp" />
+    <ClCompile Include="Link\P2PLinkSession.cpp" />
+    <ClCompile Include="Link\P2PSignalCodec.cpp" />
+    <ClCompile Include="Io\P2PAdapters.cpp" />
+    <ClCompile Include="Io\P2PEngine.cpp" />
+    <ClCompile Include="Io\P2PRelayConn.cpp" />
+    <ClCompile Include="Io\P2PUdpPort.cpp" />
+    <ClCompile Include="Chan\P2PBbrCc.cpp" />
+    <ClCompile Include="Chan\P2PChannelMux.cpp" />
+    <ClCompile Include="Chan\P2PDatagramFrag.cpp" />
+    <ClCompile Include="Chan\P2PReliableChannel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoP2P.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 版本信息（文件说明、版权）：UTF-8 编码，单独按 /c65001 编译；由 tools/version_rc.py 生成 -->
+    <ResourceCompile Include="FlamingoP2PVersion.rc">
+      <AdditionalOptions>/c65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

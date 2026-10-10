@@ -15,7 +15,10 @@
 #include "Widgets/CommonWidgets.h"
 #include "Mock/DataStore.h"
 #include "Util/OrgTreeBuilder.h"     // kSyntheticRootId（尚未迁移的存量数据兜底）
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "Util/OrgToolbarLayout.h"   // 工具条搜索框 / 图标按钮的摆位（纯函数，有单测）
+#include "Widgets/LinkPageSlot.h"    // 「在线用户」子 tab 的占位控件
+#include "Screens/FeatureSwitchesPage.h"   // 「功能开关」子 tab 的内容页
 
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 #include "Controls/Input/DuiEdit.h" // 组织树搜索框
@@ -40,6 +43,7 @@ const int kBreadcrumbY  = 16;   // 面包屑距头部顶部
 const int kAvatarY      = 42;   // 企业头像距头部顶部
 const int kAvatarSz     = 44;   // 企业头像边长
 const int kBtnH         = 34;   // 头部操作按钮高度
+const int kAvatarAfterBack = 44; // 有返回按钮时企业头像相对头部左内距的偏移：按钮宽 36 + 间距 8
 const int kToolBtn      = 28;   // 工具条图标按钮边长
 const int kToolBtnGap    = 4;   // 工具条相邻图标按钮之间的间距
 const int kToolSidePad   = 12;  // 工具条左 / 右内边距
@@ -47,6 +51,9 @@ const int kToolSearchGap = 8;   // 搜索框右边界与最左侧图标按钮之
 const int kOrgSearchH    = 28;  // 组织树搜索框高度
 const int kToolBtnIcon   = 14;  // 工具条图标按钮内图标边长
 const int kToolBtnCount  = 3;   // 工具条图标按钮个数（刷新 / 展开全部 / 折叠）
+const int kTabTextPad    = 56;  // 子 tab 宽度 = 文字宽度 + 本值（含右侧数量徽章的位置）
+const int kOnlineTabPad  = 32;  // 「在线用户」「功能开关」子 tab 没有数量徽章，宽度 = 文字宽度 + 本值
+const int kOnlineSidePad = 24;  // 「在线用户」子 tab 主体区的左 / 右 / 下内边距（与列表页的外边距一致）
 
 int MeasureW(LPCTSTR text, HFONT font)
 {
@@ -190,6 +197,69 @@ EnterpriseDetailScreen::EnterpriseDetailScreen()
     auto svcPanel = std::make_unique<ServicesPanel>();
     m_servicesPanel = svcPanel.get();
     AddChild(std::move(svcPanel));
+
+    // ---- 「在线用户」子 tab 的占位控件：内容是 FlamingoLink.dll 的子窗口，这里只占位置 ----
+    auto slot = std::make_unique<ui::LinkPageSlot>();
+    slot->SetVisible(false);
+    m_onlineSlot = slot.get();
+    AddChild(std::move(slot));
+
+    // ---- 「功能开关」子 tab 的内容页：只在该 tab 下显示 ----
+    std::unique_ptr<FeatureSwitchesPage> features(new FeatureSwitchesPage());
+    features->SetVisible(false);
+    m_featuresPage = features.get();
+    AddChild(std::move(features));
+}
+
+CString EnterpriseDetailScreen::GetEnterpriseName() const
+{
+    return (m_ent != nullptr) ? m_ent->m_name : CString();
+}
+
+void EnterpriseDetailScreen::ApplySubTabEditVisibility()
+{
+    // 服务号 tab 下搜索框被铺满主体区的服务号面板整块盖住，看不出来；「在线用户」tab 的内容四周留了
+    // 边距，搜索框不隐藏的话会从左上角的边距里露出半截（2026-10-05 界面核对发现）
+    if (m_orgSearch != nullptr)
+    {
+        m_orgSearch->SetVisible(m_subTab == kTabOrg);
+    }
+}
+
+RECT EnterpriseDetailScreen::SubTabRect(int tab) const
+{
+    switch (tab)
+    {
+    //组织架构
+    case kTabOrg:
+        return m_rcTabOrg;
+    //服务号
+    case kTabSvc:
+        return m_rcTabSvc;
+    //在线用户：不可用时 Layout 已把它置为空矩形
+    case kTabOnline:
+        return m_rcTabOnline;
+    //功能开关
+    case kTabFeatures:
+        return m_rcTabFeatures;
+    //非法序号
+    default:
+        return RECT{ 0, 0, 0, 0 };
+    }
+}
+
+void EnterpriseDetailScreen::SetOnlineTabAvailable(bool available)
+{
+    m_onlineAvailable = available;
+    if (!available && m_subTab == kTabOnline)
+    {
+        SetSubTab(kTabOrg);
+    }
+    if (m_rcItem.right > m_rcItem.left)
+    {
+        ForceLayout(m_rcItem);
+    }
+    Invalidate();
 }
 
 void EnterpriseDetailScreen::SetEnterprise(const CString& enterpriseId)
@@ -366,10 +436,17 @@ void EnterpriseDetailScreen::SetSubTab(int tab)
 {
     m_subTab = tab;
     const bool org = (tab == kTabOrg);
+    const bool svc = (tab == kTabSvc);
+    const bool online = (tab == kTabOnline);
+    const bool features = (tab == kTabFeatures);
     m_tree->SetVisible(org);
     m_panel->SetVisible(org);
-    m_servicesPanel->SetVisible(!org);
+    m_servicesPanel->SetVisible(svc);
+    m_onlineSlot->SetVisible(online);
+    m_featuresPage->SetVisible(features);
     m_btnPrimary->SetText(org ? _T("新增员工") : _T("新建服务号"));
+    // 只有组织架构与服务号两个 tab 有主操作：「在线用户」只是查看，「功能开关」拨动开关即生效
+    m_btnPrimary->SetVisible(org || svc);
     // 「新建群」只在组织架构 tab 有意义；服务号 tab 隐藏。
     m_btnCreateGroup->SetVisible(org);
     // 工具条三个图标按钮同理：服务号 tab 下整个树列都不显示，按钮须一并隐藏，
@@ -377,13 +454,30 @@ void EnterpriseDetailScreen::SetSubTab(int tab)
     m_btnOrgRefresh->SetVisible(org);
     m_btnOrgExpandAll->SetVisible(org);
     m_btnOrgCollapse->SetVisible(org);
+    // 组织树搜索框同理，见 ApplySubTabEditVisibility
+    ApplySubTabEditVisibility();
+    Invalidate();
+
+    // 通知 AdminFrame：「在线用户」tab 的内容是 DLL 的子窗口，显示与否要由它重新决定
+    NotifyParent(DUIN_VALUECHANGED, static_cast<LPARAM>(tab));
+}
+
+void EnterpriseDetailScreen::SetPlatformAdminMode(bool platformAdmin)
+{
+    m_platformAdmin = platformAdmin;
+    // 三个按钮在头部各占固定位置：「返回」在最左，「发布公告」「企业设置」排在右侧按钮组的
+    // 最左端，隐藏它们不影响其余按钮的位置，因此不需要重新布局。
+    m_btnBack->SetVisible(platformAdmin);
+    m_btnSettings->SetVisible(platformAdmin);
+    m_btnAnnounce->SetVisible(platformAdmin);
     Invalidate();
 }
 
 void EnterpriseDetailScreen::SelectSubTab(int tab)
 {
-    // 仅接受合法序号；非法值忽略，保持当前 tab 不变。
-    if (tab != kTabOrg && tab != kTabSvc)
+    // 仅接受合法序号；非法值与不可用的「在线用户」忽略，保持当前 tab 不变。
+    const bool online = (tab == kTabOnline && m_onlineAvailable);
+    if (tab != kTabOrg && tab != kTabSvc && tab != kTabFeatures && !online)
     {
         return;
     }
@@ -417,10 +511,23 @@ void EnterpriseDetailScreen::Layout(const RECT& rcAvail)
     // ---- 子 tab 矩形 ----
     const int tabY = T + kHeaderH - kSubtabH;
     HFONT tf = ui::UiFont(theme::kFontSizeNormal, true);
-    const int orgW = MeasureW(_T("组织架构"), tf) + 56;
-    const int svcW = MeasureW(_T("服务号"),  tf) + 56;
+    const int orgW = MeasureW(_T("组织架构"), tf) + kTabTextPad;
+    const int svcW = MeasureW(_T("服务号"),  tf) + kTabTextPad;
     m_rcTabOrg = RECT{ L + kSidePad,        tabY, L + kSidePad + orgW,        tabY + kSubtabH };
     m_rcTabSvc = RECT{ m_rcTabOrg.right,    tabY, m_rcTabOrg.right + svcW,    tabY + kSubtabH };
+    if (m_onlineAvailable)
+    {
+        const int onlineW = MeasureW(_T("在线用户"), tf) + kOnlineTabPad;
+        m_rcTabOnline = RECT{ m_rcTabSvc.right, tabY, m_rcTabSvc.right + onlineW, tabY + kSubtabH };
+    }
+    else
+    {
+        m_rcTabOnline = RECT{ 0, 0, 0, 0 };
+    }
+    // 「功能开关」排在最后：有「在线用户」时在它之后，没有时紧跟服务号
+    const int featuresLeft = m_onlineAvailable ? m_rcTabOnline.right : m_rcTabSvc.right;
+    const int featuresW = MeasureW(_T("功能开关"), tf) + kOnlineTabPad;
+    m_rcTabFeatures = RECT{ featuresLeft, tabY, featuresLeft + featuresW, tabY + kSubtabH };
 
     // ---- 主体区 ----
     const int bodyT = T + kHeaderH;
@@ -459,6 +566,14 @@ void EnterpriseDetailScreen::Layout(const RECT& rcAvail)
 
     // 服务号面板铺满整个主体区。
     m_servicesPanel->ForceLayout(RECT{ L, bodyT, R, rcAvail.bottom });
+
+    // 「在线用户」占位控件：主体区四周留出与列表页相同的外边距（DLL 页面自己留了上边距）。
+    // 不论当前是哪个 tab 都排版，占位控件据此把位置报给 AdminFrame，切到这个 tab 时页面已就位。
+    m_onlineSlot->ForceLayout(RECT{ L + kOnlineSidePad, bodyT, R - kOnlineSidePad,
+                                    rcAvail.bottom - kOnlineSidePad });
+
+    // 功能开关页铺满整个主体区（四周的边距由它自己留）。不论当前是哪个 tab 都排版，切过去时已就位。
+    m_featuresPage->ForceLayout(RECT{ L, bodyT, R, rcAvail.bottom });
 }
 
 void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
@@ -475,14 +590,15 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     RECT header = { L, T, R, T + kHeaderH };
     ui::FillSolidRect(hdc, header, theme::kInk0);
 
-    // 面包屑：企业管理 › 企业名。
+    // 面包屑：企业管理 › 企业名；企业管理员的首段与侧栏一致，为「本企业」。
     HFONT crumbFont = ui::UiFont(theme::kFontSizeSmall, false);
+    const LPCTSTR crumbHead = m_platformAdmin ? _T("企业管理") : _T("本企业");
     RECT rcCrumb1 = { L + kSidePad, T + kBreadcrumbY, L + kSidePad + 64,
                       T + kBreadcrumbY + 18 };
-    ui::DrawTextLine(hdc, _T("企业管理"), rcCrumb1, theme::kFlamingo600,
+    ui::DrawTextLine(hdc, crumbHead, rcCrumb1, theme::kFlamingo600,
                      ui::UiFont(theme::kFontSizeSmall, true),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    const int crumbW = MeasureW(_T("企业管理"), ui::UiFont(theme::kFontSizeSmall, true));
+    const int crumbW = MeasureW(crumbHead, ui::UiFont(theme::kFontSizeSmall, true));
     RECT rcChev = { L + kSidePad + crumbW + 4, T + kBreadcrumbY + 3,
                     L + kSidePad + crumbW + 16, T + kBreadcrumbY + 15 };
     ui::DrawIcon(hdc, ui::Icon::ChevronRight, rcChev, theme::kInk300);
@@ -497,7 +613,8 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     // 企业头像 + 名称 + 状态 / 套餐徽章 + 元信息。
     if (m_ent != nullptr)
     {
-        const int avX = L + kSidePad + 44;   // 头像在返回按钮右侧
+        // 头像在返回按钮右侧；企业管理员没有返回按钮，头像左移到按钮原来的位置。
+        const int avX = L + kSidePad + (m_platformAdmin ? kAvatarAfterBack : 0);
         RECT av = { avX, T + kAvatarY, avX + kAvatarSz, T + kAvatarY + kAvatarSz };
         ui::DrawAvatar(hdc, av, m_ent->m_logoColor, ui::Initials(m_ent->m_shortName));
 
@@ -518,13 +635,16 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
         ui::DrawChip(hdc, planChip, m_ent->m_plan, theme::kFlamingo700,
                      theme::kFlamingo50, false, 0);
 
-        // 元信息行。
+        // 元信息行。末尾是新建账号的前缀（2026-10-06）：没设时显示默认的 EMP
         CString meta;
-        meta.Format(_T("%s    %s · %s    开通 %s"),
+        meta.Format(_T("%s    %s · %s    开通 %s    账号前缀 %s"),
                     static_cast<LPCTSTR>(m_ent->m_id),
                     static_cast<LPCTSTR>(m_ent->m_industry),
                     static_cast<LPCTSTR>(m_ent->m_region),
-                    static_cast<LPCTSTR>(m_ent->m_createdAt));
+                    static_cast<LPCTSTR>(timetext::FormatTimeText(
+                        m_ent->m_createdAt, timetext::TimeStyle::Date)),
+                    m_ent->m_accountPrefix.IsEmpty() ? _T("EMP")
+                                                     : static_cast<LPCTSTR>(m_ent->m_accountPrefix));
         ui::DrawTextLine(hdc, meta,
                          RECT{ txtX, T + kAvatarY + 26, R - 360, T + kAvatarY + 44 },
                          theme::kInk400, ui::UiFont(theme::kFontSizeSmall, false),
@@ -536,24 +656,29 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     DataStore::Instance().CountOrg(m_entId, orgUsers, orgDepts);
     const int svcCount = static_cast<int>(DataStore::Instance().Services(m_entId).size());
 
+    // count 小于 0 表示这个 tab 没有数量徽章（「在线用户」的人数在 DLL 页面里显示），文字占满整个 tab。
     auto drawTab = [&](const RECT& rc, LPCTSTR label, int count, bool active)
     {
+        const bool hasBadge = (count >= 0);
         ui::DrawTextLine(hdc, label,
-                         RECT{ rc.left, rc.top, rc.right - 24, rc.bottom },
+                         RECT{ rc.left, rc.top, hasBadge ? rc.right - 24 : rc.right, rc.bottom },
                          active ? theme::kFlamingo600 : theme::kInk500,
                          ui::UiFont(theme::kFontSizeNormal, active),
                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         // 数量徽章。
-        CString cnt;
-        cnt.Format(_T("%d"), count);
-        RECT badge = { rc.right - 30, (rc.top + rc.bottom) / 2 - 9,
-                       rc.right - 6,  (rc.top + rc.bottom) / 2 + 9 };
-        ui::FillRoundRect(hdc, badge,
-                          active ? theme::kFlamingo100 : theme::kInk100, 9);
-        ui::DrawTextLine(hdc, cnt, badge,
-                         active ? theme::kFlamingo700 : theme::kInk500,
-                         ui::UiFont(theme::kFontSizeSmall, false),
-                         DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (hasBadge)
+        {
+            CString cnt;
+            cnt.Format(_T("%d"), count);
+            RECT badge = { rc.right - 30, (rc.top + rc.bottom) / 2 - 9,
+                           rc.right - 6,  (rc.top + rc.bottom) / 2 + 9 };
+            ui::FillRoundRect(hdc, badge,
+                              active ? theme::kFlamingo100 : theme::kInk100, 9);
+            ui::DrawTextLine(hdc, cnt, badge,
+                             active ? theme::kFlamingo700 : theme::kInk500,
+                             ui::UiFont(theme::kFontSizeSmall, false),
+                             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
         if (active)
         {
             RECT ul = { rc.left + 6, rc.bottom - 2, rc.right - 6, rc.bottom };
@@ -562,6 +687,11 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     };
     drawTab(m_rcTabOrg, _T("组织架构"), orgUsers + orgDepts, m_subTab == kTabOrg);
     drawTab(m_rcTabSvc, _T("服务号"),   svcCount,            m_subTab == kTabSvc);
+    if (m_onlineAvailable)
+    {
+        drawTab(m_rcTabOnline, _T("在线用户"), -1, m_subTab == kTabOnline);
+    }
+    drawTab(m_rcTabFeatures, _T("功能开关"), -1, m_subTab == kTabFeatures);
 
     // 头部底部分隔线。
     ui::FillLine(hdc, L, T + kHeaderH - 1, R - L, 1, theme::kInk100);
@@ -601,7 +731,13 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
                          ui::UiFont(theme::kFontSizeSmall, false),
                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
-    // 服务号 tab 的主体由 m_servicesPanel 子控件自行绘制（下方 base
+    else if (m_subTab == kTabOnline)
+    {
+        // 「在线用户」tab 的内容是 FlamingoLink.dll 的子窗口，只盖住占位控件那一块；四周的边距由本屏
+        // 填上与 DLL 页面相同的浅灰底色，否则那一圈露出的是未绘制的系统默认底色
+        ui::FillSolidRect(hdc, RECT{ L, bodyT, R, m_rcItem.bottom }, theme::kInk25);
+    }
+    // 服务号、功能开关 tab 的主体由 m_servicesPanel、m_featuresPage 子控件自行绘制（下方 base
     // OnPaint 会绘制可见子控件），此处不需额外绘制。
 
     // 绘制子控件（按钮、组织树、详情面板）。
@@ -613,6 +749,16 @@ bool EnterpriseDetailScreen::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
     // 子 tab 切换。
     if (::PtInRect(&m_rcTabOrg, pt)) { SetSubTab(kTabOrg); return true; }
     if (::PtInRect(&m_rcTabSvc, pt)) { SetSubTab(kTabSvc); return true; }
+    if (m_onlineAvailable && ::PtInRect(&m_rcTabOnline, pt))
+    {
+        SetSubTab(kTabOnline);
+        return true;
+    }
+    if (::PtInRect(&m_rcTabFeatures, pt))
+    {
+        SetSubTab(kTabFeatures);
+        return true;
+    }
 
     if (m_subTab == kTabOrg)
     {
@@ -634,6 +780,8 @@ bool EnterpriseDetailScreen::OnSetCursor(POINT pt)
     // 这里只管本屏自绘的热区（子 tab、页脚「顶级部门」）。
     const bool onHit =
         ::PtInRect(&m_rcTabOrg, pt) || ::PtInRect(&m_rcTabSvc, pt) ||
+        (m_onlineAvailable && ::PtInRect(&m_rcTabOnline, pt)) ||
+        ::PtInRect(&m_rcTabFeatures, pt) ||
         (m_subTab == kTabOrg && ::PtInRect(&m_rcAddTopDept, pt));
     if (onHit)
     {

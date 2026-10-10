@@ -28,6 +28,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../net/ContactsProtocolClient.h"   // net::ContactItem / net::DepartmentItem
 #include "ForwardRequest.h"
+#include "TitleBarIcon.h"   // ProgramWindowIcons（任务栏图标）
 #include "ForwardTargetModel.h"
 #include "MemberPickerTreeModel.h"             // MemberPickerNode
 
@@ -162,6 +163,8 @@ private:
 
 private:
     IForwardTargetSink*             m_sink;         // 结果接收方（借用）；NULL 表示调试入口
+    balloonwjui::DuiLabel*          m_targetTitle;  // 右侧已选列表上方的小标题（借用，控件树持有；BuildUi 之前为 NULL）：按用途写「发送给」或「通话对象」
+    balloonwjui::DuiLabel*          m_contentTitle; // 右侧说明区的小标题（借用，控件树持有；BuildUi 之前为 NULL）：按用途写「转发内容」或「说明」
     int64_t                         m_selfUserId;   // 本人 userid，每次 Open 时更新
     ForwardRequest                  m_request;      // 本次的转发请求（复制）
     std::vector<ForwardTarget>      m_recent;       // 「最近会话」候选（复制）
@@ -197,6 +200,8 @@ private:
 
     // 标题栏左侧图标位图。DuiFrameWindow::SetIcon 只借用不释放，故本类持有、析构时释放
     HBITMAP                         m_hTitleIcon;
+    // 任务栏 / Alt-Tab 图标（2026-10-05 起窗口可最小化，最小化后从任务栏找回）；本对象持有，窗口先于它销毁
+    ProgramWindowIcons              m_taskIcons;
 };
 
 } // namespace balloonmain

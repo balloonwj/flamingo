@@ -10,13 +10,14 @@
  *  纯函数并配测试，避免菜单逻辑散落在窗口代码里没法验证。
  *
  *  行为约定（与用户确认过）：
- *    · 图片消息且本地文件已就绪 → 在「复制」之后插入「图片另存为」「再次发送」。
+ *    · 分组（2026-10-03 起）：复制、[图片另存为] ｜ 引用回复、[转发]、[再次发送] ｜ [Pin]、多选 ｜
+ *      [撤回]、删除；组与组之间一条分隔线，删除类动作永远在最后。
+ *    · 图片消息且本地文件已就绪 → 「复制」之后有「图片另存为」，「转发」之后有「再次发送」。
  *    · 图片未就绪（上传中 / 下载中 / 失败 / 没有本地路径）→ 这两项<u>不显示</u>，
  *      而不是置灰。与「撤回」超时即整项消失是同一种处理，菜单里不留点不动的项。
  *    · 「再次发送」自己发的图与收到的图都给 —— 只要本地有文件就能再发一遍，
  *      语义是「把这张图作为一条新消息再发到当前会话」，不是重发原来那条。
- *    · 「Pin / 取消 Pin」文案随本条当前是否已钉住取反，位置在「转发」之后、第一条
- *      分隔线之前。服务器还没给这条消息分配 msgid 时（本端刚发出）整项<u>不出现</u>，
+ *    · 「Pin / 取消 Pin」文案随本条当前是否已钉住取反，与「多选」同组、排在它前面。服务器还没给这条消息分配 msgid 时（本端刚发出）整项<u>不出现</u>，
  *      与「撤回」超时即整项消失同一种处理。
  *    · 取消 Pin 的权限<u>不在客户端预判</u>：本端不一定知道一条历史消息是谁钉的
  *      （operator 只随推送来、历史行未必有），预判会出现"该显示的没显示"。故菜单项
@@ -49,7 +50,32 @@ enum ChatMessageMenuId
     kChatMsgMenuMultiSelect = 8,   // 多选：以本行为起点进入多选模式
     kChatMsgMenuPin         = 9,   // Pin / 取消 Pin：把本条钉在会话里（会话内共享，对方与全体群成员都看得到）
     kChatMsgMenuOpenLink    = 10,  // 在浏览器中打开：仅当右键点在正文里的超链接上时出现，排在菜单最前
-    kChatMsgMenuCopyLink    = 11   // 复制链接地址：同上；复制的是规范化后的完整 URL（www. 开头的已补 https://）
+    kChatMsgMenuCopyLink    = 11,  // 复制链接地址：同上；复制的是规范化后的完整 URL（www. 开头的已补 https://）
+    kChatMsgMenuReedit      = 12,  // 重新编辑：仅自己发出、发送失败的文字消息出现，把原文放回输入框（docs/敏感词方案.md 8.4）
+    kChatMsgMenuResendVoice = 13,  // 重新发送：仅发送失败的语音出现，用原 clientmsgid 重新上传并发出（docs/语音消息方案.md 第 7.3 节）
+    kChatMsgMenuOcr         = 14,  // 图片文字识别：仅图片行、图片已就绪且识别模块可用时出现，排在「图片另存为」之后（docs/图片文字识别方案.md 第 8.5 节）
+    kChatMsgMenuCopyMarkdownSource = 15,  // 复制 Markdown 源文本：仅显示为卡片的 Markdown 消息出现，代替「复制」，复制整条源文本（纯文字，
+                                          // docs/Markdown消息方案.md 第 11.3 节）
+    kChatMsgMenuViewCode    = 16,  // 在窗口中查看：仅代码片段出现，排在「复制代码」之后，请宿主打开代码查看窗（docs/代码片段方案.md 第 3.2 节）
+    kChatMsgMenuSaveCodeAs  = 17,  // 另存为：仅代码片段出现，排在「在窗口中查看」之后，把代码写进用户选的文件
+    kChatMsgMenuViewMarkdown = 18, // 在窗口中查看：仅 Markdown 卡片出现，排在「复制 Markdown 源文本」之后，请宿主打开 Markdown 预览窗口
+                                   // （docs/Markdown消息方案.md 第 11.3 节）
+    kChatMsgMenuAddMemo     = 19,  // 添加到备忘（单聊）/ 添加到我的备忘（群聊）：文字类消息出现，打开新建本人备忘的窗口并预填内容
+                                   // （docs/备忘与提醒方案.md §8）
+    kChatMsgMenuAddGroupMemo = 20, // 添加到群备忘：仅群聊里能新建群备忘的人（群主、管理员）看得到，打开新建群备忘的窗口并预填内容
+    kChatMsgMenuAnnotateCode = 21  // 添加批注…：仅已有服务器 msgid 的代码片段出现，排在「另存为…」之后，请宿主打开发送代码窗口的
+                                   // 批注模式，加了批注后发出一条新的代码片段（docs/代码片段方案.md 第 11.3 节）
+};
+
+/**
+ *  「添加到备忘」在菜单里出现的方式，由消息列表的宿主按会话类型与本人权限设置（ChatMessageList::SetMemoMenuMode）。
+ */
+enum ChatMemoMenuMode
+{
+    kChatMemoMenuNone       = 0,   // 不出现：消息记录窗、合并记录查看窗等不是聊天窗的地方
+    kChatMemoMenuSingle     = 1,   // 单聊：一项「添加到备忘」
+    kChatMemoMenuGroupMine  = 2,   // 群聊、本人不能新建群备忘（普通成员，或角色还没取到）：一项「添加到我的备忘」
+    kChatMemoMenuGroupBoth  = 3    // 群聊、本人能新建群备忘（群主、管理员）：「添加到我的备忘」「添加到群备忘」两项
 };
 
 /**
@@ -74,6 +100,10 @@ struct ChatMessageMenuEntry
 //单独取一份名字。两处哪天不一致，ChatImageMenuTests 的 CIM1 会立刻失败。
 const int kChatMenuKindImage = 3;
 
+//文字消息的 kind 取值（含 Markdown、代码片段、带引用的回复），与 ChatMsgKind 的 kMsgText 一致，理由同上。
+//「添加到备忘」只对它出现（docs/备忘与提醒方案.md §8），MemoPrefillTests 的 MP4 核对两处一致
+const int kChatMenuKindText = 1;
+
 //文件夹传输消息的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgFolder 必须一致，
 //单列一份的理由同上面的 kChatMenuKindImage（本模型不引依赖 CString 的那个头文件）。
 //
@@ -97,6 +127,33 @@ const int kChatMenuKindTime = 0;
 //一份的理由同上。合并卡片没有可复制的正文，菜单里不给「复制」，其余各项照常。
 const int kChatMenuKindMerged = 6;
 
+//群接龙卡片的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgRelay 必须一致，单列一份的理由同上。
+//接龙卡片不能单条转发、逐条转发时被跳过（转发出去的卡片在别的会话里没有参与的意义），合并转发
+//允许，聊天记录里这一条只显示「[接龙] 标题」（docs/群接龙方案.md §3.7）。「复制」照常给出，复制的是
+//「复制为文本」那一份文字。
+const int kChatMenuKindRelay = 7;
+
+//文件共享卡片的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgFileShare 必须一致，单列一份的理由同上。
+//共享卡片由服务端生成，只给共享的成员看：转发、合并转发、Pin 会把它扩散给不是成员的人，撤回与「取消共享」语义重叠，
+//服务端对这四项一律拒绝（docs/文件共享方案.md 6.1），菜单里这四项都不出现；「复制」「引用回复」「删除」「多选」照常。
+const int kChatMenuKindFileShare = 8;
+
+//屏幕共享卡片的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgScreenShare 必须一致，单列一份的理由同上。
+//卡片由服务端在发起共享时生成，房间只对原会话的成员开放：转发、合并转发到别的会话没有意义，Pin 与撤回也没有对应的语义，
+//服务端对这几项一律拒绝（MessageProtocol::isClientOperableMsgType），菜单里都不出现；「复制」「引用回复」「删除」「多选」照常。
+const int kChatMenuKindScreenShare = 9;
+
+//入群邀请卡片的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgGroupInvite 必须一致，单列一份的理由同上。
+//卡片由服务端生成、绑定特定的被邀请人：转发、合并转发出去没有意义，Pin 与撤回也没有对应的语义，服务端一律拒绝
+//（MessageProtocol::isClientOperableMsgType）；引用回复一张邀请卡片同样没有意义（docs/邀请入群方案.md §6.4）。
+//菜单里这几项都不出现；「复制」「删除」「多选」照常。
+const int kChatMenuKindGroupInvite = 11;
+
+//语音消息的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgVoice 必须一致，单列一份的理由同上。
+//语音没有可复制的正文（复制出来只会是一个「[语音]」占位），不给「复制」；转发、引用回复、Pin、撤回、删除、多选照常
+//（docs/语音消息方案.md 第 3.3 节）。
+const int kChatMenuKindVoice = 10;
+
 /**
  *  判断一条消息能不能转发（决定右键菜单里有没有「转发」，以及多选转发时收不收这一行）。
  *
@@ -104,6 +161,8 @@ const int kChatMenuKindMerged = 6;
  *    · 须有服务器 msgid：发送中 / 发送失败的行两个 id 都是 0，服务端不认识这条消息；
  *    · 单聊里收到的文件与历史文件，服务器 msgid 放在 fileMsgid 而 msgid 为 0，同样能转发；
  *    · 文件夹行不能转发（理由见 kChatMenuKindFolder 的注释）；
+ *    · 接龙卡片不能单条转发，多选「逐条转发」时被跳过（理由见 kChatMenuKindRelay 的注释；
+ *      多选「合并转发」另见 CanMergeForwardMessage）；
  *    · 时间分隔行与撤回后的提示行不能转发。
  *
  *    msgKind：   消息类型，取值见 ChatMockData.h 的 ChatMsgKind。
@@ -112,6 +171,14 @@ const int kChatMenuKindMerged = 6;
  *  @return 能转发返回 true。本函数无副作用。
  */
 bool CanForwardMessage(int msgKind, long long msgid, long long fileMsgid);
+
+/**
+ *  判断多选「合并转发」时收不收这一行。与 CanForwardMessage 的唯一区别是接龙卡片：合并转发允许，
+ *  单条转发与逐条转发不允许（docs/群接龙方案.md §3.7）。
+ *    msgKind / msgid / fileMsgid：同 CanForwardMessage。
+ *  @return 能合并转发返回 true。本函数无副作用。
+ */
+bool CanMergeForwardMessage(int msgKind, long long msgid, long long fileMsgid);
 
 /**
  *  取一条消息转发时交给服务端的 msgid：msgid 非 0 时取它，否则取 fileMsgid。
@@ -146,10 +213,11 @@ bool ShouldShowImageActions(int msgKind, int imageState, bool hasLocalPath);
 /**
  *  算出气泡右键菜单的行模型。
  *
- *  固定骨架是：复制 / 引用回复 / 转发 / [Pin] / 分隔线 / [撤回] / 删除 / 分隔线 / 多选。
- *  图片行且已就绪时，在「复制」之后插入「图片另存为」「再次发送」两项。
- *  <u>文件夹行是例外</u>：它是本地气泡、没有服务端 msgid，故只保留「复制」「删除」
- *  「多选」三项，理由见上面 kChatMenuKindFolder 的注释。
+ *  固定骨架是：复制 / 分隔线 / 引用回复 / [转发] / 分隔线 / [Pin] / 多选 / 分隔线 / [撤回] / 删除。
+ *  图片行且已就绪时，「复制」之后多「图片另存为」，「转发」之后多「再次发送」。
+ *  <u>文件夹行是例外</u>：它是本地气泡、没有服务端 msgid，故只保留「复制」「多选」
+ *  「删除」三项，理由见上面 kChatMenuKindFolder 的注释。发送失败的行是「复制」[「重新编辑」]、
+ *  「多选」「删除」；发送失败的语音没有「复制」，改为「重新发送」「多选」「删除」。分隔线不打头、不结尾、不连续。
  *
  *    msgKind：      消息类型，取值见 ChatMockData.h 的 ChatMsgKind。
  *    imageState：   图片就绪态，取值见 kChatImageState*；非图片行忽略此参数。
@@ -161,6 +229,14 @@ bool ShouldShowImageActions(int msgKind, int imageState, bool hasLocalPath);
  *    canForward：   本条现在能不能转发，由调用方经 CanForwardMessage 判定。为 false 时
  *                   「转发」整项不出现。点「转发」进入多选模式并预先勾选本条，由用户在
  *                   多选操作条上选择逐条转发或合并转发。
+ *    sendFailed：   本条是否发送失败（服务端拒绝）。为 true 时「引用回复」「转发」「Pin」「撤回」
+ *                   都不出现（服务端不认识这条消息），只留「复制」「删除」「多选」，以及下一项。
+ *    canReedit：    本条能不能「重新编辑」，由调用方经 CanReeditMessage 判定；只在 sendFailed 为
+ *                   true 时生效，出现在「复制」之后。
+ *    canOcr：       图片文字识别模块是否可用（COcrModuleHost::CanShowEntry）。为 true 且图片两项
+ *                   该出现时，「图片另存为」之后多一项「图片文字识别」；为 false 时整项不出现。
+ *    memoMenu：     「添加到备忘」的出现方式，取值见 ChatMemoMenuMode；只对文字消息（msgKind 为 kMsgText）生效，
+ *                   出现在第一组的末尾（「复制」一类之后）。发送失败的行不出现。
  *
  *  @return 行模型（值语义，调用方拥有）。
  */
@@ -170,7 +246,11 @@ std::vector<ChatMessageMenuEntry> BuildChatMessageMenuModel(int msgKind,
                                                             bool canRecall,
                                                             bool canPin,
                                                             bool pinned,
-                                                            bool canForward);
+                                                            bool canForward,
+                                                            bool sendFailed = false,
+                                                            bool canReedit = false,
+                                                            bool canOcr = false,
+                                                            int memoMenu = kChatMemoMenuNone);
 
 /**
  *  算「图片另存为」对话框里的默认文件名。

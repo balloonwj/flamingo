@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 15 章：帖子群——创建、帖子群窗口、发帖、查看帖子与互动、追加补充、留言与回复。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>帖子群 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c15">
+<article class="doc">
+  <h1>帖子群</h1>
+  <p class="lead">帖子群是一种没有聊天消息流的群：成员发帖，其他人在帖子下点赞、回应和留言讨论。它适合技术分享、方案讨论这类需要围绕一个话题集中讨论、并长期留存的内容。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：企业开启「帖子群」开关</li>
+    <li>置顶帖子：仅群主和管理员</li>
+  </ul>
+
+  <h2 id="create">创建帖子群</h2>
+  <p>帖子群的创建方法与普通群相同：在「新建群聊」窗口里把 <span class="ui">群类型</span> 选为 <span class="ui">帖子群</span>，详见<a href="13-group-chat.html#create">「群聊 → 新建群聊」</a>。帖子群建好后不能改成普通群。</p>
+  <ul>
+    <li>群列表里的帖子群在群号前写着 <b>帖子群</b>，双击打开帖子群窗口。</li>
+    <li>在帖子群上点右键，第一项是 <span class="ui">打开帖子群</span>；帖子群没有聊天消息，所以菜单里没有「开启字幕模式」。</li>
+    <li>帖子群不能作为转发消息的目标。</li>
+  </ul>
+  <div class="callout note"><b>帖子群不见了？</b>企业关闭「帖子群」开关后，帖子群会从群列表和会话列表中隐藏，重新开启后恢复显示。开关的位置见<a href="../admin/05-feature-switches.html">「功能开关」</a>。</div>
+
+  <h2 id="window">认识帖子群窗口</h2>
+  <figure class="shot">
+    <img src="../img/m_thread_empty.png" width="880" alt="空的帖子群窗口">
+    <figcaption>刚建好的帖子群：左侧提示「还没有帖子，点「发帖」发第一条」</figcaption>
+  </figure>
+  <p>帖子群窗口左侧是帖子列表，右侧是选中帖子的详情。下面是有了一条帖子之后的样子：</p>
+  <figure class="shot">
+    <div class="annotated">
+      <img src="../img/m_thread_post.png" width="880" alt="帖子群窗口">
+      <span class="pin" style="left:10.6%;top:16.6%">1</span>
+      <span class="pin" style="left:16%;top:16.6%">2</span>
+      <span class="pin" style="left:33.8%;top:23.3%">3</span>
+      <span class="pin" style="left:76%;top:8.7%">4</span>
+      <span class="pin" style="left:54.2%;top:17%">5</span>
+      <span class="pin" style="left:81.5%;top:18.4%">6</span>
+      <span class="pin" style="left:49.2%;top:67%">7</span>
+      <span class="pin" style="left:50.4%;top:72.6%">8</span>
+      <span class="pin" style="left:46.9%;top:78.1%">9</span>
+      <span class="pin" style="left:77%;top:88.4%">10</span>
+    </div>
+    <figcaption>罗俊辉发帖之后看到的帖子群窗口</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>＋ 发帖</b>：发一条新帖子</li>
+    <li><b>最新动态 / 最新发布</b>：帖子列表的排序方式</li>
+    <li><b>帖子卡片</b>：作者、时间、标题、摘要、图片，以及赞数和留言数</li>
+    <li><b>成员 / 群资料 / 群管理</b>：头部右侧的三个按钮</li>
+    <li><b>楼主</b>：标出发帖人</li>
+    <li><b>编辑 / 置顶 / 删除</b>：按你的身份显示</li>
+    <li><b>赞 / ＋ 表情</b>：给帖子点赞或加表情回应</li>
+    <li><b>＋ 追加补充</b>：楼主在正文之后补充内容</li>
+    <li><b>留言区</b>：显示留言条数和全部留言</li>
+    <li><b>留言框</b>：写留言，按 <kbd>Enter</kbd> 或点「发送」发出</li>
+  </ol>
+  <h3>头部按钮</h3>
+  <ul>
+    <li><span class="ui">成员</span>：在窗口右侧滑出群成员面板，成员的右键菜单与群聊窗口的成员列表相同。</li>
+    <li><span class="ui">群资料</span>：打开群资料窗口，见<a href="13-group-chat.html#info">「群聊 → 群资料」</a>。</li>
+    <li><span class="ui">群管理</span>：仅群主和管理员可见，打开群管理窗口。帖子群的群管理没有「群公告」页，其余用法见<a href="14-group-manage.html">「群管理」</a>。</li>
+  </ul>
+  <h3>帖子列表</h3>
+  <ul>
+    <li><span class="ui">最新动态</span>（默认）：按最近一次发帖、留言、回复或补充的时间排序，有新讨论的帖子排在前面。</li>
+    <li><span class="ui">最新发布</span>：按发帖时间排序。</li>
+    <li>被置顶的帖子总是排在最前面，卡片上标有 <b>置顶</b>。</li>
+    <li>滚动到列表底部会继续加载更早的帖子，全部加载完后显示「没有更多了」。</li>
+  </ul>
+
+  <h2 id="post">发帖</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/m_thread_compose_empty.png" width="560" alt="发帖窗口"><figcaption>「发帖 · 技术分享」窗口</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <ol class="steps">
+        <li>点左上角的 <span class="ui">＋ 发帖</span>。</li>
+        <li>在第一行填写标题。标题可以不填，最多 60 个字，右侧显示已输入的字数。</li>
+        <li>在大框里写正文，最多 5000 个字。</li>
+        <li>按需添加图片：点 <span class="ui">图片</span> 按钮或上方的「＋ 图片 0/9」方框选图，最多 9 张；点缩略图右上角的 × 可以删除。</li>
+        <li>需要时用 <span class="ui">表情</span> 插入表情，用 <span class="ui">@ 成员</span> 提醒群成员。</li>
+        <li>点 <span class="ui">发布</span>，或按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>。</li>
+      </ol>
+    </div>
+  </div>
+  <figure class="shot center">
+    <img src="../img/m_thread_compose.png" width="560" alt="写好的帖子">
+    <figcaption>填好标题、正文并加了一张图片</figcaption>
+  </figure>
+  <div class="callout tip"><b>发帖的几条限制</b>正文和图片至少要有一样；图片还在上传时不能发布，要等上传完成；一次最多 @ 50 个人，「所有人」只有能 @ 全体成员的人才看得到（规则与群聊相同，由群权限里的「谁能 @ 全体成员」决定）。内容还没发出就点 <span class="ui">取消</span> 时，会先询问是否确定关闭。</div>
+
+  <h2 id="detail">查看帖子与互动</h2>
+  <p>在左侧点一张帖子卡片，右侧显示帖子详情：作者与发帖时间、标题、正文、图片，下面是互动区、补充和留言。发帖人的名字旁边标着 <b>楼主</b>。</p>
+  <h3>编辑、置顶与删除</h3>
+  <p>详情右上角的按钮按你的身份显示：</p>
+  <table>
+    <tr><th>按钮</th><th>谁能用</th><th>说明</th></tr>
+    <tr><td>编辑</td><td>仅作者</td><td>打开「编辑帖子」窗口修改标题、正文和图片，修改过的帖子会标出「已编辑」</td></tr>
+    <tr><td>置顶 / 取消置顶</td><td>群主、管理员</td><td>把帖子固定在列表最前面，每个帖子群最多置顶 3 条</td></tr>
+    <tr><td>删除</td><td>作者、群主、管理员</td><td>删除帖子时，帖子下的补充、留言与回复会一起删除</td></tr>
+  </table>
+  <h3>点赞与表情回应</h3>
+  <p>点 <span class="ui">赞</span> 给帖子点赞，再点一次取消。点 <span class="ui">＋ 表情</span> 会弹出表情面板，选一个表情即可作为回应。回应会以「表情 + 人数」的形式显示在「赞」旁边，帖子卡片上也会同步显示；鼠标停在某个回应上，会提示有哪些人这样回应过。</p>
+  <figure class="shot">
+    <img src="../img/m_thread_react.png" width="880" alt="表情面板">
+    <figcaption>点「＋ 表情」弹出的表情面板</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="../img/m_thread_detail2.png" width="880" alt="加了表情回应的帖子">
+    <figcaption>加了一个表情回应后，详情和左侧卡片上都显示「赞 1」和这个表情的人数</figcaption>
+  </figure>
+
+  <h2 id="addendum">追加补充</h2>
+  <p>帖子发出后，楼主可以在正文之后追加补充内容，例如说明采纳了哪些建议。只有楼主能看到 <span class="ui">＋ 追加补充</span> 按钮。</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/m_thread_addendum.png" width="560" alt="追加补充窗口"><figcaption>「追加补充」窗口</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <ol class="steps">
+        <li>在帖子详情里点 <span class="ui">＋ 追加补充</span>。</li>
+        <li>写下补充内容，最多 2000 个字，也可以添加最多 9 张图片、插入表情或 @ 成员。窗口右下角显示这是第几段补充。</li>
+        <li>点 <span class="ui">补充</span>，或按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>。</li>
+      </ol>
+    </div>
+  </div>
+  <figure class="shot">
+    <img src="../img/m_thread_detail.png" width="880" alt="帖子详情中的补充">
+    <figcaption>补充显示在正文之后，标有「补充 · 刚刚」，右侧可以删除</figcaption>
+  </figure>
+  <ul>
+    <li>补充显示在帖子正文之后，并带上时间。</li>
+    <li>补充发出后不能修改，但可以删除。</li>
+    <li>在这个帖子下留过言的人会收到提醒。</li>
+    <li>每个帖子最多追加 20 段补充。</li>
+  </ul>
+
+  <h2 id="comment">留言与回复</h2>
+  <p>帖子详情底部是留言框，提示文字为「写下你的留言…（Enter 发送，Ctrl+Enter 换行）」。写好后按 <kbd>Enter</kbd> 或点 <span class="ui">发送</span>，每条留言最多 1000 个字。</p>
+  <figure class="shot">
+    <img src="../img/m_thread_b_comment.png" width="880" alt="赵卓轩看到的帖子">
+    <figcaption>赵卓轩一侧看到的帖子：他点了赞并发表了一条留言，头部没有「群管理」按钮</figcaption>
+  </figure>
+  <p>每条留言下方显示时间，以及几个操作：</p>
+  <ul>
+    <li><span class="ui">回复</span>：留言框上方出现「回复 某某：」提示，写好后发出；点提示行右侧的 <span class="ui">✕ 取消</span> 可以改回普通留言。回复显示在被回复的留言下面，以「某某 回复 某某：」开头，楼主的名字后面会加上「（楼主）」。</li>
+    <li><span class="ui">赞</span> 和 <span class="ui">＋</span>：给这条留言点赞或加表情回应。</li>
+    <li><span class="ui">删除</span>：留言的作者、群主和管理员可以删除。</li>
+  </ul>
+  <p>一条留言下的回复较多时，点 <span class="ui">查看更多回复（N 条）</span> 展开；留言较多时，点 <span class="ui">加载更多留言</span> 继续加载。</p>
+  <div class="callout note"><b>提示「本群目前只有群主和管理员可以发帖和留言」</b>说明你在本群暂时不能发言，例如被禁言，或者群开启了「仅通知模式」。这时你不能发帖、留言和补充，但仍然可以浏览帖子。仅通知模式的设置见<a href="14-group-manage.html#mute">「群管理 → 禁言管理」</a>。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

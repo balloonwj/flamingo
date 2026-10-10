@@ -10,7 +10,7 @@
  *  balloonwj@qq.com   2026-06-11
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/Call/CallRelayTestFrame.h"
+#include "../../FlamingoMedia/Call/CallRelayTestFrame.h"
 
 #include <string>
 #include <vector>

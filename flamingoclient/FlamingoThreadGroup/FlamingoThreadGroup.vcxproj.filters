@@ -1,0 +1,294 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{83168e6c-b289-d732-cc78-427b51f93153}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{fadd1363-4aa9-d02c-f68a-ae2fcdbc5321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonChatWnd">
+      <UniqueIdentifier>{c34bbc7a-16e0-7941-60f8-4a546e03cbea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonMain">
+      <UniqueIdentifier>{8c406ee6-61e4-c2e3-aa2c-1a2d79bfd56f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party">
+      <UniqueIdentifier>{9eab2112-6210-c38a-271b-d8cbe3106a1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\jsoncpp-1.9.0">
+      <UniqueIdentifier>{f4787265-9915-ba4f-0c42-241643d8f88f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{71ff7152-6d15-db86-eb50-fcac245d183b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarImageUtil.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonChatWnd\GroupMentionModel.cpp">
+      <Filter>Source\UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\HostLogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\ThreadGroupModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\ThreadLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadCodec.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadComposeModel.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadDetailModel.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadFeedModel.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadMembers.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadMention.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadReactions.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadRules.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadSession.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadText.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ThreadTime.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadBitmapCache.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadCardMetrics.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadCommentEdit.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadComposeLayout.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadComposeWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadComposer.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadDetailPane.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadFacePicker.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadFeedList.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadMemberPicker.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadPostCard.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadRichText.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadToolIcons.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadUiFactory.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadUiText.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadWidgets.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ThreadWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="ThreadGroupApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\BalloonUiText.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarImageUtil.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonChatWnd\GroupMentionModel.h">
+      <Filter>Source\UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\ThreadGroupModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\ThreadLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\ThreadWindowApi.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadCodec.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadComposeModel.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadDetailModel.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadFeedModel.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadMembers.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadMention.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadReactions.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadRules.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadSession.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadText.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadTime.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ThreadTypes.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadBitmapCache.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadCardMetrics.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadCommentEdit.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadComposeLayout.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadComposeWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadComposer.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadDetailPane.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadFacePicker.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadFeedList.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadMemberPicker.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadPostCard.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadRichText.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadToolIcons.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadUiFactory.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadUiText.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadWidgets.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ThreadWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoThreadGroupVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoThreadGroup.def" />
+  </ItemGroup>
+</Project>

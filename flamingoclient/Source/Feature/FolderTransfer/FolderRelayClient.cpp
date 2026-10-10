@@ -15,8 +15,7 @@
 #include "../../net/FrameCodec.h"                    // encodeFrame / decodeFrame
 #include "../../net/FramePayload.h"                  // encodeFramePayload / decodeFramePayload
 #include "../../net/HandshakeRunner.h"               // performClientHandshake / IHandshakeChannel
-#include "../../net/RemoteDesktopProtocolClient.h"   // parseRelayHelloAck（报到应答与远程桌面同结构）
-#include "../../net/IUSocket.h"                      // CIUSocket::GetServerPublicKey
+#include "../../net/FolderProtocolClient.h"          // parseRelayHelloAck（报到应答 {code, msg}）
 #include "../../Common/Log/IULog.h"                             // LOG_INFO / LOG_WARNING / LOG_ERROR
 
 #pragma comment(lib, "ws2_32.lib")
@@ -51,7 +50,9 @@ FolderRelayClient::FolderRelayClient()
     , m_connected(false)
     , m_stopping(false)
     , m_handler(NULL)
+    , m_hasServerPubKey(false)
 {
+    memset(m_serverPubKey, 0, sizeof(m_serverPubKey));
 }
 
 FolderRelayClient::~FolderRelayClient()
@@ -179,17 +180,16 @@ private:
 
 bool FolderRelayClient::PerformHandshake(int timeoutSec)
 {
-    const unsigned char* pServerPubKey = CIUSocket::GetInstance().GetServerPublicKey();
-    if (pServerPubKey == NULL)
+    if (!m_hasServerPubKey)
     {
-        //没配服务端公钥就是不加密，本连接全程明文
+        //调用方没给服务端公钥就是不加密，本连接全程明文
         return true;
     }
 
     HandshakeChannel channel(this, timeoutSec);
 
     std::string err;
-    if (!net::performClientHandshake(channel, pServerPubKey, m_handshake, err))
+    if (!net::performClientHandshake(channel, m_serverPubKey, m_handshake, err))
     {
         LOG_ERROR("FolderRelayClient: handshake failed: %s, lane=%d.", err.c_str(), m_lane.load());
         return false;
@@ -288,11 +288,10 @@ bool FolderRelayClient::SendHelloAndWaitAck(const std::string& token, int lane,
                     break;
                 }
 
-                //报到应答就是 {code, msg}，与远程桌面 / 音视频中转的报到应答同结构，故
-                //直接复用已有的解析函数，不再为同一份 JSON 另写一遍。日后
-                //net/FolderProtocolClient 落地时应换成该模块的同名函数。
-                net::RDRelayHelloAck ackobj;
-                if (net::RemoteDesktopProtocolClient::parseRelayHelloAck(plain, ackobj))
+                //报到应答就是 {code, msg}，由文件夹传输自己的协议模块解析（原先借用远程桌面的
+                //同名函数，文件共享 DLL 要编译本文件，不能把远程桌面的协议模块一起带进去）
+                net::FolderRelayHelloAck ackobj;
+                if (net::FolderProtocolClient::parseRelayHelloAck(plain, ackobj))
                     code = ackobj.m_code;
                 gotAck = true;
                 break;
@@ -333,12 +332,20 @@ bool FolderRelayClient::SendHelloAndWaitAck(const std::string& token, int lane,
 }
 
 bool FolderRelayClient::Connect(const std::string& ip, int port, const std::string& token, int lane,
+                                const unsigned char* serverPubKey,
                                 FolderRelayClientHandler* handler, int timeoutSec)
 {
     if (handler == NULL)
         return false;
     if (m_connected.load())
         return true;
+
+    //公钥拷一份留给握手用：调用方给的指针只保证在本次调用期间有效
+    m_hasServerPubKey = (serverPubKey != NULL);
+    if (m_hasServerPubKey)
+        memcpy(m_serverPubKey, serverPubKey, sizeof(m_serverPubKey));
+    else
+        memset(m_serverPubKey, 0, sizeof(m_serverPubKey));
 
     //lane 越过硬上限的连接服务端一定会拒，没必要发出去；这里先拦下并说清原因
     if (!folderrelay::IsValidLaneIndex(lane))

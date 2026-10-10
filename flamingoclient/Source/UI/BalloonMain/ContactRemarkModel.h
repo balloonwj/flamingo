@@ -12,6 +12,9 @@
  *        当前备注与当前连接态，判定 发送 / 不发(无变化) / 拦截(离线) / 拦截(超长)，
  *        并给出 trim 后的待提交文本。写法与同级的 SignatureEditModel 一致。
  *
+ *  另有 ResolveContactSpeakerName：桌面字幕的说话人前缀用的短名（有备注只用备注），
+ *  因为字幕前缀的宽度有限，不适合用拼好的「真名（备注）」。
+ *
  *  两者都不依赖 HWND、不碰网络，便于被 FlamingoUnit 测试工程直接断言；真正的
  *  发包、弹层显隐与各处刷新留在 CBalloonMainPanel / CBalloonContactWindow。
  *
@@ -96,6 +99,38 @@ CString ResolveContactDisplayName(const CString& remark,
                                   const CString& nickname,
                                   const CString& username,
                                   UINT userid);
+
+/**
+ *  解析一个联系人在桌面字幕上作为说话人时用的短名。纯函数、无副作用。
+ *
+ *  与 ResolveContactDisplayName 不同，这里不拼「真名（备注）」：字幕的说话人前缀最多占一行宽度的
+ *  一半，拼起来的长名字会被截成「张三（产品…说：」。规则（用户 2026-10-05 确认）：备注去掉首尾
+ *  空白后不为空就只用备注，否则用 ResolveContactRealName 取的真名。
+ *
+ *    remark：   本人给该联系人起的备注名，可空。
+ *    nickname： 联系人昵称，可空。
+ *    username： 联系人账号，可空。
+ *    userid：   联系人 userid，昵称与账号都为空时用来拼兜底名。
+ *
+ *  返回：说话人短名，保证非空。
+ */
+CString ResolveContactSpeakerName(const CString& remark,
+                                  const CString& nickname,
+                                  const CString& username,
+                                  UINT userid);
+
+/**
+ *  通讯录树上一行的文字：本人那一行在显示名后加「（我）」（已按界面语言翻译），别人原样返回。
+ *  纯函数。树上挂联系人叶子（AddContactLeaf）与收到资料变更推送后刷新那一行（OnUserInfoChanged）
+ *  共用这一条规则 —— 后者原先直接写显示名，本人的推送一到「（我）」就会被冲掉（2026-10-04 起服务端
+ *  也把资料变更推送发给本人）。
+ *
+ *    name：  显示名（通常是 ResolveContactDisplayName 的结果）。
+ *    isSelf：这一行是不是当前登录用户本人。
+ *
+ *  返回：树上这一行的文字。
+ */
+CString AppendSelfMark(const CString& name, bool isSelf);
 
 /**
  *  判定一次备注提交该如何处理。纯函数、无副作用、不碰窗口/网络。

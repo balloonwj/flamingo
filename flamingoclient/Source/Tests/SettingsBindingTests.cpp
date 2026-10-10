@@ -71,24 +71,6 @@ TEST_CASE("BIND-SENDKEY2 配置布尔↔下拉索引方向正确且可 round-tri
 }
 
 // =====================================================================
-// BIND-LANG. 语言（本期仅一项占位）
-// =====================================================================
-
-TEST_CASE("BIND-LANG1 至少一项，含「简体中文」", "[settings][binding]")
-{
-    REQUIRE(LanguageOptionCount() >= 1);
-    CHECK(::wcscmp(LanguageOptions()[0], L"简体中文") == 0);
-}
-
-TEST_CASE("BIND-LANG2 越界索引夹到 0", "[settings][binding]")
-{
-    CHECK(ClampLanguageIndex(0) == 0);
-    CHECK(ClampLanguageIndex(-1) == 0);
-    CHECK(ClampLanguageIndex(999) == 0);
-    CHECK(ClampLanguageIndex(LanguageOptionCount()) == 0);   // 等于 count 也算越界
-}
-
-// =====================================================================
 // BIND-SOUND. 提示音 ↔ 静音（取反）
 // =====================================================================
 

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 16 章：一对一语音 / 视频通话与群通话（发起、接听、通话中的操作、通话记录卡片、成员管理）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>语音与视频通话 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c16">
+<article class="doc">
+  <h1>语音与视频通话</h1>
+  <p class="lead">本章介绍如何与同事进行一对一的语音、视频通话，以及如何在群聊里发起多人通话。通话过程中还可以共享屏幕和电脑声音。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>一对一通话：对方需要在线，且当前没有在通话</li>
+    <li>群通话：需要企业开启「群语音 / 群视频通话」开关，每场最多 16 人（含发起人）</li>
+  </ul>
+
+  <h2 id="start">发起一对一通话</h2>
+  <p>以下几个位置都可以发起通话，语音通话与视频通话的入口总是成对出现：</p>
+  <ul>
+    <li>单聊窗头部右侧的电话图标（<span class="ui">语音通话</span>）和摄像机图标（<span class="ui">视频通话</span>），见下图。</li>
+    <li>在主面板通讯录里右键联系人，选 <span class="ui">语音通话</span> 或 <span class="ui">视频通话</span>。</li>
+    <li>联系人资料窗里的 <span class="ui">语音通话</span>、<span class="ui">视频通话</span> 按钮。</li>
+    <li>主面板左下角系统菜单「发起」分组里的 <span class="ui">发起语音通话</span>、<span class="ui">发起视频通话</span>：先在弹出的窗口里选择联系人，再开始呼叫。</li>
+  </ul>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/r_call_card.png" width="760" alt="单聊窗头部的通话按钮与通话记录卡片">
+      <span class="pin" style="left:53.8%;top:11.8%">1</span>
+      <span class="pin" style="left:59.3%;top:11.8%">2</span>
+      <span class="pin" style="left:52%;top:61.1%">3</span>
+    </div>
+    <figcaption>单聊窗头部的通话按钮，以及通话结束后留在聊天里的通话记录卡片</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>语音通话</b>：发起一对一语音通话</li>
+    <li><b>视频通话</b>：发起一对一视频通话</li>
+    <li><b>通话记录卡片</b>：通话结束后自动出现，详见本章<a href="#record">「通话记录」</a>一节</li>
+  </ol>
+
+  <h2 id="ring">呼叫与接听</h2>
+  <p>发起后会打开通话窗口，显示对方的头像和「正在呼叫，等待对方接听…」。对方接听之前，可以点右下角的红色按钮取消呼叫。</p>
+  <figure class="shot center">
+    <img src="../img/r_call_outgoing.png" width="776" alt="正在呼叫">
+    <figcaption>呼叫中的通话窗口，右下角红色按钮用于取消呼叫</figcaption>
+  </figure>
+  <p>对方的屏幕右下角会弹出来电窗。标题栏显示通话类型和倒计时「N 秒后无人接听自动结束」，正文写明「某某 邀请你语音通话」（视频通话时为「邀请你视频通话」）。点左边的红色按钮拒绝，点右边的绿色按钮接听。</p>
+  <figure class="shot center">
+    <img src="../img/r_call_incoming.png" width="420" alt="来电窗">
+    <figcaption>被叫一方屏幕右下角弹出的来电窗</figcaption>
+  </figure>
+  <div class="callout note"><b>没有接通的情况</b>对方不在线或正在通话时，呼叫会直接结束并给出提示。倒计时结束仍无人接听，呼叫自动结束。在呼叫中、来电中或通话中直接关闭窗口，分别等同于取消、拒绝和挂断。</div>
+
+  <h2 id="in-call">通话中的操作</h2>
+  <p>接通后，窗口标题变为「与 某某 语音通话中」，画面区显示对方的头像、通话状态和通话时长，底部是一排操作按钮：</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/r_call_connected.png" width="776" alt="语音通话中">
+      <span class="pin" style="left:7%;top:82.1%">1</span>
+      <span class="pin" style="left:54.1%;top:82.1%">2</span>
+      <span class="pin" style="left:61.8%;top:82.1%">3</span>
+      <span class="pin" style="left:69.5%;top:82.1%">4</span>
+      <span class="pin" style="left:77.3%;top:82.1%">5</span>
+      <span class="pin" style="left:85%;top:82.1%">6</span>
+      <span class="pin" style="left:93.2%;top:82.1%">7</span>
+      <span class="pin" style="left:76.3%;top:3.9%">8</span>
+    </div>
+    <figcaption>罗俊辉一侧的语音通话窗口</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>网络质量</b>：信号格表示当前网络状况；显示「P2P」说明双方直接连接，没有经过服务器中转。鼠标停在信号格上可以查看线路、往返时延和丢包等数据</li>
+    <li><b>麦克风</b>：打开或关闭自己的麦克风，关闭后对方听不到你的声音</li>
+    <li><b>调节音量</b>：弹出滑块，调节你听到的声音大小，不影响对方</li>
+    <li><b>切到视频</b>：把语音通话切换为视频通话</li>
+    <li><b>共享屏幕</b>：把这次通话变成一场屏幕共享，见<a href="18-screen-share.html">「屏幕共享」</a></li>
+    <li><b>共享电脑声音</b>：把电脑上其他程序播放的声音一并传给对方，建议佩戴耳机</li>
+    <li><b>挂断</b>：结束通话</li>
+    <li><b>固定在桌面</b>：窗口置顶，且不能移动和改变大小；再点一次取消固定</li>
+  </ol>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/r_call_connected_b.png" width="776" alt="对方一侧的通话窗口"><figcaption>赵卓轩一侧的通话窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>对方的窗口与你的相同，标题显示「与 罗俊辉 语音通话中」。</p>
+      <p>截图中双方都关闭了麦克风，所以麦克风按钮显示为深色，鼠标停在上面会提示「打开麦克风」。麦克风打开时按钮为浅色，提示变为「关闭麦克风」。</p>
+      <p>网络变差时，画面区上方会出现「当前网络不佳，通话可能卡顿」或「对方网络不佳」的提示。</p>
+    </div>
+  </div>
+
+  <h2 id="video">视频通话</h2>
+  <p>视频通话的发起、接听和挂断与语音通话完全相同，区别只在于窗口里多了摄像头画面：</p>
+  <ul>
+    <li>对方的画面铺满窗口，自己的画面以小画面显示。双击大画面或单击小画面，可以对调大小画面。</li>
+    <li>底部按钮浮在画面上，鼠标停止移动片刻后自动隐藏，移动鼠标即重新出现。</li>
+    <li>按钮比语音通话多一个 <span class="ui">打开摄像头</span> / <span class="ui">关闭摄像头</span>：只关闭自己的画面，通话仍是视频通话；原来的 <span class="ui">切到视频</span> 变为 <span class="ui">切回语音</span>。</li>
+    <li>摄像头不可用时，画面上会说明原因，例如「未检测到摄像头」「摄像头打不开，可能已被其它程序占用」，这时对方看不到你的画面。</li>
+  </ul>
+  <div class="callout note"><b>关于截图</b>演示时出于隐私没有打开摄像头，所以本章没有视频画面的截图。</div>
+
+  <h2 id="record">通话记录</h2>
+  <p>通话结束后，聊天里会出现一张通话记录卡片（见本章第一张图的标注 3）。卡片标题为「语音通话」或「视频通话」，副标题写明发起人（「我发起的通话」或「某某发起的通话」），最下面一行是通话结果：</p>
+  <table>
+    <tr><th>通话结果</th><th>发起方看到</th><th>被叫方看到</th></tr>
+    <tr><td>接通后正常结束</td><td colspan="2">通话时长，如「通话时长 00:41」</td></tr>
+    <tr><td>无人接听</td><td>对方未接听</td><td>未接听</td></tr>
+    <tr><td>被拒绝</td><td>对方已拒绝</td><td>已拒绝</td></tr>
+    <tr><td>接通前取消</td><td>已取消</td><td>对方已取消</td></tr>
+  </table>
+
+  <h2 id="group">群通话</h2>
+  <p>在群聊里可以发起多人语音或视频通话。一个群同时只能有一场群通话，每场最多 16 人（含发起人）。群聊窗头部的通话按钮只在企业开启「群语音 / 群视频通话」开关后显示，开关的位置见<a href="../admin/05-feature-switches.html">「功能开关」</a>。</p>
+
+  <h3>发起群通话</h3>
+  <ol class="steps">
+    <li>打开群聊窗，点头部右侧的电话图标（<span class="ui">语音通话</span>）或摄像机图标（<span class="ui">视频通话</span>）。如果本群已经有一场进行中的群通话，点这两个按钮会直接加入那一场。</li>
+    <li>在「选择通话成员」窗口里勾选要邀请的成员，可以用上方的搜索框查找。右侧列出已选成员，左下角显示已选人数。</li>
+    <li>点 <span class="ui">开始通话</span>，被选中的成员会收到来电邀请。</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/r_groupcall_pick.png" width="778" alt="选择通话成员">
+    <figcaption>选择要邀请的群成员，选多了会提示「群通话最多 16 人，请少选几位成员。」</figcaption>
+  </figure>
+
+  <h3>群通话窗口</h3>
+  <p>通话窗口以宫格显示每位成员的头像和名字，自己显示为「我」。还没接听的成员标注「等待接听」，关闭了麦克风的标注「已静音」，网络中断的标注「连接中断」。</p>
+  <figure class="shot">
+    <img src="../img/r_groupcall_calling.png" width="880" alt="刚发起的群通话">
+    <figcaption>刚发起时，被邀请的两位成员都在「等待接听」</figcaption>
+  </figure>
+  <p>窗口底部左侧是通话时长，右侧是「N 人通话中」，中间的按钮依次为：</p>
+  <ul>
+    <li><span class="ui">关闭麦克风</span> / <span class="ui">打开麦克风</span>：开关自己的麦克风。</li>
+    <li><span class="ui">打开摄像头</span> / <span class="ui">关闭摄像头</span>：开关自己的摄像头画面。同时打开摄像头的人数有上限，满员时会提示稍后再试。</li>
+    <li><span class="ui">邀请成员</span>：追加邀请本群的其他成员，候选名单里不包含已在通话中或正在被邀请的人。</li>
+    <li><span class="ui">成员管理</span>：只有发起人、群主和管理员能看到，见下文<a href="#group-manage">「群通话的成员管理」</a>。</li>
+    <li><span class="ui">挂断</span>：退出本次群通话，其他人可以继续通话。</li>
+  </ul>
+  <p>标题栏同样有图钉图标，可以把窗口固定在桌面上。</p>
+  <figure class="shot">
+    <img src="../img/r_groupcall_active.png" width="880" alt="三人群通话进行中">
+    <figcaption>三人都已加入的群通话；截图中各方都关闭了麦克风，所以都标注「已静音」</figcaption>
+  </figure>
+
+  <h3>接听与加入群通话</h3>
+  <p>被邀请的成员屏幕右下角会弹出来电窗，标题为「群语音通话」（或「群视频通话」）加上倒计时，正文写明邀请人、群名和当前通话人数。点绿色按钮加入，点红色按钮拒绝。</p>
+  <figure class="shot center">
+    <img src="../img/r_groupcall_incoming.png" width="420" alt="群通话来电窗">
+    <figcaption>群通话的来电窗</figcaption>
+  </figure>
+  <p>没有被邀请、或者错过了邀请的成员也可以加入：群通话进行期间，群聊窗里会显示一条横幅「群语音通话进行中 · N 人，点击加入 ›」，点它即可加入；聊天里的群通话卡片在通话进行中也有 <span class="ui">加入</span> 按钮。</p>
+
+  <h3 id="group-manage">群通话的成员管理</h3>
+  <p>发起人、群主和管理员点 <span class="ui">成员管理</span>，会弹出以下菜单：</p>
+  <ul>
+    <li><span class="ui">全员静音</span>：勾选后所有人的麦克风都被关闭，并且只有发起人、群主和管理员可以重新打开麦克风；再点一次即解除。</li>
+    <li>每位成员的名字下有子菜单：<span class="ui">静音</span> 关闭该成员的麦克风（对方可以自己重新打开）；<span class="ui">移出通话</span> 把该成员移出本次通话。对还没接听的成员，这一项显示为 <span class="ui">取消邀请</span>。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/r_groupcall_manage.png" width="880" alt="成员管理菜单">
+    <figcaption>「成员管理」菜单：全员静音，以及每位成员的子菜单</figcaption>
+  </figure>
+
+  <h3>群通话卡片</h3>
+  <p>群通话发起后，群聊里会出现一张「群语音通话」（或「群视频通话」）卡片。通话进行中卡片显示「正在通话 · N 人」，结束后显示「通话已结束 · 时长 mm:ss」。</p>
+  <figure class="shot">
+    <div class="annotated">
+      <img src="../img/r_groupcall_card.png" width="880" alt="群聊窗头部的通话按钮与群通话卡片">
+      <span class="pin" style="left:64.9%;top:11.8%">1</span>
+      <span class="pin" style="left:69.1%;top:11.8%">2</span>
+      <span class="pin" style="left:39.5%;top:63.9%">3</span>
+    </div>
+    <figcaption>群聊窗头部的通话按钮，以及一场已经结束的群通话卡片</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>语音通话</b>：发起或加入群语音通话</li>
+    <li><b>视频通话</b>：发起或加入群视频通话</li>
+    <li><b>群通话卡片</b>：显示通话状态，进行中时可以点「加入」</li>
+  </ol>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

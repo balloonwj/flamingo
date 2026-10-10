@@ -1,5 +1,6 @@
 /**
- *  WindowPlacementPrefs.cpp —— 窗口位置的读写与恢复计算，说明见头文件。
+ *  WindowPlacementPrefs.cpp —— 窗口位置的读写，说明见头文件。恢复时的矩形计算 ResolveRestoredWindowRect
+ *  在 WindowPlacementResolve.cpp（2026-10-07 拆出，文件共享 DLL 也要用它，见那个文件的说明）。
  *  balloonwj@qq.com   2026-10-01
  */
 
@@ -40,33 +41,6 @@ int Height(const RECT& rc)
     return rc.bottom - rc.top;
 }
 
-//把 value 限制在 [lo, hi]。lo 大于 hi 时（最小尺寸比工作区还大）以 hi 为准
-int ClampInt(int value, int lo, int hi)
-{
-    if (value < lo)
-    {
-        value = lo;
-    }
-    if (value > hi)
-    {
-        value = hi;
-    }
-    return value;
-}
-
-//在工作区里按给定大小居中；大小先限制在 [最小尺寸, 工作区尺寸] 之内
-RECT CenteredIn(const RECT& area, SIZE size, SIZE minSize)
-{
-    const int w = ClampInt(size.cx, minSize.cx, Width(area));
-    const int h = ClampInt(size.cy, minSize.cy, Height(area));
-    RECT rc;
-    rc.left = area.left + (Width(area) - w) / 2;
-    rc.top = area.top + (Height(area) - h) / 2;
-    rc.right = rc.left + w;
-    rc.bottom = rc.top + h;
-    return rc;
-}
-
 } // namespace
 
 void LoadWindowPlacementPrefs(CIniFile& ini, LPCTSTR filePath, LPCTSTR section, LPCTSTR keyPrefix,
@@ -102,52 +76,6 @@ void SaveWindowPlacementPrefs(CIniFile& ini, LPCTSTR filePath, LPCTSTR section, 
     ini.WriteInt(section, KeyName(keyPrefix, _T("Width")), Width(prefs.m_rect), filePath);
     ini.WriteInt(section, KeyName(keyPrefix, _T("Height")), Height(prefs.m_rect), filePath);
     ini.WriteInt(section, KeyName(keyPrefix, _T("Maximized")), prefs.m_maximized ? 1 : 0, filePath);
-}
-
-RECT ResolveRestoredWindowRect(const WindowPlacementPrefs& saved, SIZE defaultSize, SIZE minSize,
-                               const std::vector<RECT>& workAreas, const RECT& fallbackWorkArea)
-{
-    if (!saved.m_hasSaved || Width(saved.m_rect) <= 0 || Height(saved.m_rect) <= 0)
-    {
-        return CenteredIn(fallbackWorkArea, defaultSize, minSize);
-    }
-
-    //找与保存的矩形重叠面积最大的工作区
-    const RECT* best = NULL;
-    long long bestArea = 0;
-    RECT bestOverlap;
-    ::SetRectEmpty(&bestOverlap);
-    for (size_t i = 0; i < workAreas.size(); ++i)
-    {
-        RECT overlap;
-        if (!::IntersectRect(&overlap, &saved.m_rect, &workAreas[i]))
-        {
-            continue;
-        }
-        const long long area = (long long)Width(overlap) * Height(overlap);
-        if (area > bestArea)
-        {
-            bestArea = area;
-            best = &workAreas[i];
-            bestOverlap = overlap;
-        }
-    }
-
-    //重叠部分不够抓住标题栏（典型是那台显示器已经拔掉）：按没有保存过处理
-    if (best == NULL || Width(bestOverlap) < kMinVisibleWidthPx || Height(bestOverlap) < kMinVisibleHeightPx)
-    {
-        return CenteredIn(fallbackWorkArea, defaultSize, minSize);
-    }
-
-    //尺寸限制在 [最小尺寸, 工作区尺寸]，再把位置平移到整个窗口都落在这个工作区里
-    const int w = ClampInt(Width(saved.m_rect), minSize.cx, Width(*best));
-    const int h = ClampInt(Height(saved.m_rect), minSize.cy, Height(*best));
-    RECT rc;
-    rc.left = ClampInt(saved.m_rect.left, best->left, best->right - w);
-    rc.top = ClampInt(saved.m_rect.top, best->top, best->bottom - h);
-    rc.right = rc.left + w;
-    rc.bottom = rc.top + h;
-    return rc;
 }
 
 } // namespace winplace

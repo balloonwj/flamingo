@@ -18,6 +18,26 @@
 //前向声明：数据库连接类，仅在 .cpp 中需要其完整定义。
 class IDatabase;
 
+//服务号类型（t_service_account.f_kind 与 service/save.do 的 kind 字段）。
+enum service_account_kind
+{
+    //通知型：单向推送，员工只读（如人事通知、财务通知）
+    service_kind_notification = 0,
+    //助手型：对话式，员工可以回复（如 IT 支持、考勤助手）
+    service_kind_assistant    = 1,
+    //集成型：对接外部系统（如监控告警）。目前与通知型的服务端行为相同，只作分类
+    service_kind_integration  = 2,
+};
+
+//判断服务号类型取值是否合法（0～2）。service/save.do 据此拒绝未定义的类型，免得库里
+//出现控制台和客户端都不认识的值。
+inline bool isValidServiceKind(int32_t kind)
+{
+    return kind == service_kind_notification
+        || kind == service_kind_assistant
+        || kind == service_kind_integration;
+}
+
 //服务号可见范围的一条绑定（t_service_account_binding 的一行）。
 struct ServiceBinding
 {
@@ -39,7 +59,7 @@ struct ServiceAccountInfo
     int64_t     serviceId;        //服务号业务ID
     int64_t     enterpriseId;     //所属企业ID
     std::string name;             //服务号名称
-    int32_t     kind;             //类型：0=通知型（单向推送）1=助手型（员工可回复）
+    int32_t     kind;             //类型：取值见 enum service_account_kind（0 通知型 / 1 助手型 / 2 集成型）
     std::string description;      //服务号描述
     std::string avatarColor;      //头像底色
     std::string avatarGlyph;      //头像字形/图标
@@ -58,7 +78,7 @@ struct SaveServiceReq
     int64_t     serviceId;        //服务号ID；0表示新建，非0表示编辑既有服务号
     int64_t     enterpriseId;     //所属企业ID（新建时使用）
     std::string name;             //服务号名称
-    int32_t     kind;             //类型：0=通知型 1=助手型
+    int32_t     kind;             //类型：取值见 enum service_account_kind（0 通知型 / 1 助手型 / 2 集成型）
     std::string description;      //服务号描述
     std::string avatarColor;      //头像底色
     int32_t     allowUnsubscribe; //是否允许员工取消订阅：0=否 1=是

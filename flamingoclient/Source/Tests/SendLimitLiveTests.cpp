@@ -1,7 +1,7 @@
 /**
  *  单条消息体积上限的端到端联调用例（Suite MSG-L），SendLimitLiveTests.cpp
  *
- *  背景见 bugs.md 的 BUG-32：发消息（cmd_send_message）原先不限制单条内容的大小，接近或
+ *  背景：发消息（cmd_send_message）原先不限制单条内容的大小，接近或
  *  超过 1 MiB 的消息会让发送方（请求帧超过服务端的单帧上限被断开）或接收方（推送 / 同步
  *  整帧超过客户端的单帧上限被断开）掉线。修复后服务端对 content 与 quote 合计超过
  *  MESSAGE_CONTENT_MAX_BYTES（256 KiB）的消息回 error_code_msg_too_large，不落库、不推送。

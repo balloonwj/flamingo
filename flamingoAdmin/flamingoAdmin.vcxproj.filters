@@ -42,10 +42,61 @@
     <ClCompile Include="Util\CrashHandler.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="Util\LoginText.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\TimeText.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\PluginLibrary.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\LinkPageState.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\LinkBridge.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\ColumnFit.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
     <ClCompile Include="Util\AppConfig.cpp">
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Util\DpapiSecret.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\SensitiveWordText.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\FileShareAuditScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\FileSharesScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\FileShareCenterScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\FeatureSwitchesPage.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\FeatureSwitchPanel.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\CloudRecordQuotaPanel.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\FileShareUi.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Widgets\KeyValueGrid.cpp">
+      <Filter>Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\FileShareText.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\TextFileSave.cpp">
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Util\NetProbe.cpp">
@@ -91,6 +142,18 @@
       <Filter>Widgets</Filter>
     </ClCompile>
     <ClCompile Include="Widgets\CommonWidgets.cpp">
+      <Filter>Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Widgets\PagerBar.cpp">
+      <Filter>Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Widgets\ActionTable.cpp">
+      <Filter>Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Widgets\ColumnHeader.cpp">
+      <Filter>Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Widgets\LinkPageSlot.cpp">
       <Filter>Widgets</Filter>
     </ClCompile>
     <ClCompile Include="Widgets\OrgTree.cpp">
@@ -171,6 +234,42 @@
     <ClCompile Include="Screens\ClientVersionsScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="Screens\SensitiveWordsScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\SensitiveWordModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\QaAdminApi.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\EnterpriseQaScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\EnterpriseQaModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\BotAdminApi.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\BotRuleText.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\EnterpriseBotScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\EnterpriseBotModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\BotRuleModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\BotDomainsModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\SensitiveImportModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="Screens\ClientVersionModal.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -201,10 +300,64 @@
     <ClInclude Include="Util\CrashHandler.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="Util\LoginText.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\TimeText.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\PluginLibrary.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\LinkPageState.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\LinkBridge.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="FlamingoLink\FlamingoLinkApi.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\ColumnFit.h">
+      <Filter>Util</Filter>
+    </ClInclude>
     <ClInclude Include="Util\AppConfig.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\DpapiSecret.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\SensitiveWordText.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\FileShareAuditScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\FileSharesScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\FileShareCenterScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\FeatureSwitchesPage.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\FeatureSwitchPanel.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\CloudRecordQuotaPanel.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\FileShareUi.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Widgets\KeyValueGrid.h">
+      <Filter>Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\FileShareText.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\TextFileSave.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\NetProbe.h">
@@ -241,6 +394,18 @@
       <Filter>Widgets</Filter>
     </ClInclude>
     <ClInclude Include="Widgets\CommonWidgets.h">
+      <Filter>Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="Widgets\PagerBar.h">
+      <Filter>Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="Widgets\ActionTable.h">
+      <Filter>Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="Widgets\ColumnHeader.h">
+      <Filter>Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="Widgets\LinkPageSlot.h">
       <Filter>Widgets</Filter>
     </ClInclude>
     <ClInclude Include="Widgets\OrgTree.h">
@@ -319,6 +484,42 @@
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="Screens\ClientVersionsScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\SensitiveWordsScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\SensitiveWordModal.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\QaAdminApi.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\EnterpriseQaScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\EnterpriseQaModal.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\BotAdminApi.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\BotRuleText.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\EnterpriseBotScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\EnterpriseBotModal.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\BotRuleModal.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\BotDomainsModal.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\SensitiveImportModal.h">
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="Screens\ClientVersionModal.h">

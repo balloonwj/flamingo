@@ -121,26 +121,24 @@ bool SetConversationPinned(std::vector<net::ConversationItem>& items,
                            int ctype, int64_t cid, bool pinned);
 
 /**
- *  设置某会话的免打扰标志。免打扰不影响列表顺序，故不重排。
- *    items  [出入参] 会话列表。
- *    ctype  会话类型（1单聊 2群聊）。
- *    cid    会话ID。
- *    muted  目标免打扰状态。
+ *  设置某会话的「手动标为未读」标志（docs/会话标为未读方案.md）。不影响排序。
+ *    items     [出入参] 会话列表。
+ *    ctype     会话类型（1单聊 2群聊）。
+ *    cid       会话ID。
+ *    mark      目标状态。
  *  @return 标志确实发生了变化返回 true；会话不存在、或本就是该状态返回 false
  */
-bool SetConversationMuted(std::vector<net::ConversationItem>& items,
-                          int ctype, int64_t cid, bool muted);
+bool SetConversationUnreadMark(std::vector<net::ConversationItem>& items,
+                               int ctype, int64_t cid, bool mark);
 
 /**
- *  查询某会话当前是否免打扰。收到新消息时据此决定要不要播提示音 / 闪托盘。
- *    items  会话列表。
- *    ctype  会话类型（1单聊 2群聊）。
- *    cid    会话ID。
- *  @return 该会话存在且被设为免打扰返回 true；会话不存在（如刚冒出来、还没同步过
- *          设置）按"不免打扰"处理返回 false
+ *  查某会话是否被手动标为未读。会话不在列表里时返回 false。
  */
-bool IsConversationMuted(const std::vector<net::ConversationItem>& items,
-                         int ctype, int64_t cid);
+bool IsConversationUnreadMarked(const std::vector<net::ConversationItem>& items, int ctype, int64_t cid);
+
+//原来这里还有 SetConversationMuted / IsConversationMuted 两个函数（按会话缓存读写免打扰标志）。
+//2026-10-03 起免打扰扩展成五种消息提醒模式，改由独立的模式表 NotifyModeModel 记录，
+//两个函数随之删除，见 docs/消息提醒模式与消息盒子方案.md §7.2。
 
 /**
  *  收到一条消息的当下，该会话能否直接算作"用户已经看到了"。
@@ -157,11 +155,14 @@ bool IsConversationMuted(const std::vector<net::ConversationItem>& items,
  *    isIconic       窗口是否已最小化（::IsIconic）。<u>最小化的窗口 IsWindowVisible
  *                   仍返回 TRUE</u>，故必须单独判这一项，否则最小化时会被误判成已读。
  *    isForeground   窗口是否是当前前台窗口（::GetForegroundWindow 与之相等）。
- *  @return 五项条件全部满足（存在、有效、可见、未最小化、在前台）返回 true，此时
- *          该消息视为用户已经看到；任何一项不满足返回 false，按未读处理
+ *    subtitleActive 该会话是否正处于字幕模式（docs/聊天字幕模式方案.md，字幕由主面板持有）。
+ *                   用户确认过「字幕上显示过就算已读」：字幕模式下消息会显示在桌面字幕上，
+ *                   不论聊天窗是否存在、可见、最小化、在不在前台都视为已经看到。默认 false。
+ *  @return 正处于字幕模式时返回 true；否则窗口存在且有效、可见、未最小化、在前台五项全中
+ *          时返回 true，此时该消息视为用户已经看到；其余情况返回 false，按未读处理
  */
 bool ShouldTreatAsReadOnArrival(bool windowExists, bool isWindow, bool isVisible,
-                                bool isIconic, bool isForeground);
+                                bool isIconic, bool isForeground, bool subtitleActive = false);
 
 /**
  *  收到一条消息之后，该会话的未读数应当变成多少。
@@ -176,5 +177,41 @@ bool ShouldTreatAsReadOnArrival(bool windowExists, bool isWindow, bool isVisible
  *  @return 新的未读数。视为已看到时恒为 0；否则该计未读就加一、不计则维持原值
  */
 int NextUnreadCount(int oldUnread, bool countAsUnread, bool treatAsRead);
+
+/**
+ *  会话行副行的摘要该怎样显示，由 ClassifyRecalledDigest 给出。
+ */
+enum RecalledDigestKind
+{
+    //最后一条消息没有撤回：照原样显示 m_digest
+    kRecalledDigestNone = 0,
+    //最后一条消息已撤回、撤回者就是本人：显示「你撤回了一条消息」
+    kRecalledDigestBySelf = 1,
+    //最后一条消息已撤回、撤回者是别人：显示「某某撤回了一条消息」，名字按 RecalledDigestOperator 取
+    kRecalledDigestByOther = 2,
+};
+
+/**
+ *  判断一条会话的摘要要不要显示成撤回提示、撤回者是不是本人（2026-10-03 起）。
+ *
+ *  服务端对已撤回的最后一条只下发 recalled 标志与中性的「撤回了一条消息」，不带撤回者，
+ *  因为它不知道查看者怎样称呼对方。客户端在渲染会话行时据本函数拼出与在线撤回
+ *  （CBalloonMainPanel::OnMessageRecalled）同口径的文字；放在渲染时而不是收到会话列表时拼，
+ *  是因为通讯录可能晚于会话列表到达，到达后会话树会整体重绘，名字随之更新。
+ *
+ *  撤回者取 RecalledDigestOperator：群主或管理员撤回别人的消息时它与发送方不同（2026-10-03 起）。
+ *    item    一条会话。
+ *    selfId  本端 userid；取不到时传 0，此时一律按别人撤回处理。
+ *  @return 摘要的显示方式，见 RecalledDigestKind
+ */
+RecalledDigestKind ClassifyRecalledDigest(const net::ConversationItem& item, uint32_t selfId);
+
+/**
+ *  取会话最后一条已撤回消息的撤回者。服务端记录了撤回者时随会话列表下发（lastmsg.recalledby）；
+ *  没有记录的（2026-10-03 服务端开始记录撤回者之前撤回的消息）按发送方处理，绝大多数撤回是发送方自己操作的。
+ *    item  一条会话；只在 m_lastRecalled 为真时有意义。
+ *  @return 撤回者 userid：m_lastRecalledBy 大于 0 时取它，否则取 m_lastFrom
+ */
+int64_t RecalledDigestOperator(const net::ConversationItem& item);
 
 } // namespace balloonmain

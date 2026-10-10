@@ -2,7 +2,7 @@
  *  「清理本地缓存」清理计划的单元测试（Suite CCP），CacheCleanPlanTests.cpp
  *
  *  覆盖：
- *    CCP1  正常账号产出三个类别，目录分别是 ChatFile / ChatImage /（Avatar + UserThumb）；
+ *    CCP1  正常账号产出三个类别，目录分别是（ChatFile + ChatVoice）/ ChatImage /（Avatar + UserThumb）；
  *    CCP2  计划里<u>永远</u>不出现 ChatLog 与 .ini —— 聊天记录、公告、登记表、配置不可清；
  *    CCP3  未登录（账号为空）或数据根为空时产出空计划；
  *    CCP4  账号里混进路径分隔符 / 上跳时，产出的目录仍落在 Users\ 之下（靠净化）；
@@ -57,8 +57,10 @@ TEST_CASE("CCP1 正常账号产出三个类别及各自目录", "[cacheclean]")
     REQUIRE(plan.size() == (size_t)kCacheCategoryCount);
 
     CHECK(plan[0].m_category == kCacheChatFile);
-    REQUIRE(plan[0].m_dirs.size() == 1);
+    //聊天文件一类连同语音缓存 ChatVoice（语音消息第 3c 步并入）
+    REQUIRE(plan[0].m_dirs.size() == 2);
     CHECK(plan[0].m_dirs[0] == std::wstring(L"E:\\flamingo\\flamingoclient\\Bin\\Users\\MY0113\\ChatFile\\"));
+    CHECK(plan[0].m_dirs[1] == std::wstring(L"E:\\flamingo\\flamingoclient\\Bin\\Users\\MY0113\\ChatVoice\\"));
 
     CHECK(plan[1].m_category == kCacheChatImage);
     REQUIRE(plan[1].m_dirs.size() == 1);

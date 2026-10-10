@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 28 章：系统设置（通用、消息通知、聊天、音视频、快捷键、存储、账号安全七个页面）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>系统设置 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c28">
+<article class="doc">
+  <h1>系统设置</h1>
+  <p class="lead">系统设置集中了客户端的各项偏好：开机启动、关闭方式、提示音、发送快捷键、自动回复、录屏、截图快捷键、数据存储位置等。本章按页面逐项说明。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：已登录</li>
+    <li>设置按账号保存（截图相关的两项为本机所有账号共用）</li>
+  </ul>
+
+  <h2 id="open">打开系统设置</h2>
+  <p>点主面板左下角的 ≡，在系统菜单的「设置」组中选 <span class="ui">系统设置</span>。窗口左侧是七个页面：通用、消息通知、聊天、音视频、快捷键、存储、账号安全，点击即可切换。</p>
+  <p>系统设置没有「保存」按钮，<b>每一项改动后立即生效并保存</b>，直接关闭窗口即可。</p>
+  <div class="callout note"><b>关于「暂未生效」与「暂未开放」</b>当前版本中有少数设置项还没有实际效果。本章把可以设置、也会被保存，但客户端暂时还不会按它改变行为的项目标为「暂未生效」；把点击后只提示功能正在开发中的按钮标为「暂未开放」。设置页上这些项目的说明文字也写明了当前的实际情况。</div>
+
+  <h2 id="general">通用</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_general.png" width="738" alt="系统设置：通用">
+    <figcaption>「通用」页</figcaption>
+  </figure>
+  <table><colgroup><col style="width:10.5em"><col></colgroup>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>开机自启动</td><td>登录 Windows 后自动启动 FlamingoIM。</td></tr>
+    <tr><td>关闭主面板时</td><td>点主面板右上角 × 时的处理方式：<b>最小化到托盘</b>（程序留在托盘里继续运行）或 <b>退出程序</b>。关闭时弹出的「关闭 FlamingoIM」对话框默认选中这里的方式；在对话框里勾选过「记住我的选择」后，点 × 直接按这里的方式处理。见<a href="02-main-panel.html#close">「认识主面板」</a>。</td></tr>
+    <tr><td>主面板贴边自动隐藏</td><td>把主面板拖到屏幕上、左、右边缘时自动收起，鼠标移过去再展开。</td></tr>
+    <tr><td>禁止机器休眠</td><td>开启后本机不会自动休眠、关屏或锁屏，适合演示等场景。开启期间下面的「自动离开」不生效，这两行变为灰色。</td></tr>
+    <tr><td>自动离开</td><td>电脑一段时间没有操作时，自动把你的状态切到「离开」，一有操作再自动切回「在线」。</td></tr>
+    <tr><td>无操作多久后切换成离开</td><td>自动离开的等待时间：5 分钟、10 分钟、15 分钟或 30 分钟，默认 5 分钟。</td></tr>
+    <tr><td>语言 / Language</td><td>界面语言，可选「跟随系统」、简体中文以及语言包中的其他语言。选择后客户端询问是否立即重启，重启后生效。程序目录里没有语言包 <code>FlamingoLang.dll</code> 时不显示这一行。</td></tr>
+  </table>
+
+  <h2 id="notify">消息通知</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_notify.png" width="738" alt="系统设置：消息通知">
+    <figcaption>「消息通知」页</figcaption>
+  </figure>
+  <table><colgroup><col style="width:10.5em"><col></colgroup>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>新消息提醒</td><td>暂未生效。新消息怎样提醒由各会话的「消息提醒方式」决定，在会话的右键菜单里设置，见<a href="05-conversations.html#notify">「消息提醒设置」</a>。</td></tr>
+    <tr><td>桌面弹窗</td><td>暂未生效，目前没有新消息弹窗。</td></tr>
+    <tr><td>提示音</td><td>关闭后，新消息等提示音不再播放。与托盘菜单的「关闭所有声音」是同一个开关，在任意一处修改，另一处随之改变。</td></tr>
+    <tr><td>震动闪烁图标</td><td>暂未生效。托盘图标按各会话的提醒方式闪烁。</td></tr>
+    <tr><td>勿扰时段</td><td>开启后，每天 22:00 到次日 08:00 之间不弹出文件共享的右下角通知。目前只对文件共享的通知有效，新消息的提示音和托盘闪烁不受它影响；不想被新消息打扰时，可以把会话的提醒方式改为「接收消息但不提醒」等，见<a href="05-conversations.html#notify">「消息提醒设置」</a>。</td></tr>
+    <tr><td>锁屏后通知</td><td>暂未生效。客户端锁屏期间不响提示音、不弹窗，托盘图标照常闪烁，见<a href="26-lock.html">「锁屏」</a>。</td></tr>
+  </table>
+  <p>想按会话控制提醒（例如某个群只在 @ 你时提醒），请使用会话的「消息提醒设置」，见<a href="05-conversations.html#notify">「会话列表与消息提醒」</a>。</p>
+
+  <h2 id="chat">聊天</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_chat.png" width="738" alt="系统设置：聊天">
+    <figcaption>「聊天」页</figcaption>
+  </figure>
+  <table><colgroup><col style="width:10.5em"><col></colgroup>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>发送消息快捷键</td><td>选 <b>Enter</b> 时按 <kbd>Enter</kbd> 发送、<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 换行；选 <b>Ctrl+Enter</b> 时按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发送、<kbd>Enter</kbd> 换行。与聊天窗口发送按钮旁 ▾ 菜单中的设置是同一份。</td></tr>
+    <tr><td>默认聊天字体</td><td>点 <span class="ui">修改</span> 选择你发出消息的默认字体，点 <span class="ui">恢复默认</span> 取消。没有设置时显示「未设置」。单独设过字体的聊天窗口仍使用它自己的字体。</td></tr>
+    <tr><td>自动接收图片</td><td>暂未生效。聊天里的图片总是自动下载。</td></tr>
+    <tr><td>自动接收文件</td><td>暂未生效。单聊里收到的文件要点 <span class="ui">接收</span> 后才下载，见<a href="08-files.html">「图片、文件与文件夹」</a>。</td></tr>
+    <tr><td>消息漫游</td><td>暂未生效。聊天记录始终保存在服务器上，在哪台电脑上登录都能查看。</td></tr>
+    <tr><td>自动识别链接</td><td>开启时聊天里的网址显示为可点击的链接；关闭后以普通文字显示。已打开的聊天窗口立即随之变化。</td></tr>
+    <tr><td>截图时隐藏当前窗口</td><td>从单聊、群聊窗口发起截图时，截图里不包含这个聊天窗口。与聊天窗口截图按钮旁 ▾ 菜单中的勾选项是同一个设置，本机所有账号共用。</td></tr>
+    <tr><td>离开时自动回复<br>忙碌时自动回复</td><td>开启后，你处于「离开」或「忙碌」状态时，同事在单聊里给你发消息，会自动收到下方输入框里的这段文字（最多 100 个字）。输入框留空时发送默认文字，即框里灰色显示的「您好，我现在不在，稍后回复您。」或「您好，我正在忙，稍后回复您。」。群聊里不自动回复；你正看着与对方的聊天窗口时也不回复。</td></tr>
+    <tr><td>我的机器人</td><td>点 <span class="ui">打开…</span> 打开「我的机器人」窗口，按关键词、时间段与发送者设置更多自动代答，见<a href="25-bots.html">「机器人」</a>。机器人模块不可用或企业没有允许使用个人机器人时，不显示这一行。</td></tr>
+    <tr><td>快捷回复</td><td>三条常用回复，默认是「收到」「好的，稍后回复」「正在开会，稍后联系」。在聊天窗口发送按钮旁的 ▾ 菜单里点一条就直接发出，留空的不显示。点 <span class="ui">恢复默认</span> 把三条都换回默认文字。</td></tr>
+    <tr><td>清理聊天记录</td><td>按时间范围删除聊天记录，见下文。</td></tr>
+  </table>
+
+  <h3 id="chat-clean">按时间范围清理聊天记录</h3>
+  <p>想一次删除某段时间的全部聊天记录时，点「清理聊天记录」一行的 <span class="ui">清理…</span>：</p>
+  <ol class="steps">
+    <li>在弹出的「清理聊天记录」对话框里选择 <span class="ui">时间范围</span>：全部、最近 1 天、最近 7 天、最近 30 天、7 天以前、30 天以前、3 个月以前、半年以前、1 年以前，或自定义。</li>
+    <li>选「自定义」时，再分别选择 <span class="ui">开始</span> 和 <span class="ui">结束</span> 的年、月、日。开始时间不能晚于结束时间，结束时间不能晚于当前时间。</li>
+    <li>点 <span class="ui">清理</span>，确认框里会说明将删除的时间范围，确认后开始清理。完成后提示「已清理……的聊天记录」。</li>
+  </ol>
+  <div class="callout warn"><b>清理后无法恢复</b>清理会删除这个时间范围内你的全部单聊和群聊记录，本机与服务器上的记录同时删除，删除后无法恢复；对方和其他群成员的记录不受影响。清理需要连接服务器，未连接时会提示「未连接服务器，连接后才能清理」。只想清空某一个会话时，请在会话的右键菜单里选「清空聊天记录」，见<a href="05-conversations.html#menu">「会话右键菜单」</a>。</div>
+
+  <h2 id="media">音视频</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_media.png" width="738" alt="系统设置：音视频">
+    <figcaption>「音视频」页（截图中的设备名称和保存位置因电脑而异）</figcaption>
+  </figure>
+  <table><colgroup><col style="width:10.5em"><col></colgroup>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>麦克风 / 扬声器 / 摄像头</td><td>下拉框列出本机的设备。暂未生效：目前通话时麦克风和扬声器使用 Windows 的默认设备，摄像头使用系统找到的第一个摄像头。需要换麦克风或扬声器时，请在 Windows 的声音设置里修改默认设备。</td></tr>
+    <tr><td>麦克风测试</td><td>暂未开放，点 <span class="ui">测试</span> 会提示功能开发中。</td></tr>
+    <tr><td>回声消除</td><td>暂未生效。一对一通话时回声消除始终开启。</td></tr>
+    <tr><td>录屏画质</td><td><b>标准</b> 或 <b>高清</b>。高清的分辨率最高 2560、码率约为标准的 2 倍，画面更清晰，文件也更大。从下一次录制开始生效。</td></tr>
+    <tr><td>录屏保存位置</td><td>录像文件存放的文件夹，默认是「视频」文件夹下的 <code>FlamingoRecords</code>。点 <span class="ui">更改</span> 选择其他文件夹。</td></tr>
+    <tr><td>录屏快捷键</td><td>开启后，在任何程序里按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> 开始录屏，录制中再按一次停止。录屏的用法见<a href="19-recording.html">「屏幕录制」</a>。</td></tr>
+  </table>
+
+  <h2 id="hotkey">快捷键</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_hotkey.png" width="738" alt="系统设置：快捷键">
+    <figcaption>「快捷键」页</figcaption>
+  </figure>
+  <p>这一页列出客户端的快捷键，其中只有「截图」可以修改：</p>
+  <table><colgroup><col style="width:7.5em"><col style="width:10em"><col></colgroup>
+    <tr><th>功能</th><th>按键</th><th>说明</th></tr>
+    <tr><td>打开主面板</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd></td><td>在任何程序里都可以按：主面板可见时隐藏它，不可见时调到前台</td></tr>
+    <tr><td>截图</td><td>默认 <kbd>Alt</kbd>+<kbd>Z</kbd></td><td>可以修改，见下文；截图的用法见<a href="09-screenshot.html">「截图与图片文字识别」</a></td></tr>
+    <tr><td>发送消息</td><td><kbd>Enter</kbd></td><td rowspan="2">随「聊天」页的「发送消息快捷键」变化：选 Ctrl+Enter 发送时，这里分别显示 Ctrl + Enter 和 Enter</td></tr>
+    <tr><td>换行</td><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td></tr>
+    <tr><td>快速搜索</td><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>主面板在前台时，把光标移到主面板的搜索框，见<a href="02-main-panel.html#search">「搜索」</a></td></tr>
+  </table>
+
+  <h3 id="hotkey-shot">修改截图快捷键</h3>
+  <ol class="steps">
+    <li>点「截图」一行显示按键的框（键帽），提示变为「按 Esc 取消，Backspace 停用」。</li>
+    <li>按下新的组合键。组合里必须包含 <kbd>Ctrl</kbd> 或 <kbd>Alt</kbd>，主键须为字母、数字或 <kbd>F1</kbd>~<kbd>F12</kbd>，也不能与 FlamingoIM 自己的其他快捷键重复。</li>
+    <li>按键合规时立即保存生效，托盘菜单里「截图」后面括号中的按键也随之更新（停用后只显示「截图」）。</li>
+  </ol>
+  <ul>
+    <li>录入时按 <kbd>Esc</kbd> 取消修改；按 <kbd>Backspace</kbd> 停用截图快捷键，此时提示「已停用，点击键帽可重新设置」。</li>
+    <li>新组合已被其他程序占用时，会提示「…已被其他程序占用，请换一个组合」。</li>
+    <li>点 <span class="ui">恢复默认</span> 恢复为 <kbd>Alt</kbd>+<kbd>Z</kbd>。</li>
+    <li>截图快捷键为本机所有账号共用，登录之前也可以使用。</li>
+  </ul>
+
+  <h2 id="storage">存储</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_storage.png" width="738" alt="系统设置：存储">
+    <figcaption>「存储」页（截图中的路径是演示电脑上的路径）</figcaption>
+  </figure>
+  <table><colgroup><col style="width:10.5em"><col></colgroup>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>数据存储位置</td><td>本机保存聊天记录、缓存和账号设置的文件夹。点 <span class="ui">更改</span> 可以换到其他位置，重启客户端后生效，见下方提示。</td></tr>
+    <tr><td>启动时清空历史日志</td><td>开启后，每次启动客户端时删除以往的日志文件，只保留本次运行的这一份。重启后生效。</td></tr>
+    <tr><td>清理本地缓存</td><td>点 <span class="ui">立即清理</span> 打开「清理本地缓存」对话框，列出聊天文件、聊天图片、头像缓存各占多少空间；勾选要清理的项目后点 <span class="ui">开始清理</span>。清理后这些内容需要时会重新下载，聊天记录、公告与本地设置不受影响。</td></tr>
+  </table>
+  <div class="callout warn"><b>更改数据存储位置前请先看清提示</b>更改后客户端从新位置读写数据，而新位置是空的：聊天记录、公告和本地设置都会从头开始。原有数据仍保留在原位置下的 <code>Users\<i>账号</i>\</code> 文件夹里，但不再被使用。如果要保留原有数据，请先退出客户端，把这个文件夹整个复制到新位置下的 <code>Users\</code> 文件夹中，再启动客户端。确认框里会写明这两个文件夹的完整路径。</div>
+
+  <h2 id="security">账号安全</h2>
+  <figure class="shot">
+    <img src="../img/q_settings_security.png" width="738" alt="系统设置：账号安全">
+    <figcaption>「账号安全」页</figcaption>
+  </figure>
+  <table><colgroup><col style="width:10.5em"><col></colgroup>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>登录设备</td><td>暂未开放。</td></tr>
+    <tr><td>修改密码</td><td>点 <span class="ui">修改</span> 打开修改密码对话框，与系统菜单中的「修改密码」相同，见<a href="03-profile.html#password">「个人资料与账号」</a>。</td></tr>
+    <tr><td>自动登录</td><td>开启后，启动客户端时自动登录当前账号，登录过程中可以取消。与登录窗口里的「自动登录」是同一个设置。</td></tr>
+    <tr><td>二次验证</td><td>暂未开放。</td></tr>
+    <tr><td>登录日志</td><td>暂未开放。</td></tr>
+    <tr><td>注销账号</td><td>暂未开放。</td></tr>
+  </table>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

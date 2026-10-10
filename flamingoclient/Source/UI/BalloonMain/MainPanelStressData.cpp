@@ -241,10 +241,12 @@ void BuildStressData(const StressDataSpec& spec, StressDataSet& out)
     }
     std::shuffle(order.begin(), order.end(), rng);
 
+    //特别关注是会话的提醒模式，名单随会话列表应答下发，这里先记下，建会话列表时再写进去
     const int starred = (std::min)(kStarredCount, contactCount);
+    std::vector<int64_t> starredIds;
     for (int i = 0; i < starred; ++i)
     {
-        contacts.m_starred.push_back(kFirstUserId + order[(size_t)i]);
+        starredIds.push_back(kFirstUserId + order[(size_t)i]);
     }
     const int favContacts = (std::min)(kFavoriteContactCount, contactCount);
     for (int i = 0; i < favContacts; ++i)
@@ -285,6 +287,14 @@ void BuildStressData(const StressDataSpec& spec, StressDataSet& out)
     net::ConversationsResult& convs = out.m_conversations;
     convs = net::ConversationsResult();
     convs.m_code = 0;
+    for (size_t i = 0; i < starredIds.size(); ++i)
+    {
+        net::NotifyModeEntry entry;
+        entry.m_ctype = conversation_single;
+        entry.m_cid   = starredIds[i];
+        entry.m_mode  = notify_mode_starred;
+        convs.m_notifyModes.push_back(entry);
+    }
 
     const int maxConvs  = contactCount + groupCount;
     const int convCount = (std::min)((std::max)(0, spec.m_conversationCount), maxConvs);
@@ -328,7 +338,7 @@ void BuildStressData(const StressDataSpec& spec, StressDataSet& out)
         conv.m_timestamp   = timestamp;
         conv.m_unread      = (RandomBelow(rng, kPercent) < kUnreadPercent) ? 1 + RandomBelow(rng, kMaxUnread) : 0;
         conv.m_pinned      = ((int)i < kPinnedCount) ? 1 : 0;
-        conv.m_mute        = (RandomBelow(rng, kMuteDivisor) == 0) ? 1 : 0;
+        conv.m_notifyMode  = (RandomBelow(rng, kMuteDivisor) == 0) ? notify_mode_silent : notify_mode_allow;
         timestamp         -= (1 + RandomBelow(rng, kMaxGapMinutes)) * kMsPerMinute;
     }
     convs.m_items.swap(items);

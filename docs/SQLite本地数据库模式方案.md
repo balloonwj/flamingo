@@ -15,7 +15,7 @@
 
 ## 2. 现状盘点
 
-本节结论均为**据实证**，逐条附了代码位置。
+本节结论均为**据实证**，逐条附了代码位置。其中的数量与行号是 2026-07-31 的快照，只用来说明改造规模，不随此后的代码变化重数（此后表与业务 Manager 都有增加）。
 
 ### 2.1 业务层直接依赖 MySQL 具体类，没有抽象层
 
@@ -53,7 +53,7 @@
 | `CONCAT` / `SUBSTRING` | 各 1 | 不能，可注册同名函数 |
 | `LIMIT` / `OFFSET` / `GROUP BY` / `UNION` / `LEFT JOIN` | 59 / 31 / 5 / 2 / 3 | 全部能 |
 
-此外还有 16 处 `escapeString()` 调用（依赖 `mysql_real_escape_string`），以及 `table.sql` 里的 28 张表。
+此外还有 16 处 `escapeString()` 调用（依赖 `mysql_real_escape_string`），以及 `table_mysql.sql` 里的 28 张表。
 
 ---
 
@@ -63,9 +63,9 @@
 
 | 决策项 | 结论 | 理由 |
 | --- | --- | --- |
-| **并发模型** | 每次业务调用新建一条 SQLite 连接，配 WAL 日志模式加 `busy_timeout=5000` | 保持现有 `unique_ptr<IDatabase>` 用完即弃的形态，改动最小；`LAST_INSERT_ID` 的 6 处调用天然正确（见 5.4）。压测若发现 `SQLITE_BUSY` 不可接受，再讨论换成专用写线程 |
+| **并发模型** | 每次业务调用新建一条 SQLite 连接，配 WAL 日志模式加 `busy_timeout=5000` | 保持现有 `unique_ptr<IDatabase>` 用完即弃的形态，改动最小；`LAST_INSERT_ID` 的各处调用天然正确（见 5.4）。压测若发现 `SQLITE_BUSY` 不可接受，再讨论换成专用写线程 |
 | **编译形态** | 一个二进制两种模式，运行时由 `etc/chatserver.conf` 的 `dbtype` 决定；CMake 保留 `WITH_MYSQL` / `WITH_SQLITE` 开关且默认均为 `ON` | 现有部署零配置改动；将来要出不依赖 `libmysqlclient` 的纯本地版本时不必回头改构建脚本 |
-| **改造范围** | 只改 `chatserver` | `fileserver` / `imgserver` 不访问数据库：`CMakeLists.txt:122-137` 的源文件列表里没有 `mysqlapi`，`TARGET_LINK_LIBRARIES` 也没链接 `mysqlclient` |
+| **改造范围** | 只改 `chatserver` | `fileserver` / `imgserver` 不访问数据库：`CMakeLists.txt` 里它们的源文件列表里没有 `mysqlapi`，`TARGET_LINK_LIBRARIES` 也没链接 `mysqlclient` |
 | **数据迁移工具** | 本期不做 | 本地模式主要面向全新部署，起步就是空库。先把两种模式跑通，迁移工具确有需求时再单独立项 |
 
 ### 3.1 关于并发模型的一个澄清
@@ -103,7 +103,7 @@ flamingoserver/
 │   ├── SqliteQueryResult.h/.cpp
 │   ├── SqliteFunctions.h/.cpp      ← 注册 NOW/CURDATE/… 等 MySQL 兼容函数
 │   ├── SqliteSqlTranslator.h/.cpp  ← 纯逻辑：INSERT IGNORE 改写与 SQLite 规则的转义
-│   └── SqliteManager.h/.cpp        ← 对应 CMysqlManager，负责建表与补列
+│   └── SqliteManager.h/.cpp        ← 对应 CMysqlManager，负责建表
 ├── sqlite3/                  ← 新增：SQLite amalgamation（sqlite3.c / sqlite3.h）
 └── table_sqlite.sql          ← 新增：SQLite 方言的建表脚本
 ```
@@ -136,9 +136,9 @@ public:
 };
 ```
 
-`QueryResult` 拆成「基类加两个子类」。基类只保留纯字符串的行缓存（也就是现在 `QueryResult.h:56-61` 那几个成员），`nextRow()` 与析构改为虚函数；`MysqlQueryResult` 继续持有 `MYSQL_RES*`，`SqliteQueryResult` 持有查询结果的行数组。**类名 `QueryResult` 保持不变**，所以业务层那 208 行 `QueryResult* pResult = pConn->query(...)` 一个字都不用改。
+`QueryResult` 拆成「基类加两个子类」。基类只保留纯字符串的行缓存（也就是改造前 `mysqlapi/QueryResult.h` 里那几个成员），`nextRow()` 与析构改为虚函数；`MysqlQueryResult` 继续持有 `MYSQL_RES*`，`SqliteQueryResult` 持有查询结果的行数组。**类名 `QueryResult` 保持不变**，所以业务层那 208 行 `QueryResult* pResult = pConn->query(...)` 一个字都不用改。
 
-业务层唯一需要改的是类型名和构造点。改造前（`chatserversrc/DepartmentManager.cpp:96`）：
+业务层唯一需要改的是类型名和构造点。改造前（`chatserversrc/DepartmentManager.cpp` 的 `createDbConnection`）：
 
 ```cpp
 CDatabaseMysql* DepartmentManager::createDbConnection()
@@ -162,7 +162,7 @@ IDatabase* DepartmentManager::createDbConnection()
 
 其余所有 `CDatabaseMysql* pConn` 形参统一换成 `IDatabase* pConn`。这是纯机械替换，编译器会兜底。
 
-各 Manager 的 `init(dbServer, dbUserName, dbPassword, dbName)` 签名**保持不变**（`main.cpp:149-249` 那 13 行不用动），因为它们保存的连接参数在 SQLite 模式下由工厂直接忽略。
+各 Manager 的 `init(dbServer, dbUserName, dbPassword, dbName)` 签名在第一步**保持不变**，因为它们保存的连接参数在 SQLite 模式下由工厂直接忽略；第五步把这四个只写不读的参数连同对应成员一并删除，`init()` 现在无参（见第 9 节）。
 
 ### 4.3 方言差异的三层处理策略
 
@@ -173,10 +173,10 @@ IDatabase* DepartmentManager::createDbConnection()
 只有一条规则：把语句开头的 `INSERT IGNORE INTO` 替换成 `INSERT OR IGNORE INTO`（13 处）。这是前缀级别的精确替换，不是通用 SQL 解析，风险可控。**这一层不再增加别的规则**——正则改写 SQL 一旦复杂化就很难保证正确。
 
 **第三层，无法自动处理的，让业务代码按方言生成 SQL 片段，通过 `SqlDialect` 统一出口。**
-这类只有两种，合计约 16 处：
+这类只有两种，第四步实施时核实合计 8 处（起草时按关键字估为约 16 处，见第 9 节）：
 
-- **日期区间运算**（12 处），例如 `AdminManager.cpp:179` 的 `DATE_ADD(NOW(), INTERVAL %d HOUR)` 和 `AdminManager.cpp:462` 的 `CURDATE() - INTERVAL 13 DAY`。`INTERVAL` 是 MySQL 的语法结构而非函数，SQLite 的解析器认不了，只能改写。做法是提供 `SqlDialect::nowPlusHours(int)` / `SqlDialect::todayMinusDays(int)` 这类函数，MySQL 下返回 `DATE_ADD(NOW(), INTERVAL 24 HOUR)`，SQLite 下返回 `datetime('now','+24 hours')`。
-- **UPSERT**（4 处），例如 `MessageManager.cpp:435` 的 `ON DUPLICATE KEY UPDATE f_readmsgid = GREATEST(...)`。MySQL 的 `ON DUPLICATE KEY UPDATE` 不需要写明冲突列，SQLite 的 `ON CONFLICT(列) DO UPDATE SET` 必须写明，没法机械转换。这 4 处由 `SqlDialect::upsertClause(冲突列, 更新表达式)` 生成。
+- **日期区间运算**（5 处），例如 `AdminManager.cpp` 里的 `DATE_ADD(NOW(), INTERVAL %d HOUR)` 和 `CURDATE() - INTERVAL 13 DAY`。`INTERVAL` 是 MySQL 的语法结构而非函数，SQLite 的解析器认不了，只能改写。做法是提供 `SqlDialect::NowPlusHours(int)` / `SqlDialect::TodayMinusDays(int)` 这类函数，MySQL 下返回 `DATE_ADD(NOW(), INTERVAL 24 HOUR)`，SQLite 下返回 `datetime('now','localtime','+24 hours')`。
+- **UPSERT**（3 处），例如 `MessageManager.cpp` 里的 `ON DUPLICATE KEY UPDATE f_readmsgid = GREATEST(...)`。MySQL 的 `ON DUPLICATE KEY UPDATE` 不需要写明冲突列，SQLite 的 `ON CONFLICT(列) DO UPDATE SET` 必须写明，没法机械转换。这几处由 `SqlDialect::UpsertClause(冲突列)` 生成子句关键字，赋值部分两种方言文本相同。
 
 ### 4.4 配置开关
 
@@ -210,9 +210,9 @@ PRAGMA foreign_keys = ON;       -- SQLite 默认关闭外键约束，需显式�
 
 ### 5.2 建表引导
 
-不复用 `CMysqlManager` 里 `m_vecTableInfo` 那套表定义。原因是它的字段类型存的是 MySQL DDL 片段（`mysqlmgr/MysqlManager.cpp:25-50` 那样的 `varchar(32) DEFAULT NULL COMMENT '…'`），而且 `m_strKeyString` 用的是 MySQL 内联索引语法（`KEY idx_parent (f_parent_dept_id)`），SQLite 要求索引必须用独立的 `CREATE INDEX` 语句。硬做翻译既复杂又容易出错。
+不复用 `CMysqlManager` 里 `m_vecTableInfo` 那套表定义。原因是它的字段类型存的是 MySQL DDL 片段（`mysqlmgr/MysqlManager.cpp` 里那样的 `varchar(32) DEFAULT NULL COMMENT '…'`），而且 `m_strKeyString` 用的是 MySQL 内联索引语法（`KEY idx_parent (f_parent_dept_id)`），SQLite 要求索引必须用独立的 `CREATE INDEX` 语句。硬做翻译既复杂又容易出错。
 
-采用的做法是单独维护一份 `table_sqlite.sql`，28 张表加对应的 `CREATE INDEX IF NOT EXISTS`，由脚本从 `table.sql` 半自动生成后人工校对。`CSqliteManager::init()` 启动时执行这份 DDL，然后对每张表用 `PRAGMA table_info(表名)` 拿到实际列，缺列就 `ALTER TABLE … ADD COLUMN` 补上——这与 `CMysqlManager::checkTable()`（`mysqlmgr/MysqlManager.cpp:705` 起）用 `desc 表名` 做的事情一一对应。
+采用的做法是单独维护一份 `table_sqlite.sql`（全部表的建表语句加对应的 `CREATE INDEX IF NOT EXISTS`），由 `tools/gen_table_sqlite.py` 从 `table_mysql.sql` 生成。`CSqliteManager::init()` 启动时先执行建表语句、再建索引与触发器，都是 `IF NOT EXISTS` 形式，已有的表不做任何改动——与 `CMysqlManager::ensureTable()`（`mysqlmgr/MysqlManager.cpp:1279` 起，表不存在才建）一致。2026-10-09 起启动时不再给已有的表补列，表结构有变化时已有的库须手工修改或重建（见第 12 节）。
 
 ### 5.3 转义
 
@@ -220,15 +220,11 @@ SQLite 侧用 `sqlite3_mprintf("%q", src)`，或者手写「单引号翻倍」�
 
 这里有个**必须注意的语义差异**：MySQL 的转义会处理反斜杠（MySQL 字符串里 `\` 是转义引导符），而 SQLite 的字符串字面量里反斜杠只是普通字符。同一份含反斜杠的数据两边转义规则不同，**不能共用一个实现，必须各写各的**。
 
-`f_teaminfo`、`f_content` 是 blob 列（`mysqlmgr/MysqlManager.cpp:37,103`），实际存的是 JSON 文本。如果内容里出现 `\0`，两边都会在拼 SQL 时被截断——这是现有 MySQL 实现已有的隐患，不是 SQLite 引入的，本方案不顺手改，仅在此记录。
+`f_teaminfo`、`f_content` 是 blob 列（`mysqlmgr/MysqlManager.cpp` 的建表定义），实际存的是 JSON 文本。如果内容里出现 `\0`，两边都会在拼 SQL 时被截断——这是现有 MySQL 实现已有的隐患，不是 SQLite 引入的，本方案不顺手改，仅在此记录。
 
 ### 5.4 自增 ID 的连接私有语义（重要）
 
-业务层有 6 处是「先 `execute` 插入，紧接着 `query("SELECT LAST_INSERT_ID()")` 取自增 ID」：`MessageManager.cpp:73`、`GroupManager.cpp:650`、`GroupManager.cpp:1045`、`GroupManager.cpp:1231`、`FileStoreManager.cpp:143`、`GroupFileManager.cpp:56`。
-
-> 起草时这份清单里还有一处 `UserManager.cpp`（`addFriendRequest()` 插完 `t_friend_request` 后取 `requestid`），
-> 已随好友关系子系统于 2026-08-05 删除；`GroupManager` 另有一处新增，故总数仍是 6。
-> 行号会随代码漂移，以 `grep -rn "LAST_INSERT_ID" chatserversrc/` 的实时结果为准。
+业务层有多处是「先 `execute` 插入，紧接着 `query("SELECT LAST_INSERT_ID()")` 取自增 ID」（起草时 6 处），具体位置以 `grep -rn "LAST_INSERT_ID" chatserversrc/` 的实时结果为准。
 
 自增 ID 在 MySQL 和 SQLite 里**都是连接私有的状态**。目前每个 Manager 在同一条连接上先插后读，所以取得到。一旦把写操作挪到专用线程、而 `SELECT LAST_INSERT_ID()` 走调用方自己的读连接，**这个 ID 就读不到了，会静默拿到 0**，不报错、只写出错误数据。
 
@@ -238,10 +234,10 @@ SQLite 侧用 `sqlite3_mprintf("%q", src)`，或者手写「单引号翻倍」�
 
 以下各条**属于据推测**，需要在第二、三步实施时逐条写测试验证：
 
-1. **字符串比较的大小写敏感性。** MySQL 默认排序规则 `utf8_general_ci` 不区分大小写，`table.sql:32` 的 `UNIQUE KEY uk_f_username (f_username)` 因此是「不区分大小写唯一」；SQLite 的 `=` 和唯一索引默认区分大小写。这会直接影响登录和注册的重名判断。对策是在 SQLite DDL 里给用户名、邮箱这类列显式加 `COLLATE NOCASE`。
-2. **`ON UPDATE CURRENT_TIMESTAMP` 不存在。** 多张表的 `f_update_time` 用了这个特性（`mysqlmgr/MysqlManager.cpp:39` 等），SQLite 没有自动更新列，需要建 `AFTER UPDATE` 触发器，或让业务层显式写入时间。倾向用触发器，业务层改动更小。
+1. **字符串比较的大小写敏感性。** MySQL 默认排序规则 `utf8_general_ci` 不区分大小写，`table_mysql.sql:32` 的 `UNIQUE KEY uk_f_username (f_username)` 因此是「不区分大小写唯一」；SQLite 的 `=` 和唯一索引默认区分大小写。这会直接影响登录和注册的重名判断。对策是在 SQLite DDL 里给用户名、邮箱这类列显式加 `COLLATE NOCASE`。
+2. **`ON UPDATE CURRENT_TIMESTAMP` 不存在。** 多张表的 `f_update_time` 用了这个特性（见 `mysqlmgr/MysqlManager.cpp` 的建表定义），SQLite 没有自动更新列，需要建 `AFTER UPDATE` 触发器，或让业务层显式写入时间。倾向用触发器，业务层改动更小。
 3. **类型长度不做约束。** SQLite 是弱类型，`varchar(64)` 不会限制长度，超长字符串会被静默写入而不是像 MySQL 那样报错或截断。
-4. **自增 ID 的复用行为。** SQLite 的 `INTEGER PRIMARY KEY` 在删除行后会复用 ID，加 `AUTOINCREMENT` 关键字才能保证单调递增。`t_chatmsg.f_msgid` 明确要求「全局自增、单调递增」（`mysqlmgr/MysqlManager.cpp:100`），这张表必须加 `AUTOINCREMENT`。
+4. **自增 ID 的复用行为。** SQLite 的 `INTEGER PRIMARY KEY` 在删除行后会复用 ID，加 `AUTOINCREMENT` 关键字才能保证单调递增。`t_chatmsg.f_msgid` 明确要求「全局自增、单调递增」（`mysqlmgr/MysqlManager.cpp` 里 `t_chatmsg` 的定义），这张表必须加 `AUTOINCREMENT`。
 5. **中文排序。** `ORDER BY` 中文字段在两边的结果顺序不一致（SQLite 按字节序）。影响的是通讯录之类的展示顺序，不影响正确性。
 
 ---
@@ -266,7 +262,7 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 
 ### 6.3 SQLite 版本与来源
 
-**UPSERT 语法需要 SQLite 3.24 以上**，客户端 vendored 的那份（`flamingoclient/Source/SQLite 3.7.17/sqlite3.h`）是 3.7.17，太老，不能复用。
+**UPSERT 语法需要 SQLite 3.24 以上**。
 
 好在仓库里已经有一份合适的：`third-party/sqlite-src-3530100/`，版本 **3.53.1**，顶层就有现成的 amalgamation `sqlite3.c` 与 `sqlite3.h`。服务端直接用这一份，不需要另外下载或引入。
 
@@ -280,15 +276,15 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 | --- | --- | --- |
 | **第一步** | 抽象接口，MySQL 走通（纯重构）。建 `dbapi/`，拆 `QueryResult` 基类，`CDatabaseMysql` 改为实现 `IDatabase`，12 个 Manager 类型名替换，加 `DbConfig` 与 `DbFactory`（此时工厂只返回 MySQL 实现） | 编译通过，现有 `flamingo_tests` 全部通过，MySQL 模式功能零回归 |
 | **第二步** | SQLite 驱动实现。引入 amalgamation，实现 `CDatabaseSqlite` 与 `SqliteQueryResult`，注册 7 个兼容函数，做 `INSERT IGNORE` 前缀改写与 `escapeString` | 新增单测与集成测试通过 |
-| **第三步** | SQLite 建表引导。产出 `table_sqlite.sql`（含 `COLLATE NOCASE`、`AUTOINCREMENT`、更新时间触发器）与 `CSqliteManager` | 空目录启动能自动建出 28 张表；缺列场景能自动补列 |
-| **第四步** | 清理剩下的 16 处方言 SQL。实现 `SqlDialect`，改写 12 处日期区间运算与 4 处 UPSERT | 两种模式下相同业务路径结果一致 |
+| **第三步** | SQLite 建表引导。产出 `table_sqlite.sql`（含 `COLLATE NOCASE`、`AUTOINCREMENT`、更新时间触发器）与 `CSqliteManager` | 空目录启动能自动建出全部表 |
+| **第四步** | 清理剩下的方言 SQL。实现 `SqlDialect`，改写日期区间运算与 UPSERT（实际 5 处与 3 处，见第 9 节） | 两种模式下相同业务路径结果一致 |
 | **第五步** | 配置开关接线、构建脚本、文档收尾 | `dbtype=sqlite` 能完整跑通登录、发消息、建群等主流程 |
 
 ---
 
 ## 8. 测试
 
-仓库里已有 doctest 测试框架（`CMakeLists.txt:150-197` 的 `flamingo_tests` 目标），直接扩展即可。规划两类用例：
+仓库里已有 doctest 测试框架（`CMakeLists.txt` 的 `flamingo_tests` 目标），直接扩展即可。规划两类用例：
 
 - **纯逻辑单测**，覆盖 `SqlDialect` 的方言片段生成、`INSERT IGNORE` 改写、`escapeString` 的转义规则。不依赖任何数据库进程。
 - **SQLite 集成测试**，用临时 `.db` 文件跑真实的建表、增删改查、UPSERT、日期区间查询，验证与 MySQL 语义一致。SQLite 是嵌入式的，不需要外部服务，适合放进 CI。
@@ -317,11 +313,9 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 
   验收结果：`FlamingoServer.sln` 以 Debug x86 完整重新生成，`chatserver` / `fileserver` / `imgserver` / `Tests` 四个工程全部编译通过，无新增警告（唯一的 C4244 来自 vendored 的 jsoncpp，改造前就存在）；`Tests.exe` 的 208 个用例、1321 条断言全部通过。
 
-  遗留到第五步的收尾项：78 处连接失败日志（形如 `LOGE("XxxManager db connect failed, dbserver: %s, dbname: %s", ...)`）仍在打印 MySQL 的主机与库名，SQLite 模式下这两个值不参与连接、打出来会误导。届时统一改用 `CDbConfig::describe()`，并评估能否顺带删掉各 Manager 里已经不再用于建连接的 `m_strDbServer` / `m_strDbUserName` / `m_strDbPassword` 成员。
-
 - **2026-07-31　第二步完成。** SQLite 驱动已经跑通。
 
-  amalgamation 取自仓库里现成的 `third-party/sqlite-src-3530100/`（3.53.1），拷进 `flamingoserver/sqlite3/`。之所以拷贝而不是直接引用 `third-party/`：服务端现有的第三方库（`zlib1.2.11/`、`jsoncpp1.9.0/`）都是放在 `flamingoserver/` 下并纳入版本管理的，而 `third-party/` 整个目录都没有被 git 跟踪，直接引用会让服务端的构建依赖一个不在仓库里的目录。代价是仓库多出一个 9.5 MB 的 `sqlite3.c`，是否入库由提交时决定。
+  amalgamation 取自仓库里现成的 `third-party/sqlite-src-3530100/`（3.53.1），拷进 `flamingoserver/sqlite3/`。之所以拷贝而不是直接引用 `third-party/`：服务端现有的第三方库（`zlib1.3.2/`、`jsoncpp1.9.0/`）都是放在 `flamingoserver/` 下并纳入版本管理的，而 `third-party/` 整个目录都没有被 git 跟踪，直接引用会让服务端的构建依赖一个不在仓库里的目录。代价是仓库多出一个 9.5 MB 的 `sqlite3.c`（已入库）。
 
   新增 `sqliteapi/`：`SqliteSqlTranslator`（纯逻辑，负责 INSERT IGNORE 改写与 SQLite 规则的转义）、`SqliteQueryResult`、`SqliteFunctions`（注册 7 个 MySQL 兼容函数）、`CDatabaseSqlite`。`DbFactory` 的 `DB_TYPE_SQLITE` 分支已接上真实实现。
 
@@ -339,28 +333,23 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 
 - **2026-07-31　第三步完成。** 建库建表引导已跑通，`chatserver` 能以 `dbtype=sqlite` 实际启动。
 
-  **结构的来源改成了 `table.sql`，而不是 `MysqlManager.cpp`。** 核对结果是两者的 28 张表、268 个列完全一致，只有索引定义有差别 —— `table.sql` 多出 `t_user` 的两个唯一键（`uk_f_username`、`uk_ent_employee_no`）。`migrations/` 下几个补列脚本的注释也说明了 `MysqlManager.cpp` 的建表定义历史上会漏东西。所以以 `table.sql` 为权威源头。
+  **结构的来源改成了 `table_mysql.sql`，而不是 `MysqlManager.cpp`。** 核对结果是两者的 28 张表、268 个列完全一致，只有索引定义有差别 —— `table_mysql.sql` 多出 `t_user` 的两个唯一键（`uk_f_username`、`uk_ent_employee_no`）。所以以 `table_mysql.sql` 为权威源头。
 
-  新增 `tools/gen_table_sqlite.py`，从 `table.sql` 单向生成两个产物，保证同源不失配：
-  - `table_sqlite.sql` —— 可读、可用 sqlite3 命令行直接执行的建表脚本，与 `table.sql` 并排放；
+  新增 `tools/gen_table_sqlite.py`，从 `table_mysql.sql` 单向生成两个产物，保证同源不失配：
+  - `table_sqlite.sql` —— 可读、可用 sqlite3 命令行直接执行的建表脚本，与 `table_mysql.sql` 并排放；
   - `sqliteapi/SqliteSchema.cpp` —— 把同样的语句嵌进程序的结构数据。之所以嵌进程序而不是运行期读 `.sql` 文件：本地模式主打解压即用，多一个必须随二进制部署的文件就多一处会忘记、且报错不直观的失败点；这也与 MySQL 侧把结构写在代码里的做法一致。
 
   翻译过程中处理掉的方言差异，除了方案第 5.5 节已列出的那几条，还有三条是动手后才发现的：
 
   1. **SQLite 的索引名是库内全局唯一的**，而本项目里 `idx_enterprise` / `idx_user` / `idx_group` 这类名字在多张表里重复出现，直接照搬会撞名。生成时统一加了表名前缀。
   2. **MySQL 允许自增列不是主键，SQLite 不允许。** 全仓库只有 `t_user` 是这种情况（自增列 `f_id`、主键 `f_user_id`），处理办法是把自增列升为 SQLite 主键、原主键降级成唯一索引，约束强度不变。其余 27 张表要么自增列本身就是主键，要么没有自增列。
-  3. **建索引必须排在补列之后。** 这一条是被测试逼出来的：SQM3 一开始就失败，查下来是结构落后的存量库里，索引要用到的列还没补上，`CREATE INDEX` 直接报 `no such column`。所以生成的语句分成了 `SCHEMA_TABLE_STATEMENTS` 与 `SCHEMA_POST_STATEMENTS` 两组，执行顺序固定为「建表 → 补列 → 建索引与触发器」。
+  3. **建索引与触发器必须排在建表之后。** 生成的语句分成了 `SCHEMA_TABLE_STATEMENTS` 与 `SCHEMA_POST_STATEMENTS` 两组，执行顺序固定为「建表 → 建索引与触发器」。已有的库缺少某个建了索引的列时，`CREATE INDEX` 会报 `no such column`，启动失败（第 12 节）。
 
-  另外，生成的 C++ 里所有非 ASCII 字节都用**八进制转义**。这不是洁癖：源文件里直接写中文时，MSVC 会把窄字符串字面量转成系统 ANSI 代码页（本机是 GBK），而 SQLite 要的是 UTF-8，建表语句里含中文的字面量（默认值、字符串常量）会被写成乱码。八进制转义描述的是字节，不受执行字符集影响。
-
-> 这一条起草时举的例子是 `DEFAULT '我的好友'`（`t_user_relationship` 的好友分组名默认值）。该表已随好友关系
-> 子系统于 2026-08-05 删除，目前 `table.sql` 里已没有含中文的 `DEFAULT` 值，`SqliteSchema.cpp` 里也不再有
-> 八进制转义串——中文只剩在 `COMMENT` 子句里，而生成器本来就会把 `COMMENT` 剥掉（SQLite 不支持）。
-> **但这条规则要保留**：只要以后有人往 schema 里加一个含中文的默认值或字符串常量，同一个坑立刻复现。
+  另外，生成的 C++ 里所有非 ASCII 字节都用**八进制转义**。这不是洁癖：源文件里直接写中文时，MSVC 会把窄字符串字面量转成系统 ANSI 代码页（本机是 GBK），而 SQLite 要的是 UTF-8，建表语句里含中文的字面量（默认值、字符串常量）会被写成乱码。八进制转义描述的是字节，不受执行字符集影响。目前 schema 里没有含中文的默认值或字符串常量（`SqliteSchema.cpp` 里没有八进制转义串），但以后有人加这类内容时，这条规则就会起作用。
 
   `main.cpp` 已按 `dbtype` 分支选择 `CSqliteManager` 或 `CMysqlManager` 做引导 —— 两者流程完全不同，SQLite 模式下跑 MySQL 引导会直接连不上库。`etc/chatserver.conf` 也补上了 `dbtype` / `dbpath` 两项，默认值仍是 `mysql`。
 
-  测试：新增 `tests/test_sqlite_schema.cpp`（Suite SQM，7 个用例），覆盖空库冷启动、重复执行幂等、缺列自动补齐且不丢数据、关键索引存在、`COLLATE NOCASE` 唯一约束、`AUTOINCREMENT` 单调递增、更新时间触发器。整个测试集 236 个用例、1585 条断言全部通过。
+  测试：新增 `tests/test_sqlite_schema.cpp`（Suite SQM，7 个用例），覆盖空库冷启动、重复执行幂等、关键索引存在、`COLLATE NOCASE` 唯一约束、`AUTOINCREMENT` 单调递增、更新时间触发器。整个测试集 236 个用例、1585 条断言全部通过。
 
   **端到端验证（据实证）**：把配置临时改成 `dbtype=sqlite` 后启动 `chatserver`，日志显示 WAL 模式生效、28 条建表语句与 56 条索引触发器语句执行成功、12 个业务 Manager 全部初始化通过、进程进入事件循环，整个启动过程零 ERROR 零 WARN，生成的库文件 360 KB。验证完配置已还原为 `mysql`。
 
@@ -410,11 +399,11 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 
 - **2026-08-03　补做第 10 节遗留的第 2 项：主流程端到端实测。**
 
-  新增 `tools/e2e_sqlite_smoke.py`，直接按 v2 线协议（24 字节 FrameCodec 帧头 + JSON 包体）与服务端对话，不依赖 PC 客户端，跑完九步主流程：注册两个账号（短信验证码从服务端日志里取）→ 双方登录 → 加好友 / 通过好友申请 → 拉联系人 → 单聊发消息并校验对端收到推送 → 同步会话列表与历史消息 → 标记已读 → 建群并在群里发消息 → 最后直接开库核对数据确实落盘。
+  新增 `tools/e2e_sqlite_smoke.py`，直接按 v2 线协议（24 字节 FrameCodec 帧头 + JSON 包体）与服务端对话，不依赖 PC 客户端，跑完九步主流程：注册两个账号（短信验证码从服务端日志里取）→ 双方登录 → alice 给 bob 设联系人备注名（`CMD_SET_FRIEND_REMARK = 1209`；2026-08-05 删除好友关系子系统之前这一步是「加好友 / 通过好友申请」）→ 拉联系人 → 单聊发消息并校验对端收到推送 → 同步会话列表与历史消息 → 标记已读 → 建群并在群里发消息 → 最后直接开库核对数据确实落盘。
 
   为避免打扰用户本机已有的服务，测试用 20100 端口另起一份 `chatserver`，库文件也另放一份。（第一次跑时发现 `127.0.0.1:20000` 被 WSL 的 `wslrelay.exe` 占着，请求其实进了用户 WSL 里那份服务端，换端口后重跑，并确认没有数据写进用户的库。）
 
-  **结果：九步全部通过。** 落盘核对的数据是 `t_user` 2 行、`t_user_relationship` 1 行、`t_chatmsg` 2 行、`t_group` 1 行、`t_group_member` 2 行、`t_friend_request` 1 行、`t_conversation` 已读位点 1 行。消息内容做了逐字节回读比对：写进去的 JSON 包体与从 `f_content` 读出来的完全一致；含英文单引号的内容原样落库、没有被转义符污染；含反斜杠的内容只保留 jsoncpp 自己那一层转义，没有出现 MySQL 规则残留导致的双重转义。这一条正是第四步合并 `EscapeSql` 时最担心的失败模式，现在有了实测数据。
+  **结果：九步全部通过。** 落盘核对的数据是 `t_user` 2 行、`t_contact_remark` 1 行（另有一条「备注名里的单引号原样落库」的断言）、`t_chatmsg` 2 行、`t_group` 1 行、`t_group_member` 2 行、`t_conversation` 已读位点 1 行（2026-08-03 当时核对的是好友关系的两张表，见上一条括注）。消息内容做了逐字节回读比对：写进去的 JSON 包体与从 `f_content` 读出来的完全一致；含英文单引号的内容原样落库、没有被转义符污染；含反斜杠的内容只保留 jsoncpp 自己那一层转义，没有出现 MySQL 规则残留导致的双重转义。这一条正是第四步合并 `EscapeSql` 时最担心的失败模式，现在有了实测数据。
 
   （测试脚本里一开始写了一条「按中文子串 `LIKE` 匹配 `f_content`」的断言，跑不过。查下来是 jsoncpp 序列化时把中文写成了 `\uXXXX` 转义，`f_content` 里根本不会出现中文字面量 —— 是断言本身写错了，不是落库有问题。已改成上面这套语义正确的比对。）
 
@@ -427,24 +416,24 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 五步已全部完成。当前状态：
 
 - **MySQL 模式**：行为与改造前一致。所有方言相关改动在 MySQL 侧都生成与原先逐字相同的 SQL（有单元测试逐条比对），唯一的实质变化是日志不再打印密码。
-- **SQLite 模式**：可用。`chatserver` 能以 `dbtype=sqlite` 冷启动、自动建库建表、业务 Manager 全部初始化通过；注册、登录、设联系人备注名、单聊收发、会话与历史消息同步、标记已读、建群、群聊这一整条主流程已按线协议实测走通，数据确实落盘（详见第 9 节 2026-08-03 的记录，以及第 11 节 2026-08-05 的更正）。
+- **SQLite 模式**：可用。`chatserver` 能以 `dbtype=sqlite` 冷启动、自动建库建表、业务 Manager 全部初始化通过；注册、登录、设联系人备注名、单聊收发、会话与历史消息同步、标记已读、建群、群聊这一整条主流程已按线协议实测走通，数据确实落盘（详见第 9 节 2026-08-03 的记录）。
 
 尚未做、建议后续跟进的事项：
 
-1. **并发写压测。** 方案 5.1 节记的那条「WAL + busy_timeout 能否扛住实际写入量」仍是**据推测**，没有实测数据。建议用 `tools/gen_testdata.py` 造并发消息写入，观察日志里 `SQLITE_BUSY` 的出现率。若不够用，退路是把写操作串行化到专用写线程，但要注意那样会打破 `LAST_INSERT_ID` 的连接私有语义（见 5.4 节），6 处调用点需要一并改造。
-2. **MySQL 模式的回归实测。** 改造全程没有连过真实 MySQL（本机没有该环境），MySQL 侧的结论都建立在「编译通过 + 单元测试比对 SQL 文本一致」之上。上线前应在有 MySQL 的环境里跑一轮回归。
+1. **并发写压测。** 方案 5.1 节记的那条「WAL + busy_timeout 能否扛住实际写入量」仍是**据推测**，没有实测数据。建议用 `tools/gen_testdata.py` 造并发消息写入，观察日志里 `SQLITE_BUSY` 的出现率。若不够用，退路是把写操作串行化到专用写线程，但要注意那样会打破 `LAST_INSERT_ID` 的连接私有语义（见 5.4 节），这些调用点需要一并改造。
+2. **MySQL 模式的回归实测。** 改造全程没有连过真实 MySQL（本机没有该环境），MySQL 侧的结论都建立在「编译通过 + 单元测试比对 SQL 文本一致」之上。2026-10-09 已在 Linux 上以 `FLAMINGO_TEST_MYSQL=1` 连 MySQL 8.0.46 跑通服务端测试集的 MySQL 模式；按线协议的主流程端到端回归尚未在 MySQL 上做过。
 3. **数据迁移工具**（第 3 节已决定本期不做）。若要把现有 MySQL 部署改成本地部署，需要一个导出工具。
-4. **`table.sql` 改动后务必重跑 `tools/gen_table_sqlite.py`**，否则两种后端的表结构会失配。建议在提交前检查里加上这一条。
+4. **`table_mysql.sql` 改动后务必重跑 `tools/gen_table_sqlite.py`**，否则两种后端的表结构会失配。建议在提交前检查里加上这一条。
 
 ### 10.1 端到端实测中撞见的两个既有缺陷（不属于本次改造范围）
 
 两个都在 `ChatServer.cpp` / `ChatSession.cpp` 的会话簿记与联系人逻辑里，与数据库后端无关，两种后端下表现相同。
 
-**缺陷一已于 2026-08-03 修复**（经用户确认后动手，见下文「修复」小节）；缺陷二仍未处理，记录在此备查。
+**缺陷一已于 2026-08-03 修复**（经用户确认后动手，见下文「修复」小节）；缺陷二经复核协议规范后撤回，不是缺陷。
 
 **缺陷一：用户下线时若其好友在线，`chatserver` 自我死锁并 `abort`。**
 
-据实证，cdb 抓到的调用栈是：
+据实证，cdb 抓到的调用栈是（行号是 2026-08-03 那版代码的，现在已指向别处）：
 
 ```
 TcpConnection::handleRead → handleError → handleClose
@@ -455,17 +444,15 @@ TcpConnection::handleRead → handleError → handleClose
           → std::_Throw_Cpp_error(5) → terminate → abort
 ```
 
-`ChatServer.cpp:87` 已经锁住了 `m_sessionMutex`，`ChatServer.cpp:118` 在这把锁里遍历在线好友并调 `sendUserStatusChangeMsg`；该函数内部（`ChatSession.cpp:1229`）又去调 `getUserClientTypeByUserId`，后者在 `ChatServer.cpp:403` 对同一把**非递归** mutex 再加一次锁。错误码 5 就是 `resource_deadlock_would_occur`。触发条件是「下线用户至少有一个好友在线」，与是否走数据库无关 —— 整条栈上没有任何数据库调用。
+`ChatServer.cpp:87` 已经锁住了 `m_sessionMutex`，`ChatServer.cpp:118` 在这把锁里遍历在线好友并调 `sendUserStatusChangeMsg`；该函数内部（`ChatSession.cpp:1229`）又去调 `getUserClientTypeByUserId`，后者在 `ChatServer.cpp:403` 对同一把**非递归** mutex 再加一次锁。错误码 5 就是 `resource_deadlock_would_occur`。触发条件是「下线用户至少有一个好友在线」（企业版删除好友关系之后应理解为「至少有一个同企业同事在线」），与是否走数据库无关 —— 整条栈上没有任何数据库调用。
 
 值得一提的是，同一个函数里已经写着这个隐患的注释（`ChatServer.cpp:79-81`）：`broadcastToEnterprise` 因为内部要再取会话表快照，作者特意把它挪到了锁外执行。第 118 行这处是同类问题的漏网之鱼。
 
-**修复（2026-08-03）。** 照抄作者在同一个函数里已有的做法：持锁期间只把目标好友会话收进局部的 `friendSessions`（存 `shared_ptr`，保证解锁后会话仍存活），解锁之后再逐个推送。
+**修复（2026-08-03）。** 照抄作者在同一个函数里已有的做法：持锁期间只收集，解锁之后再推送。好友关系删除之后，现在的 `ChatServer::onDisconnected` 持锁期间只记下下线者的 userid 与 clienttype，**解锁之后**按企业广播一次。「持锁期间只收集、解锁之后再推送」是这个函数的约束。
 
-推送内容不再走 `sendUserStatusChangeMsg`，而是直接用 `ProfileProtocol::buildPresenceChangedNotify(下线用户ID, 0, disconnectedClientType)` 拼一次、发多份。这样处理有两个原因：一是此刻该会话已从 `m_sessions` 摘除，回头去查 `getUserClientTypeByUserId` 也查不到；二是这份通知与紧随其后的企业广播（`ChatServer.cpp` 原有代码）内容完全一致，同企业好友先后收到的两份通知不会互相打架 —— 原注释所说的「幂等无害」这才真正成立。
+`ChatSession::sendUserStatusChangeMsg` 已无调用方，**未删除**，但在头文件里补了调用约束说明（禁止在持有 `m_sessionMutex` 期间调用，以及原因），避免以后有人重新踩进来。
 
-`ChatSession::sendUserStatusChangeMsg` 改完后已无调用方，**未删除**，但在头文件里补了调用约束说明（禁止在持有 `m_sessionMutex` 期间调用，以及原因），避免以后有人重新踩进来。顺带修正了该方法一处过时的注释 —— 原注释写着「当前为空实现」，但实现里其实是会真发包的。
-
-**回归测试。** 新增 `tools/e2e_offline_notify.py`，按线协议把触发条件原样跑一遍：两人互加好友 → 双方在线 → 一方 FIN 正常断开 → 一方 RST 异常断开（走 `handleError` 而非 `handleClose`，路径不同）→ 反方向再来一次，每一步都校验在线的一方确实收到 `cmd_presence_changed_notify`（`presence=0`、`userid` 正确），并补发一次真实请求确认服务端还能干活（只看端口是否监听不够，进程 abort 后端口往往还挂着）。
+**回归测试。** 新增 `tools/e2e_offline_notify.py`，按线协议把触发条件原样跑一遍：两人注册进同一家企业（2026-08-05 之前是两人互加好友）→ 双方在线 → 一方 FIN 正常断开 → 一方 RST 异常断开（走 `handleError` 而非 `handleClose`，路径不同）→ 反方向再来一次，每一步都校验在线的一方确实收到 `cmd_presence_changed_notify`（`presence=0`、`userid` 正确），并补发一次真实请求确认服务端还能干活（只看端口是否监听不够，进程 abort 后端口往往还挂着）。
 
 这个测试特意做了**非空验证**：先把修复代码临时改回原样重编一次，测试在第 3 步失败且服务端进程直接消失（日志停在 `TcpConnection::handleRead` → `handleError`，与当初 cdb 抓到的栈顶完全一致）；换回修复版重编后 6 步全过、进程存活。也就是说这条用例确实能抓到这个缺陷，不是空跑通过。
 
@@ -477,62 +464,40 @@ TcpConnection::handleRead → handleError → handleClose
 
 2026-08-03 经用户确认并复核 `docs/协议设计-v2.md` 后更正：**这是设计如此，实现与规范完全一致。**
 
-- 规范第 1116 行定义 `contacts` 为「去重的联系人资料池；**部门成员与服务号**都在此，靠 `usertype` 区分」—— 本就不含好友。
-- 规范第 491 行：「v2 通讯录以企业组织架构为中心，**取消 v1 的『好友分组』**……联系人的部门归属由 §7.5 企业组织架构表达。」
-- 规范第 1665 行的已决事项表同样记着这一条。
+- 规范 §10.13 定义 `contacts` 为「去重的联系人资料池；**部门成员与服务号**都在此，靠 `usertype` 区分」—— 本就不含好友。
+- 规范 §7.3 的作废编号表：v1 的好友分组（1211 / 1212）v2 起即取消，通讯录以企业组织架构为中心。
+- 规范 §15.1 的已决事项表同样记着这一条。
 
-一句话概括用户的定调：**企业版没有好友关系，通讯录即组织架构。** 实测里 alice / bob 是临时注册的账号、不属于任何企业，所以 `contacts` 为空是正确结果。
+（引用规范时请按小节号找，不要认行号。）
 
-这条记录保留在此，是为了留下「据推测的结论不该当成据实证来用」的教训：当时该做的是先查协议文档，而不是只读实现就断言行为不对。
+一句话概括用户的定调：**企业版没有好友关系，通讯录即组织架构**（2026-08-05 删除好友关系子系统后已由代码兑现）。实测里 alice / bob 是临时注册的账号、不属于任何企业，所以 `contacts` 为空是正确结果。
 
-**一处遗留的文档与代码不一致（未处理）：** `chatserversrc/Protocol.h:105` 给 `cmd_get_contacts` 的注释仍写作「拉取好友列表（含分组/标签/收藏）」，与规范矛盾；`cmd_move_friend_team`（1211）、`cmd_operate_team`（1212）两个枚举及配套的分组操作类型枚举（`Protocol.h:481`）也仍留在文件里，而规范明确写着这两条「已删除、编号留空」。客户端 `flamingoclient/Source/net/Protocol.h` 有同样的残留。上面那次误判正是被这条过时注释带偏的。是否清理由用户决定。
+这条记录保留在此，是为了留下「据推测的结论不该当成据实证来用」的教训：当时该做的是先查协议文档，而不是只读实现就断言行为不对。当时的误判是被 `chatserversrc/Protocol.h` 里 `cmd_get_contacts` 一条过时注释（「拉取好友列表」）带偏的；这条注释与 1211 / 1212 的残留枚举后来都已清理，1211 / 1212 只留「编号留空不复用」的注释。
 
 ---
 
-## 11. 2026-08-05 更正：好友关系子系统删除后，上面哪些记录已经对不上了
+## 12. 2026-10-09 更正：启动时自动补列已删除
 
-企业版于 2026-08-05 整体删除了好友关系子系统（作废协议号 1203~1208、1210、1214；删表
-`t_user_relationship`、`t_friend_request`；备注名迁到新表 `t_contact_remark`）。
+2026-10-09 起，`chatserver` 启动时不再给已有的表补列（用户确认的决定）。`table_mysql.sql` 只描述最终结构，
+不含任何 `ALTER` 语句；`flamingoserver/migrations/` 目录同时删除，其中两个开发工具
+`insert_test_accounts.py`、`probe_v2_login.py` 移到了 `flamingoserver/tools/`。
 
-第 9、10 节是**当时的实测流水**，记的是那一天确实发生过的事，因此**原文一概不改**。但照着它复现会撞墙，
-以下逐条说明现在的实际情况。
+前文第 4.1、5.2、7、9 节里有关「补列」的描述已于 2026-10-10 按现状改写，现在的实际情况如下：
 
-**① 端到端脚本的第 3 步换了。** 第 9 节写的九步主流程里「加好友 / 通过好友申请」已改为
-「alice 给 bob 设联系人备注名」（`tools/e2e_sqlite_smoke.py` 现在走 `CMD_SET_FRIEND_REMARK = 1209`）。
-落盘核对的表也跟着变：原文那句「`t_user_relationship` 1 行 …… `t_friend_request` 1 行」现在是
-**`t_contact_remark` 1 行**，并多了一条「备注名里的单引号原样落库」的断言——正好还是在验 SQL 转义，
-所以这一步的测试价值没有丢。
+- `CSqliteManager::init` 只执行两组语句：先建表，再建索引与触发器，都是 `IF NOT EXISTS` 形式，已有的表不做任何改动。
+  `fillMissingColumns`、`loadTableColumns` 已删除；生成脚本 `tools/gen_table_sqlite.py` 不再输出 `SCHEMA_COLUMNS`，
+  `sqliteapi/SqliteSchema.cpp` 随之少了 504 行。
+- MySQL 侧对应的 `CMysqlManager::checkTable` 改名为 `ensureTable`：表不存在才建，已存在就不做任何改动。
+- 第 9 节原先的「建索引必须排在补列之后」一条不再适用；建表语句与建索引、触发器语句仍分成 `SCHEMA_TABLE_STATEMENTS`
+  与 `SCHEMA_POST_STATEMENTS` 两组，因为索引与触发器建在表上，必须先建表。
+- 相关测试已删除或裁剪：SQM3（第 9 节提到的「缺列自动补齐」用例）、FSDB2、GM9、NMS2 整条删除；
+  MU-S3、UPF1、UPF10、LGA6 只保留新库部分。
 
-**② 缺陷一（下线死锁）的成因描述仍然成立，但代码形态已经变了。** 原文里
-「持锁遍历在线好友并逐个推送」的那段循环随好友关系删除而消失，修复时引入的局部变量 `friendSessions`
-现在也已不存在——`ChatServer::onDisconnected` 改成只记下下线者的 userid 与 clienttype，**解锁之后**
-按企业广播一次。因此：
-- 原文引的 `ChatServer.cpp:87 / :118 / :403` 三个行号**只对 2026-08-03 那版有效**，现在指向别处；
-- 原文「两份通知内容一致、不会互相打架」的论证前提没有了，现在只剩企业广播一份；
-- 触发条件「下线用户至少有一个好友在线」应理解为「至少有一个同企业同事在线」。
+**由此带来的后果：** 表结构有变化时，已有的库须手工修改（`ALTER TABLE`）或重建。两种模式的表现不同：
 
-「持锁期间只收集、解锁之后再推送」这条教训本身没有过期，仍是这个函数的约束。
+- SQLite：已有的库缺少某个建了索引的列时，启动阶段的 `CREATE INDEX` 报 `no such column`，`init` 返回 false，
+  进程启动失败（据实证：2026-10-09 对一个 `t_user` 缺 `f_username` 列的库执行生成的建索引语句，报
+  `no such column: f_username`）。缺的是没有索引的列时可以启动，用到该列的 SQL 在运行时出错。
+- MySQL：总能启动，用到缺失列的 SQL 在运行时出错。
 
-**③ 回归脚本 `tools/e2e_offline_notify.py` 现在跑不起来（待修）。** 它仍在引用
-`CMD_ADD_FRIEND_REQUEST` / `CMD_FRIEND_REQUEST_NOTIFY` / `CMD_HANDLE_FRIEND_REQUEST` /
-`FRIEND_ACTION_ACCEPT`，而这几个常量已随协议号作废从被它 import 的 `e2e_sqlite_smoke.py` 里删掉，
-运行会直接 `AttributeError`。修法是把「两人互加好友」这个前置条件换成「两人分别登录、且同属一个企业」。
-
-**④ 缺陷二那段「撤回」的记录，结论比当时更硬了。** 原文的标题「`cmd_get_contacts` 从不返回普通好友」
-以"普通好友"为前提，而现在企业版根本没有这个概念，准确的说法是「`cmd_get_contacts` 不返回非企业联系人」。
-文末那句定调——**企业版没有好友关系，通讯录即组织架构**——现在已经由代码兑现，不再只是口径。
-
-**⑤ 引用 `docs/协议设计-v2.md` 的三个行号已全部位移**（该文档 §7.3 被整章改写）。原文引的
-第 1116 / 491 / 1665 行，现分别约在第 1115 / 501 / 1730 行一带；其中「取消 v1 的『好友分组』」那句
-原文已不在，最接近的表述在作废编号表里。**引用规范时请按小节号找（§7.3、§10.13、§14.1），不要认行号。**
-
-**⑥ 第 10 节末尾那条「一处遗留的文档与代码不一致（未处理）」已经处理完了。**
-`chatserversrc/Protocol.h` 里 `cmd_get_contacts` 的注释已改为「拉取通讯录（企业部门树 + 部门成员 +
-群组 + 服务号 + 收藏）」，1211/1212 与分组操作类型枚举已删除、只留「编号留空不复用」的注释，
-客户端 `flamingoclient/Source/net/Protocol.h` 同步清理（`friend_request_action` 枚举也已删）。
-
-**⑦ 全文的两个统计数字已过期。** 「28 张表」现为 **31 张**（本次 −2 +1，其余来自 Pin 与群管理几轮），
-「12 个业务 Manager」现为 **15 个**（本次新增 `ContactRemarkManager`，另有 `FavoriteManager`、
-`MessagePinManager`）。§2.4 的方言用法计数（`INSERT IGNORE` 13 处、`escapeString` 16 处等）同理，
-均为 **2026-07-31 的快照**，删掉 `UserManager` 里的好友 SQL 之后会变小。这些数字只用来说明改造规模，
-不影响任何结论，故不逐个重数。
+用户确认不考虑老库（2026-10-09），因此没有为这种情形另加守卫用例或启动提示。

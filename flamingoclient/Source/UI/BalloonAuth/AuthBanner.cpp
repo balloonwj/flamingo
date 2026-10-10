@@ -46,9 +46,14 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "AuthBanner.h"
+#include "../../App/BrandText.h"                      // 产品名称与标语的缺省值
 #include "../BalloonMain/MainPanelStatusMenu.h"   // GetPresenceVisual（状态胶囊文字，与主面板同源）
 #include "../BalloonMain/PresenceBadge.h"         // DrawPresenceBadge（状态胶囊上的状态徽标）
 #include "../../net/Protocol.h"                       // presence_type（状态默认值 presence_online）
+#include "../BalloonMain/AvatarGlyph.h"               // DrawCenteredGlyphGdi：头像字居中
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"                      // DuiHost：悬停提示换算屏幕坐标
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // 状态胶囊的悬停提示
 
 namespace balloonauth {
 
@@ -88,7 +93,24 @@ const float kNameTopRatio        = 180.0f / 240.0f;   // 用户名文字区上�
 const float kNameFontFactor      = 0.062f;            // 用户名字号占控件高占比
 const float kPillTopRatio        = 208.0f / 240.0f;   // 状态胶囊上沿距顶占比
 const float kPillHeightRatio     = 22.0f / 240.0f;    // 状态胶囊高度占比
-const float kPillWidthRatio      = 62.0f / 240.0f;    // 状态胶囊宽度占比
+const float kPillWidthRatio      = 62.0f / 240.0f;    // 状态胶囊宽度占比（不含右端放下拉小三角的一截）
+const float kPillArrowAreaRatio  = 14.0f / 240.0f;    // 状态胶囊右端放下拉小三角的一截宽度占比（2026-10-04 起）
+
+// ---- 状态胶囊的可点击提示（2026-10-04 起）----
+// 下拉小三角的宽、高与其中心距胶囊右缘的距离，各占胶囊高度的比例。
+const float kPillArrowWidthFactor  = 0.34f;
+const float kPillArrowHeightFactor = 0.18f;
+const float kPillArrowRightFactor  = 0.42f;
+// 胶囊文字右缘与小三角左缘之间的间距，占胶囊高度的比例。
+const float kPillTextArrowGapFactor = 0.10f;
+// 胶囊底色（黑色）的不透明度：平时、鼠标悬停时。
+const BYTE kPillBgAlpha            = 12;
+const BYTE kPillHoverBgAlpha       = 30;
+// 胶囊细边框（黑色）的不透明度与线宽（像素）。
+const BYTE kPillBorderAlpha        = 46;
+const float kPillBorderWidth       = 1.0f;
+// 鼠标悬停在胶囊上时的提示文字。
+const wchar_t* const kPillTipText  = TR_NOOP(L"点击切换登录状态");
 // 状态徽标绘制方框的边长，占胶囊高度的比例。徽标圆底只占方框的 20/24，取 0.41 时
 // 设计稿尺寸（胶囊高 22）下方框约 9px、圆底约 7.5px，与主面板 Header 的胶囊一致。
 // 改版前这里是半径 pillH * 0.15 的纯色圆点（直径约 6.6px），字形在那个尺寸下糊成一团。
@@ -102,9 +124,31 @@ const float kRoundRectRadiusRatio = 0.22f;
 const float kFlamingoViewBox        = 200.0f;   // SVG viewBox 边长
 const float kFlamingoStrokeInViewBox = 3.0f;    // 描边宽度（viewBox 内）
 const float kFlamingoSizeFactor     = 1.15f;    // 方形绘制区 / 渐变区高度
+const float kFlamingoRightShiftRatio = 0.12f;   // 绘制区向右溢出控件右缘的距离 / 渐变区高度
+const float kFlamingoTopShiftRatio  = 0.05f;    // 绘制区向上溢出控件上缘的距离 / 渐变区高度
+const float kFlamingoPathMinX       = 52.0f;    // 火烈鸟路径最左点的 x（viewBox 内），品牌文字区以它为右界
 const float kTitleFontFactor        = 0.135f;   // 标题字号 / 渐变区高度
 const float kTagFontFactor          = 0.072f;   // 标语字号 / 渐变区高度
 const float kInitialFontFactor      = 0.46f;    // 头像字母字号 / 头像边长
+
+// ---- 品牌文字区（产品名称 + 标语）----
+
+const float kBrandTextLeftRatio = 0.063f;  // 文字左边距 / 控件宽度
+const float kBrandTextGapRatio  = 0.05f;   // 文字区右缘与火烈鸟最左点之间的间距 / 渐变区高度
+const float kTitleMinFontRatio  = 0.6f;    // 产品名称过长时允许缩小到的字号 / 设计字号
+// 标题行上沿与标语行上沿之间的距离 / 渐变区高度。取自原设计两行的相对位置（标题上沿在
+// 渐变区下沿之上 0.40、标语上沿在其上 0.205，相差 0.195），两行整体上移后间距保持不变。
+const float kTitleToTagRatio    = 0.195f;
+// 文字区下缘与头像白环上缘之间的间距 / 控件高度：设计尺寸（高 240）下约 10 像素。
+// 产品名称与标语整体放在头像上方（用户 2026-10-03 指定），与头像纵向不重叠。
+const float kBrandTextAvatarGapRatio = 10.0f / 240.0f;
+
+// Banner 上所有文字使用的字体：当前界面语言的界面字体（多语言第 3e 步）。品牌文字的测量（FitBrandTextSize）
+// 也用它，两者须一致。
+const wchar_t* BannerFontFace()
+{
+    return i18n::UiFontName();
+}
 
 // 用四段 90° 圆弧 + 闭合，向 path 添加一个圆角矩形。
 void AddRoundRectPath(Gdiplus::GraphicsPath& path,
@@ -146,7 +190,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        BannerFontFace());
     if (hFont == NULL)
     {
         return;
@@ -169,8 +213,142 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
 AuthBanner::AuthBanner()
     : m_avatarColor(RGB(kAvatarFillR, kAvatarFillG, kAvatarFillB))   // 默认主题橙
     , m_presence(presence_online)   // 默认在线（胶囊显示绿点"在线"）
+    , m_title(brandtext::kDefaultAppTitle)
+    , m_slogan(brandtext::kDefaultSlogan)
+    , m_avatarGlyphSet(false)
+    , m_pillHover(false)
 {
     ::SetRectEmpty(&m_rcPillHit);
+    ::SetRectEmpty(&m_rcAvatar);
+}
+
+AuthBanner::~AuthBanner()
+{
+}
+
+void AuthBanner::SetAvatar(LPCTSTR glyph, COLORREF color, LPCWSTR photoPath)
+{
+    m_avatarGlyph = (glyph != NULL) ? glyph : _T("");
+    m_avatarGlyphSet = true;
+    m_avatarColor = color;
+    const std::wstring path = (photoPath != NULL) ? photoPath : L"";
+    if (path != m_avatarPhotoPath)
+    {
+        m_avatarPhotoPath = path;
+        m_avatarPhoto.reset();
+        if (!path.empty())
+        {
+            // 从文件加载后复制一份放在内存里，随即释放文件：照片是主面板的头像缓存文件，不能一直占着
+            std::unique_ptr<Gdiplus::Bitmap> file(Gdiplus::Bitmap::FromFile(path.c_str()));
+            if (file && file->GetLastStatus() == Gdiplus::Ok && file->GetWidth() > 0 && file->GetHeight() > 0)
+            {
+                m_avatarPhoto.reset(file->Clone(0, 0, (INT)file->GetWidth(), (INT)file->GetHeight(),
+                                                PixelFormat32bppARGB));
+                if (m_avatarPhoto && m_avatarPhoto->GetLastStatus() != Gdiplus::Ok)
+                    m_avatarPhoto.reset();
+            }
+        }
+    }
+    Invalidate();
+}
+
+bool AuthBanner::HasAvatarPhoto() const
+{
+    return m_avatarPhoto != nullptr;
+}
+
+void AuthBanner::SetTitleText(LPCTSTR title)
+{
+    m_title = (title != NULL && title[0] != _T('\0')) ? title : brandtext::kDefaultAppTitle;
+    Invalidate();
+}
+
+void AuthBanner::SetSloganText(LPCTSTR slogan)
+{
+    m_slogan = (slogan != NULL) ? slogan : _T("");
+    Invalidate();
+}
+
+RECT AuthBanner::ComputeBrandTextArea(const RECT& rcItem)
+{
+    RECT area = { 0, 0, 0, 0 };
+    const int rectW = rcItem.right - rcItem.left;
+    const int rectH = rcItem.bottom - rcItem.top;
+    if (rectW <= 0 || rectH <= 0)
+    {
+        return area;
+    }
+
+    // 火烈鸟绘制区的位置与 OnPaint 中的计算一致，路径最左点即图案的最左端
+    const float gradH        = (float)rectH * kGradientHeightRatio;
+    const float flamSide     = gradH * kFlamingoSizeFactor;
+    const float flamX        = (float)rcItem.right - flamSide + gradH * kFlamingoRightShiftRatio;
+    const float flamingoLeft = flamX + kFlamingoPathMinX * flamSide / kFlamingoViewBox;
+
+    // 文字整体放在头像白环上方：下缘在白环上缘之上留出间距。两者纵向不重叠，横向就只需
+    // 避开右侧的火烈鸟图案。
+    const float ringTop = (float)rcItem.top + (float)rectH * kRingTopRatio;
+
+    area.left   = rcItem.left + (int)((float)rectW * kBrandTextLeftRatio);
+    area.right  = (int)(flamingoLeft - gradH * kBrandTextGapRatio);
+    area.top    = rcItem.top;
+    area.bottom = (int)(ringTop - (float)rectH * kBrandTextAvatarGapRatio);
+    if (area.right < area.left)
+    {
+        area.right = area.left;
+    }
+    if (area.bottom < area.top)
+    {
+        area.bottom = area.top;
+    }
+    return area;
+}
+
+void AuthBanner::ComputeBrandTextRows(HDC hdc, const RECT& rcItem, LPCWSTR title, LPCWSTR slogan,
+                                      RECT& titleRc, RECT& sloganRc)
+{
+    const RECT area   = ComputeBrandTextArea(rcItem);
+    const float gradH = (float)(rcItem.bottom - rcItem.top) * kGradientHeightRatio;
+    const int titlePx = (int)(gradH * kTitleFontFactor);
+    const int tagPx   = (int)(gradH * kTagFontFactor);
+
+    // 行高都按设计字号测量：产品名称被缩小字号时行框高度不变、文字贴框底绘制，
+    // 与下方标语的间距保持不变
+    const int titleLineH = MeasureBrandText(hdc, title, BannerFontFace(), titlePx, true).cy;
+    const bool hasSlogan = (slogan != NULL && slogan[0] != L'\0');
+    const int sloganLineH = hasSlogan ? MeasureBrandText(hdc, slogan, BannerFontFace(), tagPx, false).cy : 0;
+
+    // 标语贴文字区下缘；不显示标语时为高度 0 的矩形
+    sloganRc.left   = area.left;
+    sloganRc.right  = area.right;
+    sloganRc.bottom = area.bottom;
+    sloganRc.top    = area.bottom - sloganLineH;
+
+    // 标题在标语之上，两行上沿相距 kTitleToTagRatio；没有标语时标题下移、贴文字区下缘
+    titleRc.left  = area.left;
+    titleRc.right = area.right;
+    if (hasSlogan)
+    {
+        titleRc.top = sloganRc.top - (int)(gradH * kTitleToTagRatio);
+    }
+    else
+    {
+        titleRc.top = area.bottom - titleLineH;
+    }
+    if (titleRc.top < area.top)
+    {
+        titleRc.top = area.top;
+    }
+    titleRc.bottom = titleRc.top + titleLineH;
+}
+
+BrandTextFitResult AuthBanner::FitTitle(HDC hdc, const RECT& rcItem, LPCWSTR title)
+{
+    const RECT area   = ComputeBrandTextArea(rcItem);
+    const float gradH = (float)(rcItem.bottom - rcItem.top) * kGradientHeightRatio;
+    const int desired = (int)(gradH * kTitleFontFactor);
+    const int minPx   = (int)((float)desired * kTitleMinFontRatio);
+    return FitBrandTextSize(hdc, title, BannerFontFace(), desired, minPx, area.right - area.left, true);
 }
 
 void AuthBanner::SetUserName(LPCTSTR name)
@@ -193,6 +371,59 @@ bool AuthBanner::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
         return true;
     }
     return false;
+}
+
+bool AuthBanner::OnMouseMove(POINT pt, UINT mkFlags)
+{
+    SetPillHover(::PtInRect(&m_rcPillHit, pt) != FALSE, pt);
+    return DuiControl::OnMouseMove(pt, mkFlags);
+}
+
+bool AuthBanner::OnMouseLeave()
+{
+    const POINT none = { 0, 0 };
+    SetPillHover(false, none);
+    return DuiControl::OnMouseLeave();
+}
+
+bool AuthBanner::OnSetCursor(POINT pt)
+{
+    // 状态胶囊可以点：手形光标
+    if (::PtInRect(&m_rcPillHit, pt))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    return DuiControl::OnSetCursor(pt);
+}
+
+void AuthBanner::SetPillHover(bool hover, POINT pt)
+{
+    if (hover == m_pillHover)
+    {
+        return;
+    }
+    m_pillHover = hover;
+    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
+    if (hover)
+    {
+        // 提示只在胶囊上登记：本控件是整块 Banner，按控件登记会在整块 Banner 上都弹提示。
+        // 宿主只在鼠标进入本控件时通知提示管理器开始计时，进入胶囊时由这里补一次通知。
+        tips.Register(this, TR(kPillTipText));
+        balloonwjui::DuiHost* host = GetHost();
+        if (host != NULL && ::IsWindow(host->m_hWnd))
+        {
+            POINT screen = pt;
+            ::ClientToScreen(host->m_hWnd, &screen);
+            tips.OnHover(this, screen);
+        }
+    }
+    else
+    {
+        tips.OnLeave(this);
+        tips.Unregister(this);
+    }
+    Invalidate();
 }
 
 void AuthBanner::SetAvatarColor(COLORREF color)
@@ -228,13 +459,17 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const float avY      = ringY + pad;
     const float avSide   = ringSide - pad * 2.0f;
 
-    const float pillW = (float)rectH * kPillWidthRatio;
+    // 胶囊宽度含右端放下拉小三角的一截（2026-10-04 起）
+    const float pillW = (float)rectH * (kPillWidthRatio + kPillArrowAreaRatio);
     const float pillH = (float)rectH * kPillHeightRatio;
     const float pillX = centerX - pillW / 2.0f;
     const float pillY = (float)top + (float)rectH * kPillTopRatio;
     const float badgeBox = pillH * kBadgeBoxRatio;      // 状态徽标绘制方框边长
     const float dotCx    = pillX + pillH * 0.46f;       // 徽标中心 X（胶囊左内缘处）
     const float dotCy    = pillY + pillH / 2.0f;        // 徽标中心 Y（胶囊垂直居中）
+    const float arrowCx  = pillX + pillW - pillH * kPillArrowRightFactor;   // 下拉小三角中心 X
+    const float arrowW   = pillH * kPillArrowWidthFactor;                   // 下拉小三角宽
+    const float arrowH   = pillH * kPillArrowHeightFactor;                  // 下拉小三角高
 
     // ====================================================================
     // 第一层：GDI+ 形状（作用域结束时 Graphics 析构并 flush）
@@ -256,8 +491,8 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         // 2. 火烈鸟轮廓。
         const Gdiplus::REAL flamSide  = gradH * kFlamingoSizeFactor;
         const Gdiplus::REAL flamX     = (Gdiplus::REAL)m_rcItem.right - flamSide
-                                      + gradH * 0.12f;
-        const Gdiplus::REAL flamY     = (Gdiplus::REAL)top - gradH * 0.05f;
+                                      + gradH * kFlamingoRightShiftRatio;
+        const Gdiplus::REAL flamY     = (Gdiplus::REAL)top - gradH * kFlamingoTopShiftRatio;
         const Gdiplus::REAL flamScale = flamSide / kFlamingoViewBox;
 
         Gdiplus::GraphicsState flamState = g.Save();
@@ -297,22 +532,49 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         Gdiplus::GraphicsPath ringPath;
         AddRoundRectPath(ringPath, ringX, ringY, ringSide, ringSide, ringRadius);
         Gdiplus::SolidBrush ringBrush(Gdiplus::Color(255, 255, 255, 255));
-        g.FillPath(&ringBrush, &ringPath);
+        // 外圈与底色都按像素格对齐地填充，与头像字、照片头像对齐（见 AvatarGlyph.h）；只对齐底色会让外圈一侧厚、一侧薄
+        balloonmain::FillAvatarBackground(g, ringBrush, ringPath);
 
         Gdiplus::GraphicsPath avatarPath;
         AddRoundRectPath(avatarPath, avX, avY, avSide, avSide, avRadius);
-        // 头像方块底色取自 m_avatarColor（登录窗按账号设置；默认主题橙）。
-        Gdiplus::SolidBrush avatarBrush(
-            Gdiplus::Color(255, GetRValue(m_avatarColor),
-                           GetGValue(m_avatarColor), GetBValue(m_avatarColor)));
-        g.FillPath(&avatarBrush, &avatarPath);
+        if (m_avatarPhoto)
+        {
+            // 照片：等比缩放到铺满圆角方块（长边多出的部分居中裁掉），按圆角路径填充
+            const Gdiplus::REAL photoW = (Gdiplus::REAL)m_avatarPhoto->GetWidth();
+            const Gdiplus::REAL photoH = (Gdiplus::REAL)m_avatarPhoto->GetHeight();
+            const Gdiplus::REAL scale = (avSide / photoW > avSide / photoH) ? (avSide / photoW) : (avSide / photoH);
+            Gdiplus::TextureBrush photoBrush(m_avatarPhoto.get(), Gdiplus::WrapModeClamp);
+            photoBrush.TranslateTransform(avX + (avSide - photoW * scale) / 2.0f, avY + (avSide - photoH * scale) / 2.0f);
+            photoBrush.ScaleTransform(scale, scale);
+            balloonmain::FillAvatarBackground(g, photoBrush, avatarPath);
+        }
+        else
+        {
+            // 头像方块底色取自 m_avatarColor（登录窗按账号设置；默认主题橙）。
+            Gdiplus::SolidBrush avatarBrush(
+                Gdiplus::Color(255, GetRValue(m_avatarColor),
+                               GetGValue(m_avatarColor), GetBValue(m_avatarColor)));
+            balloonmain::FillAvatarBackground(g, avatarBrush, avatarPath);
+        }
 
         // 4. 状态胶囊底 + 状态徽标（形状与颜色随当前在线状态：在线实心圆 / 离开时钟 /
         //    忙碌横杠 / 离线空心环，与主面板、列表、菜单四处同源）。
         Gdiplus::GraphicsPath pillPath;
         AddRoundRectPath(pillPath, pillX, pillY, pillW, pillH, pillH / 2.0f);
-        Gdiplus::SolidBrush pillBgBrush(Gdiplus::Color(12, 0, 0, 0));
+        // 底色：鼠标悬停时加深，提示可以点
+        Gdiplus::SolidBrush pillBgBrush(Gdiplus::Color(m_pillHover ? kPillHoverBgAlpha : kPillBgAlpha, 0, 0, 0));
         g.FillPath(&pillBgBrush, &pillPath);
+        // 细边框与右端的下拉小三角：看起来像一个可以点开的下拉按钮
+        Gdiplus::Pen pillBorder(Gdiplus::Color(kPillBorderAlpha, 0, 0, 0), kPillBorderWidth);
+        g.DrawPath(&pillBorder, &pillPath);
+        const Gdiplus::PointF arrow[3] = {
+            Gdiplus::PointF(arrowCx - arrowW / 2.0f, dotCy - arrowH / 2.0f),
+            Gdiplus::PointF(arrowCx + arrowW / 2.0f, dotCy - arrowH / 2.0f),
+            Gdiplus::PointF(arrowCx, dotCy + arrowH / 2.0f)
+        };
+        Gdiplus::SolidBrush arrowBrush(
+            Gdiplus::Color(255, GetRValue(kPillTextColor), GetGValue(kPillTextColor), GetBValue(kPillTextColor)));
+        g.FillPolygon(&arrowBrush, arrow, 3);
 
         // 登录窗只表达用户挑选的状态，不涉及掉线重连那套连接态，故直接按 m_presence 画。
         balloonmain::DrawPresenceBadge(g, m_presence, false,
@@ -325,31 +587,35 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     // 第二层：GDI 文字（清晰锐利）
     // ====================================================================
 
-    // 标题 / 标语 —— 贴渐变区左下角，左对齐。
-    const int textX     = left + (int)((float)rectW * 0.063f);
-    const float gradBot = (float)top + gradH;
-    const int titlePx   = (int)(gradH * kTitleFontFactor);
-    const int tagPx     = (int)(gradH * kTagFontFactor);
+    // 产品名称 / 标语 —— 两行整体放在头像上方、靠左对齐，右侧止于火烈鸟图案之前
+    // （行矩形的计算见 ComputeBrandTextRows）。
+    const int tagPx = (int)(gradH * kTagFontFactor);
+    RECT titleRc;
+    RECT tagRc;
+    ComputeBrandTextRows(hdc, m_rcItem, m_title, m_slogan, titleRc, tagRc);
 
-    RECT titleRc = { textX, (int)(gradBot - gradH * 0.40f),
-                     left + rectW, (int)gradBot };
-    DrawGdiText(hdc, L"FlamingoIM", titleRc, titlePx, true, kTitleColor,
-                DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOCLIP);
+    // 产品名称放不下时先缩小字号（FitTitle），缩到下限仍放不下则以省略号截断；文字贴行框底
+    // 绘制，缩小字号后仍紧贴下方的标语。
+    const BrandTextFitResult titleFit = FitTitle(hdc, m_rcItem, m_title);
+    DrawGdiText(hdc, m_title, titleRc, titleFit.m_pixelHeight, true, kTitleColor,
+                DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS);
 
-    RECT tagRc = { textX, (int)(gradBot - gradH * 0.205f),
-                   left + rectW, (int)gradBot };
-    DrawGdiText(hdc, L"让沟通像火烈鸟一样优雅", tagRc, tagPx, false, kTagColor,
-                DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOCLIP);
+    // 标语不缩小字号，放不下直接以省略号截断；为空时不绘制（DrawGdiText 对空串直接返回）。
+    DrawGdiText(hdc, m_slogan, tagRc, tagPx, false, kTagColor,
+                DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS);
 
-    // 头像内白色首字母。
-    if (!m_userName.IsEmpty())
+    // 头像方块的矩形：缓存下来供测试取色
+    ::SetRect(&m_rcAvatar, (int)avX, (int)avY, (int)(avX + avSide), (int)(avY + avSide));
+
+    // 头像内白色字形：画照片时不画；调用过 SetAvatar 时取它设的字形，否则取用户名首字。
+    const CString initial = m_avatarGlyphSet ? m_avatarGlyph : m_userName.Left(1);
+    if (!m_avatarPhoto && !initial.IsEmpty())
     {
-        const CString initial = m_userName.Left(1);
         RECT avatarRc = { (int)avX, (int)avY,
                           (int)(avX + avSide), (int)(avY + avSide) };
-        DrawGdiText(hdc, (LPCWSTR)initial, avatarRc,
-                    (int)(avSide * kInitialFontFactor), true, kInitialColor,
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        // 按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低
+        balloonmain::DrawCenteredGlyphGdi(hdc, (LPCWSTR)initial, avatarRc,
+                                          (int)(avSide * kInitialFontFactor), true, kInitialColor);
     }
 
     // 用户名。
@@ -364,8 +630,9 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     }
 
     // 状态胶囊文字（徽标右侧），随当前在线状态变化（在线 / 离开 / 忙碌）。
+    // 文字在徽标与下拉小三角之间居中
     RECT pillTextRc = { (int)(dotCx + badgeBox / 2.0f), (int)pillY,
-                        (int)(pillX + pillW - pillH * 0.18f), (int)(pillY + pillH) };
+                        (int)(arrowCx - arrowW / 2.0f - pillH * kPillTextArrowGapFactor), (int)(pillY + pillH) };
     DrawGdiText(hdc, balloonmain::GetPresenceVisual(m_presence).text, pillTextRc,
                 (int)(pillH * 0.52f), false,
                 kPillTextColor, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);

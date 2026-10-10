@@ -1,0 +1,79 @@
+/**
+ *  屏幕共享画面的码率自适应（docs/屏幕共享与录制方案.md 第 9 期 9b），ShareBitrateController.h
+ *
+ *  发起人按两种拥塞信号调整编码码率：
+ *    - 发送阻塞：每帧交给中转连接时 send 阻塞的时长。套接字发送缓冲区满了 send 才会阻塞，说明上行带宽跟不上；
+ *    - 关键帧请求：服务端给慢观看者丢帧后会请求关键帧（第 3 期 3b），新成员连上中转时也会请求一次，
+ *      所以只有一个评估周期里请求次数较多时才算拥塞。
+ *  每 2 秒评估一次：拥塞时目标码率降到当前的 70%（不低于下限）；连续 3 个周期都不拥塞后，之后每个不拥塞的周期
+ *  加最高码率的 10%，直到回到最高码率。本类只做计算，不碰编码器与网络，所有方法须在同一线程（推流线程）调用。
+ *
+ *  典型用法（推流线程）：
+ *      ShareBitrateController ctl(kShareBitrateBps, kShareMinBitrateBps);
+ *      ...每编一帧之前：
+ *      int bps = 0;
+ *      if (ctl.Evaluate(nowMs, bps)) encoder.SetBitrate(bps);
+ *      ...每帧发完：
+ *      ctl.OnFrameSent(sendBlockedMs);
+ *      ...收到关键帧请求（经原子计数转到推流线程）：
+ *      ctl.OnKeyFrameRequests(count);
+ *
+ *  balloonwj@qq.com   2026-10-03
+ */
+#pragma once
+
+#include <stdint.h>
+
+namespace screenshare {
+
+//屏幕共享画面码率的下限（bit/s）：再低画面已经糊得看不清文字，宁可丢帧
+const int kShareMinBitrateBps = 300000;
+
+//码率自适应的评估周期（毫秒）
+const int64_t kShareBitrateWindowMs = 2000;
+
+//屏幕共享的码率自适应计算
+class ShareBitrateController
+{
+public:
+    /**
+     *  @param maxBps 最高码率（bit/s），也是初始码率；须大于 0
+     *  @param minBps 最低码率（bit/s）；大于 maxBps 时按 maxBps 处理
+     */
+    ShareBitrateController(int maxBps, int minBps);
+
+    /**
+     *  记录一帧发送时 send 阻塞的时长。
+     *  @param blockedMs 本帧交给中转连接所用的时间（毫秒）；负数按 0 处理
+     */
+    void OnFrameSent(int64_t blockedMs);
+
+    /**
+     *  记录收到的关键帧请求。
+     *  @param count 自上次调用以来收到的请求次数；不大于 0 时忽略
+     */
+    void OnKeyFrameRequests(int count);
+
+    /**
+     *  评估是否需要调整码率；距上次评估不足一个周期时什么都不做。第一次调用只记下周期起点。
+     *  @param nowMs  当前时刻（单调时钟，毫秒）
+     *  @param outBps [出参] 需要调整时为新的目标码率；不需要时不修改
+     *  @return 目标码率变了返回 true（调用方据此设置编码器）
+     */
+    bool Evaluate(int64_t nowMs, int& outBps);
+
+    //当前的目标码率（bit/s）
+    int CurrentBps() const;
+
+private:
+    int     m_maxBps;          //最高码率（bit/s）
+    int     m_minBps;          //最低码率（bit/s）
+    int     m_currentBps;      //当前目标码率（bit/s）
+    bool    m_started;         //是否已记下第一个周期的起点
+    int64_t m_windowStartMs;   //当前评估周期的起点（毫秒）
+    int64_t m_blockedMs;       //当前周期内 send 阻塞的总时长（毫秒）
+    int     m_keyRequests;     //当前周期内收到的关键帧请求次数
+    int     m_calmWindows;     //连续不拥塞的周期数
+};
+
+} // namespace screenshare

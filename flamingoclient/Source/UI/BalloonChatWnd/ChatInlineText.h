@@ -3,7 +3,7 @@
  *
  *  「文字 + 内联表情」的排版与绘制引擎。把一条消息正文（形如
  *  `明天见 /f["5"] 记得带上资料`）解析出的段序列，按给定的最大宽度折行排版成一串
- *  带坐标的放置项，再照着放置项把文字画出来、把表情画成 Bin/Face 下的小图。
+ *  带坐标的放置项，再照着放置项把文字画出来、把表情画成 程序目录/Face 下的小图。
  *
  *  典型用法（气泡与消息记录窗都是这个路子）：
  *      std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(text);
@@ -77,7 +77,7 @@ struct InlineTextStyle
 struct InlinePlaced
 {
     bool    isFace;   // true=表情格（取 faceId）；false=文字段（取 text）
-    int     faceId;   // isFace 时有效：系统表情 id，对应 Bin/Face/face<id>.png
+    int     faceId;   // isFace 时有效：系统表情 id，对应 程序目录/Face/face<id>.png
     CString text;     // 非 isFace 时有效：本段要画的文字
     RECT    rc;       // 相对布局原点的矩形
 

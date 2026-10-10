@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 13 章：建群、群聊窗口、@提醒、成员与群文件、群公告 / 备忘 / 问答页签、接龙、群列表右键菜单、群资料与加群链接。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>群聊 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c13">
+<article class="doc">
+  <h1>群聊</h1>
+  <p class="lead">本章介绍如何新建群聊，以及在群聊窗口里收发消息、@提醒成员、查看成员与群文件，使用群公告、群备忘、群问答和接龙等协作功能。管理群成员与群设置的方法见下一章<a href="14-group-manage.html">「群管理」</a>。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>标有「仅群主 / 管理员」的操作需要相应的群角色</li>
+  </ul>
+
+  <h2 id="create">新建群聊</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_groups.png" width="338" alt="主面板的群组页签"><figcaption>主面板的群组页签，右下角是「建群」按钮</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <ol class="steps">
+        <li>在主面板点第三个页签（群组），这里列出 <b>我的群聊</b>，每个群显示群号和人数。</li>
+        <li>点右下角的 <span class="ui">＋ 建群</span>，打开「新建群聊」窗口。</li>
+        <li>在左侧选人：在顶部的搜索框里输入姓名搜索联系人，或者直接在下面的组织架构里勾选成员。选中的人会出现在右侧 <span class="ui">已选成员</span> 列表中，点某人右侧的 × 可以把他移除，左下角显示「已选 N 人」。</li>
+        <li>按需填写 <span class="ui">群聊名称（选填）</span>。不填时群名由成员的名字自动生成，之后成员有变化也会自动更新；在群管理里设定过群名后就不再自动变化。</li>
+        <li>选择 <span class="ui">群类型</span>：<span class="ui">普通群</span> 或 <span class="ui">帖子群</span>。</li>
+        <li>点 <span class="ui">创建群聊</span>，提示「群聊创建成功。」后，新群就出现在群组页签里。</li>
+      </ol>
+    </div>
+  </div>
+  <figure class="shot">
+    <img src="../img/l_create_group.png" width="778" alt="新建群聊窗口">
+    <figcaption>刚打开的「新建群聊」窗口：左侧是组织架构，右侧是群名、群类型和已选成员</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="../img/l_create_group_filled.png" width="778" alt="填写完成的新建群聊窗口">
+    <figcaption>选好 6 位成员、群名填「技术分享」、群类型选「帖子群」之后的样子</figcaption>
+  </figure>
+  <div class="callout warn"><b>群类型建好后不能再改</b>帖子群没有聊天消息，成员发帖并在帖子下留言讨论，建好后不能改成普通群。确定要用帖子群时再选它，用法见<a href="15-thread-group.html">「帖子群」</a>。</div>
+  <div class="callout note"><b>看不到「群类型」？</b>帖子群需要企业开启「帖子群」功能开关。开关关闭时，新建群聊窗口里没有群类型这一项，建出来的都是普通群。开关的位置见<a href="../admin/05-feature-switches.html">「功能开关」</a>。</div>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_groups2.png" width="338" alt="新建的帖子群出现在群列表里"><figcaption>新建的「技术分享」出现在列表末尾</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>群列表里的帖子群在群号前写着 <b>帖子群</b>，双击它打开的是帖子群窗口而不是群聊窗口。</p>
+      <p>普通群双击即可打开群聊窗口；也可以在群上点右键，选 <span class="ui">进入群聊</span>。</p>
+    </div>
+  </div>
+
+  <h2 id="window">认识群聊窗口</h2>
+  <p>群聊窗口分为三部分：上方是头部按钮，中间左侧是消息区和输入区，右侧是成员、群文件、公告、备忘、问答五个页签。</p>
+  <figure class="shot">
+    <div class="annotated">
+      <img src="../img/i_group_chat.png" width="880" alt="群聊窗口">
+      <span class="pin" style="left:24%;top:8.5%">1</span>
+      <span class="pin" style="left:65%;top:11.7%">2</span>
+      <span class="pin" style="left:69.1%;top:11.7%">3</span>
+      <span class="pin" style="left:73.1%;top:11.7%">4</span>
+      <span class="pin" style="left:77.1%;top:11.7%">5</span>
+      <span class="pin" style="left:81.1%;top:11.7%">6</span>
+      <span class="pin" style="left:85.1%;top:11.7%">7</span>
+      <span class="pin" style="left:89.1%;top:11.7%">8</span>
+      <span class="pin" style="left:93.1%;top:11.7%">9</span>
+      <span class="pin" style="left:2.8%;top:68.5%">10</span>
+      <span class="pin" style="left:6.2%;top:68.5%">11</span>
+      <span class="pin" style="left:9.7%;top:68.5%">12</span>
+      <span class="pin" style="left:13.1%;top:68.5%">13</span>
+      <span class="pin" style="left:18.1%;top:68.5%">14</span>
+      <span class="pin" style="left:21.4%;top:68.5%">15</span>
+      <span class="pin" style="left:24.8%;top:68.5%">16</span>
+      <span class="pin" style="left:28.3%;top:68.5%">17</span>
+      <span class="pin" style="left:31.6%;top:68.5%">18</span>
+      <span class="pin" style="left:66.8%;top:73.75%">19</span>
+    </div>
+    <figcaption>「v2.1 版本发布」群的群聊窗口</figcaption>
+  </figure>
+  <h3>头部</h3>
+  <ol class="legend">
+    <li><b>群简介</b>：头部左侧显示本群的简介，在群管理的「基本信息」里修改</li>
+    <li><b>语音通话</b>：发起群语音通话，见<a href="16-calls.html">「语音与视频通话」</a></li>
+    <li><b>视频通话</b>：发起群视频通话，最多 16 人</li>
+    <li><b>共享屏幕</b>：把屏幕共享给群成员，见<a href="18-screen-share.html">「屏幕共享」</a></li>
+    <li><b>文件共享</b>：查看或发起本群的文件共享，见<a href="21-file-share.html">「文件共享」</a></li>
+    <li><b>发起接龙</b>：见本章<a href="#relay">「接龙」</a></li>
+    <li><b>字幕模式</b>：在桌面上以字幕显示本群的新消息，再点一次退出，见<a href="20-captions.html">「字幕模式与字幕编辑」</a></li>
+    <li><b>消息记录</b>：打开本群的聊天记录，见<a href="24-history.html">「聊天记录管理」</a></li>
+    <li><b>群管理</b>（齿轮）：仅群主和管理员可见，见<a href="14-group-manage.html">「群管理」</a></li>
+  </ol>
+  <h3>输入区工具栏</h3>
+  <ol class="legend" style="counter-reset: lg 9">
+    <li><b>表情</b>：插入表情</li>
+    <li><b>图片</b>：选择图片发到群里</li>
+    <li><b>上传群文件</b>：把文件上传到本群的群文件库</li>
+    <li><b>截图</b>：右侧的 ▾ 是截图选项，见<a href="09-screenshot.html">「截图与图片文字识别」</a></li>
+    <li><b>屏幕录制</b>：见<a href="19-recording.html">「屏幕录制」</a></li>
+    <li><b>语音消息</b>：见<a href="10-voice.html">「语音消息」</a></li>
+    <li><b>字体设置</b>：设置本群的聊天字体</li>
+    <li><b>Markdown 编辑器</b>：打开 Markdown 编辑器并预先选好本群，见<a href="12-markdown.html">「Markdown 文档」</a></li>
+    <li><b>发送代码</b>：见<a href="11-code.html">「代码片段」</a></li>
+    <li><b>@提醒</b>：弹出成员列表，选择要提醒的人</li>
+  </ol>
+  <p>输入框的用法与单聊相同：按 <kbd>Enter</kbd> 发送，按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 换行，详见<a href="06-chat.html">「单聊：收发消息」</a>。</p>
+  <p>把文件拖进输入框时，窗口会提示「松开发送：图片进聊天，文件进群文件」：图片作为聊天消息发出，其他文件上传到群文件库。群聊不能发送文件夹，拖进来的文件夹会被跳过并给出提示。</p>
+  <div class="callout note"><b>群聊与单聊的区别</b>群聊窗口没有远程桌面、窗口抖动和发送文件夹这几项功能。另外，通话、屏幕共享、文件共享、屏幕录制等按钮只有在企业开启了相应功能、程序目录里也有对应模块时才会显示。</div>
+
+  <h2 id="mention">@提醒成员</h2>
+  <p>群里消息多时，用 @ 点名要找的人，对方能在会话列表里一眼看到与自己有关的消息。</p>
+  <ol class="steps">
+    <li>在输入框里输入 <code>@</code>，或者点工具栏右侧的 <span class="ui">@提醒</span>，输入框下方弹出候选列表。</li>
+    <li>列表依次是 <b>所有人</b>、本群的机器人（如果有）和其他群成员，点选要提醒的人。</li>
+    <li>输入框里出现彩色的 <b>@周思源</b>，接着输入要说的话，按 <kbd>Enter</kbd> 发送。</li>
+  </ol>
+  <figure class="shot">
+    <img src="../img/i_at_popup.png" width="880" alt="@ 候选列表">
+    <figcaption>输入 @ 后弹出的候选列表，第一项是「所有人」</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="../img/i_at_typed.png" width="880" alt="输入框中的 @周思源">
+    <figcaption>选中周思源后，输入框里显示「@周思源」，接着输入正文</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="../img/i_at_sent.png" width="880" alt="发出的 @ 消息">
+    <figcaption>发出的消息里，「@周思源」以高亮显示</figcaption>
+  </figure>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/i_at_recv_c_main.png" width="338" alt="被 @ 的人看到的会话列表"><figcaption>周思源的会话列表：群会话的摘要前面带着「[有人@我]」</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>被 @ 的人在会话列表里会看到这个群的摘要前面多了 <b>[有人@我]</b>，一眼就能分辨出与自己有关的消息。</p>
+      <p><b>谁能 @所有人</b>：群主和管理员总能使用「所有人」；群主或管理员在群管理的「群权限」里把「谁能 @ 全体成员」设为「所有人」后，普通成员也可以使用。</p>
+      <p><b>@机器人</b>：本群添加了群机器人后，它也会出现在候选列表里，@ 它就能按规则得到回复，见<a href="25-bots.html">「机器人」</a>。</p>
+      <p>在右侧成员列表的右键菜单里点 <span class="ui">@TA</span>，同样可以把对方插入到输入框中。</p>
+    </div>
+  </div>
+
+  <h2 id="members">成员页签</h2>
+  <p>右侧边栏的 <span class="ui">成员</span> 页签列出全部群成员，页签名后面的数字是人数。成员头像右下角的圆点表示在线状态，群主和管理员的名字右侧分别标有 <b>群主</b>、<b>管理员</b>。</p>
+  <ul>
+    <li>在 <span class="ui">搜索成员</span> 框里输入姓名，可以快速找到某人。</li>
+    <li>搜索框右侧的按钮在 <b>按部门显示</b> 和 <b>平铺显示</b> 之间切换。</li>
+    <li>群里有机器人时，列表顶部多出「机器人 N」一组，点某个机器人可以查看它的资料卡。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/i_member_menu.png" width="880" alt="成员右键菜单">
+    <figcaption>群主在成员周思源上点右键看到的菜单</figcaption>
+  </figure>
+  <p>在成员上点右键可以执行下面的操作。菜单会按你和对方的群角色变化，看不到的项表示你没有这项权限：</p>
+  <table>
+    <tr><th>菜单项</th><th>说明</th></tr>
+    <tr><td>发消息</td><td>打开与对方的单聊窗口</td></tr>
+    <tr><td>@TA</td><td>在输入框中插入「@对方」</td></tr>
+    <tr><td>查看资料</td><td>打开对方的资料窗口</td></tr>
+    <tr><td>复制名字</td><td>把对方的名字复制到剪贴板</td></tr>
+    <tr><td>设为特别关注联系人</td><td>见<a href="04-contacts.html">「通讯录与联系人」</a></td></tr>
+    <tr><td>关注 TA 在本群的发言</td><td>把对方加入本群的「关注的成员」。本群的消息提醒设为「只提醒 @我和关注的人」时，关注的成员发言也会提醒你</td></tr>
+    <tr><td>设为管理员 / 撤销管理员</td><td>仅群主可用</td></tr>
+    <tr><td>转让群主</td><td>仅群主可用，把群主身份转给对方</td></tr>
+    <tr><td>移出本群</td><td>群主可以移出任何成员；管理员只能移出普通成员，不能移出其他管理员</td></tr>
+  </table>
+
+  <h2 id="files">群文件页签</h2>
+  <p><span class="ui">群文件</span> 页签是本群的文件库，页签名后面的数字是文件数。</p>
+  <figure class="shot">
+    <img src="../img/i_group_files.png" width="880" alt="群文件页签">
+    <figcaption>群文件页签，列表里是刚上传的「v2.1发布检查清单.md」</figcaption>
+  </figure>
+  <ul>
+    <li>用 <span class="ui">搜索文件名</span> 查找文件，或用下方的胶囊按类型筛选：<span class="ui">全部</span>、<span class="ui">PDF</span>、<span class="ui">文档</span>、<span class="ui">表格</span>、<span class="ui">设计</span>。</li>
+    <li>每一行显示文件名、上传者、上传时间和大小，点右侧的下载箭头下载。</li>
+    <li>文件多时分页显示，底部显示「共 N · 第 X/Y 页」，用左右箭头翻页。</li>
+    <li>点底部的 <span class="ui">上传文件</span>，或点工具栏的「上传群文件」按钮，都可以上传文件。</li>
+    <li>上传者本人、群主和管理员可以删除文件：鼠标停在文件那一行时，下载箭头左侧会出现垃圾桶图标，点它并确认即可。删除后全群成员都看不到这个文件。</li>
+  </ul>
+
+  <h2 id="announce-tab">公告页签</h2>
+  <figure class="shot">
+    <img src="../img/i_group_announce_tab.png" width="880" alt="公告页签">
+    <figcaption>公告页签显示「群公告 · 1 条」，聊天区里是对应的公告卡片</figcaption>
+  </figure>
+  <p><span class="ui">公告</span> 页签按发布顺序显示本群的群公告，顶部写着「群公告 · N 条」，用右上角的箭头翻看。这里是只读的，底部显示发布人和时间。群主和管理员在群管理的「群公告」页发布公告，发布后群里会出现一张公告卡片，点卡片上的 <span class="ui">查看</span> 可以阅读全文。发布、入群必读等管理操作见<a href="14-group-manage.html#announce">「群管理 → 群公告」</a>。</p>
+
+  <h2 id="memo">备忘页签（群备忘）</h2>
+  <p>群备忘用来在约定时间提醒群成员做某件事，例如上线开始前提醒值班同学到岗。</p>
+  <ul class="facts">
+    <li>新建、修改、删除：仅群主和管理员</li>
+    <li>查看：全体成员</li>
+  </ul>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/k_group_memo_new.png" width="480" alt="新建群备忘窗口"><figcaption>新建群备忘：比个人备忘多了「提醒谁」</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <ol class="steps">
+        <li>打开右侧的 <span class="ui">备忘</span> 页签，点底部的 <span class="ui">＋ 新建群备忘</span>。</li>
+        <li>在「新建群备忘」窗口里填写 <span class="ui">标题</span>，设置 <span class="ui">时间</span>、<span class="ui">提醒</span>、<span class="ui">重复</span>、<span class="ui">结束</span> 和 <span class="ui">方式</span>（<span class="ui">右下角弹窗</span> 或 <span class="ui">全屏动画</span>，点 <span class="ui">预览效果</span> 可以先看看全屏动画的样子）。各项的含义与个人备忘相同，见<a href="23-memo.html">「备忘与提醒」</a>。</li>
+        <li>在 <span class="ui">提醒谁</span> 里选择 <span class="ui">全体成员</span>，或选 <span class="ui">指定成员</span> 后点 <span class="ui">选择成员</span> 挑选要提醒的人。</li>
+        <li>按需填写 <span class="ui">备注（选填）</span>，点 <span class="ui">保存</span>。</li>
+      </ol>
+    </div>
+  </div>
+  <figure class="shot">
+    <img src="../img/k_group_memo_tab.png" width="880" alt="备忘页签与群备忘卡片">
+    <figcaption>保存后，备忘页签里出现这条备忘，群里也出现一张群备忘卡片</figcaption>
+  </figure>
+  <p>保存后，群里会出现一张群备忘卡片，写明时间、重复规则、备注与提醒对象，点 <span class="ui">查看</span> 可以打开详情。到了提醒时间，被提醒的成员会收到弹窗或全屏动画提醒。群主和管理员可以在备忘页签的卡片上修改或删除备忘；删除后被提醒的成员都不会再收到这条提醒。被提醒的群备忘也会出现在每个人自己的「备忘与提醒」窗口里，在那里只能查看。</p>
+  <div class="callout tip"><b>把聊天消息存成群备忘</b>群主和管理员在群里的文字消息上点右键，选 <span class="ui">添加到群备忘</span>，会打开新建群备忘窗口并预先填好标题和备注；选 <span class="ui">添加到我的备忘</span> 则存成自己的个人备忘。</div>
+
+  <h2 id="qa">问答页签（群问答）</h2>
+  <p>群问答用来整理群里经常被问到的问题，成员可以随时搜索，也可以一键把答案发到群里。</p>
+  <ul class="facts">
+    <li>新建、修改、删除：仅群主和管理员</li>
+    <li>搜索、发到群里：全体成员</li>
+  </ul>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/k_group_qa_new.png" width="440" alt="新建问答窗口"><figcaption>新建问答</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <ol class="steps">
+        <li>打开右侧的 <span class="ui">问答</span> 页签，点底部的 <span class="ui">＋ 新建问答</span>。</li>
+        <li>在「新建问答」窗口里填写 <span class="ui">问题</span> 和 <span class="ui">答案</span>。答案里可以写网址，群成员点了会用浏览器打开。</li>
+        <li>点 <span class="ui">保存</span>，问答页签里出现这条问答。</li>
+      </ol>
+    </div>
+  </div>
+  <figure class="shot">
+    <img src="../img/k_group_qa_tab.png" width="880" alt="问答页签">
+    <figcaption>问答页签里的问答卡片，显示问题、最后修改人与时间、答案和三个按钮</figcaption>
+  </figure>
+  <p>在页签顶部的 <span class="ui">搜索问题或答案</span> 框里输入关键字可以筛选问答。每张卡片下方有三个按钮：</p>
+  <ul>
+    <li><span class="ui">发到群里</span>：所有成员都可以用，把这条问答以「问：…… 答：……」的形式发到群里。</li>
+    <li><span class="ui">修改</span>、<span class="ui">删除</span>：仅群主和管理员可见。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/k_group_qa_sent.png" width="880" alt="发到群里的问答">
+    <figcaption>点「发到群里」后，群里出现一条问答消息</figcaption>
+  </figure>
+  <div class="callout note"><b>企业问答</b>企业管理员维护的企业问答也会显示在这个页签里，卡片上标着「企业问答」，在这里只能查看和发到群里，不能修改。企业问答的维护方法见<a href="../admin/08-enterprise-qa.html">「企业问答」</a>。</div>
+
+  <h2 id="relay">接龙</h2>
+  <p>接龙适合报名、统计、排班一类需要每人填一行的事情。群里任何成员都可以发起接龙。</p>
+  <h3>发起接龙</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/i_relay_compose_empty.png" width="440" alt="发起接龙窗口"><figcaption>发起接龙窗口</figcaption></figure>
+    <figure class="shot"><img src="../img/i_relay_compose.png" width="440" alt="填好的发起接龙窗口"><figcaption>填好标题、说明、截止时间和自己的接龙</figcaption></figure>
+  </div>
+  <ol class="steps">
+    <li>点群聊窗头部的 <span class="ui">发起接龙</span> 按钮（写字板图标）。</li>
+    <li>填写 <span class="ui">标题</span>，按需填写 <span class="ui">说明（选填）</span>，例如约定每行的格式。</li>
+    <li>设置 <span class="ui">截止时间</span>，它不能早于当前时间 5 分钟之后。</li>
+    <li>按需填写 <span class="ui">我的接龙</span>，发起后你会自动参与，这一行就是你的内容。</li>
+    <li>点 <span class="ui">发起</span>，群里出现一张接龙卡片。</li>
+  </ol>
+  <h3>参与接龙</h3>
+  <figure class="shot">
+    <img src="../img/i_relay_card.png" width="880" alt="群里的接龙卡片">
+    <figcaption>接龙卡片显示标题、说明、已参与的名单与「共 N 人参与 · 截止时间」</figcaption>
+  </figure>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/i_relay_detail.png" width="440" alt="接龙详情窗口"><figcaption>赵卓轩已参与后看到的「接龙详情」，自己的那一行以橙色显示</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>还没参与时，卡片底部是 <span class="ui">参与接龙</span>；参与之后变成 <span class="ui">修改我的</span>。点卡片（或点群里「某某参与了接龙」那一行提示）会打开「接龙详情」窗口：</p>
+      <ul>
+        <li>在 <span class="ui">填写你的接龙内容</span> 框里写一行内容，点 <span class="ui">提交</span>；已经参与过时按钮是 <span class="ui">修改</span>，用来改自己那一行。内容不能换行。</li>
+        <li><span class="ui">撤回我的</span>：删除自己的那一行。</li>
+        <li><span class="ui">复制为文本</span>：把标题、说明和完整名单复制成纯文本，方便贴到别处。</li>
+        <li><span class="ui">结束接龙</span>：只有发起人、群主和管理员能看到。结束后任何人都不能再参与、修改或撤回。</li>
+      </ul>
+      <p>每个接龙最多 200 人参与；过了截止时间也不能再参与。被禁言的成员不能参与接龙。</p>
+    </div>
+  </div>
+
+  <h2 id="group-menu">群列表的右键菜单</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_group_menu.png" width="338" alt="群列表右键菜单"><figcaption>群主在「v2.1 版本发布」上点右键</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>在主面板群组页签的某个群上点右键，可以不打开群聊窗口直接完成下面这些操作：</p>
+      <table>
+        <tr><th>菜单项</th><th>说明</th></tr>
+        <tr><td>进入群聊</td><td>打开群聊窗口（帖子群显示为「打开帖子群」）</td></tr>
+        <tr><td>开启字幕模式</td><td>只在桌面上显示本群消息的字幕，不打开群聊窗口</td></tr>
+        <tr><td>查看群资料</td><td>打开群资料窗口，见下文</td></tr>
+        <tr><td>查看消息记录</td><td>打开本群的聊天记录</td></tr>
+        <tr><td>群管理</td><td>仅群主和管理员可见</td></tr>
+        <tr><td>添加到收藏</td><td>把本群加入联系人页签顶部的「我的收藏」，已收藏时显示为「取消收藏」</td></tr>
+        <tr><td>置顶群聊</td><td>让本群在会话列表中置顶</td></tr>
+        <tr><td>消息提醒设置 ▸</td><td>选择本群的提醒方式，见<a href="05-conversations.html">「会话列表与消息提醒」</a></td></tr>
+        <tr><td>复制群号 / 复制群名</td><td>复制到剪贴板</td></tr>
+        <tr><td>生成加群链接</td><td>见本章<a href="#link">「加群链接」</a></td></tr>
+        <tr><td>清空聊天记录</td><td>只清空你这一方的记录，你登录的其他设备会同步清空，其他群成员不受影响，清空后无法恢复</td></tr>
+        <tr><td>退出群聊</td><td>离开本群</td></tr>
+        <tr><td>解散群聊</td><td>仅群主可见</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="callout warn"><b>群主退群要先转让群主</b>群主不能直接退出群聊。群主点 <span class="ui">退出群聊</span> 并确认后，会弹出「转让群主并退出」窗口，选好新群主、点 <span class="ui">转让并退出</span>，转让成功后才会退出。不想转让时可以选择解散群聊。</div>
+
+  <h2 id="info">群资料</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/l_group_info.png" width="478" alt="群资料窗口"><figcaption>群主看到的群资料窗口</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <p>群列表右键选 <span class="ui">查看群资料</span> 打开群资料窗口：</p>
+      <ul>
+        <li>顶部显示群名、「群号 · N 人」和群主。点群名可以复制群名，点群号那一行可以复制群号。</li>
+        <li><span class="ui">群简介</span>：显示本群的简介，没有填写时显示「暂无群简介」；简介在群管理的「基本信息」里修改。</li>
+        <li><span class="ui">群公告</span>：显示最新一条群公告。</li>
+        <li><span class="ui">我在本群的昵称</span>：点这一行可以直接修改你在本群显示的昵称。</li>
+        <li><span class="ui">消息提醒</span>：选择本群的提醒方式。</li>
+        <li><span class="ui">置顶群聊</span>：打开开关后本群在会话列表中置顶。</li>
+        <li>底部按钮：<span class="ui">查看消息记录</span>、<span class="ui">退出群聊</span>，群主另有 <span class="ui">解散群聊</span>。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="link">加群链接</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/l_group_link.png" width="440" alt="生成加群链接窗口"><figcaption>生成加群链接窗口</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>群里的任何成员都可以生成加群链接，把链接发给同企业的同事，对方点开就能加入本群。</p>
+      <ol class="steps">
+        <li>在群列表的右键菜单里点 <span class="ui">生成加群链接</span>。</li>
+        <li>在 <span class="ui">有效期</span> 里选择 <span class="ui">1 天</span>、<span class="ui">7 天</span> 或 <span class="ui">永久有效</span>，点 <span class="ui">生成链接</span>。</li>
+        <li>点 <span class="ui">复制链接</span>，把链接粘贴到聊天里发给同事。对方在聊天里点这个链接即可加群。</li>
+      </ol>
+      <p>窗口下方的 <span class="ui">我生成的链接</span> 列出你在本群生成、仍然有效的链接，每条都可以 <span class="ui">复制</span> 或 <span class="ui">作废</span>。作废后再点这个链接将无法加群，已经通过它加入的成员不受影响。</p>
+    </div>
+  </div>
+  <div class="callout note"><b>链接加群的限制</b>加群链接只对生成者所在企业的同事有效。群的加群方式设为「需要验证消息」时，点链接会提交一条加群申请，要等群主或管理员同意；群设置为「禁止任何人加入」时不能通过链接加群。群主和管理员可以在群管理的「加群链接」页查看并作废本群全部有效的链接。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

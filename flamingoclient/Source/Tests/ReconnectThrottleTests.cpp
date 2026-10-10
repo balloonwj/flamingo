@@ -1,7 +1,7 @@
 /**
  *  断线重连登录请求节流的单元测试（Suite RT），ReconnectThrottleTests.cpp
  *
- *  背景见 bugs.md 的 BUG-21 与 UI/BalloonMain/ReconnectThrottle.h：重连定时器原先每次触发都
+ *  背景见 UI/BalloonMain/ReconnectThrottle.h：重连定时器原先每次触发都
  *  发一个登录请求，不管上一个有没有结果，请求可能在发送队列里越积越多。覆盖：
  *    RT1 一轮重连的第一次触发会发出请求；
  *    RT2 等结果期间，后续几次触发都不发；

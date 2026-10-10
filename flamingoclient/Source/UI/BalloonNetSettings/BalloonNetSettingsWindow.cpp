@@ -22,18 +22,15 @@
 #include "NetServerCard.h"            // NetServerCard
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../net/IUSocket.h"            // CIUSocket::TestConnect
+#include "../../Common/I18n/I18n.h"      // TR / TRF / TR_NOOP：界面文字的多语言查找
 
 using namespace balloonwjui;
 using namespace balloonnetsettings;
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
-// 网络设置窗口固定客户区尺寸（逻辑像素）。design 原值 470x530 的 85%。
-static const int kNetWindowWidth  = 400;
-static const int kNetWindowHeight = 415;
-
-// 标题栏高度（逻辑像素）。
-static const int kNetWindowTitleBarHeight = 31;
+// 网络设置窗的窗口尺寸与标题栏高度（kNetWindowWidth / kNetWindowHeight /
+// kNetWindowTitleBarHeight）定义在 NetSettingsLayout.h，与布局单测共用同一份。
 
 // 端口合法取值范围。
 static const int kNetPortMin = 1;
@@ -120,21 +117,25 @@ CBalloonNetSettingsWindow::~CBalloonNetSettingsWindow()
 
 bool CBalloonNetSettingsWindow::BuildWindow(HWND hWndParent)
 {
-    if (Create(hWndParent, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(hWndParent, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
-        LOG_ERROR(_T("网络设置窗口 Create 失败。"));
+        LOG_ERROR(_T("network settings window: Create failed."));
         return false;
     }
 
-    SetTitle(_T("网络设置"));
+    SetTitle(TR(L"网络设置"));
     SetTitleBarHeight(kNetWindowTitleBarHeight);
     SetButtons(false, false, true);   // 只保留关闭按钮
     SetResizable(false);              // 固定尺寸对话框
-    SetMinSize(kNetWindowWidth, kNetWindowHeight);
+    SetMinSize(kNetWindowWidth, kNetWindowHeight + kNetWindowTitleBarHeight);
+    // 标题栏左侧的程序图标：标题栏不透明，底色用 kOpaqueTitleBarColor；同时设好任务栏 / Alt-Tab 图标
+    SetIcon(m_programIcons.TitleBitmap(balloonmain::kProgramTitleIconSize, balloonmain::kOpaqueTitleBarColor));
+    m_programIcons.ApplyTaskIcons(m_hWnd);
 
     InitUi();
-    ResizeClient(kNetWindowWidth, kNetWindowHeight);
+    //kNetWindowHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+    ResizeClient(kNetWindowWidth, kNetWindowHeight + kNetWindowTitleBarHeight);
     CenterWindow();
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -149,7 +150,7 @@ void CBalloonNetSettingsWindow::CreateAndShow(HWND hMainDlg)
     if (!BuildWindow(NULL))
         return;
 
-    LOG_INFO(_T("网络设置窗口已创建并显示。"));
+    LOG_INFO(_T("network settings window: created and shown."));
 }
 
 INT_PTR CBalloonNetSettingsWindow::DoModal(HWND hWndParent)
@@ -205,7 +206,7 @@ void CBalloonNetSettingsWindow::InitUi()
     std::unique_ptr<DuiControl> root = BuildNetSettingsBody();
     if (!root)
     {
-        LOG_ERROR(_T("BuildNetSettingsBody 返回空 —— 网络设置窗客户区未能构建。"));
+        LOG_ERROR(_T("network settings window: BuildNetSettingsBody returned null, the client area could not be built."));
         return;
     }
     SetClientContent(std::move(root));
@@ -213,7 +214,7 @@ void CBalloonNetSettingsWindow::InitUi()
     DuiControl* content = GetClientContent();
     if (content == NULL)
     {
-        LOG_ERROR(_T("SetClientContent 之后 GetClientContent 仍为空。"));
+        LOG_ERROR(_T("network settings window: GetClientContent is still null after SetClientContent."));
         return;
     }
 
@@ -240,7 +241,7 @@ void CBalloonNetSettingsWindow::InitUi()
     // 落到真实结论。探测在后台线程做，不阻塞窗口显示。
     StartProbeAll();
 
-    LOG_INFO(_T("网络设置窗客户区 UI 初始化完成。"));
+    LOG_INFO(_T("network settings window: client UI initialized."));
 }
 
 // =======================================================================
@@ -290,7 +291,7 @@ void CBalloonNetSettingsWindow::SaveModelToIni()
         ini.WriteString(_T("server"), kIniKeys[i].portKey, portStr, iniPath);
     }
 
-    LOG_INFO(_T("网络设置已写回 flamingo.ini。"));
+    LOG_INFO(_T("network settings window: settings written back to flamingo.ini."));
 }
 
 // =======================================================================
@@ -414,15 +415,15 @@ void CBalloonNetSettingsWindow::DoTestConnection()
     if (!StartProbe(kind, entry.host, entry.port, WM_NETTEST_RESULT))
     {
         // 线程创建失败（极罕见）：提示用户重试
-        ::MessageBox(m_hWnd, _T("无法启动连接测试，请稍后重试。"),
-                     _T("网络设置"), MB_OK | MB_ICONWARNING);
+        ::MessageBox(m_hWnd, TR(L"无法启动连接测试，请稍后重试。"),
+                     TR(L"网络设置"), MB_OK | MB_ICONWARNING);
         return;
     }
 
     // 进入"测试中"状态：按钮文字提示，并防止重复点击；被测的那张卡片同时
     // 回到"连接中"，等结果回来再落到"已连接" / "未连接"。
     m_testing = true;
-    SetTestButtonText(_T("测试中…"));
+    SetTestButtonText(TR(L"测试中…"));
     m_connState[kind] = kNetConnConnecting;
     RefreshCards();
 }
@@ -440,7 +441,7 @@ void CBalloonNetSettingsWindow::StartProbeAll()
             || entry.port > kNetPortMax)
         {
             m_connState[i] = kNetConnDisconnected;
-            LOG_WARNING(_T("%s 配置无效（地址 / 端口不合法），直接判为未连接。"),
+            LOG_WARNING(_T("network settings window: %s config invalid (bad address / port), treated as not connected."),
                         NetServerDisplayName(i));
             continue;
         }
@@ -450,7 +451,7 @@ void CBalloonNetSettingsWindow::StartProbeAll()
         {
             // 线程起不来就地判负，否则这张卡会永远停在"连接中"。
             m_connState[i] = kNetConnDisconnected;
-            LOG_ERROR(_T("%s 的探测线程创建失败。"), NetServerDisplayName(i));
+            LOG_ERROR(_T("network settings window: failed to create the probe thread for %s."), NetServerDisplayName(i));
         }
     }
 
@@ -512,7 +513,7 @@ void CBalloonNetSettingsWindow::ApplyProbeResult(int kind, LPCTSTR host, int por
     const NetServerEntry& entry = m_model.Server(kind);
     if (entry.host.CompareNoCase(host) != 0 || entry.port != port)
     {
-        LOG_INFO(_T("%s 的探测结果已过期（探的是 %s:%d，现配置为 %s:%d），重新探测。"),
+        LOG_INFO(_T("network settings window: probe result for %s is stale (probed %s:%d, now %s:%d), probing again."),
                  NetServerDisplayName(kind), host, port,
                  (LPCTSTR)entry.host, entry.port);
         m_connState[kind] = kNetConnConnecting;
@@ -527,8 +528,8 @@ void CBalloonNetSettingsWindow::ApplyProbeResult(int kind, LPCTSTR host, int por
     m_connState[kind] = ok ? kNetConnConnected : kNetConnDisconnected;
     RefreshCards();
 
-    LOG_INFO(_T("%s 探测完成：%s:%d %s。"), NetServerDisplayName(kind),
-             host, port, ok ? _T("可连通") : _T("连不上"));
+    LOG_INFO(_T("network settings window: probe for %s finished: %s:%d %s."), NetServerDisplayName(kind),
+             host, port, ok ? _T("reachable") : _T("unreachable"));
 }
 
 LRESULT CBalloonNetSettingsWindow::OnProbeResult(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -553,7 +554,7 @@ LRESULT CBalloonNetSettingsWindow::OnTestResult(UINT /*uMsg*/, WPARAM /*wParam*/
 
     // 退出"测试中"状态：恢复按钮文字、放开重入
     m_testing = false;
-    SetTestButtonText(_T("测试连接"));
+    SetTestButtonText(TR(L"测试连接"));
 
     if (task != NULL)
     {
@@ -563,14 +564,14 @@ LRESULT CBalloonNetSettingsWindow::OnTestResult(UINT /*uMsg*/, WPARAM /*wParam*/
         CString msg;
         if (task->ok)
         {
-            msg.Format(_T("已连通 %s:%d。"), (LPCTSTR)task->host, task->port);
-            ::MessageBox(m_hWnd, msg, _T("网络设置"), MB_OK | MB_ICONINFORMATION);
+            msg = TRF(L"已连通 {0}:{1}。", (LPCTSTR)task->host, task->port).c_str();
+            ::MessageBox(m_hWnd, msg, TR(L"网络设置"), MB_OK | MB_ICONINFORMATION);
         }
         else
         {
-            msg.Format(_T("无法连接 %s:%d。\n\n请检查地址 / 端口，或确认服务器是否已启动。"),
-                       (LPCTSTR)task->host, task->port);
-            ::MessageBox(m_hWnd, msg, _T("网络设置"), MB_OK | MB_ICONWARNING);
+            msg = TRF(L"无法连接 {0}:{1}。\n\n请检查地址 / 端口，或确认服务器是否已启动。",
+                      (LPCTSTR)task->host, task->port).c_str();
+            ::MessageBox(m_hWnd, msg, TR(L"网络设置"), MB_OK | MB_ICONWARNING);
         }
         delete task;
     }
@@ -619,8 +620,8 @@ void CBalloonNetSettingsWindow::DoSave()
     }
 
     ::MessageBox(m_hWnd,
-                 _T("服务器设置已保存，本次登录即生效。"),
-                 _T("网络设置"), MB_OK | MB_ICONINFORMATION);
+                 TR(L"服务器设置已保存，本次登录即生效。"),
+                 TR(L"网络设置"), MB_OK | MB_ICONINFORMATION);
 }
 
 // =======================================================================

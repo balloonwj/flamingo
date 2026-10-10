@@ -7,8 +7,14 @@
     <Filter Include="Common">
       <UniqueIdentifier>{d13bc5b6-8b2b-d9e1-8f29-777db17cc563}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Code">
+      <UniqueIdentifier>{a7712a2f-4488-2ffd-751a-c988e8519ca5}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Common\Graphics">
       <UniqueIdentifier>{18351ab4-92cb-c110-12fe-c76b9c2ba36f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\I18n">
+      <UniqueIdentifier>{000ae107-e24f-9932-cf9f-803a4da77c14}</UniqueIdentifier>
     </Filter>
     <Filter Include="Common\Log">
       <UniqueIdentifier>{e8ebef2f-176a-ac26-f94d-8ecd3c3880d3}</UniqueIdentifier>
@@ -19,17 +25,77 @@
     <Filter Include="Feature">
       <UniqueIdentifier>{21021ea0-e52b-e8e9-c599-f4dff41e5be0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Feature\Call">
-      <UniqueIdentifier>{787da1e9-7884-9e3d-3118-9c313af47f5d}</UniqueIdentifier>
+    <Filter Include="Feature\Bot">
+      <UniqueIdentifier>{96431bb9-6044-8d02-a926-3da4bb35a523}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Caption">
+      <UniqueIdentifier>{7c6098d4-36a0-dac5-c8b8-4a7bf3de5d66}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\CloudRecord">
+      <UniqueIdentifier>{35948323-56bd-e6c9-1d51-6be126ded4ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\FileShare">
+      <UniqueIdentifier>{4a1063fa-43db-9a84-dfec-4d439733f9ee}</UniqueIdentifier>
     </Filter>
     <Filter Include="Feature\FolderTransfer">
       <UniqueIdentifier>{83139d86-0aad-c28d-880b-d941cae834f5}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Feature\RemoteDesktop">
-      <UniqueIdentifier>{fa7ab5eb-8f31-a5fd-65ee-3aa6d560ecaf}</UniqueIdentifier>
+    <Filter Include="Feature\GroupCall">
+      <UniqueIdentifier>{0ddf8246-93eb-9804-210e-4b71ab1277e9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Lock">
+      <UniqueIdentifier>{3b7ae13c-0a5c-a065-b355-0944fc19430c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Markdown">
+      <UniqueIdentifier>{510c4f40-69c2-e361-bece-d6203c097711}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Memo">
+      <UniqueIdentifier>{8c70886e-a973-7ceb-eac3-423669c0a2ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Ocr">
+      <UniqueIdentifier>{bd65ec01-b303-8427-cbe9-ef87dcc79ff0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\P2P">
+      <UniqueIdentifier>{18970bbb-7961-3618-8764-d426a91cdabf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\RewrittenSync">
+      <UniqueIdentifier>{e982642d-1a5e-0337-cac9-881a755c6c75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\ScreenShare">
+      <UniqueIdentifier>{7846ea96-016c-0ad5-db06-cde41d12a9b0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Screenshot">
+      <UniqueIdentifier>{c00b8df4-0945-3737-4a7c-5c4faf17b51a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\SecretChat">
+      <UniqueIdentifier>{e5106edd-6a48-744a-c2a5-bb7d3a58f356}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\ThreadGroup">
+      <UniqueIdentifier>{048e78fe-8da0-4cac-8eea-fe0abfef21fb}</UniqueIdentifier>
     </Filter>
     <Filter Include="Feature\Update">
       <UniqueIdentifier>{51f26236-504f-be38-e4c1-7fa76094c6f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Voice">
+      <UniqueIdentifier>{ae257e7c-a47f-87ff-bfc3-b2be5287eec3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoBot">
+      <UniqueIdentifier>{2dca490c-dd7f-276e-861e-4ce8636fd31b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock">
+      <UniqueIdentifier>{287154da-4eb0-db8f-174d-66d102ec4710}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock\Session">
+      <UniqueIdentifier>{bff93ce7-b231-cd5f-d3d4-9b3568a6365f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Api">
+      <UniqueIdentifier>{efeb6372-ff0c-2535-7acb-a65692d48efb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P">
+      <UniqueIdentifier>{efdae02c-ad3b-745e-56c9-75211bb388e0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Session">
       <UniqueIdentifier>{71c7ae29-4b7a-bd86-6b3f-b295b3b9e4a4}</UniqueIdentifier>
@@ -46,11 +112,17 @@
     <Filter Include="UI\BalloonAuth">
       <UniqueIdentifier>{0cf7cc5b-9a18-1d37-c4c0-3681d60c09bf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI\BalloonCard">
+      <UniqueIdentifier>{a0a390da-374e-c2d5-a7e4-833df489fe36}</UniqueIdentifier>
+    </Filter>
     <Filter Include="UI\BalloonChat">
       <UniqueIdentifier>{dd5fd32d-5e9d-0ccf-90de-01069bcd390e}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonChatWnd">
       <UniqueIdentifier>{95401c41-7b7e-fd6f-3dc4-31e308abc77d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonCode">
+      <UniqueIdentifier>{5fef5eb1-fa09-3b13-d8ac-f6e30986211e}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonContact">
       <UniqueIdentifier>{26c426fd-bb58-3351-efd4-9152b6693989}</UniqueIdentifier>
@@ -67,8 +139,23 @@
     <Filter Include="UI\BalloonMain">
       <UniqueIdentifier>{1250ceb6-7499-8a57-dafd-9641cc4f646e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI\BalloonMarkdown">
+      <UniqueIdentifier>{d468d91b-fc6c-7d27-93f5-6e48414ecc51}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonMemo">
+      <UniqueIdentifier>{8a202f5a-9557-62ad-9c3b-a81a487664e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonMsgBox">
+      <UniqueIdentifier>{f37f93cb-e6ff-40ef-b7ab-9434d769823d}</UniqueIdentifier>
+    </Filter>
     <Filter Include="UI\BalloonNetSettings">
       <UniqueIdentifier>{53ffcb6a-6b10-ae18-0133-5423706830f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonNotifyMode">
+      <UniqueIdentifier>{a6d3a19d-50aa-197b-6015-731608733593}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonOcr">
+      <UniqueIdentifier>{16a1a81f-43f7-0f3f-100d-0bd8aebedd48}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonProfile">
       <UniqueIdentifier>{9f41f8ab-2f7d-9f0e-1eab-6c97aac11b18}</UniqueIdentifier>
@@ -76,17 +163,14 @@
     <Filter Include="UI\BalloonRegister">
       <UniqueIdentifier>{3e8f5995-bf4a-7d2a-0708-25746b565a3c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="UI\BalloonRemoteDesktop">
-      <UniqueIdentifier>{e63ade81-8107-c413-6789-fa803dc44b00}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="UI\BalloonScreenshot">
-      <UniqueIdentifier>{90e844ca-aeb1-33da-ca05-6a738c69c218}</UniqueIdentifier>
-    </Filter>
     <Filter Include="UI\BalloonSearch">
       <UniqueIdentifier>{c0f404cd-799b-88d4-dd56-1e90f22dd3d8}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonSettings">
       <UniqueIdentifier>{c83478b9-6203-187d-58b2-0af402839dcd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonSubtitle">
+      <UniqueIdentifier>{dda1ead6-49b3-d36b-5493-1ab0e1f9ced8}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonUpdate">
       <UniqueIdentifier>{c47eb8df-5045-9b2a-db99-d9bc663bb662}</UniqueIdentifier>
@@ -132,6 +216,12 @@
     <ClCompile Include="App\Crash.cpp">
       <Filter>App</Filter>
     </ClCompile>
+    <ClCompile Include="App\HangWatchdog.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="..\FlamingoLock\Session\LockPower.cpp">
+      <Filter>FlamingoLock\Session</Filter>
+    </ClCompile>
     <ClCompile Include="Common\Util\EncodeUtil.cpp">
       <Filter>Common\Util</Filter>
     </ClCompile>
@@ -150,10 +240,16 @@
     <ClCompile Include="Common\Graphics\GDIFactory.cpp">
       <Filter>Common\Graphics</Filter>
     </ClCompile>
+    <ClCompile Include="Common\Graphics\ShellTypeIcon.cpp">
+      <Filter>Common\Graphics</Filter>
+    </ClCompile>
     <ClCompile Include="Session\ChatFontPrefs.cpp">
       <Filter>Session</Filter>
     </ClCompile>
     <ClCompile Include="Session\WindowPlacementPrefs.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\WindowPlacementResolve.cpp">
       <Filter>Session</Filter>
     </ClCompile>
     <ClCompile Include="Session\GroupRoleRules.cpp">
@@ -195,6 +291,84 @@
     <ClCompile Include="App\AppShell.cpp">
       <Filter>App</Filter>
     </ClCompile>
+    <ClCompile Include="App\MediaModuleLoader.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="App\PluginModuleLoader.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\FileShare\FileShareHost.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\FileShare\ShareChannel.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\P2P\P2PChannel.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\P2P\P2PHost.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Lock\LockHost.cpp">
+      <Filter>Feature\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Lock\LockSuppressPolicy.cpp">
+      <Filter>Feature\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\SecretChat\SecretChatHost.cpp">
+      <Filter>Feature\SecretChat</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\RewrittenSync\RewrittenSync.cpp">
+      <Filter>Feature\RewrittenSync</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\ThreadGroup\ThreadCardSync.cpp">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\ThreadGroup\ThreadGroupFilter.cpp">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\ThreadGroup\ThreadGroupHost.cpp">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Bot\BotUiBridge.cpp">
+      <Filter>Feature\Bot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Bot\BotHost.cpp">
+      <Filter>Feature\Bot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Bot\BotHostConvert.cpp">
+      <Filter>Feature\Bot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Caption\CaptionHost.cpp">
+      <Filter>Feature\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\CloudRecord\CloudTransferRunner.cpp">
+      <Filter>Feature\CloudRecord</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Caption\CaptionHostPolicy.cpp">
+      <Filter>Feature\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\P2P\P2PSocketNetwork.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\P2P\FolderP2PTransport.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\P2P\P2PLinkBroker.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\FileShare\ShareMemberInfo.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\FileShare\ShareNoticePolicy.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="App\MediaHostAdapter.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="net\MediaSignalPolicy.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="Common\Util\MD5.cpp">
       <Filter>Common\Util</Filter>
     </ClCompile>
@@ -219,6 +393,21 @@
     <ClCompile Include="App\Startup.cpp">
       <Filter>App</Filter>
     </ClCompile>
+    <ClCompile Include="Common\I18n\I18n.cpp">
+      <Filter>Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\I18n\I18nXml.cpp">
+      <Filter>Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\I18n\LanguageSetting.cpp">
+      <Filter>Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="App\AppRestart.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="App\BrandText.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="Threading\Thread.cpp">
       <Filter>Threading</Filter>
@@ -230,6 +419,9 @@
       <Filter>App</Filter>
     </ClCompile>
     <ClCompile Include="Session\UserConfig.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\ConfigTextCodec.cpp">
       <Filter>Session</Filter>
     </ClCompile>
     <ClCompile Include="Session\UserMgr.cpp">
@@ -262,6 +454,9 @@
     <ClCompile Include="UI\BalloonAuth\AuthBanner.cpp">
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonAuth\BrandTextFit.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonAuth\AuthButtons.cpp">
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
@@ -269,6 +464,9 @@
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonAuth\BalloonLoginDlg.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonAuth\LoginAccountAvatar.cpp">
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonAuth\LoginProgressState.cpp">
@@ -280,10 +478,25 @@
     <ClCompile Include="UI\BalloonAuth\AccountRemoval.cpp">
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonAuth\WindowFlipFrame.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonAuth\WindowFlipTransition.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChat\BalloonChatMsgFormat.cpp">
       <Filter>UI\BalloonChat</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\BalloonChatWindow.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\BalloonChatWindowDirectFile.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\BalloonChatWindowSecret.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\SecretImageOverlay.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\BalloonGroupChatWindow.cpp">
@@ -299,6 +512,9 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFileCardControl.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCodeCardControl.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFileCard.cpp">
@@ -340,6 +556,9 @@
     <ClCompile Include="UI\BalloonChatWnd\ChatFileStateModel.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatDirectFileModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFileVisual.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
@@ -373,6 +592,9 @@
     <ClCompile Include="UI\BalloonChatWnd\ChatIcons.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMarkdownIcons.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatImageCache.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
@@ -380,6 +602,9 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatInputRichEdit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatPasteImage.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatMessageList.cpp">
@@ -397,13 +622,136 @@
     <ClCompile Include="UI\BalloonChatWnd\ChatMergedCard.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatFileShareCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatShareCardBridge.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatRelayCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatGroupInviteCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatSecretMode.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\RelayNotifyApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\ScreenShareInfoApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupInviteStateApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\AnnouncementCardApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\CornerPopupCountdown.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCard\RelayDetailModel.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCard\RelayComposeModel.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCard\RelayComposeLayout.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCard\RelayDetailWindow.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCard\RelayComposeDlg.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelRelay.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatRichContentSplit.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatSendLimit.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatReedit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\RecallEdit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatSendMenu.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMemoPrefill.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupNotifyOnly.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="net\GroupQaProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\GroupLinkProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\BotProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupMustRead.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupQaModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupBotModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\BotCardLayout.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\BotCardWindow.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupBotSection.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupQaCardList.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupQaEditLayout.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupQaEditDialog.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupLinkFlow.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupLinkLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupLinkDialog.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="App\UrlProtocolRegistry.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatSendBumpQueue.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatEarlyTips.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\SensitiveWordTips.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatRootPanel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatScrollFade.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatScrollThumb.cpp">
@@ -413,6 +761,12 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatSendMode.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatScreenshotMenu.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatRecordMenu.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatTextSelection.cpp">
@@ -463,6 +817,18 @@
     <ClCompile Include="UI\BalloonChatWnd\GroupMemberItem.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupMemberPanelKit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ThreadMemberPanel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupMemberDeptTree.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupDeptHeaderItem.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\GroupMemberList.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
@@ -503,6 +869,9 @@
       <Filter>UI\BalloonContact</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonContact\TagEditPopup.cpp">
+      <Filter>UI\BalloonContact</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonContact\ContactWindowSet.cpp">
       <Filter>UI\BalloonContact</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonContact\TagChip.cpp">
@@ -550,6 +919,9 @@
     <ClCompile Include="UI\BalloonHistory\BalloonHistoryWindow.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryLocalFile.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonHistory\FileLocalStore.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
@@ -575,6 +947,66 @@
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonHistory\HistoryImageGrid.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryWildcard.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistorySearchSyntax.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryLibraryLinks.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryStorageStats.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryStorageLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryZipWriter.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryExportJob.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryExportLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryExportPopup.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryTipSearchBox.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryLibraryQuery.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\GroupFileCacheSync.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryLibraryLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryTimelineLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryLibraryModel.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryTimeline.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\BalloonHistoryWindowLibrary.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\BalloonHistoryWindowStorage.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\BalloonHistoryWindowExport.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\BalloonHistoryWindowTimeline.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonHistory\HistoryRow.cpp">
@@ -604,13 +1036,22 @@
     <ClCompile Include="UI\BalloonHistory\HistoryCoverage.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryConversationList.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonHistory\HistoryDateJumpPopup.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\HistoryScopePopup.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonHistory\HistoryDateRange.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonHistory\V2MsgStore.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\V2MsgSearchWorker.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonImageViewer\BalloonImageViewerWindow.cpp">
@@ -634,6 +1075,9 @@
     <ClCompile Include="UI\BalloonMain\AvatarImageUtil.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\AvatarGlyph.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\AvatarBitmapCache.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -650,6 +1094,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\ConversationRowSync.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\PresenceTreeMarks.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\AvatarPickerTile.cpp">
@@ -691,10 +1138,16 @@
     <ClCompile Include="UI\BalloonMain\BalloonMainPanelForward.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
-    <ClCompile Include="UI\BalloonMain\MainPanelRdCoordinator.cpp">
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelCall.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
-    <ClCompile Include="UI\BalloonMain\MainPanelCallCoordinator.cpp">
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelAutoReply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelBot.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\AutoReplySync.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelTrayController.cpp">
@@ -703,7 +1156,13 @@
     <ClCompile Include="UI\BalloonMain\MainPanelAutoAwayController.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MainPanelDockController.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelSessionController.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\SendModeConfigStore.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelStressData.cpp">
@@ -713,12 +1172,6 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\BalloonModifyAvatarDlg.cpp">
-      <Filter>UI\BalloonMain</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonMain\BalloonProfileDlg.cpp">
-      <Filter>UI\BalloonMain</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonMain\BalloonProfileLayout.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\ClosePromptDecision.cpp">
@@ -745,13 +1198,40 @@
     <ClCompile Include="UI\BalloonMain\FolderInviteNotifyPolicy.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\NotifyModeModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\NotifyModePolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonNotifyMode\BalloonNotifyManageWindow.cpp">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupFollowModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonNotifyMode\NotifyManageLayout.cpp">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonNotifyMode\NotifyManageModel.cpp">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMsgBox\BalloonMsgBoxWindow.cpp">
+      <Filter>UI\BalloonMsgBox</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMsgBox\MsgBoxLayout.cpp">
+      <Filter>UI\BalloonMsgBox</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MsgBoxModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\NotifyModeMenu.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\GroupListOps.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\GroupRowText.cpp">
-      <Filter>UI\BalloonMain</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonMain\StarredModel.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\CornerPopupPlacement.cpp">
@@ -779,6 +1259,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\GroupExitFlow.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\ClearHistoryFlow.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelConversationMenu.cpp">
@@ -811,7 +1294,19 @@
     <ClCompile Include="UI\BalloonMain\PresenceBadge.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\ConversationRowLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\AutoAwayPolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\PanelDockGeometry.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\PanelDockPolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\PanelShortcutPolicy.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\KeepAwakePolicy.cpp">
@@ -838,7 +1333,19 @@
     <ClCompile Include="UI\BalloonMain\MemberPickerRow.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MemberPickerLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\MemberPickerTreeModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\DeptPickModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\DeptPickLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\DeptPickDialog.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\ForwardRequest.cpp">
@@ -881,6 +1388,180 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\TrayFlashController.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\AutoReplyPolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoCardList.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoEditLayout.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoWindowLayout.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoCalendarControls.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoCenter.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\BalloonMemoWindow.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoEditDialog.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoReminderPopup.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoFullscreenWindow.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelMemo.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelLock.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelSecret.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelRewritten.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelThread.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Memo\MemoRule.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Memo\MemoScheduler.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Memo\MemoBook.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Ocr\OcrModuleHost.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Markdown\MarkdownModuleHost.cpp">
+      <Filter>Feature\Markdown</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Markdown\MarkdownDocument.cpp">
+      <Filter>Feature\Markdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMarkdown.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMarkdownCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMarkdownCardControl.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\MarkdownEditCommands.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMarkdownPreview.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMarkdownFormatBar.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownEditorManager.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownEditorModel.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownFindReplace.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownEditorLayout.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownEditorWindow.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownExport.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownClipboard.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownPreviewWindow.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMarkdown\MarkdownPdf.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Ocr\OcrPrompt.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Ocr\OcrRecognizer.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Ocr\OcrLauncher.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonOcr\OcrResultLayout.cpp">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonOcr\OcrResultWindow.cpp">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonOcr\OcrEntry.cpp">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Code\CodeLexer.cpp">
+      <Filter>Common\Code</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Code\CodeFormatter.cpp">
+      <Filter>Common\Code</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Code\CodeNotes.cpp">
+      <Filter>Common\Code</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCodeBlock.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCodeMessage.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeViewerModel.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeViewerLayout.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeViewerWindow.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeComposeLayout.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeComposeWindow.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeNotesPane.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonCode\CodeSnippetDemoWindow.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Memo\MemoClock.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="net\MemoProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMemo\MemoViewModel.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\TrayConnectingBlink.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\TrayMsgTipPopup.cpp">
@@ -937,33 +1618,6 @@
     <ClCompile Include="UI\BalloonRegister\RegisterModel.cpp">
       <Filter>UI\BalloonRegister</Filter>
     </ClCompile>
-    <ClCompile Include="UI\BalloonRemoteDesktop\BalloonRemoteDesktopDlg.cpp">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonRemoteDesktop\RdControlledBar.cpp">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonRemoteDesktop\RdViewerToolbar.cpp">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonRemoteDesktop\RdViewerWindow.cpp">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonScreenshot\AnnotationModel.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonScreenshot\CaptureCanvas.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonScreenshot\ScreenCaptureOverlay.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonScreenshot\ScreenshotGeometry.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\BalloonScreenshot\ScreenshotToolbar.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
     <ClCompile Include="UI\BalloonSearch\ContactMatch.cpp">
       <Filter>UI\BalloonSearch</Filter>
     </ClCompile>
@@ -974,6 +1628,21 @@
       <Filter>UI\BalloonSearch</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonSearch\SearchCandidateCache.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSearch\GlobalSearchText.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSearch\GroupFileSearchState.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSearch\SearchKeyboard.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSearch\RecentSearchList.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSearch\SearchResultScrollView.cpp">
       <Filter>UI\BalloonSearch</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonSearch\SearchDropdown.cpp">
@@ -1012,80 +1681,11 @@
     <ClCompile Include="UI\BalloonSettings\SettingsNavList.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
-    <ClCompile Include="UI\BalloonSettings\SettingsPageModel.cpp">
+    <ClCompile Include="UI\BalloonSettings\AutoReplySettingsRows.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
-    <ClCompile Include="Feature\Call\AudioLoopback.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\AudioPcmUtils.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\BalloonCallDlg.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallAudioEngine.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallDlgLayout.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallMediaFraming.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallMediaSession.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallRelayClient.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallRelaySelfTest.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallRelayTestFrame.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallVideoCanvas.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallVideoEngine.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CallVideoUiDebug.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CameraDisplayTest.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\CameraPreviewDebug.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\H264SelfTest.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\MfCameraCapture.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\MfH264Codec.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\OpusAudioCodec.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\SpeexAudioProcessor.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\SpeexResampler.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\VideoFrameConvert.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\VideoLoopbackDebug.cpp">
-      <Filter>Feature\Call</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\Call\WasapiAudioIo.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="UI\BalloonSettings\SettingsPageModel.cpp">
+      <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
     <ClCompile Include="third-party\jsoncpp-1.9.0\json_reader.cpp">
       <Filter>third-party\jsoncpp-1.9.0</Filter>
@@ -1102,13 +1702,19 @@
     <ClCompile Include="net\AnnounceProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="net\CallProtocolClient.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
     <ClCompile Include="net\ChatTransferCancelRegistry.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\ContactsProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\LoginResultFill.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\ProfileFields.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="net\SystemTipText.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\ConversationsProtocolClient.cpp">
@@ -1118,9 +1724,6 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\FileProtocolClient.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
-    <ClCompile Include="net\StarredProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\ContactTagProtocolClient.cpp">
@@ -1139,6 +1742,9 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\GroupFileProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\GlobalSearchProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\GroupProtocolClient.cpp">
@@ -1180,6 +1786,9 @@
     <ClCompile Include="net\MessageProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
+    <ClCompile Include="net\CardProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="net\ProfileProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -1187,9 +1796,6 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\RegisterProtocolClient.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
-    <ClCompile Include="net\RemoteDesktopProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\FolderProtocolClient.cpp">
@@ -1201,32 +1807,14 @@
     <ClCompile Include="net\TransferOwnerRegistry.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\CaptureFallbackPolicy.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\DxgiScreenCapturer.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\GdiScreenCapturer.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdControlledStreamer.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdInputEncoder.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdInputInjector.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdRelayClient.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdRelayFraming.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
     <ClCompile Include="Feature\FolderTransfer\FolderManifest.cpp">
       <Filter>Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\FolderTransfer\DirectFileTransfer.cpp">
+      <Filter>Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\P2PBadge.cpp">
+      <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFolderStateModel.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
@@ -1245,30 +1833,6 @@
     </ClCompile>
     <ClCompile Include="Feature\FolderTransfer\FolderTransferManager.cpp">
       <Filter>Feature\FolderTransfer</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdRelaySelfTest.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdScreenCapturer.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdScreenDecoder.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\RdSelfTestWindow.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\ScreenFrameEncoder.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\ScreenManager.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\ScreenSpy.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClCompile>
-    <ClCompile Include="Feature\RemoteDesktop\until.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="third-party\zlib1.2.11\adler32.c">
       <Filter>third-party\zlib1.2.11</Filter>
@@ -1318,6 +1882,129 @@
     <ClCompile Include="..\..\third-party\sqlite-src-3530100\sqlite3.c">
       <Filter>third-party\sqlite-src-3530100</Filter>
     </ClCompile>
+    <ClCompile Include="Feature\ScreenShare\ScreenShareStatusCache.cpp">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatScreenShareCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatSystemTip.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\ScreenShare\ScreenShareHub.cpp">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\GroupCall\GroupCallStatusCache.cpp">
+      <Filter>Feature\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\GroupCall\GroupCallHub.cpp">
+      <Filter>Feature\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatGroupCallCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCallCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatAnnouncementCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatMemoCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCloudRecordCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\ScreenShare\RecordEntry.cpp">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Screenshot\ScreenshotEntry.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Screenshot\ScreenshotHotkey.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Screenshot\ScreenshotPrefs.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Screenshot\ScreenshotHost.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Screenshot\ScreenshotRequestBuilder.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSettings\HotkeyCaptureBox.cpp">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="net\VoiceContent.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="Feature\Voice\VoiceHub.cpp">
+      <Filter>Feature\Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\VoiceRecordBarModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\VoiceRecordBar.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatVoiceBubble.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatReceivedVoice.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatVoicePaint.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatVoiceStrip.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\VoiceRecordFlow.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\VoiceRecordSession.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\GroupFileChatPoster.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="Session\SubtitlePrefs.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Graphics\CompositionLayer.cpp">
+      <Filter>Common\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleModel.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleTextFit.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleState.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleLayout.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleRenderer.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleSession.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonSubtitle\SubtitleWindow.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonHistory\RecordLocalStore.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="App\MediaRecordingBridge.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="net\UploadInflightGate.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="net\FrameCrypto.h">
@@ -1359,6 +2046,9 @@
     <ClInclude Include="Common\Graphics\GDIFactory.h">
       <Filter>Common\Graphics</Filter>
     </ClInclude>
+    <ClInclude Include="Common\Graphics\ShellTypeIcon.h">
+      <Filter>Common\Graphics</Filter>
+    </ClInclude>
     <ClInclude Include="Session\ChatFontPrefs.h">
       <Filter>Session</Filter>
     </ClInclude>
@@ -1389,6 +2079,12 @@
     <ClInclude Include="App\Crash.h">
       <Filter>App</Filter>
     </ClInclude>
+    <ClInclude Include="App\HangWatchdog.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLock\Session\LockPower.h">
+      <Filter>FlamingoLock\Session</Filter>
+    </ClInclude>
     <ClInclude Include="Session\LoginAccountList.h">
       <Filter>Session</Filter>
     </ClInclude>
@@ -1397,6 +2093,96 @@
     </ClInclude>
     <ClInclude Include="App\AppShell.h">
       <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="App\MediaModuleLoader.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="App\PluginModuleLoader.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FileShare\FileShareGate.h">
+      <Filter>Feature\FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FileShare\FileShareHost.h">
+      <Filter>Feature\FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FileShare\ShareChannel.h">
+      <Filter>Feature\FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\P2P\P2PChannel.h">
+      <Filter>Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\P2P\P2PHost.h">
+      <Filter>Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Lock\LockHost.h">
+      <Filter>Feature\Lock</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Lock\LockSuppressPolicy.h">
+      <Filter>Feature\Lock</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\SecretChat\SecretChatGate.h">
+      <Filter>Feature\SecretChat</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\SecretChat\SecretChatHost.h">
+      <Filter>Feature\SecretChat</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\RewrittenSync\RewrittenSync.h">
+      <Filter>Feature\RewrittenSync</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ThreadGroup\ThreadCardSync.h">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ThreadGroup\ThreadGroupFilter.h">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ThreadGroup\ThreadGroupGate.h">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ThreadGroup\ThreadGroupHost.h">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Caption\CaptionHost.h">
+      <Filter>Feature\Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\CloudRecord\CloudTransferRunner.h">
+      <Filter>Feature\CloudRecord</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Caption\CaptionHostPolicy.h">
+      <Filter>Feature\Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\P2P\P2PSocketNetwork.h">
+      <Filter>Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\P2P\FolderP2PTransport.h">
+      <Filter>Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\P2P\P2PLinkBroker.h">
+      <Filter>Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\P2P\FolderP2PRegistration.h">
+      <Filter>Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FolderTransfer\FolderLaneTransport.h">
+      <Filter>Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoP2P\FlamingoP2PApi.h">
+      <Filter>FlamingoP2P</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FileShare\ShareMemberInfo.h">
+      <Filter>Feature\FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FileShare\ShareNoticePolicy.h">
+      <Filter>Feature\FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="App\MediaHostAdapter.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="net\MediaSignalPolicy.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Api\FlamingoMediaApi.h">
+      <Filter>FlamingoMedia\Api</Filter>
     </ClInclude>
     <ClInclude Include="Common\Util\MD5.h">
       <Filter>Common\Util</Filter>
@@ -1426,6 +2212,24 @@
     <ClInclude Include="App\Startup.h">
       <Filter>App</Filter>
     </ClInclude>
+    <ClInclude Include="App\BrandText.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\I18n\I18n.h">
+      <Filter>Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\I18n\I18nXml.h">
+      <Filter>Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\I18n\LanguageSetting.h">
+      <Filter>Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="App\AppRestart.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonAuth\BrandTextFit.h">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClInclude>
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Threading\Thread.h">
       <Filter>Threading</Filter>
@@ -1440,6 +2244,9 @@
       <Filter>App</Filter>
     </ClInclude>
     <ClInclude Include="Session\UserConfig.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\ConfigTextCodec.h">
       <Filter>Session</Filter>
     </ClInclude>
     <ClInclude Include="Session\UserMgr.h">
@@ -1481,6 +2288,9 @@
     <ClInclude Include="UI\BalloonAuth\BalloonLoginDlg.h">
       <Filter>UI\BalloonAuth</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonAuth\LoginAccountAvatar.h">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonAuth\LoginProgressState.h">
       <Filter>UI\BalloonAuth</Filter>
     </ClInclude>
@@ -1488,6 +2298,12 @@
       <Filter>UI\BalloonAuth</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonAuth\AccountRemoval.h">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonAuth\WindowFlipFrame.h">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonAuth\WindowFlipTransition.h">
       <Filter>UI\BalloonAuth</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChat\BalloonChatMsgFormat.h">
@@ -1553,6 +2369,9 @@
     <ClInclude Include="UI\BalloonChatWnd\ChatFileStateModel.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatDirectFileModel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatFileVisual.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
@@ -1604,6 +2423,9 @@
     <ClInclude Include="UI\BalloonChatWnd\ChatInputRichEdit.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatPasteImage.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatMessageList.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
@@ -1619,13 +2441,127 @@
     <ClInclude Include="UI\BalloonChatWnd\ChatMergedCard.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatFileShareCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatShareCardBridge.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatRelayCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatGroupInviteCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatSecretMode.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\SecretImageOverlay.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\GroupInviteStateApply.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\RelayNotifyApply.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCard\RelayDetailModel.h">
+      <Filter>UI\BalloonCard</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCard\RelayComposeModel.h">
+      <Filter>UI\BalloonCard</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCard\RelayComposeLayout.h">
+      <Filter>UI\BalloonCard</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCard\RelayDetailWindow.h">
+      <Filter>UI\BalloonCard</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCard\RelayComposeDlg.h">
+      <Filter>UI\BalloonCard</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatRichContentSplit.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatSendLimit.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatReedit.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\RecallEdit.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatSendMenu.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMemoPrefill.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupNotifyOnly.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="net\GroupQaProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\BotProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\GroupLinkProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupMustRead.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupQaModel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupBotModel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\BotCardLayout.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\BotCardWindow.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupBotSection.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupQaCardList.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupQaEditLayout.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupQaEditDialog.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\GroupLinkFlow.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\GroupLinkLayout.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\GroupLinkDialog.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="App\UrlProtocolRegistry.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatSendBumpQueue.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatEarlyTips.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\SensitiveWordTips.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatRootPanel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatScrollFade.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatScrollThumb.h">
@@ -1635,6 +2571,12 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatSendMode.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatScreenshotMenu.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatRecordMenu.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatTextSelection.h">
@@ -1682,7 +2624,19 @@
     <ClInclude Include="UI\BalloonChatWnd\GroupMemberItem.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupMemberPanelKit.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ThreadMemberPanel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\GroupMemberList.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupMemberDeptTree.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupDeptHeaderItem.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\GroupMemberOrder.h">
@@ -1733,6 +2687,12 @@
     <ClInclude Include="UI\BalloonContact\TagEditPopup.h">
       <Filter>UI\BalloonContact</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonContact\ContactWindowSet.h">
+      <Filter>UI\BalloonContact</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\InlineEditKeys.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonContact\TagChip.h">
       <Filter>UI\BalloonContact</Filter>
     </ClInclude>
@@ -1781,6 +2741,9 @@
     <ClInclude Include="UI\BalloonHistory\BalloonHistoryWindow.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryLocalFile.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonHistory\FileLocalStore.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
@@ -1826,7 +2789,13 @@
     <ClInclude Include="UI\BalloonHistory\HistoryCoverage.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryConversationList.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonHistory\HistoryDateJumpPopup.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryScopePopup.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonHistory\HistoryDateRange.h">
@@ -1841,10 +2810,64 @@
     <ClInclude Include="UI\BalloonHistory\HistoryImageGrid.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryWildcard.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistorySearchSyntax.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryLibraryLinks.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryStorageStats.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryStorageLayout.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryZipWriter.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryExportJob.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryExportLayout.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryExportPopup.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryTipSearchBox.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryLibraryQuery.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\GroupFileCacheSync.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryLibraryLayout.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryLibraryModel.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryTimeline.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryTimelineLayout.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\HistoryLayoutKit.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonHistory\HistoryWindowKeys.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonHistory\V2MsgStore.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\V2MsgSearchWorker.h">
       <Filter>UI\BalloonHistory</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonImageViewer\BalloonImageViewerWindow.h">
@@ -1868,6 +2891,9 @@
     <ClInclude Include="UI\BalloonMain\AvatarImageUtil.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\AvatarGlyph.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\AvatarBitmapCache.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
@@ -1886,6 +2912,9 @@
     <ClInclude Include="UI\BalloonMain\ConversationRowSync.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\PresenceTreeMarks.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\AvatarPalette.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
@@ -1896,6 +2925,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\BadgeRender.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelBottomAction.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\BalloonAboutDlg.h">
@@ -1925,12 +2957,6 @@
     <ClInclude Include="UI\BalloonMain\BalloonMainPanel.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
-    <ClInclude Include="UI\BalloonMain\MainPanelRdCoordinator.h">
-      <Filter>UI\BalloonMain</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonMain\MainPanelCallCoordinator.h">
-      <Filter>UI\BalloonMain</Filter>
-    </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelTrayController.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
@@ -1940,7 +2966,13 @@
     <ClInclude Include="UI\BalloonMain\MainPanelAutoAwayController.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelDockController.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelSessionController.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\SendModeConfigStore.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelStressData.h">
@@ -1950,12 +2982,6 @@
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\BalloonModifyAvatarDlg.h">
-      <Filter>UI\BalloonMain</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonMain\BalloonProfileDlg.h">
-      <Filter>UI\BalloonMain</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonMain\BalloonProfileLayout.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\ClosePromptDecision.h">
@@ -1982,7 +3008,37 @@
     <ClInclude Include="UI\BalloonMain\FolderInviteNotifyPolicy.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
-    <ClInclude Include="UI\BalloonMain\StarredModel.h">
+    <ClInclude Include="UI\BalloonMain\NotifyModeModel.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\NotifyModePolicy.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonNotifyMode\BalloonNotifyManageWindow.h">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonNotifyMode\NotifyManageLayout.h">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonNotifyMode\NotifyManageModel.h">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMsgBox\BalloonMsgBoxWindow.h">
+      <Filter>UI\BalloonMsgBox</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMsgBox\MsgBoxLayout.h">
+      <Filter>UI\BalloonMsgBox</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MsgBoxModel.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\GroupFollowModel.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupFollowTarget.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\NotifyModeMenu.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\CornerPopupPlacement.h">
@@ -2018,6 +3074,9 @@
     <ClInclude Include="UI\BalloonMain\GroupExitFlow.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\ClearHistoryFlow.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelConversationMenu.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
@@ -2048,7 +3107,19 @@
     <ClInclude Include="UI\BalloonMain\PresenceBadge.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\ConversationRowLayout.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\AutoAwayPolicy.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\PanelDockGeometry.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\PanelDockPolicy.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\PanelShortcutPolicy.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\KeepAwakePolicy.h">
@@ -2075,7 +3146,19 @@
     <ClInclude Include="UI\BalloonMain\MemberPickerRow.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MemberPickerLayout.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\MemberPickerTreeModel.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\DeptPickModel.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\DeptPickLayout.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\DeptPickDialog.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\ForwardRequest.h">
@@ -2132,6 +3215,189 @@
     <ClInclude Include="UI\BalloonMain\TrayFlashController.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonMain\AutoReplyPolicy.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\AutoReplySync.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Bot\BotUiBridge.h">
+      <Filter>Feature\Bot</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Bot\BotHost.h">
+      <Filter>Feature\Bot</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Bot\BotHostConvert.h">
+      <Filter>Feature\Bot</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoBot\BotApi.h">
+      <Filter>FlamingoBot</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoCardList.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoEditLayout.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoWindowLayout.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoCalendarControls.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoCenter.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\BalloonMemoWindow.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoEditDialog.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoReminderPopup.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoFullscreenWindow.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Memo\MemoRule.h">
+      <Filter>Feature\Memo</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Memo\MemoScheduler.h">
+      <Filter>Feature\Memo</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Memo\MemoBook.h">
+      <Filter>Feature\Memo</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Ocr\OcrModuleHost.h">
+      <Filter>Feature\Ocr</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Markdown\MarkdownModuleHost.h">
+      <Filter>Feature\Markdown</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Markdown\MarkdownDocument.h">
+      <Filter>Feature\Markdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMarkdown.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMarkdownCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMarkdownCardControl.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\MarkdownEditCommands.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMarkdownIcons.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMarkdownPreview.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMarkdownFormatBar.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownEditorManager.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownEditorHost.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownEditorModel.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownFindReplace.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownEditorLayout.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownEditorWindow.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownExport.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownClipboard.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownPreviewWindow.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMarkdown\MarkdownPdf.h">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Ocr\OcrPrompt.h">
+      <Filter>Feature\Ocr</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Ocr\OcrRecognizer.h">
+      <Filter>Feature\Ocr</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Ocr\OcrLauncher.h">
+      <Filter>Feature\Ocr</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonOcr\OcrResultLayout.h">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonOcr\OcrResultWindow.h">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonOcr\OcrEntry.h">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Code\CodeLexer.h">
+      <Filter>Common\Code</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCodeBlock.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCodeMessage.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeViewerModel.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeViewerLayout.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeViewerWindow.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeComposeLayout.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeComposeWindow.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Code\CodeFormatter.h">
+      <Filter>Common\Code</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Code\CodeNotes.h">
+      <Filter>Common\Code</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeNotesPane.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCodeCardControl.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonCode\CodeSnippetDemoWindow.h">
+      <Filter>UI\BalloonCode</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Memo\MemoClock.h">
+      <Filter>Feature\Memo</Filter>
+    </ClInclude>
+    <ClInclude Include="net\MemoProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMemo\MemoViewModel.h">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\TrayConnectingBlink.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonMain\TrayMsgTipPopup.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
@@ -2171,33 +3437,6 @@
     <ClInclude Include="UI\BalloonRegister\RegisterModel.h">
       <Filter>UI\BalloonRegister</Filter>
     </ClInclude>
-    <ClInclude Include="UI\BalloonRemoteDesktop\BalloonRemoteDesktopDlg.h">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonRemoteDesktop\RdControlledBar.h">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonRemoteDesktop\RdViewerToolbar.h">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonRemoteDesktop\RdViewerWindow.h">
-      <Filter>UI\BalloonRemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonScreenshot\AnnotationModel.h">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonScreenshot\CaptureCanvas.h">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonScreenshot\ScreenCaptureOverlay.h">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonScreenshot\ScreenshotGeometry.h">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\BalloonScreenshot\ScreenshotToolbar.h">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClInclude>
     <ClInclude Include="UI\BalloonSearch\ContactMatch.h">
       <Filter>UI\BalloonSearch</Filter>
     </ClInclude>
@@ -2213,6 +3452,21 @@
     <ClInclude Include="UI\BalloonSearch\SearchCandidateCache.h">
       <Filter>UI\BalloonSearch</Filter>
     </ClInclude>
+    <ClInclude Include="UI\BalloonSearch\GlobalSearchText.h">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSearch\GroupFileSearchState.h">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSearch\SearchKeyboard.h">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSearch\RecentSearchList.h">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSearch\SearchResultScrollView.h">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClInclude>
     <ClInclude Include="UI\BalloonSearch\SearchDropdown.h">
       <Filter>UI\BalloonSearch</Filter>
     </ClInclude>
@@ -2226,6 +3480,9 @@
       <Filter>UI\BalloonSettings</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonSettings\SettingsBinding.h">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSettings\HotkeyCaptureBox.h">
       <Filter>UI\BalloonSettings</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonSettings\CacheCleanPlan.h">
@@ -2249,89 +3506,11 @@
     <ClInclude Include="UI\BalloonSettings\SettingsNavList.h">
       <Filter>UI\BalloonSettings</Filter>
     </ClInclude>
-    <ClInclude Include="UI\BalloonSettings\SettingsPageModel.h">
+    <ClInclude Include="UI\BalloonSettings\AutoReplySettingsRows.h">
       <Filter>UI\BalloonSettings</Filter>
     </ClInclude>
-    <ClInclude Include="Feature\Call\AudioLoopback.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\AudioPcmUtils.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\AvSyncScheduler.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\BalloonCallDlg.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallActionBarModel.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallAudioEngine.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallDlgLayout.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallMediaFraming.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallMediaSession.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallRelayClient.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallRelaySelfTest.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallRelayTestFrame.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallVideoCanvas.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallVideoDisplaySink.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallVideoEngine.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CallVideoUiDebug.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CameraDisplayTest.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\CameraPreviewDebug.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\H264SelfTest.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\MfCameraCapture.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\MfH264Codec.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\OpusAudioCodec.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\SpeexAudioProcessor.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\SpeexResampler.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\VideoFrameConvert.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\VideoLoopbackDebug.h">
-      <Filter>Feature\Call</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\Call\WasapiAudioIo.h">
-      <Filter>Feature\Call</Filter>
+    <ClInclude Include="UI\BalloonSettings\SettingsPageModel.h">
+      <Filter>UI\BalloonSettings</Filter>
     </ClInclude>
     <ClInclude Include="third-party\jsoncpp-1.9.0\allocator.h">
       <Filter>third-party\jsoncpp-1.9.0</Filter>
@@ -2375,22 +3554,25 @@
     <ClInclude Include="net\AnnounceProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="net\CallProtocolClient.h">
-      <Filter>net</Filter>
-    </ClInclude>
     <ClInclude Include="net\ChatTransferCancelRegistry.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="net\ContactsProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
+    <ClInclude Include="net\LoginResultFill.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\ProfileFields.h">
+      <Filter>Session</Filter>
+    </ClInclude>
     <ClInclude Include="net\ConversationsProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="net\FavoriteProtocolClient.h">
+    <ClInclude Include="net\SystemTipText.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="net\StarredProtocolClient.h">
+    <ClInclude Include="net\FavoriteProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="net\ContactTagProtocolClient.h">
@@ -2415,6 +3597,9 @@
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="net\GroupFileProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\GlobalSearchProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="net\GroupProtocolClient.h">
@@ -2475,10 +3660,10 @@
     <ClInclude Include="net\RegisterProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="net\RemoteDesktopProtocolClient.h">
+    <ClInclude Include="net\FolderProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="net\FolderProtocolClient.h">
+    <ClInclude Include="net\CardProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="Feature\FolderTransfer\FolderTransferManager.h">
@@ -2492,6 +3677,12 @@
     </ClInclude>
     <ClInclude Include="Feature\FolderTransfer\FolderManifest.h">
       <Filter>Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\FolderTransfer\DirectFileTransfer.h">
+      <Filter>Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\P2PBadge.h">
+      <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="Feature\FolderTransfer\FolderRecvSession.h">
       <Filter>Feature\FolderTransfer</Filter>
@@ -2510,69 +3701,6 @@
     </ClInclude>
     <ClInclude Include="net\TransferOwnerRegistry.h">
       <Filter>net</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\CaptureFallbackPolicy.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\CursorInfo.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\DxgiScreenCapturer.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\GdiScreenCapturer.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\IScreenCapturer.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdCaptureTypes.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdControlledStreamer.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdEngineDef.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdInputDef.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdInputEncoder.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdInputInjector.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdRelayClient.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdRelayFraming.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdRelaySelfTest.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdScreenCapturer.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdScreenDecoder.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\RdSelfTestWindow.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\ScreenFrameEncoder.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\ScreenManager.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\ScreenSpy.h">
-      <Filter>Feature\RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="Feature\RemoteDesktop\until.h">
-      <Filter>Feature\RemoteDesktop</Filter>
     </ClInclude>
     <ClInclude Include="third-party\wtl10.1\atlapp.h">
       <Filter>third-party\wtl10.1</Filter>
@@ -2667,9 +3795,148 @@
     <ClInclude Include="third-party\zlib1.2.11\zutil.h">
       <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
+    <ClInclude Include="Feature\ScreenShare\ScreenShareStatusCache.h">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ScreenShare\ScreenShareRoomState.h">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatScreenShareCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatSystemTip.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ScreenShare\ScreenShareHub.h">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\GroupCall\GroupCallStatusCache.h">
+      <Filter>Feature\GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\GroupCall\GroupCallHub.h">
+      <Filter>Feature\GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatGroupCallCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCallCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatAnnouncementCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatMemoCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCloudRecordCard.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\AnnouncementCardApply.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\ScreenShare\RecordEntry.h">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Screenshot\ScreenshotEntry.h">
+      <Filter>Feature\Screenshot</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Screenshot\ScreenshotHotkey.h">
+      <Filter>Feature\Screenshot</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Screenshot\ScreenshotPrefs.h">
+      <Filter>Feature\Screenshot</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Screenshot\ScreenshotHost.h">
+      <Filter>Feature\Screenshot</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Screenshot\ScreenshotRequestBuilder.h">
+      <Filter>Feature\Screenshot</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelRecordMenu.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\ScreenShareInfoApply.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\CornerPopupCountdown.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="net\VoiceContent.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="Feature\Voice\VoiceHub.h">
+      <Filter>Feature\Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\VoiceRecordBarModel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\VoiceRecordBar.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatVoiceBubble.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatReceivedVoice.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatVoicePaint.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatVoiceStrip.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\VoiceRecordFlow.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\VoiceRecordSession.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\GroupFileChatPoster.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="Session\SubtitlePrefs.h">
+      <Filter>Session</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Graphics\CompositionLayer.h">
+      <Filter>Common\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleModel.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleTextFit.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleState.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleLayout.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleRenderer.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleSession.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleView.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonSubtitle\SubtitleWindow.h">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonHistory\RecordLocalStore.h">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="App\MediaRecordingBridge.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="net\UploadInflightGate.h">
+      <Filter>net</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="flamingo.rc" />
+    <ResourceCompile Include="FlamingoVersion.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\100.ico">

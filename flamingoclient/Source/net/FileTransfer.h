@@ -51,6 +51,7 @@
 #include "GroupTransferQueue.h"     // GroupTransferQueue / GroupTransferItem（群文件并发池）
 #include "ChatTransferCancelRegistry.h"  // ChatTransferCancelRegistry（单聊收发的取消簿记）
 #include "FileStreamTransfer.h"     // IFileFrameChannel / FileStreamTransfer（流式收发实现）
+#include "UploadInflightGate.h"     // UploadInflightGate（同一文件只上传一份）
 
 namespace net {
 
@@ -159,6 +160,7 @@ struct GroupFileUploadResult
     std::string m_fileid;    //成功时：文件ID（群聊窗据此发 cmd_add_group_file 登记）
     std::string m_filename;  //原始文件名（UTF-8，日志 / 提示用）
     int64_t     m_size;      //文件字节数
+    std::string m_md5;       //成功时：文件内容的 MD5（2026-10-05 起带上：发送录像时还要用它在群里发文件消息）
 
     GroupFileUploadResult()
         : m_groupid(0)
@@ -219,6 +221,45 @@ struct GroupFileDownloadResult
     GroupFileDownloadResult()
         : m_groupid(0)
         , m_ok(false)
+        , m_errcode(0)
+    {
+    }
+};
+
+//语音消息上传最终结果（回投 UI，堆对象由 UI 处理后 delete；语音消息第 3c 步）。
+//成功只表示语音文件已上传、语音消息（cmd_send_message，msgtype=4）已发出；服务器的发送回执仍经
+//FMG_MSG_V2_SEND_CHATMSG_ACK 按 clientmsgid 回投，与文本 / 图片 / 文件消息一致。
+struct VoiceSendResult
+{
+    std::string m_clientmsgid;  //关联本端「发送中」的语音气泡
+    int         m_ctype;        //会话类型（主面板据此路由到单聊窗或群聊窗）
+    int64_t     m_cid;          //会话ID（单聊=对端 userid，群聊=群id）
+    bool        m_ok;           //上传并发出是否成功
+    int         m_errcode;      //失败错误码（见 enum error_code，传输层错误用 error_code_upload_fail）
+    std::string m_errmsg;       //失败描述（日志用）
+    std::string m_fileid;       //成功时：语音文件ID
+    std::string m_md5;          //语音文件内容MD5（小写十六进制）
+
+    VoiceSendResult()
+        : m_ctype(0)
+        , m_cid(0)
+        , m_ok(false)
+        , m_errcode(0)
+    {
+    }
+};
+
+//语音文件下载最终结果（回投 UI，堆对象由 UI 处理后 delete；语音消息第 3d-3 步）。
+//按 md5 而不按 msgid 关联：同一段语音被转发多次时有好几条消息共用一个文件，下载一次即可全部就绪。
+struct VoiceDownloadResult
+{
+    std::string  m_md5;        //语音文件内容 MD5（小写十六进制），聊天窗据此找到所有该段语音的气泡
+    bool         m_ok;         //下载并校验是否成功
+    int          m_errcode;    //失败错误码（见 enum error_code）
+    std::wstring m_localpath;  //成功时：文件落地的本地完整路径（Users\<账号>\ChatVoice\<md5>.ogg）
+
+    VoiceDownloadResult()
+        : m_ok(false)
         , m_errcode(0)
     {
     }
@@ -348,6 +389,35 @@ public:
                                   int64_t selfUserId, const std::wstring& destPath);
 
     /**
+     *  发起一次语音文件下载（语音消息第 3d-3 步，docs/语音消息方案.md V5：收到语音即在后台下载到本机缓存）。
+     *  与单聊收文件走同一条串行工作线程与共享 file 连接；不报进度、不可取消（语音文件最大约 1 MiB）。
+     *  同一 md5 已在队列里或正在下载时直接忽略，在途那一笔完成后按 md5 回投，所有该段语音的气泡一并更新。
+     *  完成 / 失败经 FMG_MSG_V2_VOICE_DOWNLOAD_RESULT 回投到 UI。线程安全，立即返回。
+     *  @param fileid     语音文件ID（来自消息 content，传给 cmd_request_download）
+     *  @param md5        文件内容MD5（小写十六进制，来自消息 content，下载后校验，也是回投时的关联键）
+     *  @param expectSize 期望字节数（来自消息 content，日志用，可为 0）
+     *  @param destPath   落地完整路径（ChatVoice\<md5>.ogg）；所在目录不存在时由工作线程逐级创建
+     */
+    void EnqueueVoiceDownload(const std::string& fileid, const std::string& md5, int64_t expectSize,
+                              const std::wstring& destPath);
+
+    /**
+     *  发起一次发语音（语音消息第 3c 步，docs/语音消息方案.md 第 7.3 节）：把录好的语音文件按聊天文件场景
+     *  （file_scene_chat_file，方案 V3）上传，再发语音消息（cmd_send_message，msgtype=4）。与单聊收发文件走同一条
+     *  串行工作线程；不报进度、不可取消（语音文件最大约 360 KB）。服务端已有同 md5 文件时跳过传字节。
+     *  完成 / 失败经 FMG_MSG_V2_VOICE_SEND_RESULT 回投；发送回执另经 FMG_MSG_V2_SEND_CHATMSG_ACK 回投。
+     *  线程安全，可在 UI 线程调用，立即返回。重发时沿用原 clientMsgId 再调一次即可。
+     *  @param ctype           会话类型（单聊=1、群聊=2）
+     *  @param cid             会话ID（单聊=对端 userid，群聊=群id）
+     *  @param clientMsgId     客户端消息ID（开始录音时生成，非空），与本端「发送中」的语音气泡对回
+     *  @param localPath       录音文件完整路径（ChatVoice\<md5>.ogg）
+     *  @param durationSeconds 时长（整秒，1~120），写进消息 content.duration
+     *  @param waveBase64      40 个波形值的 Base64，写进 content.wave；空串表示不带波形
+     */
+    void EnqueueSendVoice(int ctype, int64_t cid, const std::string& clientMsgId, const std::wstring& localPath,
+                          int durationSeconds, const std::string& waveBase64);
+
+    /**
      *  由 CIUSocket::HandleV2Frame 在收到 cmd_request_upload(1801) 应答、且经
      *  TransferOwnerRegistry 判定归属为文件传输时调用，把信令应答按 seq 交给等待槽。
      *  可能在网络接收线程上调用。
@@ -385,6 +455,8 @@ private:
     {
         task_send     = 0,   //发文件：读本地文件→申请上传→传字节→发文件消息
         task_download = 1,   //收文件：申请下载→拉字节→校验→按原名落地
+        task_voice_download = 2,   //收语音：申请下载→拉字节→校验→落地到 m_destPath（ChatVoice\<md5>.ogg），按 md5 回投
+        task_send_voice = 3,       //发语音：读录音文件→申请上传→传字节→发语音消息（msgtype=4）
     };
 
     //一项串行 worker 队列任务（仅单聊收发文件用）。按 m_kind 区分发送 / 下载。
@@ -406,6 +478,13 @@ private:
         int64_t      m_expectSize;   //期望字节数（日志用，可为 0）
         std::wstring m_selfAccount;  //当前登录账号（决定落地到 Users\<账号>\ChatFile\ 哪个目录）
 
+        //==== 语音下载（task_voice_download）字段：另用上面的 m_fileid、m_expectMd5、m_expectSize ====
+        std::wstring m_destPath;     //落地完整路径（ChatVoice\<md5>.ogg）
+
+        //==== 发语音（task_send_voice）字段：另用上面的 m_ctype、m_cid、m_clientmsgid、m_localpath ====
+        int          m_voiceDuration;  //时长（整秒），写进消息 content.duration
+        std::string  m_voiceWave;      //波形值的 Base64，写进消息 content.wave；空串表示不带
+
         //取消标志（入队时由 m_cancelReg 登记并装入）：worker 不持锁地 load 它，UI 线程
         //经 CancelSend / CancelDownload 持锁 store。worker 持有这份 shared_ptr，故簿记表
         //即便已 CompleteXxx 清理，这里读取依然安全。
@@ -417,6 +496,7 @@ private:
             , m_cid(0)
             , m_msgid(0)
             , m_expectSize(0)
+            , m_voiceDuration(0)
         {
         }
     };
@@ -458,6 +538,12 @@ private:
     //处理一项收文件任务（申请下载→拉字节→校验→按原名落地→回投本地路径），全程串行。
     void ProcessDownload(const Task& task);
 
+    //处理一项语音下载任务（申请下载→拉字节→校验→落地到 task.m_destPath→按 md5 回投），全程串行。
+    void ProcessVoiceDownload(const Task& task);
+
+    //处理一项发语音任务（读文件算 md5→申请上传→传字节→发语音消息→回投结果），全程串行。
+    void ProcessSendVoice(const Task& task);
+
     //========== 群文件并发传输池（最多 kMaxConcurrentGroupTransfers 笔并发） ==========
 
     //并发池工作线程主循环：从 m_poolQueue 取一笔（上传/下载）、用一条独立连接处理完
@@ -486,10 +572,18 @@ private:
     void PostDownloadResult(int64_t msgid, bool ok, int errcode, const std::wstring& localPath,
                             const std::string& md5, const std::string& filename);
 
+    //向 UI 回投语音下载结果（成功 / 失败统一走此），并把该 md5 移出在途集合。
+    void PostVoiceDownloadResult(const std::string& md5, bool ok, int errcode, const std::wstring& localPath);
+
+    //向 UI 回投发语音的结果（成功 / 失败统一走此）。
+    void PostVoiceSendResult(const Task& task, bool ok, int errcode, const std::string& errmsg,
+                             const std::string& fileid, const std::string& md5);
+
     //向 UI 回投群文件上传最终结果（成功 / 失败统一走此）。uploadId 让 UI 定位是哪一笔。
     void PostGroupFileUploadResult(int64_t groupId, int uploadId, bool ok, int errcode,
                                    const std::string& errmsg, const std::string& fileid,
-                                   const std::string& filename, int64_t size);
+                                   const std::string& filename, int64_t size,
+                                   const std::string& md5 = std::string());
 
     //向 UI 回投群文件下载最终结果（成功 / 失败统一走此）。
     void PostGroupFileDownloadResult(int64_t groupId, const std::string& entryid,
@@ -507,7 +601,12 @@ private:
     std::deque<Task>             m_queue;       //待处理任务（发送 / 下载）
     std::set<int64_t>            m_inflightDownloads;  //在途下载的 msgid 集合（受 m_queueMtx 保护）：
                                                        //同一条文件被 live 追加 + 历史渲染各触发一次下载时去重
+    std::set<std::string>        m_inflightVoices;     //在途语音下载的 md5 集合（受 m_queueMtx 保护）：同一段语音
+                                                       //出现在多条消息里、或收到推送与翻历史各触发一次时去重
     ChatTransferCancelRegistry   m_cancelReg;   //单聊收发的取消簿记（纯逻辑，受 m_queueMtx 保护）
+    UploadInflightGate           m_uploadGate;  //同一文件只上传一份的门闩（自身加锁）：单聊串行 worker 与群文件
+                                                //并发池在申请上传之前按 MD5 排队，同一文件同时发给群和单聊时
+                                                //后来者等前一笔传完再申请、命中秒传。随单例存活到进程退出
     bool                         m_stop;        //停止标志（串行 worker 与并发池共用）
     bool                         m_started;     //是否已启动（Start 幂等用）
 

@@ -71,4 +71,71 @@ HBITMAP CreateProgramIconBitmap(int size, COLORREF bg)
     return hBmp;
 }
 
+namespace {
+
+// 按指定边长从 exe 模块加载程序主图标；失败返回 NULL
+HICON LoadProgramIcon(int cx, int cy)
+{
+    return (HICON)::LoadImage(::GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_MAINFRAME), IMAGE_ICON, cx, cy,
+                              LR_DEFAULTCOLOR);
+}
+
+} // namespace
+
+ProgramWindowIcons::ProgramWindowIcons()
+    : m_titleBitmap(NULL)
+    , m_bigIcon(NULL)
+    , m_smallIcon(NULL)
+{
+}
+
+ProgramWindowIcons::~ProgramWindowIcons()
+{
+    if (m_titleBitmap != NULL)
+    {
+        ::DeleteObject(m_titleBitmap);
+    }
+    if (m_bigIcon != NULL)
+    {
+        ::DestroyIcon(m_bigIcon);
+    }
+    if (m_smallIcon != NULL)
+    {
+        ::DestroyIcon(m_smallIcon);
+    }
+}
+
+HBITMAP ProgramWindowIcons::TitleBitmap(int size, COLORREF bg)
+{
+    if (m_titleBitmap == NULL)
+    {
+        m_titleBitmap = CreateProgramIconBitmap(size, bg);
+    }
+    return m_titleBitmap;
+}
+
+void ProgramWindowIcons::ApplyTaskIcons(HWND hwnd)
+{
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    if (m_bigIcon == NULL)
+    {
+        m_bigIcon = LoadProgramIcon(::GetSystemMetrics(SM_CXICON), ::GetSystemMetrics(SM_CYICON));
+    }
+    if (m_smallIcon == NULL)
+    {
+        m_smallIcon = LoadProgramIcon(::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+    }
+    if (m_bigIcon != NULL)
+    {
+        ::SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)m_bigIcon);
+    }
+    if (m_smallIcon != NULL)
+    {
+        ::SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)m_smallIcon);
+    }
+}
+
 } // namespace balloonmain

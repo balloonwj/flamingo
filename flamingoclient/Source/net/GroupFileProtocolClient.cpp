@@ -188,4 +188,46 @@ bool GroupFileProtocolClient::parseGroupFilesChangedNotify(const std::string& js
     return true;
 }
 
+std::string GroupFileProtocolClient::buildSearchGroupFilesRequest(const std::string& keywordUtf8, int limit)
+{
+    Json::Value root;
+    root["keyword"] = keywordUtf8;
+    root["limit"]   = limit;
+    return writeCompact(root);
+}
+
+bool GroupFileProtocolClient::parseSearchGroupFilesResponse(const std::string& jsonbody,
+                                                            SearchGroupFilesResult& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+    //缺少整型 code 视为非法应答
+    if (!root["code"].isIntegral())
+        return false;
+
+    out.m_code    = root["code"].asInt();
+    out.m_msg     = root["msg"].isString() ? root["msg"].asString() : std::string();
+    //以下字段失败应答没有，按容错取值，不影响返回 true
+    out.m_keyword = root["keyword"].isString() ? root["keyword"].asString() : std::string();
+    out.m_hasmore = root["hasmore"].isBool() ? root["hasmore"].asBool() : false;
+
+    out.m_files.clear();
+    const Json::Value& files = root["files"];
+    if (files.isArray())
+    {
+        out.m_files.reserve(files.size());
+        for (Json::ArrayIndex i = 0; i < files.size(); ++i)
+        {
+            if (!files[i].isObject())
+                continue;
+            SearchedGroupFileItem item;
+            item.m_groupid = jsonToStringId(files[i]["groupid"]);
+            parseEntry(files[i], item.m_entry);
+            out.m_files.push_back(item);
+        }
+    }
+    return true;
+}
+
 } // namespace net

@@ -12,6 +12,8 @@
 #include "../net/IUSocket.h"
 #include "../net/ProtocolStream.h"
 #include "../net/LoginProtocolClient.h"     // v2 登录应答解析（重连路径用）
+#include "../net/LoginResultFill.h"         // FillLoginResultFromResponse：登录应答写进 CLoginResult
+#include "../net/SystemTipText.h"          // SetSystemTipSelfUserId：系统提示涉及本人时写「你」
 
 CMsgItem::CMsgItem(void)
 {
@@ -170,23 +172,10 @@ void CSendMsgThread::HandleLogon(const CLoginRequest* pLoginRequest)
             {
                 pLoginResult->m_LoginResultCode = LOGIN_SUCCESS;
                 pLoginResult->m_uAccountID = (UINT)resp.userid;
-                strcpy_s(pLoginResult->m_szAccountName, ARRAYSIZE(pLoginResult->m_szAccountName),
-                         resp.profile.username.c_str());
-                strcpy_s(pLoginResult->m_szNickName, ARRAYSIZE(pLoginResult->m_szNickName),
-                         resp.profile.nickname.c_str());
-                pLoginResult->m_nFace     = resp.profile.facetype;
-                pLoginResult->m_nGender   = resp.profile.gender;
-                pLoginResult->m_nBirthday = resp.profile.birthday;
-                strcpy_s(pLoginResult->m_szSignature, ARRAYSIZE(pLoginResult->m_szSignature),
-                         resp.profile.signature.c_str());
-                strcpy_s(pLoginResult->m_szAddress, ARRAYSIZE(pLoginResult->m_szAddress),
-                         resp.profile.address.c_str());
-                strcpy_s(pLoginResult->m_szCustomFace, ARRAYSIZE(pLoginResult->m_szCustomFace),
-                         resp.profile.customface.c_str());
-                strcpy_s(pLoginResult->m_szPhoneNumber, ARRAYSIZE(pLoginResult->m_szPhoneNumber),
-                         resp.profile.phonenumber.c_str());
-                strcpy_s(pLoginResult->m_szMail, ARRAYSIZE(pLoginResult->m_szMail),
-                         resp.profile.mail.c_str());
+                //系统提示涉及本人时写「你」：须在收取线程解析任何业务帧之前设好
+                net::SetSystemTipSelfUserId((int64_t)resp.userid);
+                //userid、账号、本人资料与功能开关：与登录窗共用同一份拷贝（net/LoginResultFill.h）
+                net::FillLoginResultFromResponse(resp, *pLoginResult);
             }
             //失败应答：把服务端错误码映射到客户端 LOGIN_RESULT_CODE
             //（错误码定义见 server chatserversrc/Protocol.h enum error_code）

@@ -7,6 +7,9 @@
  *      都按区间过滤，且对方与其他群成员不受影响（真的打开临时库跑 SQL，默认 SQLite，
  *      设 FLAMINGO_TEST_MYSQL=1 时跑 MySQL，见 test_dbbackend.h）；
  *    - MDB1：规模基准（挂 doctest::skip()，默认不跑）。
+ *    - CLR0~CLR6：按会话本人视角清空聊天记录（cmd_clear_conversation）：锚点写入
+ *      t_conversation.f_cleared_msgid 之后，同步 / 搜索 / 会话列表 / Pin 列表 / 转发取源都排除
+ *      锚点之前的消息，对方与其他群成员不受影响，锚点只前进不后退。
  *
  *  典型用法：Tests.exe --test-case="MDR*"
  *
@@ -24,7 +27,8 @@
 #include "test_dbbackend.h"
 #include "../chatserversrc/MessageDeleteRange.h"
 #include "../chatserversrc/MessageManager.h"
-#include "../chatserversrc/MessagePinManager.h"   //MDR8：Pin 列表同样按区间过滤
+#include "../chatserversrc/MessagePinManager.h"   //MDR8 / CLR5：Pin 列表同样按区间与清空锚点过滤
+#include "../chatserversrc/MessageProtocol.h"     //CLR3：SetConversationRequest
 #include "../chatserversrc/Protocol.h"      //conversation_single / conversation_group
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
@@ -835,3 +839,204 @@ TEST_CASE("MDB1 10 万条消息：逐条写入删除记录与只写一条区间�
 
     CleanupMdrDb();
 }
+
+// =====================================================================
+// CLR 组：按会话本人视角清空聊天记录（cmd_clear_conversation，2026-10-02）
+//
+// 清空锚点记在本人这一行 t_conversation.f_cleared_msgid：该会话里 msgid 不大于锚点的消息对本人
+// 隐藏，对方与其他群成员不受影响。读取时由 visibleToUserClause 里的 BuildNotClearedClause 过滤，
+// 与按时间范围清理（MDR 组）同时生效。
+// =====================================================================
+
+namespace {
+
+//清空时写入 f_update_time 的时刻（Unix毫秒），取值无特殊含义
+const int64_t kClearTimeMs = 1754500000000LL;
+
+//以 userid 的身份清空某会话，返回生效的锚点；失败时中止用例。
+int64_t ClearFor(int32_t userid, int ctype, int64_t cid)
+{
+    int64_t anchor = -1;
+    REQUIRE(Singleton<MessageManager>::Instance().clearConversation(userid, ctype, cid,
+                                                                     kClearTimeMs, anchor));
+    return anchor;
+}
+
+} // anonymous namespace
+
+TEST_CASE("CLR0 清空过滤条件：按消息算出本人视角的会话，取该会话的清空锚点比较 msgid")
+{
+    const std::string clause = msgdelete::BuildNotClearedClause(kUserA, "m.");
+    //列名都带上调用方给的前缀，联表时不会有歧义
+    CHECK(clause.find("m.f_msgid >") != std::string::npos);
+    CHECK(clause.find("t_conversation") != std::string::npos);
+    CHECK(clause.find("f_cleared_msgid") != std::string::npos);
+    //本人 userid 出现在子查询里
+    CHECK(clause.find("100001") != std::string::npos);
+    //没有清空过（查不到行）时按 0 处理
+    CHECK(clause.find("COALESCE") != std::string::npos);
+    //片段自带前置空格与 AND，可以直接拼在 WHERE 条件之后
+    CHECK(clause.compare(0, 5, " AND ") == 0);
+}
+
+TEST_CASE("CLR1 清空群会话：本人同步、搜索、会话列表都不再带出旧消息，其他成员不受影响，新消息照常")
+{
+    ResetMdrDb();
+    InsertSingleAndGroupMessages();
+
+    //锚点为清空时该群的最大 msgid
+    CHECK(ClearFor(kUserA, conversation_group, kGroupG) == 13);
+
+    CHECK(SyncIds(kUserA, conversation_group, kGroupG).empty());
+    CHECK(SearchIds(kUserA, conversation_group, kGroupG, "g").empty());
+    //群里没有本人可见的消息：不再出现在会话列表里
+    CHECK(FindBrief(GroupBriefsOfA(), kGroupG) == NULL);
+    //单聊不受影响
+    const int64_t single[] = { 1, 2, 3, 4 };
+    CHECK(SyncIds(kUserA, conversation_single, kUserB) == Ids(single, 4));
+    //其他群成员不受影响
+    const int64_t group[] = { 11, 12, 13 };
+    CHECK(SyncIds(kUserC, conversation_group, kGroupG) == Ids(group, 3));
+
+    //清空之后到达的新消息照常可见，会话重新出现、未读只数新消息
+    InsertMsg(14, conversation_group, kUserC, kGroupG, kT4, "g4");
+    const int64_t fresh[] = { 14 };
+    CHECK(SyncIds(kUserA, conversation_group, kGroupG) == Ids(fresh, 1));
+    //会话列表先存进局部变量再查：FindBrief 返回的是列表元素的指针，临时列表一结束语句就析构了
+    const std::vector<ConversationBrief> briefs = GroupBriefsOfA();
+    const ConversationBrief* brief = FindBrief(briefs, kGroupG);
+    REQUIRE(brief != NULL);
+    CHECK(brief->lastmsgid == 14);
+    CHECK(brief->unread == 1);
+
+    CleanupMdrDb();
+}
+
+TEST_CASE("CLR2 清空单聊：本人看不到、会话从本人列表消失，对方完全不受影响")
+{
+    ResetMdrDb();
+    InsertSingleAndGroupMessages();
+    InsertMsg(21, conversation_single, kUserD, kUserA, kT1, "d1");
+
+    CHECK(ClearFor(kUserA, conversation_single, kUserB) == 4);
+
+    CHECK(SyncIds(kUserA, conversation_single, kUserB).empty());
+    CHECK(FindBrief(SingleBriefsOfA(), kUserB) == NULL);
+    //与 D 的单聊、群 G 不受影响
+    CHECK(FindBrief(SingleBriefsOfA(), kUserD) != NULL);
+    const int64_t group[] = { 11, 12, 13 };
+    CHECK(SyncIds(kUserA, conversation_group, kGroupG) == Ids(group, 3));
+
+    //B 看单聊与清空前一致，B 的会话列表里仍有 A
+    const int64_t single[] = { 1, 2, 3, 4 };
+    CHECK(SyncIds(kUserB, conversation_single, kUserA) == Ids(single, 4));
+    std::vector<ConversationBrief> briefsOfB;
+    REQUIRE(Singleton<MessageManager>::Instance().getConversationBriefs(kUserB, briefsOfB));
+    CHECK(FindBrief(briefsOfB, kUserA) != NULL);
+
+    CleanupMdrDb();
+}
+
+TEST_CASE("CLR3 锚点只前进不后退；清空不改动置顶与消息提醒模式")
+{
+    ResetMdrDb();
+    InsertSingleAndGroupMessages();
+
+    //先把与 B 的单聊设为置顶、接收消息但不提醒
+    SetConversationRequest req;
+    req.ctype = conversation_single;
+    req.cid = kUserB;
+    req.has_pinned = true;
+    req.pinned = true;
+    req.has_notifymode = true;
+    req.notifymode = notify_mode_silent;
+    req.has_deleted = false;
+    req.deleted = false;
+    int errorCode = error_code_ok;
+    REQUIRE(Singleton<MessageManager>::Instance().setConversation(kUserA, req, kClearTimeMs, errorCode));
+
+    CHECK(ClearFor(kUserA, conversation_single, kUserB) == 4);
+    //没有新消息时再清空一次：锚点不变
+    CHECK(ClearFor(kUserA, conversation_single, kUserB) == 4);
+    //来了新消息再清空：锚点前进
+    InsertMsg(5, conversation_single, kUserB, kUserA, kT4, "s5");
+    CHECK(ClearFor(kUserA, conversation_single, kUserB) == 5);
+    CHECK(SyncIds(kUserA, conversation_single, kUserB).empty());
+
+    bool pinned = false;
+    int notifymode = notify_mode_allow;
+    bool deleted = true;
+    REQUIRE(Singleton<MessageManager>::Instance().getConversationState(
+        kUserA, conversation_single, kUserB, pinned, notifymode, deleted));
+    CHECK(pinned);
+    CHECK(notifymode == notify_mode_silent);
+    CHECK_FALSE(deleted);
+
+    CleanupMdrDb();
+}
+
+TEST_CASE("CLR4 清空一个没有任何消息的会话：成功，锚点为 0，之后的消息照常可见")
+{
+    ResetMdrDb();
+    CHECK(ClearFor(kUserA, conversation_single, kUserD) == 0);
+    InsertMsg(31, conversation_single, kUserD, kUserA, kT1, "first");
+    const int64_t fresh[] = { 31 };
+    CHECK(SyncIds(kUserA, conversation_single, kUserD) == Ids(fresh, 1));
+    CleanupMdrDb();
+}
+
+TEST_CASE("CLR5 Pin 列表与按 ID 取消息（转发取源）同样排除被清空的消息")
+{
+    ResetMdrDb();
+    InsertMsg(11, conversation_group, kUserC, kGroupG, kT1, "g1");
+    InsertMsg(12, conversation_group, kUserC, kGroupG, kT2, "g2");
+
+    MessagePinManager& pinMgr = Singleton<MessagePinManager>::Instance();
+    REQUIRE(pinMgr.pinMessage(11, kUserC, kT3));
+
+    CHECK(ClearFor(kUserA, conversation_group, kGroupG) == 12);
+    InsertMsg(13, conversation_group, kUserC, kGroupG, kT3, "g3");
+
+    std::vector<MessageRecord> out;
+    std::vector<PinRecord> pins;
+    int64_t total = 0;
+    REQUIRE(pinMgr.getPinnedMessages(conversation_group, kGroupG, kUserA,
+                                     PIN_FETCH_LIMIT, out, pins, total));
+    CHECK(out.empty());
+    //C 仍看得到被钉住的那条
+    REQUIRE(pinMgr.getPinnedMessages(conversation_group, kGroupG, kUserC,
+                                     PIN_FETCH_LIMIT, out, pins, total));
+    CHECK(out.size() == 1);
+
+    //转发取源：A 取不到被清空的 11、12，取得到清空之后的 13
+    std::vector<int64_t> wanted;
+    wanted.push_back(11);
+    wanted.push_back(12);
+    wanted.push_back(13);
+    std::vector<MessageRecord> records;
+    REQUIRE(Singleton<MessageManager>::Instance().getMessagesByIds(kUserA, wanted, records));
+    REQUIRE(records.size() == 1);
+    CHECK(records[0].msgid == 13);
+
+    CleanupMdrDb();
+}
+
+TEST_CASE("CLR6 按会话清空与按时间范围清理、逐条删除同时生效")
+{
+    ResetMdrDb();
+    InsertMsg(1, conversation_single, kUserA, kUserB, kT1, "s1");
+    InsertMsg(2, conversation_single, kUserB, kUserA, kT2, "s2");
+    CHECK(ClearFor(kUserA, conversation_single, kUserB) == 2);
+
+    //清空之后的两条：一条被逐条删除，一条落在时间清理区间里，都不可见；最后一条可见
+    InsertMsg(3, conversation_single, kUserB, kUserA, kT3, "s3");
+    InsertMsg(4, conversation_single, kUserB, kUserA, kT4, "s4");
+    InsertMsg(5, conversation_single, kUserB, kUserA, kT4 + 1000, "s5");
+    REQUIRE(Singleton<MessageManager>::Instance().deleteMessageForUser(kUserA, 3));
+    AddRangeFor(kUserA, kT4, kT4);
+
+    const int64_t kept[] = { 5 };
+    CHECK(SyncIds(kUserA, conversation_single, kUserB) == Ids(kept, 1));
+    CleanupMdrDb();
+}
+

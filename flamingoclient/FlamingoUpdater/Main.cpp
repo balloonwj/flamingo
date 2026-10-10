@@ -2,7 +2,7 @@
  *  更新器 FlamingoUpdater 的入口，Main.cpp
  *
  *  执行流程（见 docs/客户端自动更新方案.md 6.5）：
- *    ① 解析命令行、打开日志；
+ *    ① 按 --lang 确定界面语言（多语言第 3c 步），解析命令行、打开日志；
  *    ② 按 PID 等主进程退出（超时则提示用户手动关闭后重试，<u>绝不 TerminateProcess</u>）；
  *    ③ 交给 Installer 完成"校验 → 备份 → 覆盖"，失败自动回滚；
  *    ④ 成功后重新启动主程序。
@@ -24,6 +24,8 @@
 #include "CommandLine.h"
 #include "Installer.h"
 #include "UpdateLog.h"
+#include "../Source/App/BrandText.h"   // ReadAppTitle（提示框里的产品名称）
+#include "../Source/Common/I18n/I18n.h"   // TR / TRF 与 i18n::Init：提示框文字的多语言
 
 namespace {
 
@@ -35,8 +37,94 @@ const DWORD kWaitMainExitMs = 30 * 1000;
 //还需要一点时间，立刻去覆盖偶尔会撞上"文件被占用"。
 const DWORD kGraceAfterExitMs = 500;
 
-//提示框标题。
-const wchar_t* const kMsgBoxTitle = L"FlamingoIM 更新";
+//产品名称：解析出安装目录后，从 <安装目录>\config\flamingo.ini 的 [ui] apptitle 读取（规则见
+//Source/App/BrandText.h）。读到之前（命令行解析失败时）为空，按缺省名称 FlamingoIM 处理。
+std::wstring s_productName;
+
+//主程序配置文件相对安装目录的路径。
+const wchar_t* const kConfigRelPath = L"\\config\\flamingo.ini";
+
+//取产品名称；还没读到时返回缺省名称。
+std::wstring ProductName()
+{
+    return s_productName.empty() ? std::wstring(brandtext::kDefaultAppTitle) : s_productName;
+}
+
+//提示框标题：「<产品名称> 更新」。
+std::wstring MsgBoxTitle()
+{
+    return TRF(L"{0} 更新", ProductName());
+}
+
+//取一个文件路径的所在目录，定义在下面
+std::wstring DirectoryOf(const std::wstring& path);
+
+//语言包临时复制品的文件名前缀与扩展名；完整文件名为「前缀 + 进程号 + 扩展名」，放在 %TEMP% 下
+const wchar_t* const kLangCopyPrefix = L"FlamingoLang_updater_";
+const wchar_t* const kLangCopySuffix = L".dll";
+
+//语言初始化的结果，打开日志之后写进日志
+i18n::InitResult s_langResult;
+
+//删除以前运行留下的语言包复制品。仍被别的更新器进程加载着的会删除失败，留到下一次再删
+void DeleteStaleLanguageCopies(const std::wstring& tempDir, const std::wstring& keepName)
+{
+    WIN32_FIND_DATAW fd;
+    const std::wstring pattern = tempDir + kLangCopyPrefix + L"*" + kLangCopySuffix;
+    HANDLE hFind = ::FindFirstFileW(pattern.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        return;
+    }
+    do
+    {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 && keepName != fd.cFileName)
+        {
+            ::DeleteFileW((tempDir + fd.cFileName).c_str());
+        }
+    } while (::FindNextFileW(hFind, &fd));
+    ::FindClose(hFind);
+}
+
+/**
+ *  按 --lang 的值初始化界面语言（多语言第 3c 步）。
+ *
+ *    language：主程序传来的语言代码；为空时跟随系统界面语言
+ *
+ *  语言包先复制到 %TEMP% 再加载：升级包里可能带有新的 FlamingoLang.dll，更新器若直接加载安装目录里的那一份，
+ *  安装时会因文件被占用而无法替换。复制或加载失败时退回简体中文，不影响升级本身。
+ */
+void InitUpdaterLanguage(const std::wstring& language)
+{
+    const LANGID systemUiLang = ::GetUserDefaultUILanguage();
+    //期望的语言就是简体中文：不需要语言包
+    const std::wstring requested = i18n::ResolveRequestedLanguage(language, systemUiLang, NULL);
+    if (_wcsicmp(requested.c_str(), i18n::kSourceLanguage) == 0)
+    {
+        s_langResult = i18n::Init(language, std::wstring(), systemUiLang);
+        return;
+    }
+
+    wchar_t exePath[MAX_PATH] = { 0 };
+    ::GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    const std::wstring source = DirectoryOf(exePath) + L"\\" + FLAMINGO_LANG_DLL_NAME;
+
+    wchar_t tempBuf[MAX_PATH] = { 0 };
+    const DWORD tempLen = ::GetTempPathW(MAX_PATH, tempBuf);
+    std::wstring copyPath;
+    if (tempLen > 0 && tempLen < MAX_PATH)
+    {
+        const std::wstring tempDir = tempBuf;   //GetTempPathW 返回的目录以反斜杠结尾
+        const std::wstring copyName = kLangCopyPrefix + std::to_wstring(::GetCurrentProcessId()) + kLangCopySuffix;
+        DeleteStaleLanguageCopies(tempDir, copyName);
+        if (::CopyFileW(source.c_str(), (tempDir + copyName).c_str(), FALSE))
+        {
+            copyPath = tempDir + copyName;
+        }
+    }
+    //复制失败（语言包不存在、临时目录不可写）时传空路径：Init 加载失败，退回简体中文
+    s_langResult = i18n::Init(language, copyPath, systemUiLang);
+}
 
 //取一个文件路径的所在目录；没有分隔符时返回空串。
 std::wstring DirectoryOf(const std::wstring& path)
@@ -65,7 +153,7 @@ bool WaitForMainProcessExit(unsigned long pid, DWORD timeoutMs)
     HANDLE hProcess = ::OpenProcess(SYNCHRONIZE, FALSE, (DWORD)pid);
     if (hProcess == NULL)
     {
-        iupdate::UpdateLog::Instance().Write(L"主进程句柄打不开，视为已退出。");
+        iupdate::UpdateLog::Instance().Write(L"Cannot open the main process handle, treating it as exited.");
         return true;
     }
 
@@ -116,7 +204,7 @@ bool LaunchMainProgram(const std::wstring& execPath)
                                      workDir.empty() ? NULL : workDir.c_str(), &si, &pi);
     if (!ok)
     {
-        iupdate::UpdateLog::Instance().WriteWithError(L"启动主程序失败：" + execPath,
+        iupdate::UpdateLog::Instance().WriteWithError(L"Failed to start the main program: " + execPath,
                                                       ::GetLastError());
         return false;
     }
@@ -132,7 +220,7 @@ void ReportToUser(const std::wstring& text, bool silent, UINT icon)
     iupdate::UpdateLog::Instance().Write(text);
     if (!silent)
     {
-        ::MessageBoxW(NULL, text.c_str(), kMsgBoxTitle, MB_OK | icon);
+        ::MessageBoxW(NULL, text.c_str(), MsgBoxTitle().c_str(), MB_OK | icon);
     }
 }
 
@@ -146,9 +234,14 @@ int APIENTRY wWinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/,
     LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
     if (argv == NULL)
     {
-        ::MessageBoxW(NULL, L"无法解析命令行参数。", kMsgBoxTitle, MB_OK | MB_ICONERROR);
+        //拿不到参数，也就不知道主程序的界面语言：跟随系统界面语言
+        InitUpdaterLanguage(std::wstring());
+        ::MessageBoxW(NULL, TR(L"无法解析命令行参数。"), MsgBoxTitle().c_str(), MB_OK | MB_ICONERROR);
         return 1;
     }
+
+    //先确定界面语言，之后的提示（含解析失败的说明）都用这种语言
+    InitUpdaterLanguage(iupdate::PeekLanguageArg(argc, argv));
 
     iupdate::UpdateArgs args;
     std::wstring errmsg;
@@ -159,51 +252,59 @@ int APIENTRY wWinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/,
     {
         //参数不对时一律弹框：这种情况只会出现在开发期或有人手工运行它，
         //此刻还没解析出 --silent，也谈不上静默。
-        ::MessageBoxW(NULL, errmsg.c_str(), kMsgBoxTitle, MB_OK | MB_ICONERROR);
+        ::MessageBoxW(NULL, errmsg.c_str(), MsgBoxTitle().c_str(), MB_OK | MB_ICONERROR);
         return 1;
     }
+
+    //知道安装目录之后，读主程序配置里的产品名称，之后的提示框都用它
+    s_productName = brandtext::ReadAppTitle((args.m_targetDir + kConfigRelPath).c_str());
 
     //② 打开日志。日志放在安装目录下的 update 子目录，与升级包同处一地，便于打包排查。
     iupdate::UpdateLog& log = iupdate::UpdateLog::Instance();
     log.Open(args.m_targetDir + L"\\update");
-    log.Write(L"======== 更新器启动 ========");
-    log.Write(L"包 = " + args.m_zipPath);
-    log.Write(L"目标目录 = " + args.m_targetDir);
-    log.Write(L"主程序 = " + args.m_execPath);
-    log.Write(L"主进程 id = " + std::to_wstring(args.m_pid));
+    log.Write(L"======== updater started ========");
+    log.Write(L"package = " + args.m_zipPath);
+    log.Write(L"target dir = " + args.m_targetDir);
+    log.Write(L"main program = " + args.m_execPath);
+    log.Write(L"main process id = " + std::to_wstring(args.m_pid));
+    {
+        //语言初始化的说明是纯 ASCII，逐字节转成宽字符写进日志
+        const std::string langLine = i18n::DescribeInitResult(s_langResult);
+        log.Write(std::wstring(langLine.begin(), langLine.end()));
+    }
 
     //③ 等主进程退出。等不到就如实报错退出，绝不强杀，也绝不在它还开着的时候动文件。
     if (!WaitForMainProcessExit(args.m_pid, kWaitMainExitMs))
     {
-        ReportToUser(L"FlamingoIM 仍在运行，升级已取消。请关闭程序后重试。",
+        ReportToUser(TRF(L"{0} 仍在运行，升级已取消。请关闭程序后重试。", ProductName()),
                      args.m_silent, MB_ICONWARNING);
-        log.Write(L"======== 更新器退出（等待主进程超时）========");
+        log.Write(L"======== updater exited (timed out waiting for the main process) ========");
         return 2;
     }
-    log.Write(L"主进程已退出，开始安装。");
+    log.Write(L"Main process has exited, installing.");
 
     //④ 安装。失败时 Installer 内部已经回滚完毕，安装目录回到升级前的状态。
     iupdate::Installer installer;
     if (!installer.Install(args.m_zipPath, args.m_targetDir, errmsg))
     {
-        ReportToUser(L"升级失败，已还原到升级前的版本。\r\n原因：" + errmsg,
+        ReportToUser(TRF(L"升级失败，已还原到升级前的版本。\r\n原因：{0}", errmsg),
                      args.m_silent, MB_ICONERROR);
 
         //即便升级失败也要把客户端拉起来 —— 用户总得能继续用
         LaunchMainProgram(args.m_execPath);
-        log.Write(L"======== 更新器退出（安装失败，已回滚）========");
+        log.Write(L"======== updater exited (install failed, rolled back) ========");
         return 3;
     }
 
     //⑤ 重新启动主程序
     if (!LaunchMainProgram(args.m_execPath))
     {
-        ReportToUser(L"升级已完成，但自动启动失败，请手动启动 FlamingoIM。",
+        ReportToUser(TRF(L"升级已完成，但自动启动失败，请手动启动 {0}。", ProductName()),
                      args.m_silent, MB_ICONWARNING);
-        log.Write(L"======== 更新器退出（升级成功但启动失败）========");
+        log.Write(L"======== updater exited (updated, but failed to start the main program) ========");
         return 4;
     }
 
-    log.Write(L"======== 更新器退出（升级成功）========");
+    log.Write(L"======== updater exited (updated) ========");
     return 0;
 }

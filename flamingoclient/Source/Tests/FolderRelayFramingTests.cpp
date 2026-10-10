@@ -7,8 +7,9 @@
  *    - 单帧上限：编码侧超过 2 MiB 的分片被拒绝，解码侧超过 2 MiB 的包体被拒绝；
  *    - 清单分段：小预算下拆成多段、段序号与起始序号连续、逐段重组还原整份清单，
  *      空清单产出恰好一段，真实预算下每帧都在上限内；
- *    - 重组的健壮性：首段不是 0 号、段号跳号、段号重复、总计字段矛盾、起始序号
- *      对不上、收齐后再来一段，一律报错并重置；
+ *    - 重组的健壮性：总计字段矛盾、起始序号对不上一律报错并重置；容忍发送端重发清单
+ *      （2026-10-05 起）：缺了开头的一份与跳号的一份丢弃后等下一份，0 号段从头再来，
+ *      收齐后多余的整份丢弃；
  *    - 安全失败：截断的字节串（逐个前缀长度）、非法 JSON、未知帧类型、附件长度
  *      与描述符不符、非分片帧夹带附件，一律返回 false 且不崩溃。
  *  框架 Catch2 v3。本组为纯逻辑，不触及 socket。
@@ -497,7 +498,23 @@ TEST_CASE("FTF14 清单分段：预算小到装不下分段头部时如实失败
     CHECK(frames.empty());
 }
 
-TEST_CASE("FTF15 清单重组：首段不是 0 号、跳号、重复、收齐后再来一段，一律报错")
+namespace {
+
+//把一整份清单的分段依次喂进重组器，返回最后一段的结果
+FolderRelayManifestAssembler::FeedResult feedAll(FolderRelayManifestAssembler& a,
+                                                 const std::vector<FolderRelayManifestSegment>& segments)
+{
+    FolderRelayManifestAssembler::FeedResult last = FolderRelayManifestAssembler::folder_manifest_error;
+    for (size_t i = 0; i < segments.size(); ++i)
+        last = a.Feed(segments[i]);
+    return last;
+}
+
+} // namespace
+
+//2026-10-05 之前这里要求「首段不是 0 号、跳号、重复、收齐后再来一段」一律报错，前提是中转通道有序可靠；
+//实际上 fileserver 在两端都报到之前收到的帧直接丢弃，发送端因此要在回执到达前重发清单，重组器改为容忍重发
+TEST_CASE("FTF15 清单重组：容忍重发——缺了开头的一份丢弃、跳号丢弃后等下一份、0 号段从头再来、收齐后多余的整份丢弃")
 {
     std::vector<std::string> dirs;
     std::vector<FolderRelayFileEntry> files;
@@ -507,38 +524,49 @@ TEST_CASE("FTF15 清单重组：首段不是 0 号、跳号、重复、收齐后
     REQUIRE(relayframing::SplitManifest("项目资料", dirs, files, 1024, segments));
     REQUIRE(segments.size() >= 3);
 
-    //首段不是 0 号：前面的分段已经丢了，不能当作正常开头
+    //首段不是 0 号：这一份的开头被 fileserver 丢了，丢弃本段、继续等；随后重发的完整一份照常收齐
     {
         FolderRelayManifestAssembler a;
-        CHECK(a.Feed(segments[1]) == FolderRelayManifestAssembler::folder_manifest_error);
+        CHECK(a.Feed(segments[1]) == FolderRelayManifestAssembler::folder_manifest_ignored);
         CHECK_FALSE(a.IsComplete());
+        CHECK(a.GetDirs().empty());
+        CHECK(feedAll(a, segments) == FolderRelayManifestAssembler::folder_manifest_done);
+        CHECK(a.GetDirs().size() == dirs.size());
+        CHECK(a.GetFiles().size() == files.size());
     }
 
-    //跳号：0 号之后直接来 2 号
+    //跳号：0 号之后直接来 2 号，这一份中间断了。丢弃已累积的部分，等下一份
     {
         FolderRelayManifestAssembler a;
         REQUIRE(a.Feed(segments[0]) == FolderRelayManifestAssembler::folder_manifest_need_more);
-        CHECK(a.Feed(segments[2]) == FolderRelayManifestAssembler::folder_manifest_error);
-        //报错后内部状态已重置，累积的条目不再残留
+        CHECK(a.Feed(segments[2]) == FolderRelayManifestAssembler::folder_manifest_ignored);
         CHECK(a.GetDirs().empty());
         CHECK(a.GetFiles().empty());
+        CHECK(feedAll(a, segments) == FolderRelayManifestAssembler::folder_manifest_done);
+        CHECK(a.GetFiles().size() == files.size());
     }
 
-    //重复：同一段连来两次
+    //又来一个 0 号段：发送端开始重发了，从头重新累积，不报错，也不会把两份叠在一起
     {
         FolderRelayManifestAssembler a;
         REQUIRE(a.Feed(segments[0]) == FolderRelayManifestAssembler::folder_manifest_need_more);
-        CHECK(a.Feed(segments[0]) == FolderRelayManifestAssembler::folder_manifest_error);
+        CHECK(a.Feed(segments[0]) == FolderRelayManifestAssembler::folder_manifest_need_more);
+        for (size_t i = 1; i + 1 < segments.size(); ++i)
+            REQUIRE(a.Feed(segments[i]) == FolderRelayManifestAssembler::folder_manifest_need_more);
+        CHECK(a.Feed(segments[segments.size() - 1]) == FolderRelayManifestAssembler::folder_manifest_done);
+        CHECK(a.GetDirs().size() == dirs.size());
+        CHECK(a.GetFiles().size() == files.size());
     }
 
-    //收齐之后又来一段
+    //收齐之后又来一整份：逐段丢弃，已收齐的结果不受影响
     {
         FolderRelayManifestAssembler a;
-        for (size_t i = 0; i + 1 < segments.size(); ++i)
-            REQUIRE(a.Feed(segments[i]) == FolderRelayManifestAssembler::folder_manifest_need_more);
-        REQUIRE(a.Feed(segments[segments.size() - 1])
-                == FolderRelayManifestAssembler::folder_manifest_done);
-        CHECK(a.Feed(segments[0]) == FolderRelayManifestAssembler::folder_manifest_error);
+        REQUIRE(feedAll(a, segments) == FolderRelayManifestAssembler::folder_manifest_done);
+        for (size_t i = 0; i < segments.size(); ++i)
+            CHECK(a.Feed(segments[i]) == FolderRelayManifestAssembler::folder_manifest_ignored);
+        CHECK(a.IsComplete());
+        CHECK(a.GetDirs().size() == dirs.size());
+        CHECK(a.GetFiles().size() == files.size());
     }
 }
 

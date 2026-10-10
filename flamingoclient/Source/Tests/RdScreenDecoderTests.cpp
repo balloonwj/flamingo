@@ -2,13 +2,14 @@
  *  远程桌面解码器单元测试（Suite RDDEC），RdScreenDecoderTests.cpp
  *  覆盖：BITMAPINFO 帧建立整屏缓冲（含 biSizeImage 为 0 时按行对齐重算）、
  *       首屏帧填充、增量帧（DIFF）按 [偏移+长度+数据] 贴回缓冲、光标位置 /
- *       类型解析、就绪状态、畸形输入安全失败。
+ *       类型解析、就绪状态、畸形输入安全失败；被控端重发相同的 BITMAPINFO 时保持原画面（RDDEC5），
+ *       尺寸变化时按新尺寸重建（RDDEC6）。
  *  解码为纯内存操作，不触发 GDI 绘制。框架 Catch2 v3。
  *  balloonwj@qq.com   2026-06-08
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/RemoteDesktop/RdScreenDecoder.h"
-#include "../Feature/RemoteDesktop/RdEngineDef.h"
+#include "../../FlamingoMedia/RemoteDesktop/RdScreenDecoder.h"
+#include "../../FlamingoMedia/RemoteDesktop/RdEngineDef.h"
 
 using namespace remotedesktop;
 
@@ -147,4 +148,67 @@ TEST_CASE("RDDEC4 畸形输入一律安全")
     BYTE shortBmi[3] = { (BYTE)rd_frame_bitmapinfo, 1, 2 };
     CHECK_FALSE(d.apply(shortBmi, 3));
     CHECK_FALSE(d.ready());
+}
+
+//构造一个首屏引擎帧：size 字节全部填 fill
+static std::vector<BYTE> makeFirstPayload(size_t size, BYTE fill)
+{
+    std::vector<BYTE> out;
+    out.push_back((BYTE)rd_frame_first);
+    out.insert(out.end(), size, fill);
+    return out;
+}
+
+//首屏填充值：区分新旧两份首屏
+static const BYTE kOldFill = 0x11;
+static const BYTE kNewFill = 0x22;
+
+TEST_CASE("RDDEC5 就绪后再收到相同的 BITMAPINFO：保持就绪与原画面，等新首屏整屏覆盖")
+{
+    //被控端每隔一段时间重发「BITMAPINFO + 首屏」。P2P 上 4 MB 的首屏从发出到拼齐要 1.2～1.5 秒（2026-10-04 实测），
+    //若 BITMAPINFO 一到就清掉画面，在约 3.3 秒的重发周期里观看端约四成时间没有画面、画面闪烁（见 docs/P2P通信方案.md 第 14.26 节）
+    RdScreenDecoder d;
+    std::vector<BYTE> bmi = makeBmiPayload(4, 4, 16, true);
+    d.apply(bmi.data(), bmi.size());
+    std::vector<BYTE> oldFirst = makeFirstPayload(kSize16x4, kOldFill);
+    d.apply(oldFirst.data(), oldFirst.size());
+    REQUIRE(d.ready());
+
+    //重发的 BITMAPINFO 与当前完全相同：仍就绪，画面不变
+    CHECK_FALSE(d.apply(bmi.data(), bmi.size()));
+    CHECK(d.ready());
+    REQUIRE(d.screen().size() == (size_t)kSize16x4);
+    CHECK(d.screen()[0] == kOldFill);
+    CHECK(d.screen()[kSize16x4 - 1] == kOldFill);
+
+    //随后到达的新首屏整屏覆盖
+    std::vector<BYTE> newFirst = makeFirstPayload(kSize16x4, kNewFill);
+    CHECK(d.apply(newFirst.data(), newFirst.size()));
+    CHECK(d.ready());
+    CHECK(d.screen()[0] == kNewFill);
+    CHECK(d.screen()[kSize16x4 - 1] == kNewFill);
+}
+
+TEST_CASE("RDDEC6 收到尺寸不同的 BITMAPINFO：不再就绪，按新尺寸重建缓冲，新首屏到达后恢复")
+{
+    RdScreenDecoder d;
+    std::vector<BYTE> bmi = makeBmiPayload(4, 4, 16, true);
+    d.apply(bmi.data(), bmi.size());
+    std::vector<BYTE> first = makeFirstPayload(kSize16x4, kOldFill);
+    d.apply(first.data(), first.size());
+    REQUIRE(d.ready());
+
+    //被控端换了分辨率：8×4，16 位色，行字节 16，整屏 64
+    const int newW = 8;
+    const size_t newSize = 64;
+    std::vector<BYTE> bigger = makeBmiPayload(newW, 4, 16, true);
+    CHECK_FALSE(d.apply(bigger.data(), bigger.size()));
+    CHECK_FALSE(d.ready());
+    CHECK(d.width() == newW);
+    CHECK(d.screen().size() == newSize);
+
+    std::vector<BYTE> newFirst = makeFirstPayload(newSize, kNewFill);
+    CHECK(d.apply(newFirst.data(), newFirst.size()));
+    CHECK(d.ready());
+    CHECK(d.screen()[newSize - 1] == kNewFill);
 }

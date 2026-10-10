@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 2 章：「本企业」页面、组织树、部门与员工的增删改、员工详情各页签。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>组织架构与员工 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a02">
+<article class="doc">
+  <h1>组织架构与员工</h1>
+  <p class="lead">员工在客户端通讯录里看到的部门结构，就是企业管理员在这里维护的组织架构。本章介绍如何浏览和搜索组织树、新增与删除部门、新增员工，以及修改员工资料、调整部门、设置角色、停用账号和重置密码。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：左侧导航「本企业」→「组织架构」页签</li>
+  </ul>
+
+  <h2 id="overview">「本企业」页面</h2>
+  <p>点左侧导航的 <span class="ui">本企业</span>，进入本企业的管理页面。页面上方是企业的基本信息，下方按页签分成几块：</p>
+  <figure class="shot">
+    <img src="../img/ad_enterprise.png" width="880" alt="本企业页面">
+    <figcaption>「本企业」页面，刚打开时右侧提示选择组织树中的节点</figcaption>
+  </figure>
+  <ul>
+    <li><b>页头</b>：企业名称、状态（如 <span class="ui">活跃</span>）和套餐（如 <span class="ui">专业版</span>）。第二行依次是企业 ID、行业 · 地区、开通日期和账号前缀。账号前缀用于生成新员工的登录账号，未设置时显示 <code>EMP</code>，由平台超级管理员在企业设置里修改。</li>
+    <li><b>右上角按钮</b>：<span class="ui">新建群</span> 用于直接为部门或项目建群（见<a href="04-groups-online.html">「建群与在线用户」</a>），<span class="ui">新增员工</span> 见本章<a href="#add-employee">「新增员工」</a>一节。</li>
+    <li><b>页签</b>：<span class="ui">组织架构</span>（右侧数字是员工数与部门数之和）、<span class="ui">服务号</span>（见<a href="03-service-accounts.html">「服务号」</a>）、<span class="ui">在线用户</span>（见<a href="04-groups-online.html#online">「在线用户」</a>）和 <span class="ui">功能开关</span>（见<a href="05-feature-switches.html">「功能开关」</a>）。</li>
+  </ul>
+  <p>页面打开时顶部会短暂出现「正在加载企业详情…」的提示，加载完成后自动消失。</p>
+
+  <h2 id="tree">浏览与搜索组织树</h2>
+  <p>「组织架构」页签左侧是组织树，最上面一级是公司本身，下面是各级部门和直接挂在部门下的员工。点部门左侧的箭头可以展开或收起；部门右侧的数字是它的直接下级数量（子部门加上直接挂载的员工）。树的底部显示全企业的统计，例如 <span class="ui">共 173 员工 · 14 部门</span>。</p>
+  <p>搜索框右侧的三个图标从左到右依次是：</p>
+  <table>
+    <tr><th>图标</th><th>作用</th></tr>
+    <tr><td>圆形箭头</td><td>刷新组织架构，重新从服务器读取</td></tr>
+    <tr><td>向下箭头</td><td>展开全部部门</td></tr>
+    <tr><td>向右箭头</td><td>折叠全部部门</td></tr>
+  </table>
+  <h3>搜索部门或员工</h3>
+  <p>在 <span class="ui">搜索部门 / 员工…</span> 框中输入名称，组织树会只保留匹配的部门或员工，以及它们的各级上级部门，方便看清此人所在的位置。清空搜索框即可恢复完整的树。</p>
+  <figure class="shot">
+    <img src="../img/ad_org_search.png" width="880" alt="搜索组织树">
+    <figcaption>搜索「赵卓轩」后，组织树只留下他本人和技术中心 → 研发部 → 前端组 → 桌面端小组这一串上级部门</figcaption>
+  </figure>
+  <h3>节点上的快捷按钮</h3>
+  <p>鼠标移到组织树的某一行上时，行右侧的数字会换成几个小按钮：</p>
+  <ul>
+    <li>部门行：文件夹图标为新增子部门，人形图标为新增员工，红色垃圾桶图标为删除部门。最上面代表公司本身的那一行不能删除，所以没有删除按钮。</li>
+    <li>员工行：只有删除按钮。</li>
+  </ul>
+
+  <h2 id="dept">查看与维护部门</h2>
+  <p>在组织树里点选一个部门，右侧显示该部门的概况：</p>
+  <figure class="shot">
+    <img src="../img/ad_org_dept.png" width="880" alt="部门详情">
+    <figcaption>选中「研发部」时的右侧详情</figcaption>
+  </figure>
+  <ul>
+    <li><b>部门信息</b>：部门名称，以及负责人、子部门数和总计员工数（包含所有下级部门的员工）。</li>
+    <li><b>下属部门</b>：每张卡片显示一个直属子部门的负责人和员工数。</li>
+    <li><b>直接挂载员工</b>：直接属于本部门（不在任何子部门里）的员工，右侧标签显示在职状态：<span class="ui">在职</span>、<span class="ui">休假</span> 或 <span class="ui">已停用</span>。</li>
+  </ul>
+  <h3>新增部门</h3>
+  <p>有三个入口：部门详情右上角的 <span class="ui">子部门</span> 按钮、组织树部门行上的文件夹按钮，以及树底部的 <span class="ui">+ 顶级部门</span>。前两个在当前部门下新建子部门，最后一个直接在公司下新建一级部门。弹出的 <span class="ui">新增部门</span> 对话框中：</p>
+  <ol class="steps">
+    <li>顶部的 <span class="ui">挂载至</span> 显示新部门的上级，请先核对。</li>
+    <li>填写 <span class="ui">部门名称</span>（必填）。</li>
+    <li>按需在 <span class="ui">部门负责人（可选）</span> 中选择负责人。可以直接输入姓名筛选，留空表示暂不设置。</li>
+    <li>点 <span class="ui">创建</span>。</li>
+  </ol>
+  <h3>删除部门</h3>
+  <p>把鼠标移到部门行上，点红色的删除按钮，在确认框中点 <span class="ui">删除</span>。</p>
+  <div class="callout warn"><b>部门下还有人时不能删除</b>部门下还有子部门或在职成员时，服务器会拒绝删除。请先把员工调到其他部门、把子部门删除或移走，再删除这个部门。</div>
+
+  <h2 id="add-employee">新增员工</h2>
+  <p>新增员工有三个入口：页面右上角的 <span class="ui">新增员工</span>、部门详情里的 <span class="ui">新增员工</span>，以及组织树部门行上的人形按钮。右上角的按钮会把员工加到当前选中的部门；没有选中部门（或选中的是某位员工）时，加到公司这一级。</p>
+  <figure class="shot">
+    <img src="../img/ad_new_employee.png" width="880" alt="新增员工对话框">
+    <figcaption>新增员工对话框，顶部显示员工将挂载到哪个部门</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>核对顶部的 <span class="ui">挂载至</span>，确认员工会加到正确的部门。</li>
+    <li>填写 <span class="ui">姓名</span>（必填）和 <span class="ui">职位</span>。</li>
+    <li>填写 <span class="ui">邮箱</span>（必填）。</li>
+    <li>填写 <span class="ui">手机号</span>（必填）：11 位、以 1 开头的手机号。员工以后可以用这个手机号登录客户端。</li>
+    <li>选择 <span class="ui">性别</span>：保密、男或女。</li>
+    <li>点 <span class="ui">创建</span>。</li>
+  </ol>
+  <p>创建成功后会弹出「员工创建成功」对话框，显示系统生成的 <b>登录账号</b> 和 <b>初始登录密码</b>。点 <span class="ui">复制密码</span> 可以把密码复制到剪贴板。</p>
+  <div class="callout warn"><b>初始密码只显示一次</b>关闭对话框后就无法再看到这个密码。请及时把账号和密码转告员工，并提醒对方登录后在客户端里修改密码（见<a href="../client/03-profile.html">「个人资料与账号」</a>）。忘记时只能用本章的<a href="#reset-password">「重置登录密码」</a>生成新密码。</div>
+  <div class="callout tip"><b>也可以让员工自助注册</b>企业打开了「允许用户自助注册」开关时，员工可以在客户端登录窗点「注册账号」自己开通，详见客户端<a href="../client/01-quick-start.html#register">「快速开始」</a>与本部分的<a href="05-feature-switches.html">「功能开关」</a>。</div>
+
+  <h2 id="employee">员工详情</h2>
+  <p>在组织树里点选一位员工，右侧上方显示员工的头像、姓名、在职状态、职位和工号，下方分为六个页签：</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_basic.png" width="880" alt="员工详情的基本信息页签">
+    <figcaption>员工「程薇」的详情，当前在「基本信息」页签</figcaption>
+  </figure>
+  <table>
+    <tr><th>页签</th><th>内容</th></tr>
+    <tr><td>基本信息</td><td>员工资料，以及「调部门」「编辑资料」和危险操作</td></tr>
+    <tr><td>权限与角色</td><td>员工在企业内的角色和权限矩阵</td></tr>
+    <tr><td>服务号</td><td>这位员工在客户端能看到哪些服务号</td></tr>
+    <tr><td>消息与会话</td><td>近 14 天的消息活跃度</td></tr>
+    <tr><td>设备登录</td><td>当前在线的设备与登录历史</td></tr>
+    <tr><td>操作历史</td><td>近 30 天与这位员工有关的管理操作</td></tr>
+  </table>
+
+  <h3>基本信息与修改资料</h3>
+  <p>「基本信息」页签列出 <span class="ui">姓名</span>、<span class="ui">职位</span>、<span class="ui">登录账号</span>、<span class="ui">工号</span>、<span class="ui">入职日期</span>、<span class="ui">邮箱</span>、<span class="ui">手机号</span>、<span class="ui">座机</span>、<span class="ui">工位地址</span>、<span class="ui">性别</span> 和 <span class="ui">个性签名</span>，没有填写的项显示「—」。要修改时点右上角的 <span class="ui">编辑资料</span>，打开「修改员工资料」对话框：</p>
+  <figure class="shot">
+    <img src="../img/ad_dlg_edit.png" width="880" alt="修改员工资料对话框">
+    <figcaption>修改员工资料对话框</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>按需修改各项资料。<span class="ui">姓名</span>、<span class="ui">邮箱</span> 和 <span class="ui">手机号</span> 为必填项，手机号须是 11 位、以 1 开头的号码。</li>
+    <li>点对话框底部的 <span class="ui">保存</span>；不想保存时点 <span class="ui">取消</span>。</li>
+  </ol>
+  <p>登录账号不能在这里修改。<span class="ui">个性签名</span> 员工本人也可以在客户端中修改。对话框打开时，页面顶部会出现「正在加载员工资料…」的提示，这是在读取该员工的最新资料，属于正常现象。</p>
+
+  <h3>调整部门</h3>
+  <p>点「基本信息」页签右上角的 <span class="ui">调部门</span>，会弹出本企业的部门列表（按层级缩进显示），点选新部门即可把员工调过去，完成后提示「员工部门已调整」。</p>
+  <figure class="shot">
+    <img src="../img/ad_dlg_movedept.png" width="880" alt="调部门菜单">
+    <figcaption>点「调部门」后弹出的部门列表</figcaption>
+  </figure>
+
+  <h3 id="danger">危险操作：停用、重置密码与删除</h3>
+  <p>「基本信息」页签的底部是 <span class="ui">危险操作</span> 区域，每项操作都会先弹出确认框：</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_danger.png" width="880" alt="危险操作区域">
+    <figcaption>基本信息页签底部的三项危险操作</figcaption>
+  </figure>
+  <table>
+    <tr><th>操作</th><th>按钮</th><th>效果</th></tr>
+    <tr><td>停用账号</td><td><span class="ui">停用</span></td><td>停用后该员工将无法登录任何客户端。账号停用后，这一项会变成 <span class="ui">启用账号</span>，点 <span class="ui">启用</span> 可让员工重新登录。适合员工长期离岗、需要暂时冻结账号的情况。</td></tr>
+    <tr id="reset-password"><td>重置登录密码</td><td><span class="ui">重置</span></td><td>生成新密码，该员工的旧密码立即失效，已登录的设备会被强制下线。新密码显示在「密码已重置」对话框里，同样只显示一次，可以点 <span class="ui">复制密码</span>。</td></tr>
+    <tr><td>删除员工</td><td><span class="ui">删除</span></td><td>永久删除该员工的账号及其会话索引，操作不可撤销；聊天记录在服务端归档保存 180 天。</td></tr>
+  </table>
+  <div class="callout warn"><b>停用与删除怎么选</b>员工离职、以后可能需要查证时，建议先停用账号；确定不再需要这个账号时再删除。删除后无法恢复。</div>
+
+  <h3>权限与角色</h3>
+  <p>「权限与角色」页签上方是员工在企业内的 <b>角色</b>，点选一张角色卡片即可修改，确认框中点 <span class="ui">修改</span> 后生效：</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_role.png" width="880" alt="权限与角色页签">
+    <figcaption>权限与角色页签</figcaption>
+  </figure>
+  <table>
+    <tr><th>角色</th><th>页面上的说明</th></tr>
+    <tr><td>企业管理员</td><td>全权管理本企业组织、成员、设置</td></tr>
+    <tr><td>部门负责人</td><td>管理所属部门成员与权限</td></tr>
+    <tr><td>普通成员</td><td>仅查看与协作</td></tr>
+  </table>
+  <p>下方的 <b>权限矩阵</b> 按「通讯」「文件与会议」「群组」「数据」分组列出各项权限（如发送消息、撤回消息、上传文件、创建群组、导出个人聊天记录等），拨动开关后立即保存。</p>
+  <div class="callout note"><b>权限矩阵目前只作记录</b>页面上写明「以下权限目前只作记录，尚未在客户端生效」。也就是说，现在关掉某项权限并不会限制员工在客户端里的操作。需要按企业整体关闭某项功能时，请使用<a href="05-feature-switches.html">「功能开关」</a>。</div>
+
+  <h3>服务号</h3>
+  <p>「服务号」页签显示这位员工在客户端能看到几个服务号，以及每个服务号是通过哪种范围覆盖到他的：<span class="ui">企业 · 全员</span> 表示服务号绑定了整个企业，「部门 · 部门名」表示绑定了他所在的部门，<span class="ui">直接绑定</span> 表示单独绑定了这位员工。绑定范围在<a href="03-service-accounts.html#binding">「服务号 → 绑定范围」</a>中修改。</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_svc.png" width="880" alt="员工的服务号页签">
+    <figcaption>程薇能看到 1 个服务号「明远HR助手」，覆盖方式为企业 · 全员</figcaption>
+  </figure>
+
+  <h3>消息与会话</h3>
+  <p>「消息与会话」页签显示这位员工近 14 天的消息活跃度：<span class="ui">发送</span>、<span class="ui">接收</span> 的消息条数和 <span class="ui">会话数</span>，发送数下方还有每天的小柱状图。这里只有数量统计，不显示消息内容。</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_msg.png" width="880" alt="消息与会话页签">
+    <figcaption>消息与会话页签</figcaption>
+  </figure>
+
+  <h3>设备登录</h3>
+  <p>「设备登录」页签的 <span class="ui">已登录设备</span> 列出这位员工当前在线的设备（如 <span class="ui">PC 客户端</span>）；<span class="ui">登录历史</span> 按时间、设备、IP、位置和结果列出登录记录。员工的电脑丢失或账号可能被他人使用时，点右上角的 <span class="ui">强制下线全部设备</span>，确认后该员工的所有设备都会下线，需要重新登录才能继续使用。如果担心密码已经泄露，请同时<a href="#reset-password">重置登录密码</a>。</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_device.png" width="880" alt="设备登录页签">
+    <figcaption>赵卓轩当前有一台在线的 PC 客户端</figcaption>
+  </figure>
+
+  <h3>操作历史</h3>
+  <p>「操作历史」页签列出近 30 天内与这位员工有关的管理操作，没有记录时显示「最近 30 天暂无操作记录」。全企业的完整记录请到<a href="10-audit-settings.html">审计日志</a>中查看。</p>
+  <figure class="shot">
+    <img src="../img/ad_emp_history.png" width="880" alt="操作历史页签">
+    <figcaption>操作历史页签</figcaption>
+  </figure>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

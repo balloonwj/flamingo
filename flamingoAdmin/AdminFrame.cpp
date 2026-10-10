@@ -33,10 +33,24 @@
 #include "Screens/AuditScreen.h"
 #include "Screens/ClientVersionsScreen.h"
 #include "Screens/ClientVersionModal.h"
+#include "Screens/SensitiveWordsScreen.h"
+#include "Screens/EnterpriseQaScreen.h"
+#include "Screens/EnterpriseQaModal.h"
+#include "Screens/EnterpriseBotScreen.h"
+#include "Screens/EnterpriseBotModal.h"
+#include "Screens/BotRuleModal.h"
+#include "Screens/BotDomainsModal.h"
+#include "Screens/FileSharesScreen.h"
+#include "Screens/FileShareAuditScreen.h"
+#include "Screens/FileShareCenterScreen.h"   // 文件共享页（「文件共享」「共享审计」两个页签，2026-10-08）
+#include "Screens/FeatureSwitchesPage.h"     // 企业详情的「功能开关」页（2026-10-08）
+#include "Screens/SensitiveWordModal.h"
+#include "Screens/SensitiveImportModal.h"
 #include "Screens/SettingsScreen.h"
 #include "Screens/NetworkSettingsScreen.h"
 #include "Mock/DataStore.h"
 #include "Util/AppConfig.h"
+#include "Util/LoginText.h"   // 登录页加密说明与账号密码回填
 #include "Util/NetProbe.h"
 #include "Util/HttpClient.h"
 #include "Util/HttpWorker.h"
@@ -48,11 +62,17 @@
 
 #include <thread>
 #include "Util/Logger.h"
+#include "Util/SensitiveWordText.h"
+#include "Util/LinkBridge.h"          // FlamingoLink.dll：长连接与「在线用户」页（docs/FlamingoLink方案.md）
+#include "Util/LinkPageState.h"
+#include "Widgets/LinkPageSlot.h"
 
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Input/DuiEdit.h"
+#include "Controls/Input/DuiComboBox.h"   // Esc 处理时判断弹窗里是否有展开着的下拉框
 #include "Controls/Basic/DuiButton.h"   // 「记住密码」复选框（StyleCheckbox）的读写
 #include "Controls/List/DuiMenu.h"
+#include "Controls/Input/DuiSwitch.h"   // 机器人开关的分发：按开关的控件编号找面板
 
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 
@@ -111,6 +131,25 @@ const WPARAM kNavHideCvModal       = 38; // 关闭新建客户端版本弹窗
 const WPARAM kNavSubmitCvDraft     = 39; // 提交新建客户端版本（存草稿）
 const WPARAM kNavSubmitCvPublish   = 40; // 提交新建客户端版本（直接发布）
 const WPARAM kNavRescanPackages    = 41; // 弹窗内「重新扫描」升级包目录
+const WPARAM kNavSwUiRequests      = 42; // 处理排队的敏感词界面请求（开关弹窗、确认框、提示）
+const WPARAM kNavSwHideModal       = 43; // 关闭添加 / 编辑敏感词弹窗
+const WPARAM kNavSwSubmitModal     = 44; // 提交添加 / 编辑敏感词弹窗
+const WPARAM kNavSwHideImport      = 45; // 关闭批量导入敏感词弹窗
+const WPARAM kNavSwSubmitImport    = 46; // 导入弹窗的主按钮（开始导入 / 完成）
+const WPARAM kNavSwImportReadFile  = 47; // 导入弹窗的「从文件读取」
+const WPARAM kNavFsUiRequests      = 48; // 处理排队的文件共享管理界面请求（提示、确认框）
+const WPARAM kNavQaUiRequests      = 49; // 处理排队的企业问答界面请求（开关弹窗、确认框、提示）
+const WPARAM kNavQaHideModal       = 50; // 关闭新增 / 编辑企业问答弹窗
+const WPARAM kNavQaSubmitModal     = 51; // 提交新增 / 编辑企业问答弹窗
+const WPARAM kNavBotUiRequests     = 52; // 处理排队的机器人界面请求（开关编辑窗与白名单窗、确认框、提示）
+const WPARAM kNavBotHideModal      = 53; // 关闭机器人编辑窗
+const WPARAM kNavBotSubmitModal    = 54; // 提交机器人编辑窗
+const WPARAM kNavBotAddRule        = 55; // 机器人编辑窗里点了规则的「添加」：打开规则编辑窗
+const WPARAM kNavBotEditRule       = 56; // 机器人编辑窗里点了规则的「编辑」或双击一行：打开规则编辑窗
+const WPARAM kNavBotCloseRule      = 57; // 关闭规则编辑窗，回到机器人编辑窗
+const WPARAM kNavBotSubmitRule     = 58; // 规则编辑窗的「确定」
+const WPARAM kNavBotHideDomains    = 59; // 关闭外部服务域名白名单窗
+const WPARAM kNavBotSubmitDomains  = 60; // 提交外部服务域名白名单窗
 const WPARAM kNavScreenBase        = 100;// 切换界面：kNavScreenBase + (int)Screen
 
 // 注:历史的 kToastTimerId / kToastTickMs 已删除 ——
@@ -126,6 +165,7 @@ const WPARAM kNavScreenBase        = 100;// 切换界面：kNavScreenBase + (int
 // 周期取 4500ms：足够看清一条、又不至于久到像静止。
 const UINT_PTR kTickerTimerId   = 2;       // 定时器 ID
 const UINT     kTickerIntervalMs = 4500;   // 切换周期（毫秒）
+const int      kTickerAuditCount = 6;      // 顶栏滚动提示单独拉取的审计条数（与顶栏循环展示的条数一致）
 
 // ---- 网络连通性测试 ----
 const int kNetTestTimeoutMs = 2000;        // TCP 探测超时（毫秒）
@@ -144,10 +184,12 @@ const UINT kMenuEntSettings  = 7;   // 企业设置：改企业信息 + 管理�
 const UINT kMenuEntCopyId    = 8;   // 复制企业 ID 到剪贴板
 const UINT kMenuEntExportOne = 9;   // 导出该企业为单行 CSV
 const UINT kMenuEntDetailSub = 10;  // 「打开详情」子菜单父项（点父项不返回此 id）
+const UINT kMenuEntDetailFeatures = 11;  // 打开详情：定位到「功能开关」子 tab（2026-10-08）
 
 // ---- 企业详情子 tab 序号（与 EnterpriseDetailScreen 内部序号一致）----
 const int kDetailTabOrg     = 0;   // 组织架构 tab
 const int kDetailTabService = 1;   // 服务号 tab
+const int kDetailTabFeatures = EnterpriseDetailScreen::kTabFeatures;   // 功能开关 tab（2026-10-08）
 
 // 员工登录历史一次拉取的条数（设备登录 tab 无翻页，一次取够近期记录）。
 const int kLoginRecordsPageSize = 50;
@@ -158,6 +200,8 @@ const int kDashEntPageSize  = 1000;   // 一次拉够（与企业管理界面同
 
 // ---- 公告列表的拉取参数 ----
 const int kAnnStatusAll     = -1;     // status=-1：不按状态筛选
+const int kAnnStatusDraft   = 0;      // 草稿：尚未发布，定时公告到点之前也处于这个状态
+const int kAnnStatusPublished = 1;    // 已发布：只有这个状态的公告可以撤回与重新推送
 const int kAnnFetchPageSize = 1000;   // 一次拉够（公告中心无分页 UI）
 
 // 仪表盘「最新公告 / 近期审计」卡只展示开头几条，拉一小页即可。
@@ -167,15 +211,82 @@ const int kDashAuditPageSize = 10;    // 仪表盘近期审计拉取条数
 // ---- 企业状态 / 套餐编码（与 docs/Admin控制台接口文档.md 模块 3 一致）----
 const int kEntStatusActive    = 1;   // 企业状态：活跃
 const int kEntStatusSuspended = 2;   // 企业状态：停用
-const int kPlanProfessional   = 1;   // 套餐：专业版
-const int kPlanEnterprise     = 2;   // 套餐：企业版
-const int kPlanUltimate       = 3;   // 套餐：旗舰版
+const int kPlanProfessional   = 1;   // 套餐：专业版。新增企业弹窗的套餐取不到时按它提交
 
 // 确认弹窗 m_confirmTarget 取值：3=删除企业，4=重置员工密码，5=启用/停用员工。
 const int kConfirmTargetEnterprise = 3;
 const int kConfirmTargetResetPwd   = 4;
 const int kConfirmTargetSetStatus  = 5;
 const int kConfirmTargetAnnDelete  = 6;   // 公告物理删除(任意状态,区别于 2=撤回)
+const int kConfirmTargetSwDelete   = 7;   // 删除敏感词
+const int kConfirmTargetSwDisable  = 8;   // 关闭敏感词过滤总开关
+const int kConfirmTargetFileShare  = 9;   // 文件共享管理的确认框（切换功能开关、强制取消共享），结果交给 m_fsConfirmTarget
+const int kConfirmTargetCvPublish  = 10;  // 发布一条客户端版本记录（m_confirmDeleteNodeId 为记录 ID）
+const int kConfirmTargetCvDisable  = 11;  // 撤回一条已发布的客户端版本记录（m_confirmDeleteNodeId 为记录 ID）
+const int kConfirmTargetEntSuspend = 12;  // 停用企业（m_confirmDeleteNodeId 为企业 ID）
+const int kConfirmTargetRemoveAdmin = 13; // 移除企业管理员（m_confirmDeleteNodeId 为管理员 ID）
+const int kConfirmTargetKick       = 14;  // 强制员工全部设备下线（m_confirmDeleteNodeId 为员工 ID）
+const int kConfirmTargetSetRole    = 15;  // 修改员工角色（m_confirmDeleteNodeId 为员工 ID；取消时重拉权限矩阵恢复面板）
+const int kConfirmTargetSvcDisable = 16;  // 停用服务号（m_confirmDeleteNodeId 为服务号 ID）
+const int kConfirmTargetAnnRepush  = 17;  // 重新推送已发布的公告（m_confirmDeleteNodeId 为公告 ID）
+const int kConfirmTargetQaDelete   = 18;  // 删除企业问答（待删的问答由企业问答界面自己记着）
+
+// 单行输入框里按回车时要「点」的提交按钮。只列在这里的输入框才响应回车；新建公告、
+// 客户端版本两个弹窗会直接发布，故意不列。企业设置弹窗里「新增管理员」的两个输入框
+// 对应「添加」，其余输入框对应「保存企业信息」。
+struct EnterSubmitRule
+{
+    UINT m_editId;     // 输入框 ctrlId
+    UINT m_buttonId;   // 要点的按钮 ctrlId（与输入框在同一个弹窗或页面里）
+};
+const EnterSubmitRule kEnterSubmitRules[] =
+{
+    { kIdLoginAccount,   kIdLoginSubmit },     // 登录页：账户
+    { kIdLoginPassword,  kIdLoginSubmit },     // 登录页：密码
+    { kIdModalName,      kIdModalSubmit },     // 新增企业：企业全称
+    { kIdModalShort,     kIdModalSubmit },     // 新增企业：企业简称
+    { kIdModalRegion,    kIdModalSubmit },     // 新增企业：主要地区
+    { kIdModalAdmin,     kIdModalSubmit },     // 新增企业：主管理员姓名
+    { kIdModalContact,   kIdModalSubmit },     // 新增企业：管理员邮箱
+    { kIdEntSetName,     kIdEntSetSave },      // 企业设置：企业全称
+    { kIdEntSetShort,    kIdEntSetSave },      // 企业设置：企业简称
+    { kIdEntSetRegion,   kIdEntSetSave },      // 企业设置：主要地区
+    { kIdEntSetPrefix,   kIdEntSetSave },      // 企业设置：账号前缀
+    { kIdEntSetNewName,  kIdEntSetAddAdmin },  // 企业设置：新增管理员姓名
+    { kIdEntSetNewEmail, kIdEntSetAddAdmin },  // 企业设置：新增管理员邮箱
+    { kIdSvcName,        kIdSvcSubmit },       // 新建服务号：名称
+    { kIdSvcGlyph,       kIdSvcSubmit },       // 新建服务号：头像文字
+    { kIdGroupName,      kIdGroupSubmit },     // 新建群：群名称
+    { kIdSwModalWord,    kIdSwModalSave },     // 敏感词：词条
+    { kIdSwModalRemark,  kIdSwModalSave },     // 敏感词：备注
+    { kIdQaModalQuestion, kIdQaModalSave },    // 企业问答：问题
+    { kIdBotModalTryText, kIdBotModalTryRun }, // 机器人编辑窗：「试一试」输入框按回车即试一试
+    { kIdBotRuleName,     kIdBotRuleSave },    // 规则编辑窗：规则名称
+};
+
+// 判断控件子树里是否有下拉框正展开着。有的话 Esc 应当只收起下拉列表，不关闭整个弹窗。
+//   node：子树根（借用）。
+bool HasOpenComboPopup(const DuiControl* node)
+{
+    const DuiComboBox* combo = dynamic_cast<const DuiComboBox*>(node);
+    if (combo != nullptr && combo->IsPopupOpen())
+    {
+        return true;
+    }
+    const std::vector<std::unique_ptr<DuiControl>>& children = node->Children();
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        if (HasOpenComboPopup(children[i].get()))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 员工角色编码（user/setrole.do 的 role，与 OrgDetailPanel::m_userRole 同一口径）。
+const int kUserRoleDeptLeader = 1;   // 部门负责人
+const int kUserRoleEntAdmin   = 2;   // 企业管理员（可登录控制台管理本企业）
 
 // 网络测试工作线程体：阻塞做一次 TCP 探测，结果经 PostMessage 回传主窗口。
 // host 取 std::wstring 值传入，使工作线程持有与 UI 线程完全独立的副本，
@@ -188,7 +299,7 @@ void RunNetTest(HWND hwnd, std::wstring host, int port)
 }
 
 // 把 CString（UTF-16）转换为 UTF-8 字节串。用于把本地拼好的 CSV 文本交给
-// SaveCsvToFile 写盘（该函数约定接收 UTF-8）。
+// SaveTextToFile 写盘（该函数约定接收 UTF-8）。
 std::string Utf8FromWide(const CString& wide)
 {
     const int wideLen = wide.GetLength();
@@ -255,18 +366,10 @@ int AuditFilterToServer(int uiIndex)
     return uiIndex <= 0 ? -1 : uiIndex - 1;
 }
 
-// 公告级别（客户端 Severity）→ 中文文案（用于 CSV 导出）。
+// 公告级别（客户端 Severity）→ 中文文案（用于 CSV 导出），与界面共用一套名称。
 LPCTSTR AnnSeverityText(Severity sev)
 {
-    switch (sev)
-    {
-    case Severity::Warn:
-        return _T("提醒");
-    case Severity::Danger:
-        return _T("警告");
-    default:
-        return _T("普通");
-    }
+    return adminapi::AnnSeverityLabel(sev);
 }
 
 // 公告状态码 → 中文文案（0 草稿 / 1 已发布 / 2 已撤回）。
@@ -316,6 +419,26 @@ ScreenInfo GetScreenInfo(Screen screen)
     case Screen::ClientVersions:
         return { kIdNavClientVersions, ui::Icon::Download, _T("客户端版本"),
                  _T("发布 PC 客户端升级包，控制发布与撤回") };
+    //敏感词：词库维护与拦截记录
+    case Screen::SensitiveWords:
+        return { kIdNavSensitiveWords, ui::Icon::ShieldAlert, _T("敏感词"),
+                 _T("维护企业的敏感词库，查看服务端拦下的内容") };
+    //文件共享：查看共享与成员、强制取消
+    case Screen::FileShares:
+        return { kIdNavFileShares, ui::Icon::Folder, _T("文件共享"),
+                 _T("查看企业成员发起的文件共享，必要时强制取消") };
+    //文件共享页的「共享审计」页签：侧栏高亮与面包屑沿用「文件共享」
+    case Screen::FileShareAudit:
+        return { kIdNavFileShares, ui::Icon::Folder, _T("文件共享"),
+                 _T("按人、按动作、按时间查询文件共享的操作记录") };
+    //企业问答：显示在群聊「问答」页签里的问答
+    case Screen::EnterpriseQa:
+        return { kIdNavEnterpriseQa, ui::Icon::Info, _T("企业问答"),
+                 _T("维护显示在群聊「问答」页签里的问答，可应用到全部群或所选的群") };
+    //机器人：企业机器人的列表、编辑、规则与外部服务域名白名单
+    case Screen::EnterpriseBot:
+        return { kIdNavEnterpriseBot, ui::Icon::Bot, _T("机器人"),
+                 _T("配置在本企业群里自动应答、定时提醒、接收外部系统推送的企业机器人") };
     case Screen::EnterpriseDetail:
     default:
         // 企业详情是「企业管理」的子屏：侧栏高亮 / 面包屑沿用企业管理。
@@ -324,20 +447,13 @@ ScreenInfo GetScreenInfo(Screen screen)
     }
 }
 
-// 把套餐名映射为服务端套餐编号（与 docs/Admin控制台接口文档.md 约定一致）。
-//   planName：新增企业弹窗套餐下拉框的当前文本。
-//   返回：套餐编号；未知文本回退为「专业版」。
-int PlanCodeFromName(const CString& planName)
+// 把新增企业弹窗套餐下拉框的文本换算为套餐编号（adminapi::PlanCodeFromName），
+// 不认识时回退为「专业版」。
+//   planName：下拉框的当前文本。
+int PlanCodeForNewEnterprise(const CString& planName)
 {
-    if (planName == _T("企业版"))
-    {
-        return kPlanEnterprise;
-    }
-    if (planName == _T("旗舰版"))
-    {
-        return kPlanUltimate;
-    }
-    return kPlanProfessional;
+    const int code = adminapi::PlanCodeFromName(planName);
+    return (code >= 0) ? code : kPlanProfessional;
 }
 
 // 把一段文本放入系统剪贴板。
@@ -453,9 +569,8 @@ void CollectDepts(const OrgNode* dept, int depth, const CString& excludeId,
 void AdminFrame::InitContent()
 {
     // 开启 balloonui 的双击合成：企业列表「双击行进详情」依赖 DUI 控件收到
-    // OnLButtonDblClk —— balloonui 窗口类未注册 CS_DBLCLKS、系统不发
-    // WM_LBUTTONDBLCLK，须经此运行期接口让 DuiHost 自行合成双击。详见
-    // DuiHost::EnableDoubleClick 注释。
+    // OnLButtonDblClk。详见 DuiHost::EnableDoubleClick 注释。
+    // （2026-10-06 更正：balloonui 窗口的窗口类其实带 CS_DBLCLKS，系统本就会投递双击，这里的双击合成实际不起作用，保留无害）
     EnableDoubleClick(true);
 
     // 构建客户区根容器：含 Toast 层 + 登录界面页 + 新增企业弹窗层。
@@ -480,6 +595,13 @@ void AdminFrame::InitContent()
 
     m_root = root.get();
     SetClientContent(std::move(root));
+
+    // 页面切换、弹窗开关时重新决定 FlamingoLink.dll 的「在线用户」页显示与否：
+    // 它是原生子窗口，会画在叠层弹窗与登录页之上。
+    m_root->SetLayerChangedCallback(&AdminFrame::LinkLayerChangedThunk, this);
+
+    // 加载 FlamingoLink.dll（长连接与「在线用户」页）。失败只记日志，没有这个功能，其余照常。
+    LinkBridge::Instance().Load(m_hWnd, WM_APP_LINK_EXPIRED);
 
     PrefillLogin();
 
@@ -520,6 +642,33 @@ void AdminFrame::InitContent()
     m_clientVersionModal = cvModal.get();
     m_root->AddModal(std::move(cvModal));
 
+    // 新增 / 编辑企业问答弹窗：同样常驻，开 / 关只切显隐。
+    auto qaModal = std::make_unique<EnterpriseQaModal>();
+    m_qaModal = qaModal.get();
+    m_root->AddModal(std::move(qaModal));
+
+    // 机器人的编辑窗、规则编辑窗与外部服务域名白名单窗：同样常驻，开 / 关只切显隐。弹窗层同一时刻只显示一个弹窗，
+    // 打开规则编辑窗时机器人编辑窗被隐藏（内容保留），关闭规则编辑窗后再显示回来。
+    std::unique_ptr<EnterpriseBotModal> botModal(new EnterpriseBotModal());
+    m_botModal = botModal.get();
+    m_root->AddModal(std::move(botModal));
+    std::unique_ptr<BotRuleModal> botRuleModal(new BotRuleModal());
+    m_botRuleModal = botRuleModal.get();
+    m_root->AddModal(std::move(botRuleModal));
+    std::unique_ptr<BotDomainsModal> botDomainsModal(new BotDomainsModal());
+    m_botDomainsModal = botDomainsModal.get();
+    m_root->AddModal(std::move(botDomainsModal));
+
+    // 添加 / 编辑敏感词弹窗：同样常驻，开 / 关只切显隐。
+    auto swModal = std::make_unique<SensitiveWordModal>();
+    m_swModal = swModal.get();
+    m_root->AddModal(std::move(swModal));
+
+    // 批量导入敏感词弹窗：同样常驻，开 / 关只切显隐。
+    auto swImportModal = std::make_unique<SensitiveImportModal>();
+    m_swImportModal = swImportModal.get();
+    m_root->AddModal(std::move(swImportModal));
+
     // 修改员工资料弹窗(EmployeeEditDialog)不再预创建 —— 它已经改成
     // 独立顶层 DuiFrameWindow,on-demand 在 OnUserDetailLoaded 里 new 出来,
     // 关闭时 DestroyWindow + AdminFrame 清指针。RootContainer 不再持有它。
@@ -534,6 +683,10 @@ void AdminFrame::InitContent()
 
 LRESULT AdminFrame::OnDestroy(UINT, WPARAM, LPARAM, BOOL& bHandled)
 {
+    // 先关闭并卸载 FlamingoLink.dll：它的页面窗口是本窗口的子窗口，此刻还在，DLL 自己销毁它，
+    // 再停连接线程、释放 DLL。放在最前面，之后的清理不会再碰到 DLL 里的窗口。
+    LinkBridge::Instance().Unload();
+
     // 销毁调试控制台窗口（Destroy 会摘掉 DebugConsole 的 sink 并销毁窗口）。
     // 须在下面的退出消息循环逻辑之前完成，确保调试窗口及其 sink 干净拆除。
     flamingoadmin::DebugConsoleWindow::Instance().Destroy();
@@ -551,10 +704,70 @@ LRESULT AdminFrame::OnTimer(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
     // 周期性调 Tick / TickAll。本函数目前只剩顶栏审计滚动提示这一路定时器。
     if (wParam == kTickerTimerId)
     {
-        // 顶栏审计滚动提示前进一条。
-        if (m_topBar != nullptr)
+        // 顶栏审计滚动提示前进一条；转完一整圈时重新拉取最近的审计，展示的总是最新几条。
+        if (m_topBar != nullptr && m_topBar->AdvanceTicker())
         {
-            m_topBar->AdvanceTicker();
+            FetchTickerAudits();
+        }
+        bHandled = TRUE;
+        return 0;
+    }
+    if (wParam == SensitiveWordsScreen::kHitSearchTimerId)
+    {
+        // 敏感词界面「拦截记录」的发送者搜索防抖到点（定时器由界面自己停掉）。
+        if (m_sensitiveWordsScreen != nullptr)
+        {
+            m_sensitiveWordsScreen->OnHitSearchTimer();
+        }
+        else
+        {
+            KillTimer(SensitiveWordsScreen::kHitSearchTimerId);
+        }
+        bHandled = TRUE;
+        return 0;
+    }
+    if (wParam == FileSharesScreen::kSearchTimerId)
+    {
+        // 「文件共享」页的分享者搜索防抖到点（定时器由界面自己停掉）。
+        if (m_fileSharesScreen != nullptr)
+        {
+            m_fileSharesScreen->OnSearchTimer();
+        }
+        else
+        {
+            KillTimer(FileSharesScreen::kSearchTimerId);
+        }
+        bHandled = TRUE;
+        return 0;
+    }
+    if (wParam == FileShareAuditScreen::kSearchTimerId || wParam == FileShareAuditScreen::kShareIdTimerId)
+    {
+        // 「共享审计」页的操作人搜索、共享 ID 输入防抖到点（定时器由界面自己停掉）。
+        if (m_fileShareAuditScreen == nullptr)
+        {
+            KillTimer(wParam);
+        }
+        else if (wParam == FileShareAuditScreen::kSearchTimerId)
+        {
+            m_fileShareAuditScreen->OnSearchTimer();
+        }
+        else
+        {
+            m_fileShareAuditScreen->OnShareIdTimer();
+        }
+        bHandled = TRUE;
+        return 0;
+    }
+    if (wParam == SensitiveWordsScreen::kSearchTimerId)
+    {
+        // 敏感词界面的搜索防抖到点：按搜索框当前文字查询（定时器由界面自己停掉）。
+        if (m_sensitiveWordsScreen != nullptr)
+        {
+            m_sensitiveWordsScreen->OnSearchTimer();
+        }
+        else
+        {
+            KillTimer(SensitiveWordsScreen::kSearchTimerId);
         }
         bHandled = TRUE;
         return 0;
@@ -572,6 +785,13 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
         return 0;
     }
     bHandled = TRUE;
+
+    // ---- 单行输入框里按了回车：对照表里的输入框提交所在窗口（见 kEnterSubmitRules）----
+    // 不在表里的输入框（搜索框等）HandleEditEnter 返回 false，照常往下派发。
+    if (n->code == DuiEdit::DUIN_EDIT_ENTER && HandleEditEnter(n))
+    {
+        return 0;
+    }
 
     // ---- 双击类通知 ----
     if (n->code == DUIN_DBLCLK)
@@ -600,6 +820,12 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                 m_detailInitialTab = kDetailTabOrg;
                 StartLoadEnterpriseDetail(list[idx].m_id);
             }
+        }
+        else if (n->ctrlId == kIdBotModalRules)
+        {
+            // 机器人编辑窗的规则列表双击一行 → 编辑这条规则。打开规则编辑窗会切换弹窗显隐，
+            // 推迟到本轮通知派发结束之后再做。
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotEditRule, 0);
         }
         return 0;
     }
@@ -633,6 +859,10 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
         case kIdNavAudit:
         case kIdNavSettings:
         case kIdNavClientVersions:
+        case kIdNavSensitiveWords:
+        case kIdNavFileShares:
+        case kIdNavEnterpriseQa:
+        case kIdNavEnterpriseBot:
             // 切换界面延迟到事件派发结束后执行。kIdNav* 连续递增、与
             // Screen 枚举一一对应。
             ::PostMessage(m_hWnd, WM_APP_NAVIGATE,
@@ -667,7 +897,18 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             StartEnterpriseExport();
             break;
         case kIdEntMore:
-            ShowToast(_T("更多筛选将在后续阶段开放"), ToastKind::Warn);
+            // 展开 / 收起「更多筛选」条。
+            if (m_enterprises != nullptr)
+            {
+                m_enterprises->ToggleMoreFilters();
+            }
+            break;
+        //「更多筛选」条的「清除」：清空行业、套餐与起止日期后重新拉取
+        case kIdEntMoreClear:
+            if (m_enterprises != nullptr)
+            {
+                m_enterprises->ClearMoreFilters();
+            }
             break;
         case kIdEntRefresh:
             if (m_enterprises != nullptr)
@@ -705,10 +946,16 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             }
             break;
         case kIdDetailAnnounce:
-            ShowToast(_T("发布公告将在 Phase 5 接入"), ToastKind::Warn);
+            // 发布公告：打开新建公告，受众预设为「指定企业：本企业」。打开动作延迟到
+            // 事件派发结束后，与公告中心的「新建公告」走同一条路径。
+            if (m_enterpriseDetail != nullptr)
+            {
+                m_composePresetEntId = m_enterpriseDetail->GetEnterpriseId();
+                ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowCompose, 0);
+            }
             break;
         case kIdDetailPrimary:
-            // 组织架构 tab：新增员工到默认部门；服务号 tab：Phase 4b。
+            // 组织架构 tab：新增员工到默认部门；服务号 tab：新建服务号（与服务号面板里的同名按钮相同）。
             if (m_enterpriseDetail != nullptr && m_enterpriseDetail->IsOrgTab())
             {
                 const CString parentId = m_enterpriseDetail->DefaultParentDept();
@@ -721,7 +968,7 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             }
             else
             {
-                ShowToast(_T("新建服务号将在 Phase 4b 接入"), ToastKind::Warn);
+                ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowServiceModal, 0);
             }
             break;
         case kIdDetailCreateGroup:
@@ -780,14 +1027,26 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                 const OrgNode* n = DataStore::Instance().FindOrgNode(
                     m_enterpriseDetail->GetEnterpriseId(), nodeId);
                 const CString name = (n != nullptr) ? n->m_name : nodeId;
+                const bool isUser = (n != nullptr && n->m_kind == OrgNodeKind::User);
                 CString msg;
-                msg.Format(_T("确定要删除「%s」吗？该节点及其下属子节点将被")
-                           _T("一并移除，此操作不可撤销。"),
-                           static_cast<LPCTSTR>(name));
+                if (isUser)
+                {
+                    // 服务端 user/delete.do 物理删除账号（t_user 与部门成员、权限记录一并删除）。
+                    msg.Format(_T("确定要删除员工「%s」吗？该员工的账号将被永久删除，")
+                               _T("此操作不可撤销。"),
+                               static_cast<LPCTSTR>(name));
+                }
+                else
+                {
+                    // 服务端 dept/delete.do 在部门下还有在用子部门或在职成员时以 112 拒绝删除。
+                    msg.Format(_T("确定要删除部门「%s」吗？部门下还有子部门或在职成员时")
+                               _T("不能删除，请先移走。"),
+                               static_cast<LPCTSTR>(name));
+                }
                 m_confirmDeleteNodeId = nodeId;
                 m_confirmTarget       = 0;   // 0 = 组织节点
                 ConfirmDialogSpec spec;
-                spec.m_title         = _T("删除组织节点");
+                spec.m_title         = isUser ? _T("删除员工") : _T("删除部门");
                 spec.m_message       = msg;
                 spec.m_okText        = _T("删除");
                 spec.m_confirmDanger = true;
@@ -824,22 +1083,41 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                     const ServerConfig& server = AppConfig::Instance().Server();
                     const CString token = AdminSession::Instance().Token();
                     const long long uid = _ttoi64(nodeId);
-                    HttpRequest req;
                     if (pend == EnterpriseDetailScreen::Pending::SetRole)
                     {
-                        req = adminapi::MakeUserSetRoleRequest(
-                            server, token, uid, panel->GetUserRole());
-                        req.m_tag = kApiTagUserSetRole;
+                        // 角色决定能否登录控制台等权限，先确认；面板上已先切换到新角色。
+                        LPCTSTR roleText = _T("普通成员");
+                        if (panel->GetUserRole() == kUserRoleDeptLeader)
+                        {
+                            roleText = _T("部门负责人");
+                        }
+                        else if (panel->GetUserRole() == kUserRoleEntAdmin)
+                        {
+                            roleText = _T("企业管理员");
+                        }
+                        const OrgNode* n = DataStore::Instance().FindOrgNode(
+                            m_enterpriseDetail->GetEnterpriseId(), nodeId);
+                        const CString name = (n != nullptr) ? n->m_name : nodeId;
+                        CString msg;
+                        msg.Format(_T("确定要把「%s」的角色改为「%s」吗？"),
+                                   static_cast<LPCTSTR>(name), roleText);
+                        m_confirmDeleteNodeId = nodeId;
+                        m_confirmTarget       = kConfirmTargetSetRole;
+                        ConfirmDialogSpec spec;
+                        spec.m_title   = _T("修改员工角色");
+                        spec.m_message = msg;
+                        spec.m_okText  = _T("修改");
+                        ShowConfirmDialog(spec);
                     }
                     else
                     {
-                        req = adminapi::MakeUserSetPermissionsRequest(
+                        HttpRequest req = adminapi::MakeUserSetPermissionsRequest(
                             server, token, uid, panel->GetPermOverrides());
-                        req.m_tag = kApiTagUserSetPerms;
+                        req.m_tag       = kApiTagUserSetPerms;
+                        req.m_replyHwnd = m_hWnd;
+                        req.m_replyMsg  = WM_APP_API_RESULT;
+                        HttpWorker::Instance().Post(req);
                     }
-                    req.m_replyHwnd = m_hWnd;
-                    req.m_replyMsg  = WM_APP_API_RESULT;
-                    HttpWorker::Instance().Post(req);
                 }
             }
             else if (pend == EnterpriseDetailScreen::Pending::SetUserStatus)
@@ -869,25 +1147,31 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                 m_confirmTarget       = kConfirmTargetResetPwd;
                 ConfirmDialogSpec spec;
                 spec.m_title         = _T("重置登录密码");
+                // 2026-10-07 起服务端重置成功后会踢掉该员工全部在线设备，确认框里一并说明
                 spec.m_message       = _T("确定重置该员工的登录密码吗?重置后将生成新密码,")
-                                       _T("该员工的旧密码立即失效。");
+                                       _T("该员工的旧密码立即失效,已登录的设备会被强制下线。");
                 spec.m_okText        = _T("重置");
                 spec.m_confirmDanger = true;
                 ShowConfirmDialog(spec);
             }
             else if (pend == EnterpriseDetailScreen::Pending::KickDevices)
             {
-                // 强制下线全部设备：deviceid 传空。
-                m_permUserId = nodeId;
-                HttpRequest req = adminapi::MakeUserKickDeviceRequest(
-                    AppConfig::Instance().Server(),
-                    AdminSession::Instance().Token(), _ttoi64(nodeId),
-                    CString());
-                req.m_replyHwnd = m_hWnd;
-                req.m_replyMsg  = WM_APP_API_RESULT;
-                req.m_tag       = kApiTagUserKickDevice;
-                HttpWorker::Instance().Post(req);
-                ShowToast(_T("正在强制下线全部设备…"));
+                // 强制下线全部设备：先确认，确认后由 SubmitKickDevices 提交（deviceid 传空）。
+                const OrgNode* n = DataStore::Instance().FindOrgNode(
+                    m_enterpriseDetail->GetEnterpriseId(), nodeId);
+                const CString name = (n != nullptr) ? n->m_name : nodeId;
+                CString msg;
+                msg.Format(_T("确定要让「%s」的全部设备下线吗？该员工需要重新登录才能")
+                           _T("继续使用。"),
+                           static_cast<LPCTSTR>(name));
+                m_confirmDeleteNodeId = nodeId;
+                m_confirmTarget       = kConfirmTargetKick;
+                ConfirmDialogSpec spec;
+                spec.m_title         = _T("强制下线");
+                spec.m_message       = msg;
+                spec.m_okText        = _T("下线");
+                spec.m_confirmDanger = true;
+                ShowConfirmDialog(spec);
             }
             else if (pend == EnterpriseDetailScreen::Pending::EditUser)
             {
@@ -950,6 +1234,182 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavRescanPackages, 0);
             break;
 
+        // ---- 企业问答界面与其弹窗 ----
+        //「新增问答」：界面会发出「打开新增弹窗」的界面请求，经队列推迟处理
+        case kIdQaAdd:
+            if (m_qaScreen != nullptr)
+            {
+                m_qaScreen->OnAddClicked();
+            }
+            break;
+        //「刷新」
+        case kIdQaRefresh:
+            if (m_qaScreen != nullptr)
+            {
+                m_qaScreen->OnRefreshClicked();
+            }
+            break;
+        //弹窗的关闭按钮与「取消」
+        case kIdQaModalClose:
+        case kIdQaModalCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavQaHideModal, 0);
+            break;
+        //弹窗的「保存」
+        case kIdQaModalSave:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavQaSubmitModal, 0);
+            break;
+
+        // ---- 机器人界面与其编辑窗、规则编辑窗、白名单窗 ----
+        //「新建机器人」：界面会发出「打开新建编辑窗」的界面请求，经队列推迟处理
+        case kIdBotAdd:
+            if (m_botScreen != nullptr)
+            {
+                m_botScreen->OnAddClicked();
+            }
+            break;
+        //「刷新」
+        case kIdBotRefresh:
+            if (m_botScreen != nullptr)
+            {
+                m_botScreen->OnRefreshClicked();
+            }
+            break;
+        //「外部服务域名白名单」：界面会发出「打开白名单窗」的界面请求
+        case kIdBotDomains:
+            if (m_botScreen != nullptr)
+            {
+                m_botScreen->OnDomainsClicked();
+            }
+            break;
+        //编辑窗的关闭按钮与「取消」
+        case kIdBotModalClose:
+        case kIdBotModalCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotHideModal, 0);
+            break;
+        //编辑窗的「保存」
+        case kIdBotModalSave:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotSubmitModal, 0);
+            break;
+        //规则的「添加」：打开规则编辑窗会切换弹窗显隐，推迟到通知派发结束后再做
+        case kIdBotModalRuleAdd:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotAddRule, 0);
+            break;
+        //规则的「编辑」：同上
+        case kIdBotModalRuleEdit:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotEditRule, 0);
+            break;
+        //规则的「上移」：只改规则列表里的数据，按钮本身不受影响，可以就地处理
+        case kIdBotModalRuleUp:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->MoveSelectedRule(-1);
+            }
+            break;
+        //规则的「下移」：同上
+        case kIdBotModalRuleDown:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->MoveSelectedRule(1);
+            }
+            break;
+        //规则的「删除」：同上
+        case kIdBotModalRuleDelete:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->DeleteSelectedRule();
+            }
+            break;
+        //Webhook「复制」：地址、令牌、签名密钥放进剪贴板
+        case kIdBotModalCopy:
+            if (m_botModal != nullptr && m_botModal->HasSecrets())
+            {
+                CopyTextToClipboard(m_hWnd, m_botModal->WebhookCopyText());
+                ShowToast(_T("已复制 Webhook 地址、令牌与签名密钥"));
+            }
+            break;
+        //Webhook「重新生成」：界面先请宿主弹确认框，确认后才发请求
+        case kIdBotModalResetToken:
+            if (m_botModal != nullptr && m_botScreen != nullptr)
+            {
+                m_botScreen->RequestResetToken(m_botModal->EditingId());
+            }
+            break;
+        //「试一试」
+        case kIdBotModalTryRun:
+            RunBotTry();
+            break;
+        //规则编辑窗的关闭按钮与「取消」：回到机器人编辑窗
+        case kIdBotRuleClose:
+        case kIdBotRuleCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotCloseRule, 0);
+            break;
+        //规则编辑窗的「确定」
+        case kIdBotRuleSave:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotSubmitRule, 0);
+            break;
+        //白名单窗的关闭按钮与「取消」
+        case kIdBotDomainsClose:
+        case kIdBotDomainsCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotHideDomains, 0);
+            break;
+        //白名单窗的「保存」
+        case kIdBotDomainsSave:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavBotSubmitDomains, 0);
+            break;
+
+        // ---- 敏感词界面与其弹窗 ----
+        //「添加」按钮：界面会发出「打开添加弹窗」的界面请求，经队列推迟处理
+        case kIdSwAdd:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnAddClicked();
+            }
+            break;
+        //弹窗的关闭按钮与「取消」
+        case kIdSwModalClose:
+        case kIdSwModalCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSwHideModal, 0);
+            break;
+        //弹窗的「保存」
+        case kIdSwModalSave:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSwSubmitModal, 0);
+            break;
+        //「批量导入」按钮：界面会发出「打开导入弹窗」的界面请求
+        case kIdSwImport:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnImportClicked();
+            }
+            break;
+        //「导出」按钮：界面取到内容后发出「存盘」的界面请求
+        case kIdSwExport:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnExportClicked();
+            }
+            break;
+        //导入弹窗的关闭按钮与「取消」
+        //文件共享页页头的「刷新」：刷新当前页签（文件共享或共享审计）
+        case kIdFsRefresh:
+            if (m_fileShareCenter != nullptr)
+            {
+                m_fileShareCenter->Refresh();
+            }
+            break;
+
+        case kIdSwImpClose:
+        case kIdSwImpCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSwHideImport, 0);
+            break;
+        //导入弹窗的主按钮（开始导入 / 完成）
+        case kIdSwImpSubmit:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSwSubmitImport, 0);
+            break;
+        //导入弹窗的「从文件读取」：打开文件对话框要跑嵌套消息循环，推迟到通知派发结束后再做
+        case kIdSwImpReadFile:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSwImportReadFile, 0);
+            break;
+
         // kIdEmpEditClose/Cancel/Submit 历史在此 PostMessage 到主窗口的
         // navigate 分发,EmployeeEditDialog 改成独立顶层窗口后,这些按钮
         // 事件不再经主窗口 OnDuiNotify —— dialog 自己 CHAIN 到 DuiFrameWindow
@@ -965,6 +1425,13 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
         case kIdEntSetAddAdmin:
             SubmitAddAdmin();
             break;
+        //企业详情「功能开关」页里「云端录像空间」的「保存」：校验后提交配额与保留天数
+        case kIdCloudQuotaSave:
+            if (m_enterpriseDetail != nullptr && m_enterpriseDetail->GetFeaturesPage() != nullptr)
+            {
+                m_enterpriseDetail->GetFeaturesPage()->OnQuotaSaveClicked(n->ctrlId);
+            }
+            break;
         case kIdEntSettings:
             // 弹窗自身上报：某管理员行点了「移除」。
             if (m_enterpriseSettingsModal != nullptr)
@@ -973,14 +1440,22 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                     m_enterpriseSettingsModal->GetPendingRemoveAdminId();
                 if (aid != 0)
                 {
-                    HttpRequest req = adminapi::MakeEnterpriseRemoveAdminRequest(
-                        AppConfig::Instance().Server(),
-                        AdminSession::Instance().Token(), aid);
-                    req.m_replyHwnd = m_hWnd;
-                    req.m_replyMsg  = WM_APP_API_RESULT;
-                    req.m_tag       = kApiTagEntRemoveAdmin;
-                    HttpWorker::Instance().Post(req);
-                    ShowToast(_T("正在移除管理员…"));
+                    // 移除立即生效，先确认（确认后见 OnConfirmDialogConfirmed）。
+                    const CString adminName =
+                        m_enterpriseSettingsModal->GetPendingRemoveAdminName();
+                    CString msg;
+                    msg.Format(_T("确定要移除企业管理员「%s」吗？移除后该账号立即失去")
+                               _T("本企业控制台的管理权限。"),
+                               adminName.IsEmpty() ? _T("该管理员")
+                                                   : static_cast<LPCTSTR>(adminName));
+                    m_confirmDeleteNodeId.Format(_T("%lld"), aid);
+                    m_confirmTarget = kConfirmTargetRemoveAdmin;
+                    ConfirmDialogSpec spec;
+                    spec.m_title         = _T("移除管理员");
+                    spec.m_message       = msg;
+                    spec.m_okText        = _T("移除");
+                    spec.m_confirmDanger = true;
+                    ShowConfirmDialog(spec);
                 }
             }
             break;
@@ -1036,21 +1511,15 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             }
             else if (spend == ServicesPanel::Pending::EditBindings)
             {
-                // 打开绑定范围弹窗，载入该服务号当前绑定。
-                const CString svcId = sp->GetSelectedServiceId();
-                const std::vector<Service>& list =
-                    DataStore::Instance().Services(sp->GetEnterpriseId());
-                for (const Service& s : list)
-                {
-                    if (s.m_id == svcId)
-                    {
-                        m_bindingModal->Configure(s.m_name,
-                                                  sp->GetEnterpriseId(), s.m_bindings);
-                        ::PostMessage(m_hWnd, WM_APP_NAVIGATE,
-                                      kNavShowBindingModal, 0);
-                        break;
-                    }
-                }
+                // 先从服务端读当前绑定，读到后再打开弹窗（见 OnServiceDetailLoaded）。
+                // 不能用缓存里的绑定直接打开：列表接口不带绑定，缓存可能是空的，而
+                // setbindings.do 是整体替换，从空集合开始保存会清掉原有绑定。
+                FetchServiceDetail(sp->GetSelectedServiceId(), true);
+            }
+            else if (spend == ServicesPanel::Pending::Selected)
+            {
+                // 面板切换了选中项：读一次它的绑定，供「概览」「绑定范围」显示。
+                FetchSelectedServiceBindingsIfNeeded();
             }
             break;
         }
@@ -1092,11 +1561,19 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             break;
         }
         case kIdAnnPreviewCopy:
+        {
+            // 复制：先拉原公告详情，应答回来后按其内容打开新建公告。
+            if (m_announcementsScreen == nullptr)
+            {
+                break;
+            }
+            StartAnnouncementCopy(m_announcementsScreen->GetSelectedId());
+            break;
+        }
         case kIdAnnPreviewRepush:
         {
-            // 复制 / 重新推送:与原 PaintPreview 时代 Pending::Misc 行为一致 ——
-            // 后续阶段开放,目前先 Toast 提示。
-            ShowToast(_T("该功能将在后续阶段开放"), ToastKind::Warn);
+            // 重新推送：先确认，再推给受众里在线且未读的成员。
+            ConfirmAnnouncementRepush();
             break;
         }
         case kIdAnnPreviewTogglePin:
@@ -1320,6 +1797,254 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                 m_enterprises->OnSegmentChanged(static_cast<int>(n->extra));
             }
             break;
+        //企业详情屏切换了子 tab（extra 为子 tab 序号）：「在线用户」tab 的内容是
+        //FlamingoLink.dll 的子窗口，显示与否要重新决定；切到「功能开关」tab 时读取该企业的设置
+        case kIdDetailScreen:
+            SyncLinkPage();
+            if (static_cast<int>(n->extra) == EnterpriseDetailScreen::kTabFeatures)
+            {
+                LoadFeaturesPage();
+            }
+            break;
+        //文件共享页的「文件共享 / 共享审计」页签切换，extra 为新页签下标
+        case kIdFsTabs:
+            if (m_fileShareCenter != nullptr)
+            {
+                m_fileShareCenter->OnTabChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //「更多筛选」条的行业 / 套餐下拉框选择变化、起止日期输入框文字变化
+        case kIdEntMoreIndustry:
+        case kIdEntMorePlan:
+        case kIdEntMoreFrom:
+        case kIdEntMoreTo:
+            if (m_enterprises != nullptr)
+            {
+                m_enterprises->OnMoreFilterChanged();
+            }
+            break;
+        //敏感词界面的「词库 / 拦截记录」页签切换，extra 为新页签下标
+        case kIdSwTabs:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnTabChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //企业问答界面的企业选择框（仅平台超管），extra 为选中项下标
+        case kIdQaEnterprise:
+            if (m_qaScreen != nullptr)
+            {
+                m_qaScreen->OnEnterpriseSelected(static_cast<int>(n->extra));
+            }
+            break;
+        //企业问答界面的搜索框：本地筛选
+        case kIdQaSearch:
+            if (m_qaScreen != nullptr)
+            {
+                m_qaScreen->OnSearchChanged();
+            }
+            break;
+        //企业问答弹窗的应用范围下拉框：群列表只在「所选的群」时可用
+        case kIdQaModalScope:
+            if (m_qaModal != nullptr)
+            {
+                m_qaModal->OnScopeChanged();
+            }
+            break;
+        //机器人界面的企业选择框（仅平台超管），extra 为选中项下标
+        case kIdBotEnterprise:
+            if (m_botScreen != nullptr)
+            {
+                m_botScreen->OnEnterpriseSelected(static_cast<int>(n->extra));
+            }
+            break;
+        //机器人编辑窗的应用范围下拉框：群列表只在「所选的群」时可用
+        case kIdBotModalScope:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->OnScopeChanged();
+            }
+            break;
+        //机器人编辑窗的规则列表选中行变化：刷新规则按钮是否可用
+        case kIdBotModalRules:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->OnRuleSelectionChanged();
+            }
+            break;
+        //规则编辑窗的触发方式：重填动作并显隐相关控件
+        case kIdBotRuleTrigger:
+            if (m_botRuleModal != nullptr)
+            {
+                m_botRuleModal->OnTriggerChanged();
+            }
+            break;
+        //规则编辑窗的动作：显隐「按 Markdown 显示」与外部服务地址
+        case kIdBotRuleAction:
+            if (m_botRuleModal != nullptr)
+            {
+                m_botRuleModal->OnActionChanged();
+            }
+            break;
+        //规则编辑窗的定时种类：显隐星期与几号
+        case kIdBotRuleSchedKind:
+            if (m_botRuleModal != nullptr)
+            {
+                m_botRuleModal->OnScheduleKindChanged();
+            }
+            break;
+        //规则编辑窗的「只在以下时间段响应」：时间段控件随之可用或不可用
+        case kIdBotRuleWindowOn:
+            if (m_botRuleModal != nullptr)
+            {
+                m_botRuleModal->OnWindowToggled();
+            }
+            break;
+        //企业详情「功能开关」页里的十三个开关之一被拨动，extra 为拨动后的状态（1 开 / 0 关）：交给它所在的面板弹确认框
+        case kIdFeatSwitchRegister:
+        case kIdFeatSwitchInviteConfirm:
+        case kIdFeatSwitchSecretChat:
+        case kIdFeatSwitchThreadGroup:
+        case kIdFeatSwitchFileShare:
+        case kIdFeatSwitchP2P:
+        case kIdFeatSwitchGroupCall:
+        case kIdFeatSwitchCaption:
+        case kIdFeatSwitchCloudRecord:
+        case kIdFeatSwitchBot:
+        case kIdFeatSwitchBotGroup:
+        case kIdFeatSwitchBotPersonal:
+        case kIdFeatSwitchBotGroupExternal:
+            if (m_enterpriseDetail != nullptr && m_enterpriseDetail->GetFeaturesPage() != nullptr)
+            {
+                m_enterpriseDetail->GetFeaturesPage()->OnSwitchToggled(n->ctrlId, n->extra != 0);
+            }
+            break;
+        //敏感词界面的企业选择框（仅平台超管），extra 为选中项下标
+        case kIdSwEnterprise:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnEnterpriseSelected(static_cast<int>(n->extra));
+            }
+            break;
+        //敏感词界面的搜索框文字变化：界面自己做防抖
+        case kIdSwSearch:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnSearchChanged();
+            }
+            break;
+        //敏感词界面的分类筛选，extra 为选中项下标
+        case kIdSwCategory:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnCategoryChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //敏感词过滤总开关被用户拨动，extra 为拨动后的状态（1 开 / 0 关）
+        case kIdSwSwitch:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnSwitchToggled(n->extra != 0);
+            }
+            break;
+        //拦截记录的时间范围，extra 为选中项下标
+        case kIdSwHitRange:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnHitRangeChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //拦截记录的发送者搜索框文字变化：界面自己做防抖
+        case kIdSwHitSearch:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnHitSearchChanged();
+            }
+            break;
+        //拦截记录的来源筛选，extra 为选中项下标
+        case kIdSwHitSource:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnHitSourceChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //拦截记录的分类筛选，extra 为选中项下标
+        case kIdSwHitCategory:
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnHitCategoryChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //「文件共享」页的企业筛选（仅平台超管），extra 为选中项下标，0 为全部企业
+        case kIdFsEnterprise:
+            if (m_fileSharesScreen != nullptr)
+            {
+                m_fileSharesScreen->OnEnterpriseSelected(static_cast<int>(n->extra));
+            }
+            break;
+        //「文件共享」页的分享者搜索框文字变化：界面自己做防抖
+        case kIdFsSearch:
+            if (m_fileSharesScreen != nullptr)
+            {
+                m_fileSharesScreen->OnSearchChanged();
+            }
+            break;
+        //「文件共享」页的状态筛选，extra 为选中项下标
+        case kIdFsState:
+            if (m_fileSharesScreen != nullptr)
+            {
+                m_fileSharesScreen->OnStateChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //「文件共享」页的表格选中行变化，extra 为行下标
+        case kIdFsTable:
+            if (m_fileSharesScreen != nullptr)
+            {
+                m_fileSharesScreen->OnRowSelected(static_cast<int>(n->extra));
+            }
+            break;
+        //「共享审计」页的企业筛选（仅平台超管），extra 为选中项下标，0 为全部企业
+        case kIdFaEnterprise:
+            if (m_fileShareAuditScreen != nullptr)
+            {
+                m_fileShareAuditScreen->OnEnterpriseSelected(static_cast<int>(n->extra));
+            }
+            break;
+        //「共享审计」页的时间范围，extra 为选中项下标
+        case kIdFaRange:
+            if (m_fileShareAuditScreen != nullptr)
+            {
+                m_fileShareAuditScreen->OnRangeChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //「共享审计」页的操作人搜索框文字变化：界面自己做防抖
+        case kIdFaSearch:
+            if (m_fileShareAuditScreen != nullptr)
+            {
+                m_fileShareAuditScreen->OnSearchChanged();
+            }
+            break;
+        //「共享审计」页的动作筛选，extra 为选中项下标，0 为全部动作
+        case kIdFaAction:
+            if (m_fileShareAuditScreen != nullptr)
+            {
+                m_fileShareAuditScreen->OnActionChanged(static_cast<int>(n->extra));
+            }
+            break;
+        //「共享审计」页的共享 ID 输入框文字变化：界面自己做防抖
+        case kIdFaShareId:
+            if (m_fileShareAuditScreen != nullptr)
+            {
+                m_fileShareAuditScreen->OnShareIdChanged();
+            }
+            break;
+        //「共享审计」页的表格选中行变化，extra 为行下标
+        case kIdFaTable:
+            if (m_fileShareAuditScreen != nullptr)
+            {
+                m_fileShareAuditScreen->OnRowSelected(static_cast<int>(n->extra));
+            }
+            break;
         default:
             bHandled = FALSE;
             break;
@@ -1391,6 +2116,82 @@ LRESULT AdminFrame::OnNavigate(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
     else if (wParam == kNavRescanPackages)
     {
         StartScanPackages();
+    }
+    else if (wParam == kNavSwUiRequests)
+    {
+        HandleSensitiveUiRequests();
+    }
+    else if (wParam == kNavSwHideModal)
+    {
+        HideSensitiveWordModal();
+    }
+    else if (wParam == kNavSwSubmitModal)
+    {
+        SubmitSensitiveWordModal();
+    }
+    else if (wParam == kNavSwHideImport)
+    {
+        HideSensitiveImportModal();
+    }
+    else if (wParam == kNavSwSubmitImport)
+    {
+        SubmitSensitiveImportModal();
+    }
+    else if (wParam == kNavSwImportReadFile)
+    {
+        ReadSensitiveImportFile();
+    }
+    else if (wParam == kNavFsUiRequests)
+    {
+        HandleFileShareUiRequests();
+    }
+    else if (wParam == kNavQaUiRequests)
+    {
+        HandleQaUiRequests();
+    }
+    else if (wParam == kNavQaHideModal)
+    {
+        HideQaModal();
+    }
+    else if (wParam == kNavQaSubmitModal)
+    {
+        SubmitQaModal();
+    }
+    else if (wParam == kNavBotUiRequests)
+    {
+        HandleBotUiRequests();
+    }
+    else if (wParam == kNavBotHideModal)
+    {
+        HideBotModal();
+    }
+    else if (wParam == kNavBotSubmitModal)
+    {
+        SubmitBotModal();
+    }
+    else if (wParam == kNavBotAddRule)
+    {
+        OpenBotRuleModal(true);
+    }
+    else if (wParam == kNavBotEditRule)
+    {
+        OpenBotRuleModal(false);
+    }
+    else if (wParam == kNavBotCloseRule)
+    {
+        CloseBotRuleModal();
+    }
+    else if (wParam == kNavBotSubmitRule)
+    {
+        SubmitBotRuleModal();
+    }
+    else if (wParam == kNavBotHideDomains)
+    {
+        HideBotDomainsModal();
+    }
+    else if (wParam == kNavBotSubmitDomains)
+    {
+        SubmitBotDomainsModal();
     }
     // kNavShowConfirm / kNavHideConfirm / kNavConfirmOk 历史 navigate 分支
     // 在此处理,ConfirmDialog 改独立顶层窗口后,按钮事件 dialog 自己接管。
@@ -1541,12 +2342,17 @@ LRESULT AdminFrame::OnLoginResult(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
         AppConfig::Instance().SetLogin(toSave);
         AppConfig::Instance().Save();
 
+        // 建立到管理端口的长连接（FlamingoLink.dll）：主机沿用 HTTP 的主机，端口与公钥取登录应答。
+        // DLL 不可用时什么都不做；服务器没下发端口时 DLL 不连接，页面提示服务器未开启。
+        LinkBridge::Instance().Start(AppConfig::Instance().Server().m_host, login.m_linkPort,
+                                     login.m_linkPubkey, login.m_token);
+
         EnterShell();
     }
     else
     {
         // 失败：用中文提示告知用户，停留在登录界面。
-        ShowToast(login.m_message);
+        ShowToast(login.m_message, ToastKind::Error);
         FA_LOGW(_T("登录失败：%s"), login.m_message.GetString());
     }
     return 0;
@@ -1624,6 +2430,101 @@ LRESULT AdminFrame::OnApiResult(UINT, WPARAM wParam, LPARAM lParam,
             m_enterprises->OnApiResult(tag, *http);
         }
         break;
+    //企业问答界面的全部接口：交给界面自己处理
+    case kApiTagQaList:
+    case kApiTagQaSave:
+    case kApiTagQaDelete:
+    case kApiTagQaGroups:
+    case kApiTagQaEnterprises:
+        if (m_qaScreen != nullptr)
+        {
+            m_qaScreen->OnApiResult(tag, *http);
+        }
+        break;
+    //机器人界面的全部接口：交给界面自己处理
+    case kApiTagBotList:
+    case kApiTagBotDetail:
+    case kApiTagBotSave:
+    case kApiTagBotDelete:
+    case kApiTagBotSetStatus:
+    case kApiTagBotGroups:
+    case kApiTagBotTry:
+    case kApiTagBotResetToken:
+    case kApiTagBotDomains:
+    case kApiTagBotSetDomains:
+    case kApiTagBotEnterprises:
+        if (m_botScreen != nullptr)
+        {
+            m_botScreen->OnApiResult(tag, *http);
+        }
+        break;
+    //敏感词界面的全部接口：交给界面自己处理
+    case kApiTagSwList:
+    case kApiTagSwAdd:
+    case kApiTagSwUpdate:
+    case kApiTagSwDelete:
+    case kApiTagSwImport:
+    case kApiTagSwExport:
+    case kApiTagSwSetEnabled:
+    case kApiTagSwHits:
+    case kApiTagSwEnterprises:
+        if (m_sensitiveWordsScreen != nullptr)
+        {
+            m_sensitiveWordsScreen->OnApiResult(tag, *http);
+        }
+        break;
+    //企业详情「功能开关」页里十三个开关与云端录像空间面板读 / 改设置的应答：按标签交给对应的面板
+    case kApiTagRegisterSwitchGet:
+    case kApiTagRegisterSwitchSet:
+    case kApiTagInviteConfirmGet:
+    case kApiTagInviteConfirmSet:
+    case kApiTagSecretChatSwitchGet:
+    case kApiTagSecretChatSwitchSet:
+    case kApiTagThreadGroupSwitchGet:
+    case kApiTagThreadGroupSwitchSet:
+    case kApiTagFeatureGet:
+    case kApiTagFeatureSet:
+    case kApiTagP2PSwitchGet:
+    case kApiTagP2PSwitchSet:
+    case kApiTagGroupCallSwitchGet:
+    case kApiTagGroupCallSwitchSet:
+    case kApiTagCaptionSwitchGet:
+    case kApiTagCaptionSwitchSet:
+    case kApiTagCloudRecordSwitchGet:
+    case kApiTagCloudRecordSwitchSet:
+    case kApiTagCloudQuotaGet:
+    case kApiTagCloudQuotaSet:
+    case kApiTagBotSwitchGet:
+    case kApiTagBotSwitchSet:
+    case kApiTagBotGroupSwitchGet:
+    case kApiTagBotGroupSwitchSet:
+    case kApiTagBotPersonalSwitchGet:
+    case kApiTagBotPersonalSwitchSet:
+    case kApiTagBotExternalSwitchGet:
+    case kApiTagBotExternalSwitchSet:
+        if (m_enterpriseDetail != nullptr && m_enterpriseDetail->GetFeaturesPage() != nullptr)
+        {
+            m_enterpriseDetail->GetFeaturesPage()->OnApiResult(tag, *http);
+        }
+        break;
+    //「文件共享」页的全部接口：交给界面自己处理
+    case kApiTagFsList:
+    case kApiTagFsMembers:
+    case kApiTagFsCancel:
+    case kApiTagFsEnterprises:
+        if (m_fileSharesScreen != nullptr)
+        {
+            m_fileSharesScreen->OnApiResult(tag, *http);
+        }
+        break;
+    //「共享审计」页的全部接口：交给界面自己处理
+    case kApiTagFsAudit:
+    case kApiTagFsAuditEnterprises:
+        if (m_fileShareAuditScreen != nullptr)
+        {
+            m_fileShareAuditScreen->OnApiResult(tag, *http);
+        }
+        break;
     case kApiTagDashStats:
         OnDashboardStatsLoaded(*http);
         break;
@@ -1684,6 +2585,14 @@ LRESULT AdminFrame::OnApiResult(UINT, WPARAM wParam, LPARAM lParam,
     case kApiTagAnnEditFetch:
         OnAnnEditFetchLoaded(*http);
         break;
+    //公告中心「复制」拉取的原公告详情：按其内容打开新建公告
+    case kApiTagAnnCopyFetch:
+        OnAnnCopyFetchLoaded(*http);
+        break;
+    //公告中心「重新推送」的应答：提示推送人数
+    case kApiTagAnnRepush:
+        OnAnnRepushed(*http);
+        break;
     case kApiTagEntCreate:
         OnEnterpriseCreated(*http);
         break;
@@ -1737,10 +2646,22 @@ LRESULT AdminFrame::OnApiResult(UINT, WPARAM wParam, LPARAM lParam,
         OnServiceActionDone(*http, _T("服务号已删除"));
         break;
     case kApiTagSvcSetBindings:
-        OnServiceActionDone(*http, _T("绑定范围已保存"));
+        OnServiceBindingsSaved(*http);
         break;
     case kApiTagSvcListReload:
         OnServiceListReloaded(*http);
+        break;
+    //顶栏「最新审计」滚动提示单独拉取的最近几条审计
+    case kApiTagTickerAudit:
+        OnTickerAuditLoaded(*http);
+        break;
+    //服务号面板切换选中项后读取的绑定范围（只为显示）
+    case kApiTagSvcDetail:
+        OnServiceDetailLoaded(*http, false);
+        break;
+    //点「修改绑定」后读取的当前绑定：读到才打开绑定弹窗
+    case kApiTagSvcDetailForBinding:
+        OnServiceDetailLoaded(*http, true);
         break;
     case kApiTagUserGetPerms:
         OnUserPermissionsLoaded(*http);
@@ -1837,8 +2758,6 @@ void AdminFrame::ToggleDebugConsole()
 void AdminFrame::EnterShell()
 {
     m_loggedIn = true;
-    DataStore::Instance().PushAudit(_T("login.success"), _T("-"),
-                                    Severity::Info, _T("通过邮箱密码登录"));
 
     // 首次登录时构建主界面外壳并常驻；之后登录直接复用。
     if (m_shellPage == nullptr)
@@ -1871,6 +2790,19 @@ void AdminFrame::EnterShell()
         m_screens[static_cast<int>(Screen::EnterpriseDetail)] = detail.get();
         m_screenHost->AddScreen(std::move(detail));
 
+        // 企业详情的「功能开关」页：各面板不直接接触网络与对话框，请求出口与界面请求都接到本窗口
+        m_enterpriseDetail->GetFeaturesPage()->SetRequestSink(&AdminFrame::SensitiveRequestThunk, this);
+        m_enterpriseDetail->GetFeaturesPage()->SetUiRequestHandler(&AdminFrame::FileShareUiRequestThunk, this);
+
+        // FlamingoLink.dll 可用时：企业详情屏多一个「在线用户」子 tab，DLL 的页面窗口建为本窗口的
+        // 子窗口（初始隐藏），占位控件排版时把位置转交 DLL。
+        if (LinkBridge::Instance().IsAvailable())
+        {
+            m_enterpriseDetail->GetOnlineSlot()->SetBoundsCallback(&AdminFrame::LinkSlotBoundsThunk, this);
+            LinkBridge::Instance().CreatePage(m_hWnd);
+            m_enterpriseDetail->SetOnlineTabAvailable(true);
+        }
+
         // 公告中心（真实界面）。
         auto annScreen = std::make_unique<AnnouncementsScreen>();
         m_announcementsScreen = annScreen.get();
@@ -1896,6 +2828,46 @@ void AdminFrame::EnterShell()
         m_screens[static_cast<int>(Screen::ClientVersions)] = cvScreen.get();
         m_screenHost->AddScreen(std::move(cvScreen));
 
+        // 敏感词：界面本身不接触网络与对话框，请求出口与界面请求都接到本窗口；
+        // 主窗口句柄用于挂搜索防抖定时器。
+        auto swScreen = std::make_unique<SensitiveWordsScreen>();
+        m_sensitiveWordsScreen = swScreen.get();
+        m_sensitiveWordsScreen->SetHostWindow(m_hWnd);
+        m_sensitiveWordsScreen->SetRequestSink(&AdminFrame::SensitiveRequestThunk, this);
+        m_sensitiveWordsScreen->SetUiRequestHandler(&AdminFrame::SensitiveUiRequestThunk, this);
+        m_screens[static_cast<int>(Screen::SensitiveWords)] = swScreen.get();
+        m_screenHost->AddScreen(std::move(swScreen));
+
+        // 企业问答：与敏感词界面相同，请求出口与界面请求都接到本窗口。
+        auto qaScreen = std::make_unique<EnterpriseQaScreen>();
+        m_qaScreen = qaScreen.get();
+        m_qaScreen->SetRequestSink(&AdminFrame::SensitiveRequestThunk, this);
+        m_qaScreen->SetUiRequestHandler(&AdminFrame::QaUiRequestThunk, this);
+        m_screens[static_cast<int>(Screen::EnterpriseQa)] = qaScreen.get();
+        m_screenHost->AddScreen(std::move(qaScreen));
+
+        // 机器人：与企业问答相同，请求出口与界面请求都接到本窗口。
+        std::unique_ptr<EnterpriseBotScreen> botScreen(new EnterpriseBotScreen());
+        m_botScreen = botScreen.get();
+        m_botScreen->SetRequestSink(&AdminFrame::SensitiveRequestThunk, this);
+        m_botScreen->SetUiRequestHandler(&AdminFrame::BotUiRequestThunk, this);
+        m_screens[static_cast<int>(Screen::EnterpriseBot)] = botScreen.get();
+        m_screenHost->AddScreen(std::move(botScreen));
+
+        // 文件共享页（「文件共享」「共享审计」两个页签）：与敏感词界面相同，请求出口与界面请求都接到本窗口；
+        // 主窗口句柄用于挂输入防抖定时器。两个页签的控件通知、定时器与接口应答仍直接交给各自的页签。
+        std::unique_ptr<FileShareCenterScreen> fsCenter(new FileShareCenterScreen());
+        m_fileShareCenter = fsCenter.get();
+        m_fileShareCenter->SetHostWindow(m_hWnd);
+        m_fileShareCenter->SetRequestSink(&AdminFrame::SensitiveRequestThunk, this);
+        m_fileShareCenter->SetUiRequestHandler(&AdminFrame::FileShareUiRequestThunk, this);
+        m_fileSharesScreen = m_fileShareCenter->SharesPage();
+        m_fileShareAuditScreen = m_fileShareCenter->AuditPage();
+        // 「共享审计」页签没有自己的界面：两个路由指向同一个页面
+        m_screens[static_cast<int>(Screen::FileShares)] = fsCenter.get();
+        m_screens[static_cast<int>(Screen::FileShareAudit)] = fsCenter.get();
+        m_screenHost->AddScreen(std::move(fsCenter));
+
         auto mainColumn = std::make_unique<DuiVBox>();
         mainColumn->AddChild(std::move(topbar),     Hint().Fixed(theme::kTopBarHeight));
         mainColumn->AddChild(std::move(screenHost), Hint().Weight(1));
@@ -1910,6 +2882,15 @@ void AdminFrame::EnterShell()
 
     m_root->ShowPage(m_shellPage);
 
+    // 外壳只在第一次登录时构建，换账号登录时身份与导航要按当前登录者重新刷新。
+    const AdminSession& session = AdminSession::Instance();
+    m_topBar->SetAccount(session.Name(), session.Email(), session.IsPlatformAdmin());
+    m_sidebar->ApplyRole(session.IsPlatformAdmin());
+    m_dashboard->SetPlatformAdminMode(session.IsPlatformAdmin());
+    m_dashboard->SetGreeting(session.Name());
+    m_enterpriseDetail->SetPlatformAdminMode(session.IsPlatformAdmin());
+    FetchTickerAudits();
+
     // 默认进入仪表板。
     SwitchScreen(Screen::Dashboard);
 
@@ -1921,6 +2902,18 @@ void AdminFrame::EnterShell()
 
 void AdminFrame::SwitchScreen(Screen screen)
 {
+    // 企业管理员只管辖一个企业，没有企业列表：侧栏「本企业」等一切通向企业列表的入口
+    // 都改为加载本企业的详情，加载完成后由 OnDetailPartLoaded 切到企业详情屏。
+    const bool platformAdmin = AdminSession::Instance().IsPlatformAdmin();
+    if (screen == Screen::Enterprises && !platformAdmin)
+    {
+        CString ownEntId;
+        ownEntId.Format(_T("%lld"), AdminSession::Instance().EnterpriseId());
+        FA_LOGI(_T("enterprise admin opens own enterprise detail: %s"), ownEntId.GetString());
+        StartLoadEnterpriseDetail(ownEntId);
+        return;
+    }
+
     m_route = screen;
     if (m_screenHost == nullptr)
     {
@@ -1947,18 +2940,45 @@ void AdminFrame::SwitchScreen(Screen screen)
     }
     else if (screen == Screen::Settings && m_settingsScreen != nullptr)
     {
+        // 功能开关已移到企业详情的「功能开关」子 tab（2026-10-08），这里只有个人资料与修改密码
         StartLoadProfile();
     }
     else if (screen == Screen::ClientVersions && m_clientVersionsScreen != nullptr)
     {
         StartLoadClientVersions();
     }
+    else if (screen == Screen::SensitiveWords && m_sensitiveWordsScreen != nullptr)
+    {
+        m_sensitiveWordsScreen->OnEnter();
+    }
+    else if (screen == Screen::EnterpriseQa && m_qaScreen != nullptr)
+    {
+        m_qaScreen->OnEnter();
+    }
+    else if (screen == Screen::EnterpriseBot && m_botScreen != nullptr)
+    {
+        m_botScreen->OnEnter();
+    }
+    else if (screen == Screen::FileShares && m_fileShareCenter != nullptr)
+    {
+        // 停在上次看的页签，并刷新它
+        m_fileShareCenter->OnEnter();
+    }
+    else if (screen == Screen::FileShareAudit && m_fileShareCenter != nullptr)
+    {
+        // 直接打开「共享审计」页签
+        m_fileShareCenter->SelectTab(FileShareCenterScreen::kTabAudit);
+    }
 
     // 切换可见性（屏常驻、不销毁）。
     m_screenHost->ShowScreen(m_screens[static_cast<int>(screen)]);
 
-    // 同步侧栏高亮与顶栏面包屑。
-    const ScreenInfo info = GetScreenInfo(screen);
+    // 同步侧栏高亮与顶栏面包屑。企业管理员的企业详情屏在侧栏里叫「本企业」，面包屑随之改名。
+    ScreenInfo info = GetScreenInfo(screen);
+    if (!platformAdmin && info.m_navId == kIdNavEnterprises)
+    {
+        info.m_name = _T("本企业");
+    }
     if (m_sidebar != nullptr)
     {
         m_sidebar->SetActiveNav(info.m_navId);
@@ -1967,6 +2987,9 @@ void AdminFrame::SwitchScreen(Screen screen)
     {
         m_topBar->SetBreadcrumb(info.m_name);
     }
+
+    // 离开或进入企业详情屏：FlamingoLink.dll 的「在线用户」页随之隐藏或显示
+    SyncLinkPage();
 
     FA_LOGI(_T("切换到界面：%s"), info.m_name);
 }
@@ -1980,6 +3003,16 @@ void AdminFrame::StartLoadDashboard()
     const ServerConfig& server = AppConfig::Instance().Server();
     const CString       token  = AdminSession::Instance().Token();
 
+    // 「活跃企业」「最新公告」两张卡只对平台超管显示；企业管理员看不到它们，也不发这两个请求。
+    const bool platformAdmin = m_dashboard->IsPlatformAdminMode();
+
+    // 卡片先置为「加载中」，各自的应答回来后再按成败置为「已加载」或「加载失败」，
+    // 不再显示缓存里上一次（可能是别的账号）的数据。
+    m_dashboard->SetCardState(DashboardScreen::Card::Trend, DashboardScreen::CardState::Loading);
+    m_dashboard->SetCardState(DashboardScreen::Card::Enterprises, DashboardScreen::CardState::Loading);
+    m_dashboard->SetCardState(DashboardScreen::Card::Announcements, DashboardScreen::CardState::Loading);
+    m_dashboard->SetCardState(DashboardScreen::Card::Audit, DashboardScreen::CardState::Loading);
+
     // 统计卡：dashboard/stats.do。
     HttpRequest reqStats = adminapi::MakeDashboardStatsRequest(server, token);
     reqStats.m_replyHwnd = m_hWnd;
@@ -1987,22 +3020,25 @@ void AdminFrame::StartLoadDashboard()
     reqStats.m_tag       = kApiTagDashStats;
     HttpWorker::Instance().Post(reqStats);
 
-    // 活跃企业列表：复用 enterprise/list.do，但用专属 tag（kApiTagDashEnterprises）
-    // 与企业管理界面的列表请求区分，避免结果被路由到 EnterprisesScreen。
-    HttpRequest reqEnts = adminapi::MakeEnterpriseListRequest(
-        server, token, CString(), kDashEntStatusAll, 1, kDashEntPageSize);
-    reqEnts.m_replyHwnd = m_hWnd;
-    reqEnts.m_replyMsg  = WM_APP_API_RESULT;
-    reqEnts.m_tag       = kApiTagDashEnterprises;
-    HttpWorker::Instance().Post(reqEnts);
+    if (platformAdmin)
+    {
+        // 活跃企业列表：复用 enterprise/list.do，但用专属 tag（kApiTagDashEnterprises）
+        // 与企业管理界面的列表请求区分，避免结果被路由到 EnterprisesScreen。
+        HttpRequest reqEnts = adminapi::MakeEnterpriseListRequest(
+            server, token, CString(), kDashEntStatusAll, 1, kDashEntPageSize);
+        reqEnts.m_replyHwnd = m_hWnd;
+        reqEnts.m_replyMsg  = WM_APP_API_RESULT;
+        reqEnts.m_tag       = kApiTagDashEnterprises;
+        HttpWorker::Instance().Post(reqEnts);
 
-    // 「最新公告」卡：announcement/list.do（拉一小页）。
-    HttpRequest reqAnn = adminapi::MakeAnnListRequest(
-        server, token, kAnnStatusAll, 1, kDashAnnPageSize);
-    reqAnn.m_replyHwnd = m_hWnd;
-    reqAnn.m_replyMsg  = WM_APP_API_RESULT;
-    reqAnn.m_tag       = kApiTagDashAnnouncements;
-    HttpWorker::Instance().Post(reqAnn);
+        // 「最新公告」卡：announcement/list.do（拉一小页）。
+        HttpRequest reqAnn = adminapi::MakeAnnListRequest(
+            server, token, kAnnStatusAll, 1, kDashAnnPageSize);
+        reqAnn.m_replyHwnd = m_hWnd;
+        reqAnn.m_replyMsg  = WM_APP_API_RESULT;
+        reqAnn.m_tag       = kApiTagDashAnnouncements;
+        HttpWorker::Instance().Post(reqAnn);
+    }
 
     // 「近期审计」卡：audit/list.do（拉一小页，不按操作者 / 级别筛选）。
     HttpRequest reqAud = adminapi::MakeAuditListRequest(
@@ -2019,7 +3055,7 @@ void AdminFrame::StartLoadDashboard()
     reqTrend.m_tag       = kApiTagDashTrend;
     HttpWorker::Instance().Post(reqTrend);
 
-    FA_LOGI(_T("仪表盘：发起 stats + 活跃企业 + 公告 + 审计 + 消息趋势 加载"));
+    FA_LOGI(_T("dashboard load started: platformAdmin=%d"), platformAdmin ? 1 : 0);
 }
 
 void AdminFrame::OnDashboardStatsLoaded(const HttpResult& http)
@@ -2031,7 +3067,8 @@ void AdminFrame::OnDashboardStatsLoaded(const HttpResult& http)
     const DashboardStatsResult r = adminapi::ParseDashboardStatsResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
+        m_dashboard->SetStatsFailed();
         FA_LOGW(_T("仪表盘统计加载失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2048,7 +3085,8 @@ void AdminFrame::OnDashboardEnterprisesLoaded(const HttpResult& http)
     EnterpriseListResult r = adminapi::ParseEnterpriseListResponse(http);
     if (!r.Succeeded())
     {
-        // 活跃企业卡加载失败不打扰用户（统计卡可能仍成功），仅记日志。
+        // 活跃企业卡加载失败不弹提示（统计卡可能仍成功），卡片里显示「加载失败」。
+        m_dashboard->SetCardState(DashboardScreen::Card::Enterprises, DashboardScreen::CardState::Failed);
         FA_LOGW(_T("仪表盘活跃企业加载失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2061,7 +3099,7 @@ void AdminFrame::OnDashboardEnterprisesLoaded(const HttpResult& http)
         }
     }
     DataStore::Instance().SetEnterprises(r.m_list);
-    m_dashboard->Invalidate();
+    m_dashboard->SetCardState(DashboardScreen::Card::Enterprises, DashboardScreen::CardState::Loaded);
     FA_LOGI(_T("仪表盘活跃企业已更新，%d 家"),
             static_cast<int>(r.m_list.size()));
 }
@@ -2075,12 +3113,13 @@ void AdminFrame::OnDashboardAnnouncementsLoaded(const HttpResult& http)
     const AnnouncementListResult r = adminapi::ParseAnnListResponse(http);
     if (!r.Succeeded())
     {
-        // 卡片加载失败不打扰用户（其它卡可能仍成功），仅记日志。
+        // 卡片加载失败不弹提示（其它卡可能仍成功），卡片里显示「加载失败」。
+        m_dashboard->SetCardState(DashboardScreen::Card::Announcements, DashboardScreen::CardState::Failed);
         FA_LOGW(_T("仪表盘最新公告加载失败：%s"), r.m_message.GetString());
         return;
     }
     DataStore::Instance().SetAnnouncements(r.m_list);
-    m_dashboard->Invalidate();
+    m_dashboard->SetCardState(DashboardScreen::Card::Announcements, DashboardScreen::CardState::Loaded);
 }
 
 void AdminFrame::OnDashboardAuditLoaded(const HttpResult& http)
@@ -2092,11 +3131,17 @@ void AdminFrame::OnDashboardAuditLoaded(const HttpResult& http)
     const AuditListResult r = adminapi::ParseAuditListResponse(http);
     if (!r.Succeeded())
     {
+        m_dashboard->SetCardState(DashboardScreen::Card::Audit, DashboardScreen::CardState::Failed);
         FA_LOGW(_T("仪表盘近期审计加载失败：%s"), r.m_message.GetString());
         return;
     }
     DataStore::Instance().SetAuditLogs(r.m_list);
-    m_dashboard->Invalidate();
+    m_dashboard->SetCardState(DashboardScreen::Card::Audit, DashboardScreen::CardState::Loaded);
+    // 顺带刷新顶栏滚动提示：仪表板这一页就是最新的几条审计。
+    if (m_topBar != nullptr)
+    {
+        m_topBar->SetTickerAudits(r.m_list);
+    }
 }
 
 void AdminFrame::OnDashboardTrendLoaded(const HttpResult& http)
@@ -2108,11 +3153,12 @@ void AdminFrame::OnDashboardTrendLoaded(const HttpResult& http)
     const MessageTrendResult r = adminapi::ParseMessageTrendResponse(http);
     if (!r.Succeeded())
     {
+        m_dashboard->SetCardState(DashboardScreen::Card::Trend, DashboardScreen::CardState::Failed);
         FA_LOGW(_T("仪表盘消息趋势加载失败：%s"), r.m_message.GetString());
         return;
     }
     DataStore::Instance().SetMessageTrend(r.m_points);
-    m_dashboard->Invalidate();
+    m_dashboard->SetCardState(DashboardScreen::Card::Trend, DashboardScreen::CardState::Loaded);
 }
 
 void AdminFrame::StartLoadAudit()
@@ -2157,7 +3203,7 @@ void AdminFrame::OnAuditListLoaded(const HttpResult& http)
     const AuditListResult r = adminapi::ParseAuditListResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("审计日志加载失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2215,11 +3261,11 @@ void AdminFrame::OnAuditExported(const HttpResult& http)
         adminapi::ParseEnterpriseExportResponse(http);
     if (!result.Succeeded())
     {
-        ShowToast(result.m_message);
+        ShowToast(result.m_message, ToastKind::Error);
         FA_LOGW(_T("导出审计日志失败：%s"), result.m_message.GetString());
         return;
     }
-    SaveCsvToFile(result.m_csvUtf8, _T("审计日志.csv"));
+    SaveTextToFile(result.m_csvUtf8, filesave::CsvFileSpec(_T("审计日志.csv"), _T("审计日志")));
 }
 
 void AdminFrame::StartLoadProfile()
@@ -2245,7 +3291,7 @@ void AdminFrame::OnProfileLoaded(const HttpResult& http)
     const ProfileResult r = adminapi::ParseProfileResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("加载管理员资料失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2291,7 +3337,7 @@ void AdminFrame::OnProfileUpdated(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("保存个人资料失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2323,6 +3369,7 @@ void AdminFrame::SubmitChangePassword()
         return;
     }
     m_changePwBusy = true;
+    m_pendingNewPassword = newPw;   // 应答成功后据此更新「记住密码」保存的口令
     HttpRequest request = adminapi::MakeChangePasswordRequest(
         AppConfig::Instance().Server(), AdminSession::Instance().Token(),
         oldPw, newPw);
@@ -2340,7 +3387,8 @@ void AdminFrame::OnPasswordChanged(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留已填内容，便于改正
+        ShowToast(r.m_message, ToastKind::Error);   // 失败保留已填内容，便于改正
+        m_pendingNewPassword.Empty();               // 暂存的新口令是明文，用不上就立即清掉
         FA_LOGW(_T("修改密码失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2349,6 +3397,18 @@ void AdminFrame::OnPasswordChanged(const HttpResult& http)
     {
         m_settingsScreen->ClearPasswordFields();
     }
+    // 勾了「记住密码」的，把保存的口令换成新密码，否则下次打开会预填旧密码、登录失败。
+    const LoginConfig& saved = AppConfig::Instance().Login();
+    const LoginConfig updated = AppConfig::ApplyPasswordChange(
+        saved, m_pendingLogin.m_account, m_pendingNewPassword);
+    if (updated.m_password != saved.m_password)
+    {
+        AppConfig::Instance().SetLogin(updated);
+        AppConfig::Instance().Save();
+        FA_LOGI(_T("remembered password updated after password change"));
+    }
+    m_pendingLogin.m_password = m_pendingNewPassword;
+    m_pendingNewPassword.Empty();
 }
 
 void AdminFrame::StartLoadAnnouncements()
@@ -2376,7 +3436,7 @@ void AdminFrame::OnAnnouncementsLoaded(const HttpResult& http)
     const AnnouncementListResult r = adminapi::ParseAnnListResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("公告列表加载失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2460,7 +3520,7 @@ void AdminFrame::OnAnnouncementActionDone(const HttpResult& http, LPCTSTR okText
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("公告写操作失败：%s"), r.m_message.GetString());
         return;
     }
@@ -2470,9 +3530,6 @@ void AdminFrame::OnAnnouncementActionDone(const HttpResult& http, LPCTSTR okText
 
 void AdminFrame::HandleLogout()
 {
-    DataStore::Instance().PushAudit(_T("logout"), _T("-"),
-                                    Severity::Info, _T("用户主动登出"));
-
     // 通知服务端注销会话：拼好登出请求交 HTTP 工作线程发送。登出是「尽力
     // 而为」—— 不设 m_replyMsg，工作线程发完即丢弃结果，不回传、不等待；
     // 即便失败也只是服务端会话记录残留至自然过期，不影响本地登出。
@@ -2487,12 +3544,110 @@ void AdminFrame::HandleLogout()
     session.Clear();
 
     m_loggedIn = false;
-    KillTimer(kTickerTimerId);            // 停掉顶栏审计滚动提示
+    ResetSessionState();
     if (m_root != nullptr && m_loginPage != nullptr)
     {
         m_root->ShowPage(m_loginPage);   // 只切显隐，不销毁外壳
     }
-    FA_LOGI(_T("用户登出"));
+    FA_LOGI(_T("user logged out"));
+}
+
+void AdminFrame::ResetSessionState()
+{
+    KillTimer(kTickerTimerId);   // 停掉顶栏审计滚动提示
+
+    // 断开 FlamingoLink.dll 的长连接并清空在线名单；页面的显隐随之后的页面切换由 SyncLinkPage 处理
+    LinkBridge::Instance().Stop();
+
+    // 关闭叠层弹窗与独立对话框。独立对话框经 WM_CLOSE 关闭，销毁回调里会清掉各自的指针。
+    if (m_root != nullptr)
+    {
+        m_root->HideModal();
+    }
+    if (m_confirmDialog != nullptr)
+    {
+        m_confirmDialog->RequestClose();
+    }
+    if (m_nodeModal != nullptr)
+    {
+        m_nodeModal->RequestClose();
+    }
+    if (m_employeeEditDialog != nullptr)
+    {
+        m_employeeEditDialog->RequestClose();
+    }
+
+    // 复位全部「请求进行中」标志与待处理状态，避免换账号后操作被卡住。
+    m_loginBusy           = false;
+    m_entCreateBusy       = false;
+    m_entExportBusy       = false;
+    m_auditExportBusy     = false;
+    m_updateProfileBusy   = false;
+    m_changePwBusy        = false;
+    m_annActionBusy       = false;
+    m_composeSubmitBusy   = false;
+    m_nodeSubmitBusy      = false;
+    m_svcSubmitBusy       = false;
+    m_svcBindingFetchBusy = false;
+    m_groupSubmitBusy     = false;
+    m_empEditBusy         = false;
+    m_entUpdateBusy       = false;
+    m_addAdminBusy        = false;
+    m_orgTreeReloading    = false;
+    m_entSettingsOpen     = false;
+    m_detailLoadEntId.Empty();          // 放弃可能在途的企业详情加载
+    m_pendingBindingsSvcId.Empty();
+    m_pendingBindings.clear();
+    m_bindingModalSvcId.Empty();
+    m_pendingNewPassword.Empty();
+    m_confirmDeleteNodeId.Empty();
+    m_confirmTarget = 0;
+
+    // 先清空缓存，再让各界面重新取一次指针：企业详情页按空 ID 重新设置后，企业、组织树与
+    // 员工面板持有的指针都变为空，迟到的接口应答不会再访问已释放的数据。
+    DataStore::Instance().Clear();
+    if (m_enterpriseDetail != nullptr)
+    {
+        m_enterpriseDetail->SetEnterprise(CString());
+    }
+    if (m_enterprises != nullptr)
+    {
+        m_enterprises->ResetState();
+    }
+    if (m_topBar != nullptr)
+    {
+        m_topBar->SetTickerAudits(std::vector<AuditLog>());
+    }
+    FA_LOGI(_T("session state reset"));
+}
+
+void AdminFrame::FetchTickerAudits()
+{
+    if (!AdminSession::Instance().IsLoggedIn())
+    {
+        return;
+    }
+    HttpRequest request = adminapi::MakeAuditListRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+        1, kTickerAuditCount, -1, -1);
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagTickerAudit;
+    HttpWorker::Instance().Post(request);
+}
+
+void AdminFrame::OnTickerAuditLoaded(const HttpResult& http)
+{
+    const AuditListResult r = adminapi::ParseAuditListResponse(http);
+    if (!r.Succeeded())
+    {
+        FA_LOGW(_T("load ticker audits failed: %s"), r.m_message.GetString());
+        return;
+    }
+    if (m_topBar != nullptr)
+    {
+        m_topBar->SetTickerAudits(r.m_list);
+    }
 }
 
 void AdminFrame::HandleSessionExpired()
@@ -2500,28 +3655,76 @@ void AdminFrame::HandleSessionExpired()
     // 与 HandleLogout 类似，但不通知服务端（token 本就已失效），并给出提示。
     AdminSession::Instance().Clear();
     m_loggedIn = false;
-    m_detailLoadEntId.Empty();   // 放弃可能在途的企业详情加载
-    // 复位各「请求进行中」标志，避免会话失效后卡住后续操作。
-    m_entCreateBusy   = false;
-    m_entExportBusy   = false;
-    m_auditExportBusy = false;
-    m_updateProfileBusy = false;
-    m_changePwBusy    = false;
-    m_annActionBusy   = false;
-    m_composeSubmitBusy = false;
-    m_nodeSubmitBusy  = false;
-    m_svcSubmitBusy   = false;
-    m_empEditBusy     = false;
-    m_entUpdateBusy   = false;
-    m_addAdminBusy    = false;
-    m_entSettingsOpen = false;
-    KillTimer(kTickerTimerId);
+    ResetSessionState();
     if (m_root != nullptr && m_loginPage != nullptr)
     {
         m_root->ShowPage(m_loginPage);
     }
     ShowToast(_T("登录已过期，请重新登录"), ToastKind::Error);
     FA_LOGW(_T("会话失效（code=2），已退回登录页"));
+}
+
+LRESULT AdminFrame::OnLinkExpired(UINT, WPARAM, LPARAM, BOOL& bHandled)
+{
+    bHandled = TRUE;
+    //已经退出登录（例如 HTTP 接口先发现了会话过期）时，这条迟到的通知不再处理
+    if (m_loggedIn)
+    {
+        FA_LOGW(_T("FlamingoLink: token invalid on the admin link, back to login"));
+        HandleSessionExpired();
+    }
+    return 0;
+}
+
+void AdminFrame::SyncLinkPage()
+{
+    LinkBridge& link = LinkBridge::Instance();
+    if (!link.IsAvailable() || m_enterpriseDetail == nullptr)
+    {
+        return;
+    }
+
+    link.SetEnterprise(m_enterpriseDetail->GetEnterpriseId(), m_enterpriseDetail->GetEnterpriseName());
+    link.SetPageBounds(m_enterpriseDetail->GetOnlineSlot()->LastBounds());
+
+    //企业详情屏「确实可见」：它与它的每一层父控件都可见（外壳页隐藏时它自己的可见标志仍是 true）
+    bool detailVisible = true;
+    for (const balloonwjui::DuiControl* c = m_enterpriseDetail; c != nullptr; c = c->GetParent())
+    {
+        if (!c->IsVisible())
+        {
+            detailVisible = false;
+            break;
+        }
+    }
+
+    const bool modalVisible = (m_root != nullptr) && m_root->IsModalVisible();
+    link.ApplyPageState(DecideLinkPageState(m_loggedIn, detailVisible, m_enterpriseDetail->IsOnlineTab(),
+                                            modalVisible));
+}
+
+void AdminFrame::LoadFeaturesPage()
+{
+    if (m_enterpriseDetail == nullptr || m_enterpriseDetail->GetFeaturesPage() == nullptr)
+    {
+        return;
+    }
+    const long long enterpriseId = FeatureSwitchesPage::EnterpriseIdForLoad(
+        AdminSession::Instance().IsPlatformAdmin(), m_enterpriseDetail->GetEnterpriseId());
+    FA_LOGI(_T("enterprise detail: open feature switches tab, enterprise %s, request enterprise %lld"),
+            m_enterpriseDetail->GetEnterpriseId().GetString(), enterpriseId);
+    m_enterpriseDetail->GetFeaturesPage()->Load(enterpriseId);
+}
+
+void AdminFrame::LinkLayerChangedThunk(void* user)
+{
+    static_cast<AdminFrame*>(user)->SyncLinkPage();
+}
+
+void AdminFrame::LinkSlotBoundsThunk(void* user, const RECT& rc)
+{
+    (void)user;
+    LinkBridge::Instance().SetPageBounds(rc);
 }
 
 void AdminFrame::ToggleSidebar()
@@ -2772,7 +3975,7 @@ void AdminFrame::SubmitNewEnterprise()
     CString adminEmail = m_modal->GetContact();
     adminEmail.Trim();
     const CString industry = m_modal->GetIndustry();
-    const int     plan     = PlanCodeFromName(m_modal->GetPlan());
+    const int     plan     = PlanCodeForNewEnterprise(m_modal->GetPlan());
 
     // 发起 create.do；弹窗暂不关闭，待应答回来在 OnEnterpriseCreated 处理。
     m_entCreateBusy = true;
@@ -2796,7 +3999,7 @@ void AdminFrame::OnEnterpriseCreated(const HttpResult& http)
     if (!result.Succeeded())
     {
         // 失败：保留弹窗，让用户修改后重试。
-        ShowToast(result.m_message);
+        ShowToast(result.m_message, ToastKind::Error);
         FA_LOGW(_T("新增企业失败：%s"), result.m_message.GetString());
         return;
     }
@@ -2840,7 +4043,7 @@ void AdminFrame::OnEnterpriseActionDone(const HttpResult& http, LPCTSTR okText)
     }
     else
     {
-        ShowToast(result.m_message);
+        ShowToast(result.m_message, ToastKind::Error);
         FA_LOGW(_T("企业写操作失败：%s"), result.m_message.GetString());
     }
 }
@@ -2853,10 +4056,11 @@ void AdminFrame::StartEnterpriseExport()
         return;
     }
     m_entExportBusy = true;
-    // keyword 空、status 取 -1：导出全部企业。
+    // 按企业列表当前的筛选条件导出（搜索框、状态分段与「更多筛选」），导出的就是界面上筛出的企业。
+    const EnterpriseListFilter filter = (m_enterprises != nullptr) ? m_enterprises->GetFilter()
+                                                                   : EnterpriseListFilter();
     HttpRequest request = adminapi::MakeEnterpriseExportRequest(
-        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
-        CString(), -1);
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(), filter);
     request.m_replyHwnd = m_hWnd;
     request.m_replyMsg  = WM_APP_API_RESULT;
     request.m_tag       = kApiTagEntExport;
@@ -2871,25 +4075,27 @@ void AdminFrame::OnEnterpriseExported(const HttpResult& http)
         adminapi::ParseEnterpriseExportResponse(http);
     if (!result.Succeeded())
     {
-        ShowToast(result.m_message);
+        ShowToast(result.m_message, ToastKind::Error);
         FA_LOGW(_T("导出企业列表失败：%s"), result.m_message.GetString());
         return;
     }
-    SaveCsvToFile(result.m_csvUtf8, _T("企业列表.csv"));
+    SaveTextToFile(result.m_csvUtf8, filesave::CsvFileSpec(_T("企业列表.csv"), _T("企业列表")));
 }
 
-void AdminFrame::SaveCsvToFile(const std::string& csvUtf8, LPCTSTR defaultName)
+void AdminFrame::SaveTextToFile(const std::string& content, const filesave::SaveFileSpec& spec)
 {
     // 弹「另存为」对话框，预填调用方给的默认文件名。
     TCHAR pathBuf[MAX_PATH] = {};
-    lstrcpyn(pathBuf, defaultName, MAX_PATH);
+    lstrcpyn(pathBuf, spec.m_defaultName, MAX_PATH);
+    std::vector<TCHAR> filter;
+    filesave::BuildFilterBuffer(spec, filter);
     OPENFILENAME ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = m_hWnd;
-    ofn.lpstrFilter = _T("CSV 文件 (*.csv)\0*.csv\0所有文件 (*.*)\0*.*\0");
+    ofn.lpstrFilter = &filter[0];
     ofn.lpstrFile   = pathBuf;
     ofn.nMaxFile    = MAX_PATH;
-    ofn.lpstrDefExt = _T("csv");
+    ofn.lpstrDefExt = spec.m_defExt;
     ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
     if (!::GetSaveFileName(&ofn))
     {
@@ -2902,22 +4108,28 @@ void AdminFrame::SaveCsvToFile(const std::string& csvUtf8, LPCTSTR defaultName)
     if (file == INVALID_HANDLE_VALUE)
     {
         ShowToast(_T("无法写入所选文件"), ToastKind::Error);
-        FA_LOGW(_T("导出企业列表：打开目标文件失败"));
+        FA_LOGW(_T("export: cannot open target file, error: %lu"), ::GetLastError());
         return;
     }
-    // 先写 UTF-8 BOM，确保 Excel 等工具正确识别中文。
-    const BYTE kUtf8Bom[3] = { 0xEF, 0xBB, 0xBF };
+    // 是否补 UTF-8 BOM 由规格决定：CSV 要补，Excel 等工具据此识别中文；内容已带 BOM 时不重复补。
+    const std::string bytes = filesave::BuildFileBytes(spec, content);
     DWORD written = 0;
-    ::WriteFile(file, kUtf8Bom, sizeof(kUtf8Bom), &written, nullptr);
-    if (!csvUtf8.empty())
+    BOOL ok = TRUE;
+    if (!bytes.empty())
     {
-        ::WriteFile(file, csvUtf8.data(),
-                    static_cast<DWORD>(csvUtf8.size()), &written, nullptr);
+        ok = ::WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
     }
     ::CloseHandle(file);
+    if (!ok || written != static_cast<DWORD>(bytes.size()))
+    {
+        ShowToast(_T("写入文件失败，文件可能不完整"), ToastKind::Error);
+        FA_LOGW(_T("export: write failed, %lu of %d bytes written"), written, static_cast<int>(bytes.size()));
+        return;
+    }
 
-    ShowToast(_T("企业列表已导出"));
-    FA_LOGI(_T("企业列表已导出到文件"));
+    ShowToast(spec.m_successToast);
+    FA_LOGI(_T("export: saved %d bytes, default name: %s"), static_cast<int>(bytes.size()),
+            spec.m_defaultName.GetString());
 }
 
 void AdminFrame::ShowEnterpriseMenu()
@@ -2935,11 +4147,12 @@ void AdminFrame::ShowEnterpriseMenu()
     // entPtr 可能失效，故后续一律用这份拷贝。
     const Enterprise ent = *entPtr;
 
-    // 「打开详情」子菜单：组织架构 / 服务号两个子 tab。子菜单为借用，须在
-    // 整个 TrackPopup 期间保活，故作为本函数局部变量。
+    // 「打开详情」子菜单：组织架构 / 服务号 / 功能开关三个子 tab（「在线用户」要等详情打开后才有意义，不列）。
+    // 子菜单为借用，须在整个 TrackPopup 期间保活，故作为本函数局部变量。
     DuiMenu detailSub;
     detailSub.AppendItem(kMenuEntDetailOrg, _T("组织架构"));
     detailSub.AppendItem(kMenuEntDetailSvc, _T("服务号"));
+    detailSub.AppendItem(kMenuEntDetailFeatures, _T("功能开关"));
 
     DuiMenu menu;
     menu.AppendSubMenu(kMenuEntDetailSub, _T("打开详情"), &detailSub);
@@ -2979,6 +4192,11 @@ void AdminFrame::ShowEnterpriseMenu()
         m_detailInitialTab = kDetailTabService;
         StartLoadEnterpriseDetail(ent.m_id);
         break;
+    //打开详情并定位到「功能开关」子 tab：切过去时由子 tab 切换通知读取该企业的设置
+    case kMenuEntDetailFeatures:
+        m_detailInitialTab = kDetailTabFeatures;
+        StartLoadEnterpriseDetail(ent.m_id);
+        break;
     case kMenuEntSettings:
         OpenEnterpriseSettings(ent);
         break;
@@ -3011,24 +4229,100 @@ void AdminFrame::ShowEnterpriseMenu()
     case kMenuEntActivate:
     case kMenuEntSuspend:
     {
-        // 改状态：审核通过 / 启用 → 活跃；停用 → 停用。
-        const int newStatus = (chosen == kMenuEntSuspend) ? kEntStatusSuspended
-                                                          : kEntStatusActive;
-        HttpRequest request = adminapi::MakeEnterpriseSetStatusRequest(
-            AppConfig::Instance().Server(), AdminSession::Instance().Token(),
-            _ttoi64(ent.m_id), newStatus);
-        request.m_replyHwnd = m_hWnd;
-        request.m_replyMsg  = WM_APP_API_RESULT;
-        request.m_tag       = kApiTagEntSetStatus;
-        HttpWorker::Instance().Post(request);
-        ShowToast(_T("正在更新企业状态…"));
-        FA_LOGI(_T("企业 %s：提交改状态 -> %d"),
-                ent.m_id.GetString(), newStatus);
+        // 改状态：审核通过 / 启用 → 活跃，直接提交；停用会让该企业全员下线，先确认。
+        if (chosen != kMenuEntSuspend)
+        {
+            SubmitEnterpriseStatus(ent.m_id, kEntStatusActive);
+            break;
+        }
+        CString msg;
+        msg.Format(_T("确定要停用企业「%s」吗？停用后该企业全体员工会被立即下线，")
+                   _T("在恢复为活跃之前都无法登录。"),
+                   static_cast<LPCTSTR>(ent.m_name));
+        m_confirmDeleteNodeId = ent.m_id;
+        m_confirmTarget       = kConfirmTargetEntSuspend;
+        ConfirmDialogSpec spec;
+        spec.m_title         = _T("停用企业");
+        spec.m_message       = msg;
+        spec.m_okText        = _T("停用");
+        spec.m_confirmDanger = true;
+        ShowConfirmDialog(spec);
         break;
     }
     default:
         break;
     }
+}
+
+void AdminFrame::SubmitEnterpriseStatus(const CString& enterpriseId, int newStatus)
+{
+    HttpRequest request = adminapi::MakeEnterpriseSetStatusRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+        _ttoi64(enterpriseId), newStatus);
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagEntSetStatus;
+    HttpWorker::Instance().Post(request);
+    ShowToast(_T("正在更新企业状态…"));
+    FA_LOGI(_T("enterprise %s: submit set status -> %d"), enterpriseId.GetString(), newStatus);
+}
+
+void AdminFrame::SubmitRemoveAdmin(long long adminId)
+{
+    HttpRequest req = adminapi::MakeEnterpriseRemoveAdminRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(), adminId);
+    req.m_replyHwnd = m_hWnd;
+    req.m_replyMsg  = WM_APP_API_RESULT;
+    req.m_tag       = kApiTagEntRemoveAdmin;
+    HttpWorker::Instance().Post(req);
+    ShowToast(_T("正在移除管理员…"));
+    FA_LOGI(_T("submit remove enterprise admin: adminid=%lld"), adminId);
+}
+
+void AdminFrame::SubmitKickDevices(const CString& userId)
+{
+    m_permUserId = userId;
+    HttpRequest req = adminapi::MakeUserKickDeviceRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(), _ttoi64(userId),
+        CString());
+    req.m_replyHwnd = m_hWnd;
+    req.m_replyMsg  = WM_APP_API_RESULT;
+    req.m_tag       = kApiTagUserKickDevice;
+    HttpWorker::Instance().Post(req);
+    ShowToast(_T("正在强制下线全部设备…"));
+    FA_LOGI(_T("submit kick all devices: userid=%s"), userId.GetString());
+}
+
+void AdminFrame::SubmitUserRole(const CString& userId)
+{
+    OrgDetailPanel* panel = (m_enterpriseDetail != nullptr)
+        ? m_enterpriseDetail->GetOrgDetailPanel() : nullptr;
+    if (panel == nullptr || userId.IsEmpty())
+    {
+        return;
+    }
+    m_permUserId = userId;
+    HttpRequest req = adminapi::MakeUserSetRoleRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(), _ttoi64(userId),
+        panel->GetUserRole());
+    req.m_tag       = kApiTagUserSetRole;
+    req.m_replyHwnd = m_hWnd;
+    req.m_replyMsg  = WM_APP_API_RESULT;
+    HttpWorker::Instance().Post(req);
+    FA_LOGI(_T("submit user role: userid=%s role=%d"), userId.GetString(), panel->GetUserRole());
+}
+
+void AdminFrame::SubmitServiceStatus(const CString& serviceId, int target)
+{
+    HttpRequest request = adminapi::MakeServiceSetStatusRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+        _ttoi64(serviceId), target);
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagSvcSetStatus;
+    HttpWorker::Instance().Post(request);
+    ShowToast(_T("正在更新服务号状态…"));
+    FA_LOGI(_T("submit service status: service=%s target=%d"), serviceId.GetString(), target);
 }
 
 void AdminFrame::ExportSingleEnterprise(const Enterprise& ent)
@@ -3070,7 +4364,7 @@ void AdminFrame::ExportSingleEnterprise(const Enterprise& ent)
 
     CString defaultName;
     defaultName.Format(_T("企业-%s.csv"), static_cast<LPCTSTR>(ent.m_name));
-    SaveCsvToFile(Utf8FromWide(csv), defaultName);
+    SaveTextToFile(Utf8FromWide(csv), filesave::CsvFileSpec(defaultName, _T("企业信息")));
     FA_LOGI(_T("已导出单个企业 CSV：%s"), ent.m_id.GetString());
 }
 
@@ -3105,7 +4399,7 @@ void AdminFrame::ExportAnnouncementsCsv()
         csv += read;
         csv += _T("\r\n");
     }
-    SaveCsvToFile(Utf8FromWide(csv), _T("公告列表.csv"));
+    SaveTextToFile(Utf8FromWide(csv), filesave::CsvFileSpec(_T("公告列表.csv"), _T("公告列表")));
     FA_LOGI(_T("已导出公告 CSV，%d 条"), static_cast<int>(list.size()));
 }
 
@@ -3227,6 +4521,8 @@ void AdminFrame::OnDetailPartLoaded(ApiTag tag, const HttpResult& http)
             m_enterpriseDetail->SelectSubTab(m_detailInitialTab);
         }
         SwitchScreen(Screen::EnterpriseDetail);
+        // 服务号列表不带绑定：为默认选中的服务号读一次绑定，供面板显示。
+        FetchSelectedServiceBindingsIfNeeded();
     }
     m_detailInitialTab = kDetailTabOrg;   // 用后复位
     FA_LOGI(_T("企业详情已加载并打开：%s"), entId.GetString());
@@ -3249,6 +4545,12 @@ void AdminFrame::ShowNodeModal()
         m_nodeModalPendingIsDept ? NodeModal::Mode::AddDept
                                  : NodeModal::Mode::AddUser,
         m_nodeModalParentName);
+    if (m_nodeModalPendingIsDept && m_enterpriseDetail != nullptr)
+    {
+        // 负责人从本企业员工里选：候选人取自已加载的组织树（树未加载时只有「不设置」）。
+        m_nodeModal->SetLeaderCandidates(orgtree::CollectLeaderCandidates(
+            DataStore::Instance().OrgTree(m_enterpriseDetail->GetEnterpriseId())));
+    }
     if (!m_nodeModal->CreateAndShow())
     {
         delete m_nodeModal;
@@ -3339,7 +4641,7 @@ void AdminFrame::OnGroupCreated(const HttpResult& http)
     const GroupCreateResult r = adminapi::ParseGroupCreateResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗，让用户改后重试
+        ShowToast(r.m_message, ToastKind::Error);   // 失败保留弹窗，让用户改后重试
         FA_LOGW(_T("新建群失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3370,7 +4672,7 @@ void AdminFrame::OnEmployeeEditDialogSubmit(EmployeeEditDialog* dlg)
         dlg->GetEmployeeNo(), dlg->GetJoinDate(),
         dlg->GetLandline(),   dlg->GetWorkstation(),
         dlg->GetPhone(),      dlg->GetEmail(),
-        dlg->GetSignature());
+        dlg->GetSignature(),  dlg->GetGenderCode());
     request.m_replyHwnd = m_hWnd;
     request.m_replyMsg  = WM_APP_API_RESULT;
     request.m_tag       = kApiTagUserUpdate;
@@ -3400,7 +4702,7 @@ void AdminFrame::OnUserDetailLoaded(const HttpResult& http)
     const UserDetailResult r = adminapi::ParseUserDetailResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("加载员工资料失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3434,7 +4736,7 @@ void AdminFrame::OnUserUpdated(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗
+        ShowToast(r.m_message, ToastKind::Error);   // 失败保留弹窗
         if (m_employeeEditDialog != nullptr)
         {
             m_employeeEditDialog->SetBusy(false);   // 解除"保存中"
@@ -3507,7 +4809,7 @@ void AdminFrame::OnUserMoved(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("调整员工部门失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3568,7 +4870,7 @@ void AdminFrame::OnEnterpriseAdminsLoaded(const HttpResult& http)
         adminapi::ParseEnterpriseAdminsResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("加载企业管理员失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3598,12 +4900,25 @@ void AdminFrame::SubmitEnterpriseUpdate()
         ShowToast(_T("请填写企业全称"), ToastKind::Warn);
         return;
     }
+    if (!m_enterpriseSettingsModal->ValidateAccountPrefix())
+    {
+        ShowToast(_T("账号前缀只能由字母和点号组成，1～10 个字符"), ToastKind::Warn);
+        return;
+    }
     if (m_entUpdateBusy)
     {
         ShowToast(_T("正在提交，请稍候…"));
         return;
     }
     m_entUpdateBusy = true;
+    // 记下这次提交的新值：保存成功后写回企业缓存（OnEnterpriseUpdated），详情屏与下次打开设置窗口都显示新值
+    m_entUpdatePending = m_entSettingsEnt;
+    m_entUpdatePending.m_name      = m_enterpriseSettingsModal->GetName();
+    m_entUpdatePending.m_shortName = m_enterpriseSettingsModal->GetShortName();
+    m_entUpdatePending.m_industry  = m_enterpriseSettingsModal->GetIndustry();
+    m_entUpdatePending.m_region    = m_enterpriseSettingsModal->GetRegion();
+    m_entUpdatePending.m_plan      = adminapi::PlanNameFromInt(m_enterpriseSettingsModal->GetPlan());
+    adminapi::NormalizeAccountPrefix(m_enterpriseSettingsModal->GetAccountPrefix(), m_entUpdatePending.m_accountPrefix);
     HttpRequest request = adminapi::MakeEnterpriseUpdateRequest(
         AppConfig::Instance().Server(), AdminSession::Instance().Token(),
         _ttoi64(m_enterpriseSettingsModal->GetEnterpriseId()),
@@ -3611,7 +4926,8 @@ void AdminFrame::SubmitEnterpriseUpdate()
         m_enterpriseSettingsModal->GetShortName(),
         m_enterpriseSettingsModal->GetIndustry(),
         m_enterpriseSettingsModal->GetRegion(),
-        m_enterpriseSettingsModal->GetPlan());
+        m_enterpriseSettingsModal->GetPlan(),
+        m_enterpriseSettingsModal->GetAccountPrefix());
     request.m_replyHwnd = m_hWnd;
     request.m_replyMsg  = WM_APP_API_RESULT;
     request.m_tag       = kApiTagEntUpdate;
@@ -3626,12 +4942,18 @@ void AdminFrame::OnEnterpriseUpdated(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗
+        ShowToast(r.m_message, ToastKind::Error);   // 失败保留弹窗
         FA_LOGW(_T("保存企业信息失败：%s"), r.m_message.GetString());
         return;
     }
     HideEnterpriseSettings();
     ShowToast(_T("企业信息已保存"));
+    // 新值写回企业缓存：此前从企业详情屏保存后缓存里仍是旧记录，详情屏头部与再次打开设置窗口都显示旧值
+    m_entSettingsEnt = m_entUpdatePending;
+    if (DataStore::Instance().UpdateEnterpriseRecord(m_entUpdatePending) && m_root != nullptr)
+    {
+        m_root->Invalidate();
+    }
     // 若企业设置是从企业列表打开的，刷新列表以反映改后的名称 / 套餐等。
     if (m_route == Screen::Enterprises && m_enterprises != nullptr)
     {
@@ -3675,7 +4997,7 @@ void AdminFrame::OnEnterpriseAdminAdded(const HttpResult& http)
         adminapi::ParseEnterpriseAddAdminResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗
+        ShowToast(r.m_message, ToastKind::Error);   // 失败保留弹窗
         FA_LOGW(_T("新增管理员失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3701,7 +5023,7 @@ void AdminFrame::OnEnterpriseAdminRemoved(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("移除管理员失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3743,9 +5065,12 @@ void AdminFrame::OnNodeModalSubmit(NodeModal* dlg)
     {
         CString name = m_nodeModal->GetDeptName();
         name.Trim();
-        // deptdesc / leaderuserid / deptorder 当前弹窗未提供，留空 / 0。
+        // deptdesc / deptorder 当前弹窗未提供，留空 / 0；负责人 0 表示不设置
+        // （无法确定为某一名员工的情况已在弹窗的 Validate 里拦下）。
+        const long long leaderId = m_nodeModal->GetDeptLeaderUserId();
         HttpRequest request = adminapi::MakeDeptCreateRequest(
-            server, token, entId, parentId, name, CString(), 0, 0);
+            server, token, entId, parentId, name, CString(),
+            (leaderId > 0) ? leaderId : 0, 0);
         request.m_replyHwnd = m_hWnd;
         request.m_replyMsg  = WM_APP_API_RESULT;
         request.m_tag       = kApiTagDeptCreate;
@@ -3762,7 +5087,7 @@ void AdminFrame::OnNodeModalSubmit(NodeModal* dlg)
             server, token, entId, parentId, name,
             m_nodeModal->GetUserTitle(), CString(),
             m_nodeModal->GetUserEmail(), m_nodeModal->GetUserPhone(),
-            CString());
+            CString(), m_nodeModal->GetUserGenderCode());
         request.m_replyHwnd = m_hWnd;
         request.m_replyMsg  = WM_APP_API_RESULT;
         request.m_tag       = kApiTagUserCreate;
@@ -3800,7 +5125,7 @@ void AdminFrame::OnDeptCreated(const HttpResult& http)
         {
             m_nodeModal->SetBusy(false);
         }
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("新增部门失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3820,7 +5145,7 @@ void AdminFrame::OnUserCreated(const HttpResult& http)
         {
             m_nodeModal->SetBusy(false);
         }
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("新增员工失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3850,7 +5175,7 @@ void AdminFrame::OnOrgNodeDeleted(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("删除组织节点失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3919,6 +5244,134 @@ void AdminFrame::OnOrgTreeReloaded(const HttpResult& http)
     }
 }
 
+bool AdminFrame::HandleEscapeKey()
+{
+    if (m_root == nullptr)
+    {
+        return false;
+    }
+    DuiControl* modal = m_root->GetVisibleModal();
+    if (modal == nullptr || HasOpenComboPopup(modal))
+    {
+        return false;   // 没有弹窗；或弹窗里有下拉框展开着，Esc 交给下拉框自己收起列表
+    }
+    UINT closeId = 0;
+    if (modal == m_modal)
+    {
+        closeId = kIdModalClose;
+    }
+    else if (modal == m_serviceModal)
+    {
+        closeId = kIdSvcClose;
+    }
+    else if (modal == m_bindingModal)
+    {
+        closeId = kIdBindClose;
+    }
+    else if (modal == m_composeModal)
+    {
+        // 已经写了标题或正文时不关闭：长文一按 Esc 就没了，代价太大。
+        if (!m_composeModal->GetTitle().IsEmpty() || !m_composeModal->GetBody().IsEmpty())
+        {
+            FA_LOGI(_T("escape ignored: compose modal has content"));
+            return true;
+        }
+        closeId = kIdComposeClose;
+    }
+    else if (modal == m_groupModal)
+    {
+        closeId = kIdGroupClose;
+    }
+    else if (modal == m_clientVersionModal)
+    {
+        closeId = kIdCvModalClose;
+    }
+    else if (modal == m_swModal)
+    {
+        closeId = kIdSwModalClose;
+    }
+    else if (modal == m_qaModal)
+    {
+        closeId = kIdQaModalClose;
+    }
+    else if (modal == m_botModal)
+    {
+        closeId = kIdBotModalClose;
+    }
+    else if (modal == m_botRuleModal)
+    {
+        closeId = kIdBotRuleClose;
+    }
+    else if (modal == m_botDomainsModal)
+    {
+        closeId = kIdBotDomainsClose;
+    }
+    else if (modal == m_swImportModal)
+    {
+        closeId = kIdSwImpClose;
+    }
+    else if (modal == m_enterpriseSettingsModal)
+    {
+        closeId = kIdEntSetClose;
+    }
+    if (closeId == 0)
+    {
+        return false;
+    }
+    DuiControl* btn = modal->FindCtrlById(closeId);
+    if (btn == nullptr || !btn->IsVisible() || !btn->IsEnabled())
+    {
+        return true;   // 关闭按钮此刻不可用（例如正在提交），按键吃掉、不做别的
+    }
+    FA_LOGI(_T("escape closes modal via button %u"), closeId);
+    btn->NotifyParent(DUIN_CLICK);
+    return true;
+}
+
+bool AdminFrame::HandleEditEnter(const DuiNotify* n)
+{
+    UINT buttonId = 0;
+    const size_t ruleCount = sizeof(kEnterSubmitRules) / sizeof(kEnterSubmitRules[0]);
+    for (size_t i = 0; i < ruleCount; ++i)
+    {
+        if (kEnterSubmitRules[i].m_editId == n->ctrlId)
+        {
+            buttonId = kEnterSubmitRules[i].m_buttonId;
+            break;
+        }
+    }
+    // 只认对照表里的输入框，且发送者必须真是输入框：别的控件的同值通知码不归这里处理。
+    if (buttonId == 0 || dynamic_cast<DuiEdit*>(static_cast<DuiControl*>(n->pCtrl)) == nullptr)
+    {
+        return false;
+    }
+    ::PostMessage(m_hWnd, WM_APP_CLICK_BUTTON, static_cast<WPARAM>(buttonId), 0);
+    return true;
+}
+
+LRESULT AdminFrame::OnClickButtonMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
+{
+    bHandled = TRUE;
+    const UINT buttonId = static_cast<UINT>(wParam);
+    // 按钮只在当前可见的弹窗或登录页里找，避免点到藏在后面的同 ID 按钮。
+    DuiControl* container = (m_root != nullptr) ? m_root->GetVisibleModal() : nullptr;
+    if (container == nullptr && m_loginPage != nullptr && m_loginPage->IsVisible())
+    {
+        container = m_loginPage;
+    }
+    if (container == nullptr)
+    {
+        return 0;
+    }
+    DuiControl* btn = container->FindCtrlById(buttonId);
+    if (btn != nullptr && btn->IsVisible() && btn->IsEnabled())
+    {
+        FA_LOGI(_T("enter submits via button %u"), buttonId);
+        btn->NotifyParent(DUIN_CLICK);
+    }
+    return 0;
+}
+
 void AdminFrame::ShowConfirmDialog(const ConfirmDialogSpec& spec)
 {
     // 重复打开保护:已有 dialog 存在则先把旧的 RequestClose,本次请求当作
@@ -3948,6 +5401,46 @@ void AdminFrame::OnConfirmDialogDestroyed(ConfirmDialog* dlg)
     if (dlg != nullptr && dlg == m_confirmDialog)
     {
         m_confirmDialog = nullptr;
+
+        // 敏感词的两种确认框：点了确认时 OnConfirmDialogConfirmed 已清空 m_confirmDeleteNodeId；
+        // 走到这里仍非空，说明是取消或直接关掉，告诉敏感词界面（关闭总开关被取消时开关要拨回去）
+        //文件共享管理的确认框：走到这里仍有待确认的操作，说明是取消或直接关掉，告诉发起方（开关要拨回去）
+        if (m_confirmTarget == kConfirmTargetFileShare && !m_confirmDeleteNodeId.IsEmpty())
+        {
+            m_confirmDeleteNodeId.Empty();
+            fsui::ConfirmTarget* target = m_fsConfirmTarget;
+            m_fsConfirmTarget = nullptr;
+            if (target != nullptr)
+            {
+                target->OnConfirmResult(false);
+            }
+        }
+        if (m_confirmTarget == kConfirmTargetSetRole && !m_confirmDeleteNodeId.IsEmpty())
+        {
+            const CString userId = m_confirmDeleteNodeId;
+            m_confirmDeleteNodeId.Empty();
+            FireGetPermissions(userId);
+            FA_LOGI(_T("role change cancelled, reload permissions: userid=%s"), userId.GetString());
+        }
+        if (m_confirmTarget == kConfirmTargetQaDelete && !m_confirmDeleteNodeId.IsEmpty())
+        {
+            m_confirmDeleteNodeId.Empty();
+            if (m_qaScreen != nullptr)
+            {
+                m_qaScreen->OnConfirmDelete(false);
+            }
+        }
+        if ((m_confirmTarget == kConfirmTargetSwDelete || m_confirmTarget == kConfirmTargetSwDisable)
+            && !m_confirmDeleteNodeId.IsEmpty())
+        {
+            const int kind = (m_confirmTarget == kConfirmTargetSwDelete) ? SensitiveWordsScreen::kUiConfirmDelete
+                                                                         : SensitiveWordsScreen::kUiConfirmDisable;
+            m_confirmDeleteNodeId.Empty();
+            if (m_sensitiveWordsScreen != nullptr)
+            {
+                m_sensitiveWordsScreen->OnConfirmResult(kind, false);
+            }
+        }
     }
     if (dlg != nullptr)
     {
@@ -3973,6 +5466,42 @@ void AdminFrame::OnConfirmDialogConfirmed(ConfirmDialog* dlg)
     }
     const CString id = m_confirmDeleteNodeId;
     m_confirmDeleteNodeId.Empty();
+
+    // 文件共享管理：切换功能开关、强制取消共享，交给发起确认的面板或界面发请求
+    if (m_confirmTarget == kConfirmTargetFileShare)
+    {
+        fsui::ConfirmTarget* target = m_fsConfirmTarget;
+        m_fsConfirmTarget = nullptr;
+        if (target != nullptr)
+        {
+            target->OnConfirmResult(true);
+        }
+        return;
+    }
+
+    // 企业问答：删除一条，交给企业问答界面发请求（待删的问答由界面自己记着）
+    if (m_confirmTarget == kConfirmTargetQaDelete)
+    {
+        m_confirmDeleteNodeId.Empty();
+        if (m_qaScreen != nullptr)
+        {
+            m_qaScreen->OnConfirmDelete(true);
+        }
+        return;
+    }
+
+    // 敏感词：删除词条 / 关闭总开关，交给敏感词界面发请求（待删的词条 ID 由界面自己记着）
+    if (m_confirmTarget == kConfirmTargetSwDelete || m_confirmTarget == kConfirmTargetSwDisable)
+    {
+        if (m_sensitiveWordsScreen != nullptr)
+        {
+            m_sensitiveWordsScreen->OnConfirmResult(
+                (m_confirmTarget == kConfirmTargetSwDelete) ? SensitiveWordsScreen::kUiConfirmDelete
+                                                            : SensitiveWordsScreen::kUiConfirmDisable,
+                true);
+        }
+        return;
+    }
 
     if (m_confirmTarget == 2)        // 公告：按状态走撤回 / 删除接口
     {
@@ -4033,6 +5562,44 @@ void AdminFrame::OnConfirmDialogConfirmed(ConfirmDialog* dlg)
         return;
     }
 
+    if (m_confirmTarget == kConfirmTargetEntSuspend)
+    {
+        SubmitEnterpriseStatus(id, kEntStatusSuspended);
+        return;
+    }
+    if (m_confirmTarget == kConfirmTargetRemoveAdmin)
+    {
+        SubmitRemoveAdmin(_ttoi64(id));
+        return;
+    }
+    if (m_confirmTarget == kConfirmTargetKick)
+    {
+        SubmitKickDevices(id);
+        return;
+    }
+    if (m_confirmTarget == kConfirmTargetSetRole)
+    {
+        SubmitUserRole(id);
+        return;
+    }
+    if (m_confirmTarget == kConfirmTargetSvcDisable)
+    {
+        SubmitServiceStatus(id, 1);
+        return;
+    }
+    if (m_confirmTarget == kConfirmTargetAnnRepush)
+    {
+        SubmitAnnouncementRepush(id);
+        return;
+    }
+    if (m_confirmTarget == kConfirmTargetCvPublish || m_confirmTarget == kConfirmTargetCvDisable)
+    {
+        // 客户端版本的发布 / 撤回：确认后才真正发请求。
+        const CvRowAction action = (m_confirmTarget == kConfirmTargetCvPublish)
+                                       ? CvRowAction::Publish : CvRowAction::Disable;
+        StartClientVersionAction(static_cast<int>(action), _ttoi64(id));
+        return;
+    }
     if (m_confirmTarget == kConfirmTargetEnterprise)   // 企业（物理删除）
     {
         HttpRequest request = adminapi::MakeEnterpriseDeleteRequest(
@@ -4131,11 +5698,22 @@ void AdminFrame::PresentComposeModal()
 
 void AdminFrame::ShowComposeModal()
 {
+    // 预设的企业只用这一次：先取出并清空，弹窗打不开时也不会留到下一次新建。
+    const CString presetEntId = m_composePresetEntId;
+    m_composePresetEntId.Empty();
     if (m_composeModal == nullptr || m_root == nullptr)
     {
         return;
     }
-    m_composeModal->Reset();
+    if (presetEntId.IsEmpty())
+    {
+        m_composeModal->Reset();
+    }
+    else
+    {
+        // 企业详情的「发布公告」：受众预设为「指定企业：本企业」（内部同样先复位）。
+        m_composeModal->PresetEnterpriseAudience(_ttoi64(presetEntId));
+    }
     PresentComposeModal();
     FA_LOGI(_T("打开新建公告弹窗"));
 }
@@ -4204,7 +5782,7 @@ void AdminFrame::OnAnnSaved(const HttpResult& http)
     if (!r.Succeeded())
     {
         m_composeSubmitBusy = false;
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("保存公告失败：%s"), r.m_message.GetString());
         return;
     }
@@ -4227,7 +5805,7 @@ void AdminFrame::OnAnnSent(const HttpResult& http)
     if (!r.Succeeded())
     {
         // 公告已落库为草稿、但发布失败 —— 关弹窗、刷列表（草稿可见），并提示。
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("发布公告失败：%s"), r.m_message.GetString());
         HideComposeModal();
         StartLoadAnnouncements();
@@ -4287,16 +5865,142 @@ void AdminFrame::OnAnnEditFetchLoaded(const HttpResult& http)
     const AnnouncementDetailResult r = adminapi::ParseAnnDetailResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("加载待编辑公告失败：%s"), r.m_message.GetString());
         return;
     }
+    // 只有「草稿 + 定时」才是尚未到点的定时公告。服务端定时发出之后不清 scheduled 标志，
+    // 已发布的公告即便带着它，也不应再回填成「定时」。
+    const bool pendingSchedule = r.m_announcement.m_scheduled
+                              && r.m_announcement.m_status == kAnnStatusDraft;
     m_composeModal->LoadForEdit(
         _ttoi64(r.m_announcement.m_id), r.m_announcement.m_title,
         r.m_announcement.m_body, r.m_severityCode, r.m_audienceType,
-        r.m_announcement.m_pinned, r.m_targets);
+        r.m_announcement.m_pinned, r.m_targets,
+        pendingSchedule, r.m_scheduledTime);
     PresentComposeModal();
     FA_LOGI(_T("打开编辑公告弹窗：%s"), r.m_announcement.m_id.GetString());
+}
+
+void AdminFrame::ConfirmAnnouncementRepush()
+{
+    if (m_announcementsScreen == nullptr)
+    {
+        return;
+    }
+    const CString annId = m_announcementsScreen->GetSelectedId();
+    if (annId.IsEmpty())
+    {
+        return;
+    }
+    const Announcement* ann = nullptr;
+    for (const Announcement& a : DataStore::Instance().Announcements())
+    {
+        if (a.m_id == annId)
+        {
+            ann = &a;
+            break;
+        }
+    }
+    // 按钮在非已发布状态下已置灰；列表刷新与点击交错时仍可能走到这里，按服务端规则提示。
+    if (ann == nullptr || ann->m_status != kAnnStatusPublished)
+    {
+        ShowToast(_T("只有已发布的公告可以重新推送"), ToastKind::Warn);
+        return;
+    }
+    CString msg;
+    msg.Format(_T("确定把公告「%s」重新推送给受众里当前在线、还没读过它的成员吗？")
+               _T("他们会再收到一次新公告提示。"),
+               static_cast<LPCTSTR>(ann->m_title));
+    m_confirmDeleteNodeId = annId;
+    m_confirmTarget       = kConfirmTargetAnnRepush;
+    ConfirmDialogSpec spec;
+    spec.m_title         = _T("重新推送公告");
+    spec.m_message       = msg;
+    spec.m_okText        = _T("重新推送");
+    spec.m_confirmDanger = false;
+    ShowConfirmDialog(spec);
+}
+
+void AdminFrame::SubmitAnnouncementRepush(const CString& annId)
+{
+    if (annId.IsEmpty())
+    {
+        return;
+    }
+    if (m_annActionBusy)
+    {
+        ShowToast(_T("正在处理，请稍候…"));
+        return;
+    }
+    m_annActionBusy = true;
+    HttpRequest request = adminapi::MakeAnnRepushRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(), _ttoi64(annId));
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagAnnRepush;
+    HttpWorker::Instance().Post(request);
+    ShowToast(_T("正在重新推送…"));
+    FA_LOGI(_T("repush announcement: %s"), annId.GetString());
+}
+
+void AdminFrame::OnAnnRepushed(const HttpResult& http)
+{
+    m_annActionBusy = false;
+    const AnnRepushResult r = adminapi::ParseAnnRepushResponse(http);
+    if (!r.Succeeded())
+    {
+        ShowToast(r.m_message, ToastKind::Error);
+        FA_LOGW(_T("repush announcement failed: %s"), r.m_message.GetString());
+        return;
+    }
+    CString text;
+    if (r.m_pushed > 0)
+    {
+        text.Format(_T("已推送给 %d 名在线未读成员"), r.m_pushed);
+    }
+    else
+    {
+        text = _T("当前没有在线且未读的成员，没有推送");
+    }
+    ShowToast(text);
+    FA_LOGI(_T("repush announcement done: pushed=%d"), r.m_pushed);
+}
+
+void AdminFrame::StartAnnouncementCopy(const CString& annId)
+{
+    if (annId.IsEmpty())
+    {
+        return;
+    }
+    HttpRequest request = adminapi::MakeAnnDetailRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+        _ttoi64(annId));
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagAnnCopyFetch;
+    HttpWorker::Instance().Post(request);
+    FA_LOGI(_T("copy announcement: fetch detail of %s"), annId.GetString());
+}
+
+void AdminFrame::OnAnnCopyFetchLoaded(const HttpResult& http)
+{
+    if (m_composeModal == nullptr)
+    {
+        return;
+    }
+    const AnnouncementDetailResult r = adminapi::ParseAnnDetailResponse(http);
+    if (!r.Succeeded())
+    {
+        ShowToast(r.m_message, ToastKind::Error);
+        FA_LOGW(_T("copy announcement: load detail failed: %s"), r.m_message.GetString());
+        return;
+    }
+    m_composeModal->LoadForCopy(r.m_announcement.m_title, r.m_announcement.m_body,
+                                r.m_severityCode, r.m_audienceType,
+                                r.m_announcement.m_pinned, r.m_targets);
+    PresentComposeModal();
+    FA_LOGI(_T("copy announcement: compose opened from %s"), r.m_announcement.m_id.GetString());
 }
 
 void AdminFrame::ShowServiceModal()
@@ -4383,14 +6087,32 @@ void AdminFrame::ToggleServiceStatus()
         }
     }
     const int target = (cur == ServiceStatus::Disabled) ? 0 : 1;  // 0 正常 / 1 停用
-    HttpRequest request = adminapi::MakeServiceSetStatusRequest(
-        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
-        _ttoi64(svcId), target);
-    request.m_replyHwnd = m_hWnd;
-    request.m_replyMsg  = WM_APP_API_RESULT;
-    request.m_tag       = kApiTagSvcSetStatus;
-    HttpWorker::Instance().Post(request);
-    ShowToast(_T("正在更新服务号状态…"));
+    if (target == 0)
+    {
+        SubmitServiceStatus(svcId, target);   // 重新启用，直接提交
+        return;
+    }
+    CString name = svcId;
+    for (const Service& s : DataStore::Instance().Services(sp->GetEnterpriseId()))
+    {
+        if (s.m_id == svcId)
+        {
+            name = s.m_name;
+            break;
+        }
+    }
+    CString msg;
+    msg.Format(_T("确定要停用服务号「%s」吗？停用后它不再向员工推送消息，历史消息保留，")
+               _T("之后可以重新启用。"),
+               static_cast<LPCTSTR>(name));
+    m_confirmDeleteNodeId = svcId;
+    m_confirmTarget       = kConfirmTargetSvcDisable;
+    ConfirmDialogSpec spec;
+    spec.m_title         = _T("停用服务号");
+    spec.m_message       = msg;
+    spec.m_okText        = _T("停用");
+    spec.m_confirmDanger = true;
+    ShowConfirmDialog(spec);
 }
 
 void AdminFrame::ShowBindingModal()
@@ -4399,7 +6121,7 @@ void AdminFrame::ShowBindingModal()
     {
         return;
     }
-    // 弹窗内容已在 OnDuiNotify 里经 Configure 配置好。
+    // 弹窗内容已在 OnServiceDetailLoaded 里按服务端读到的当前绑定经 Configure 配置好。
     SetEditsVisible(m_shellPage, false);
     m_root->ShowModal(m_bindingModal);
     FA_LOGI(_T("打开服务号绑定弹窗"));
@@ -4422,21 +6144,198 @@ void AdminFrame::SaveBindingModal()
     {
         return;
     }
-    ServicesPanel* sp = m_enterpriseDetail->GetServicesPanel();
-    if (sp == nullptr)
+    if (m_bindingModalSvcId.IsEmpty())
     {
         HideBindingModal();
         return;
     }
+    // 用打开弹窗时记下的服务号 ID，而不是面板的当前选中项：两者在正常操作下相同，
+    // 但以弹窗自己记录的为准，绑定才不会写到别的服务号上。
+    m_pendingBindingsSvcId = m_bindingModalSvcId;
+    m_pendingBindings      = m_bindingModal->GetBindings();
     HttpRequest request = adminapi::MakeServiceSetBindingsRequest(
         AppConfig::Instance().Server(), AdminSession::Instance().Token(),
-        _ttoi64(sp->GetSelectedServiceId()), m_bindingModal->GetBindings());
+        _ttoi64(m_pendingBindingsSvcId), m_pendingBindings);
     request.m_replyHwnd = m_hWnd;
     request.m_replyMsg  = WM_APP_API_RESULT;
     request.m_tag       = kApiTagSvcSetBindings;
     HttpWorker::Instance().Post(request);
     HideBindingModal();
     ShowToast(_T("正在保存绑定范围…"));
+    FA_LOGI(_T("submit service bindings: service=%s count=%u"),
+            m_pendingBindingsSvcId.GetString(),
+            static_cast<unsigned>(m_pendingBindings.size()));
+}
+
+void AdminFrame::OnServiceBindingsSaved(const HttpResult& http)
+{
+    const EnterpriseActionResult r =
+        adminapi::ParseEnterpriseActionResponse(http);
+    const CString svcId = m_pendingBindingsSvcId;
+    std::vector<ServiceBinding> saved;
+    saved.swap(m_pendingBindings);
+    m_pendingBindingsSvcId.Empty();
+
+    if (!r.Succeeded())
+    {
+        ShowToast(r.m_message, ToastKind::Error);
+        FA_LOGW(_T("save service bindings failed: service=%s msg=%s"),
+                svcId.GetString(), r.m_message.GetString());
+        return;
+    }
+
+    // 列表接口不带绑定，重拉列表时 CarryOverLoadedBindings 会沿用缓存里的旧绑定，
+    // 所以先把刚保存成功的绑定写进缓存。
+    if (m_enterpriseDetail != nullptr && !svcId.IsEmpty())
+    {
+        const CString entId = m_enterpriseDetail->GetEnterpriseId();
+        std::vector<Service> list = DataStore::Instance().Services(entId);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            if (list[i].m_id == svcId)
+            {
+                list[i].m_bindings       = saved;
+                list[i].m_bindingsLoaded = true;
+                list[i].m_subs           = DataStore::Instance().ComputeReach(entId, saved);
+                DataStore::Instance().SetServices(entId, list);
+                break;
+            }
+        }
+    }
+    ShowToast(_T("绑定范围已保存"));
+    FA_LOGI(_T("service bindings saved: service=%s count=%u"),
+            svcId.GetString(), static_cast<unsigned>(saved.size()));
+    ReloadServiceList();
+}
+
+void AdminFrame::FetchServiceDetail(const CString& serviceId, bool forBinding)
+{
+    if (serviceId.IsEmpty())
+    {
+        return;
+    }
+    if (forBinding)
+    {
+        if (m_svcBindingFetchBusy)
+        {
+            return;   // 上一次读取还没回来，忽略连点
+        }
+        m_svcBindingFetchBusy = true;
+    }
+    HttpRequest request = adminapi::MakeServiceDetailRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+        _ttoi64(serviceId));
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = forBinding ? kApiTagSvcDetailForBinding : kApiTagSvcDetail;
+    HttpWorker::Instance().Post(request);
+    FA_LOGI(_T("fetch service detail: service=%s forBinding=%d"),
+            serviceId.GetString(), forBinding ? 1 : 0);
+}
+
+void AdminFrame::FetchSelectedServiceBindingsIfNeeded()
+{
+    if (m_enterpriseDetail == nullptr)
+    {
+        return;
+    }
+    ServicesPanel* sp = m_enterpriseDetail->GetServicesPanel();
+    if (sp == nullptr)
+    {
+        return;
+    }
+    const CString svcId = sp->GetSelectedServiceId();
+    const std::vector<Service>& list = DataStore::Instance().Services(sp->GetEnterpriseId());
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        if (list[i].m_id == svcId)
+        {
+            if (!list[i].m_bindingsLoaded)
+            {
+                FetchServiceDetail(svcId, false);
+            }
+            return;
+        }
+    }
+}
+
+void AdminFrame::OnServiceDetailLoaded(const HttpResult& http, bool forBinding)
+{
+    if (forBinding)
+    {
+        m_svcBindingFetchBusy = false;
+    }
+    const ServiceDetailResult r = adminapi::ParseServiceDetailResponse(http);
+    if (!r.Succeeded())
+    {
+        FA_LOGW(_T("load service detail failed: forBinding=%d msg=%s"),
+                forBinding ? 1 : 0, r.m_message.GetString());
+        if (forBinding)
+        {
+            // 读不到当前绑定就不打开弹窗：从空集合开始保存会清掉原有绑定。
+            ShowToast(CString(_T("读取当前绑定失败，未打开编辑：")) + r.m_message,
+                      ToastKind::Error);
+        }
+        return;
+    }
+
+    // 应答回来时用户可能已离开企业详情或换了企业：只处理当前企业里仍存在的服务号。
+    if (m_enterpriseDetail == nullptr)
+    {
+        return;
+    }
+    const CString entId = m_enterpriseDetail->GetEnterpriseId();
+    const CString svcId = r.m_service.m_id;
+    std::vector<Service> list = DataStore::Instance().Services(entId);
+    size_t index = list.size();
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        if (list[i].m_id == svcId)
+        {
+            index = i;
+            break;
+        }
+    }
+    if (index == list.size())
+    {
+        FA_LOGI(_T("service detail arrived for a service no longer shown: %s"),
+                svcId.GetString());
+        return;
+    }
+
+    const Enterprise* ent = DataStore::Instance().FindEnterprise(entId);
+    const CString shortName = (ent != nullptr) ? ent->m_shortName : CString();
+    list[index].m_bindings = adminapi::ResolveServiceBindings(
+        r.m_bindings, DataStore::Instance().OrgTree(entId), shortName);
+    list[index].m_bindingsLoaded = true;
+    // 覆盖人数按绑定与组织树重算，与「绑定范围」页签的触达人数一致。
+    list[index].m_subs = DataStore::Instance().ComputeReach(entId, list[index].m_bindings);
+    const Service loaded = list[index];
+    DataStore::Instance().SetServices(entId, list);
+
+    ServicesPanel* sp = m_enterpriseDetail->GetServicesPanel();
+    if (sp != nullptr)
+    {
+        sp->Refresh();
+    }
+    FA_LOGI(_T("service detail loaded: service=%s bindings=%u forBinding=%d"),
+            svcId.GetString(), static_cast<unsigned>(loaded.m_bindings.size()),
+            forBinding ? 1 : 0);
+
+    if (!forBinding || m_bindingModal == nullptr)
+    {
+        return;
+    }
+    // 读取期间用户若已在面板上改选了别的服务号，就不再弹出，免得编辑的不是眼前这个。
+    if (sp == nullptr || sp->GetSelectedServiceId() != svcId)
+    {
+        FA_LOGI(_T("selection changed while loading bindings, modal not opened: %s"),
+                svcId.GetString());
+        return;
+    }
+    m_bindingModalSvcId = svcId;
+    m_bindingModal->Configure(loaded.m_name, entId, loaded.m_bindings);
+    ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowBindingModal, 0);
 }
 
 void AdminFrame::OnServiceSaved(const HttpResult& http)
@@ -4446,7 +6345,7 @@ void AdminFrame::OnServiceSaved(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗
+        ShowToast(r.m_message, ToastKind::Error);   // 失败保留弹窗
         FA_LOGW(_T("新建服务号失败：%s"), r.m_message.GetString());
         return;
     }
@@ -4467,7 +6366,7 @@ void AdminFrame::OnServiceActionDone(const HttpResult& http, LPCTSTR okText)
     }
     else
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("服务号写操作失败：%s"), r.m_message.GetString());
     }
 }
@@ -4498,16 +6397,19 @@ void AdminFrame::OnServiceListReloaded(const HttpResult& http)
     {
         return;
     }
-    const ServiceListResult r = adminapi::ParseServiceListResponse(http);
+    ServiceListResult r = adminapi::ParseServiceListResponse(http);
     if (!r.Succeeded())
     {
         ShowToast(_T("刷新服务号列表失败"), ToastKind::Error);
         FA_LOGW(_T("刷新服务号列表失败：%s"), r.m_message.GetString());
         return;
     }
-    DataStore::Instance().SetServices(m_enterpriseDetail->GetEnterpriseId(),
-                                      r.m_list);
+    // 列表接口不带绑定：把已经读到的绑定带到新列表上，否则一刷新就清空了。
+    const CString entId = m_enterpriseDetail->GetEnterpriseId();
+    adminapi::CarryOverLoadedBindings(DataStore::Instance().Services(entId), r.m_list);
+    DataStore::Instance().SetServices(entId, r.m_list);
     m_enterpriseDetail->Refresh();
+    FetchSelectedServiceBindingsIfNeeded();
 }
 
 void AdminFrame::FireGetPermissions(const CString& userId)
@@ -4539,7 +6441,7 @@ void AdminFrame::OnUserPermissionsLoaded(const HttpResult& http)
     const UserPermissionsResult r = adminapi::ParseUserPermissionsResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("取员工权限矩阵失败：%s"), r.m_message.GetString());
         return;
     }
@@ -4552,7 +6454,7 @@ void AdminFrame::OnUserRoleSet(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("设置员工角色失败：%s"), r.m_message.GetString());
         return;
     }
@@ -4570,7 +6472,7 @@ void AdminFrame::OnUserPermsSet(const HttpResult& http)
         ShowToast(_T("权限已保存"));
         return;
     }
-    ShowToast(r.m_message);
+    ShowToast(r.m_message, ToastKind::Error);
     FA_LOGW(_T("设置员工权限失败：%s"), r.m_message.GetString());
     // 失败时本地是乐观翻转后的状态，与服务端不一致 → 重拉权限矩阵纠正。
     FireGetPermissions(m_permUserId);
@@ -4692,7 +6594,7 @@ void AdminFrame::OnUserStatusSet(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("启用/停用员工失败：%s"), r.m_message.GetString());
         return;
     }
@@ -4706,15 +6608,12 @@ void AdminFrame::OnUserPasswordReset(const HttpResult& http)
     const UserResetPwdResult r = adminapi::ParseUserResetPasswordResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("重置员工密码失败：%s"), r.m_message.GetString());
         return;
     }
-    // 用信息弹窗展示新密码（与新增企业 / 员工一致：单按钮 + 复制）。
-    CString msg;
-    msg.Format(_T("员工登录密码已重置。\n新密码：%s\n")
-               _T("请妥善保存并转交，此密码仅显示一次。"),
-               static_cast<LPCTSTR>(r.m_newPassword));
+    // 用信息弹窗展示新密码（与新增企业 / 员工一致：单按钮 + 复制）；有设备被强制下线时一并说明（2026-10-07）。
+    const CString msg = adminapi::FormatResetPasswordNotice(r.m_newPassword, r.m_kicked);
     m_confirmDeleteNodeId.Empty();
     ConfirmDialogSpec spec;
     spec.m_infoMode = true;
@@ -4731,7 +6630,7 @@ void AdminFrame::OnUserDevicesKicked(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("强制下线设备失败：%s"), r.m_message.GetString());
         return;
     }
@@ -4820,8 +6719,7 @@ void AdminFrame::ShowToast(LPCTSTR text, ToastKind kind)
 void AdminFrame::PrefillLogin()
 {
     // 回填登录框。输入框是无窗口控件，构造完即可写入，没有前置条件。
-    // 优先用 ini 里记下的上次登录信息；本机从未登录过时，才回退到测试数据库
-    // （testdata.sql）里的平台超级管理员账户，保持联调演示的便利。
+    // 只用 ini 里记下的上次登录信息；本机从未登录过时两个框都留空（不再预填测试账号）。
     if (m_loginPage == nullptr)
     {
         return;
@@ -4829,16 +6727,9 @@ void AdminFrame::PrefillLogin()
 
     const LoginConfig& saved = AppConfig::Instance().Login();
 
-    CString accountText  = saved.m_account;
-    // 没勾"记住密码"时 m_password 本就是空的，这里再判一次是为了让意图显式：
-    // 密码只在用户明确要求记住时才回填。
-    CString passwordText = saved.m_rememberPassword ? saved.m_password : CString();
-
-    if (accountText.IsEmpty())
-    {
-        accountText  = _T("li@flamingo.com");
-        passwordText = _T("admin123");
-    }
+    CString accountText;
+    CString passwordText;
+    logintext::ResolvePrefill(saved, accountText, passwordText);
 
     if (DuiEdit* account = dynamic_cast<DuiEdit*>(
             m_loginPage->FindCtrlById(kIdLoginAccount)))
@@ -4885,6 +6776,16 @@ void AdminFrame::SetEditsVisible(DuiControl* node, bool visible)
     for (const auto& child : node->Children())
     {
         SetEditsVisible(child.get(), visible);
+    }
+
+    // 企业详情屏的组织树搜索框只在「组织架构」子 tab 下可见：上面的递归恢复时把它也设成了可见，
+    // 这里按当前子 tab 纠正，否则它会从「在线用户」页面左上角的边距里露出来
+    if (visible)
+    {
+        if (EnterpriseDetailScreen* detail = dynamic_cast<EnterpriseDetailScreen*>(node))
+        {
+            detail->ApplySubTabEditVisibility();
+        }
     }
 }
 
@@ -4959,7 +6860,7 @@ void AdminFrame::OnClientVersionsLoaded(const HttpResult& http)
         adminapi::ParseClientVersionListResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message, ToastKind::Warn);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("客户端版本：列表加载失败 —— %s"), r.m_message.GetString());
         return;
     }
@@ -4977,7 +6878,7 @@ void AdminFrame::OnPackagesScanned(const HttpResult& http)
     const adminapi::ScanPackagesResult r = adminapi::ParseScanPackagesResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message, ToastKind::Warn);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("客户端版本：扫描升级包目录失败 —— %s"), r.m_message.GetString());
         return;
     }
@@ -5020,7 +6921,7 @@ void AdminFrame::OnClientVersionActionDone(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message, ToastKind::Warn);
+        ShowToast(r.m_message, ToastKind::Error);
         FA_LOGW(_T("客户端版本：操作失败 —— %s"), r.m_message.GetString());
         return;
     }
@@ -5058,7 +6959,47 @@ void AdminFrame::HandleClientVersionRowAction()
         return;
     }
 
-    StartClientVersionAction(static_cast<int>(pending.m_action), pending.m_id);
+    // 发布 / 撤回影响全部客户端的升级提示与登录，先弹确认框，确认后再发请求。
+    const bool publish = (pending.m_action == CvRowAction::Publish);
+    if (!publish && pending.m_action != CvRowAction::Disable)
+    {
+        return;
+    }
+    const adminapi::ClientVersionItem& sel = m_clientVersionsScreen->GetSelected();
+    CString versionText;
+    if (sel.m_id == pending.m_id)
+    {
+        versionText = sel.m_version;
+    }
+    else
+    {
+        versionText.Format(_T("#%lld"), pending.m_id);
+    }
+    ConfirmDialogSpec spec;
+    CString msg;
+    if (publish)
+    {
+        msg.Format(_T("确定要发布版本 %s 吗？发布后，低于它的客户端检查更新时都会收到升级提示%s。"),
+                   versionText.GetString(),
+                   (sel.m_id == pending.m_id && sel.m_forced) ? _T("，并且必须升级后才能继续使用")
+                                                              : _T(""));
+        spec.m_title  = _T("发布版本");
+        spec.m_okText = _T("发布");
+        m_confirmTarget = kConfirmTargetCvPublish;
+    }
+    else
+    {
+        msg.Format(_T("确定要撤回版本 %s 吗？撤回后客户端不再收到它的升级提示，检查更新时")
+                   _T("改为提示此前发布的最新版本。"),
+                   versionText.GetString());
+        spec.m_title         = _T("撤回版本");
+        spec.m_okText        = _T("撤回");
+        spec.m_confirmDanger = true;
+        m_confirmTarget = kConfirmTargetCvDisable;
+    }
+    spec.m_message = msg;
+    m_confirmDeleteNodeId.Format(_T("%lld"), pending.m_id);
+    ShowConfirmDialog(spec);
 }
 
 void AdminFrame::ShowClientVersionModal(const adminapi::ScanPackagesResult& scan)
@@ -5097,6 +7038,24 @@ void AdminFrame::SubmitClientVersionModal(bool publish)
     if (!m_clientVersionModal->Validate())
     {
         ShowToast(_T("请选择一个升级包并填写版本号"), ToastKind::Warn);
+        return;
+    }
+    // 新建时校验版本号格式；最低版本不论新建还是编辑都要校验格式与「不高于版本号」，
+    // 填错会把这个版本自己的客户端也挡在登录之外。
+    if (!m_clientVersionModal->IsEditing()
+        && !adminapi::IsValidVersionText(m_clientVersionModal->GetVersion()))
+    {
+        ShowToast(_T("版本号格式不正确：应为 2～4 段数字、用点分隔，例如 3.3.0"), ToastKind::Warn);
+        return;
+    }
+    const CString versionForCheck = m_clientVersionModal->IsEditing()
+                                        ? m_clientVersionModal->GetEditingVersion()
+                                        : m_clientVersionModal->GetVersion();
+    const CString minVersionError =
+        adminapi::CheckMinVersion(m_clientVersionModal->GetMinVersion(), versionForCheck);
+    if (!minVersionError.IsEmpty())
+    {
+        ShowToast(minVersionError, ToastKind::Warn);
         return;
     }
 
@@ -5141,6 +7100,725 @@ void AdminFrame::SubmitClientVersionModal(bool publish)
     HideClientVersionModal();
     FA_LOGI(_T("客户端版本：提交新建 version=%s publish=%d"),
             m_clientVersionModal->GetVersion().GetString(), publish ? 1 : 0);
+}
+
+// ====================================================================
+// 敏感词（模块 11）
+// ====================================================================
+
+void AdminFrame::SensitiveRequestThunk(void* user, HttpRequest& request)
+{
+    AdminFrame* self = static_cast<AdminFrame*>(user);
+    //界面按空的 ServerConfig 构造请求，这里补上服务器地址与结果回传目标
+    const ServerConfig server = AppConfig::Instance().Server();
+    request.m_host      = server.m_host.GetString();
+    request.m_port      = server.m_port;
+    request.m_useTls    = server.m_useTls;
+    request.m_replyHwnd = self->m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    HttpWorker::Instance().Post(request);
+}
+
+void AdminFrame::SensitiveUiRequestThunk(void* user, const SensitiveWordsScreen::UiRequest& request)
+{
+    AdminFrame* self = static_cast<AdminFrame*>(user);
+    //队列原本为空时才投递一次：同一轮里连着来的几条（如「关闭弹窗」与「已添加」提示）一起处理
+    const bool wasEmpty = self->m_swUiQueue.empty();
+    self->m_swUiQueue.push_back(request);
+    if (wasEmpty)
+    {
+        ::PostMessage(self->m_hWnd, WM_APP_NAVIGATE, kNavSwUiRequests, 0);
+    }
+}
+
+void AdminFrame::FileShareUiRequestThunk(void* user, const fsui::UiRequest& request)
+{
+    AdminFrame* self = static_cast<AdminFrame*>(user);
+    //队列原本为空时才投递一次：同一轮里连着来的几条一起处理
+    const bool wasEmpty = self->m_fsUiQueue.empty();
+    self->m_fsUiQueue.push_back(request);
+    if (wasEmpty)
+    {
+        ::PostMessage(self->m_hWnd, WM_APP_NAVIGATE, kNavFsUiRequests, 0);
+    }
+}
+
+void AdminFrame::HandleFileShareUiRequests()
+{
+    std::vector<fsui::UiRequest> queue;
+    queue.swap(m_fsUiQueue);
+    for (size_t i = 0; i < queue.size(); ++i)
+    {
+        const fsui::UiRequest& req = queue[i];
+        switch (req.m_kind)
+        {
+        //提示
+        case fsui::kUiToast:
+            ShowToast(req.m_text, req.m_isError ? ToastKind::Error : ToastKind::Info);
+            break;
+
+        //确认框：结果经 m_fsConfirmTarget 回告发起方
+        case fsui::kUiConfirm:
+        {
+            //上一个文件共享确认框还没有结果（ShowConfirmDialog 会关掉旧的）：先按取消回告它的发起方
+            if (m_confirmTarget == kConfirmTargetFileShare && m_fsConfirmTarget != nullptr
+                && !m_confirmDeleteNodeId.IsEmpty())
+            {
+                fsui::ConfirmTarget* previous = m_fsConfirmTarget;
+                m_fsConfirmTarget = nullptr;
+                m_confirmDeleteNodeId.Empty();
+                previous->OnConfirmResult(false);
+            }
+            //确认框没有对象 ID，这里只要一个非空值表示「有待确认的操作」
+            m_confirmDeleteNodeId = _T("fileshare");
+            m_confirmTarget = kConfirmTargetFileShare;
+            m_fsConfirmTarget = req.m_target;
+            ConfirmDialogSpec spec;
+            spec.m_title = req.m_title;
+            spec.m_message = req.m_text;
+            spec.m_okText = req.m_okText;
+            spec.m_confirmDanger = req.m_danger;
+            ShowConfirmDialog(spec);
+            FA_LOGI(_T("file share admin: confirm dialog shown: %s"), req.m_title.GetString());
+            break;
+        }
+
+        //没有其它种类
+        default:
+            break;
+        }
+    }
+}
+
+void AdminFrame::HandleSensitiveUiRequests()
+{
+    std::vector<SensitiveWordsScreen::UiRequest> queue;
+    queue.swap(m_swUiQueue);
+    for (size_t i = 0; i < queue.size(); ++i)
+    {
+        const SensitiveWordsScreen::UiRequest& req = queue[i];
+        switch (req.m_kind)
+        {
+        //打开「添加敏感词」弹窗
+        case SensitiveWordsScreen::kUiOpenAddModal:
+            if (m_swModal != nullptr && m_root != nullptr)
+            {
+                m_swModal->ShowForAdd();
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_swModal);
+                FA_LOGI(_T("sensitive words: open add modal"));
+            }
+            break;
+
+        //打开「编辑敏感词」弹窗，预填所选词条
+        case SensitiveWordsScreen::kUiOpenEditModal:
+            if (m_swModal != nullptr && m_root != nullptr)
+            {
+                m_swModal->ShowForEdit(req.m_word);
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_swModal);
+                FA_LOGI(_T("sensitive words: open edit modal, id: %lld"), req.m_word.m_id);
+            }
+            break;
+
+        //删除词条前的确认框
+        case SensitiveWordsScreen::kUiConfirmDelete:
+        {
+            m_confirmDeleteNodeId.Format(_T("%lld"), req.m_word.m_id);
+            m_confirmTarget = kConfirmTargetSwDelete;
+            ConfirmDialogSpec spec;
+            spec.m_title = _T("删除敏感词");
+            spec.m_message.Format(_T("确定删除敏感词「%s」吗？删除后立即生效，含有它的内容将不再被拦截。"),
+                                  req.m_word.m_word.GetString());
+            spec.m_okText = _T("删除");
+            spec.m_confirmDanger = true;
+            ShowConfirmDialog(spec);
+            break;
+        }
+
+        //关闭总开关前的确认框
+        case SensitiveWordsScreen::kUiConfirmDisable:
+        {
+            //总开关没有对象 ID，这里只要一个非空值表示「有待确认的操作」
+            m_confirmDeleteNodeId = _T("disable");
+            m_confirmTarget = kConfirmTargetSwDisable;
+            ConfirmDialogSpec spec;
+            spec.m_title = _T("暂停敏感词过滤");
+            spec.m_message = _T("暂停后，本企业的消息、资料、群资料与文件名都不再检查敏感词，直到重新打开。确定暂停吗？");
+            spec.m_okText = _T("暂停");
+            spec.m_confirmDanger = true;
+            ShowConfirmDialog(spec);
+            break;
+        }
+
+        //弹窗里的提交成功：关闭弹窗
+        case SensitiveWordsScreen::kUiCloseModal:
+            HideSensitiveWordModal();
+            break;
+
+        //弹窗里的提交失败：弹窗不关，显示原因，「保存」恢复可用
+        case SensitiveWordsScreen::kUiModalError:
+            if (m_swModal != nullptr)
+            {
+                m_swModal->SetBusy(false);
+                m_swModal->SetError(req.m_text);
+            }
+            break;
+
+        //提示
+        case SensitiveWordsScreen::kUiToast:
+            ShowToast(req.m_text, req.m_isError ? ToastKind::Error : ToastKind::Info);
+            break;
+
+        //打开「批量导入」弹窗
+        case SensitiveWordsScreen::kUiOpenImportModal:
+            if (m_swImportModal != nullptr && m_root != nullptr)
+            {
+                m_swImportModal->ShowFresh();
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_swImportModal);
+                FA_LOGI(_T("sensitive words: open import modal"));
+            }
+            break;
+
+        //导入进行中：在弹窗里显示进度
+        case SensitiveWordsScreen::kUiImportProgress:
+            if (m_swImportModal != nullptr)
+            {
+                m_swImportModal->SetStatus(req.m_text, false);
+            }
+            break;
+
+        //导入结束：在弹窗里显示汇总
+        case SensitiveWordsScreen::kUiImportDone:
+            if (m_swImportModal != nullptr)
+            {
+                m_swImportModal->ShowResult(req.m_text, req.m_isError);
+            }
+            break;
+
+        //导出的内容已取到：弹「另存为」对话框写盘
+        case SensitiveWordsScreen::kUiSaveExport:
+            SaveTextToFile(req.m_bytes, filesave::TextFileSpec(req.m_text, _T("敏感词词库")));
+            break;
+
+        //不认识的请求种类：忽略
+        default:
+            break;
+        }
+    }
+}
+
+void AdminFrame::QaUiRequestThunk(void* user, const EnterpriseQaScreen::UiRequest& request)
+{
+    AdminFrame* self = static_cast<AdminFrame*>(user);
+    //队列原本为空时才投递一次：同一轮里连着来的几条（如「关闭弹窗」与「已保存」提示）一起处理
+    const bool wasEmpty = self->m_qaUiQueue.empty();
+    self->m_qaUiQueue.push_back(request);
+    if (wasEmpty)
+    {
+        ::PostMessage(self->m_hWnd, WM_APP_NAVIGATE, kNavQaUiRequests, 0);
+    }
+}
+
+void AdminFrame::HandleQaUiRequests()
+{
+    std::vector<EnterpriseQaScreen::UiRequest> queue;
+    queue.swap(m_qaUiQueue);
+    for (size_t i = 0; i < queue.size(); ++i)
+    {
+        const EnterpriseQaScreen::UiRequest& req = queue[i];
+        switch (req.m_kind)
+        {
+        //打开「新增企业问答」弹窗
+        case EnterpriseQaScreen::kUiOpenAddModal:
+            if (m_qaModal != nullptr && m_root != nullptr && m_qaScreen != nullptr)
+            {
+                m_qaModal->ShowForAdd(m_qaScreen->Groups());
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_qaModal);
+                FA_LOGI(_T("enterprise qa: open add modal"));
+            }
+            break;
+
+        //打开「编辑企业问答」弹窗，预填所选问答
+        case EnterpriseQaScreen::kUiOpenEditModal:
+            if (m_qaModal != nullptr && m_root != nullptr && m_qaScreen != nullptr)
+            {
+                m_qaModal->ShowForEdit(req.m_item, m_qaScreen->Groups());
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_qaModal);
+                FA_LOGI(_T("enterprise qa: open edit modal, id: %lld"), req.m_item.m_id);
+            }
+            break;
+
+        //删除前的确认框
+        case EnterpriseQaScreen::kUiConfirmDelete:
+        {
+            m_confirmDeleteNodeId.Format(_T("%lld"), req.m_item.m_id);
+            m_confirmTarget = kConfirmTargetQaDelete;
+            ConfirmDialogSpec spec;
+            spec.m_title = _T("删除企业问答");
+            spec.m_message.Format(_T("确定删除问答「%s」吗？删除后，应用到的群里将不再显示它。"),
+                                  req.m_item.m_question.GetString());
+            spec.m_okText = _T("删除");
+            spec.m_confirmDanger = true;
+            ShowConfirmDialog(spec);
+            break;
+        }
+
+        //弹窗里的提交成功：关闭弹窗
+        case EnterpriseQaScreen::kUiCloseModal:
+            HideQaModal();
+            break;
+
+        //弹窗里的提交失败：弹窗不关，显示原因，「保存」恢复可用
+        case EnterpriseQaScreen::kUiModalError:
+            if (m_qaModal != nullptr)
+            {
+                m_qaModal->SetBusy(false);
+                m_qaModal->SetError(req.m_text);
+            }
+            break;
+
+        //提示
+        case EnterpriseQaScreen::kUiToast:
+            ShowToast(req.m_text, req.m_isError ? ToastKind::Error : ToastKind::Info);
+            break;
+
+        //本企业的群到了：弹窗开着时补上群列表（保留已勾选的群）
+        case EnterpriseQaScreen::kUiGroupsLoaded:
+            if (m_qaModal != nullptr && m_qaScreen != nullptr)
+            {
+                m_qaModal->SetGroups(m_qaScreen->Groups());
+            }
+            break;
+
+        //未知请求：不处理
+        default:
+            break;
+        }
+    }
+}
+
+void AdminFrame::HideQaModal()
+{
+    if (m_root == nullptr)
+    {
+        return;
+    }
+    m_root->HideModal();
+    SetEditsVisible(m_shellPage, true);
+}
+
+void AdminFrame::SubmitQaModal()
+{
+    if (m_qaModal == nullptr || m_qaScreen == nullptr || m_qaModal->IsBusy())
+    {
+        return;
+    }
+    CString error;
+    if (!m_qaModal->Validate(&error))
+    {
+        m_qaModal->SetError(error);
+        return;
+    }
+    m_qaModal->SetError(CString());
+    m_qaModal->SetBusy(true);
+    m_qaScreen->SubmitQa(m_qaModal->GetItem());
+}
+
+void AdminFrame::BotUiRequestThunk(void* user, const EnterpriseBotScreen::UiRequest& request)
+{
+    AdminFrame* self = static_cast<AdminFrame*>(user);
+    //队列原本为空时才投递一次：同一轮里连着来的几条（如「关闭编辑窗」与「已保存」提示）一起处理
+    const bool wasEmpty = self->m_botUiQueue.empty();
+    self->m_botUiQueue.push_back(request);
+    if (wasEmpty)
+    {
+        ::PostMessage(self->m_hWnd, WM_APP_NAVIGATE, kNavBotUiRequests, 0);
+    }
+}
+
+void AdminFrame::HandleBotUiRequests()
+{
+    std::vector<EnterpriseBotScreen::UiRequest> queue;
+    queue.swap(m_botUiQueue);
+    for (size_t i = 0; i < queue.size(); ++i)
+    {
+        const EnterpriseBotScreen::UiRequest& req = queue[i];
+        switch (req.m_kind)
+        {
+        //打开「新建机器人」编辑窗
+        case EnterpriseBotScreen::kUiOpenAddModal:
+            if (m_botModal != nullptr && m_root != nullptr && m_botScreen != nullptr)
+            {
+                m_botModal->SetServer(AppConfig::Instance().Server());
+                m_botModal->SetDomains(m_botScreen->Domains(), m_botScreen->DomainsLoaded());
+                m_botModal->ShowForAdd(m_botScreen->Groups());
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_botModal);
+                FA_LOGI(_T("enterprise bot: open add modal"));
+            }
+            break;
+
+        //打开「编辑机器人」编辑窗，预填详情（带规则与密钥）
+        case EnterpriseBotScreen::kUiOpenEditModal:
+            if (m_botModal != nullptr && m_root != nullptr && m_botScreen != nullptr)
+            {
+                m_botModal->SetServer(AppConfig::Instance().Server());
+                m_botModal->SetDomains(m_botScreen->Domains(), m_botScreen->DomainsLoaded());
+                m_botModal->ShowForEdit(req.m_bot, m_botScreen->Groups());
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_botModal);
+                FA_LOGI(_T("enterprise bot: open edit modal, botid: %lld, rules: %u"), req.m_bot.m_botId,
+                        static_cast<unsigned>(req.m_bot.m_rules.size()));
+            }
+            break;
+
+        //编辑窗里的保存成功：关闭编辑窗
+        case EnterpriseBotScreen::kUiCloseModal:
+            HideBotModal();
+            break;
+
+        //编辑窗里的保存失败：编辑窗不关，显示原因，「保存」恢复可用
+        case EnterpriseBotScreen::kUiModalError:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->SetBusy(false);
+                m_botModal->SetError(req.m_text);
+            }
+            break;
+
+        //提示
+        case EnterpriseBotScreen::kUiToast:
+            ShowToast(req.m_text, req.m_isError ? ToastKind::Error : ToastKind::Info);
+            break;
+
+        //本企业的群到了：编辑窗与规则编辑窗补上群列表（保留已勾选的群）
+        case EnterpriseBotScreen::kUiGroupsLoaded:
+            if (m_botScreen != nullptr && m_botModal != nullptr)
+            {
+                m_botModal->SetGroups(m_botScreen->Groups());
+            }
+            if (m_botScreen != nullptr && m_botRuleModal != nullptr)
+            {
+                m_botRuleModal->SetGroups(m_botScreen->Groups());
+            }
+            break;
+
+        //确认框（删除机器人、重新生成令牌）：沿用文件共享管理的确认框通道，结果经 OnConfirmResult 回到机器人界面
+        case EnterpriseBotScreen::kUiConfirm:
+        {
+            fsui::UiRequest confirm;
+            confirm.m_kind = fsui::kUiConfirm;
+            confirm.m_title = req.m_title;
+            confirm.m_text = req.m_text;
+            confirm.m_okText = req.m_okText;
+            confirm.m_danger = req.m_danger;
+            confirm.m_target = m_botScreen;
+            FileShareUiRequestThunk(this, confirm);
+            break;
+        }
+
+        //「试一试」的结果：显示在编辑窗里
+        case EnterpriseBotScreen::kUiTryResult:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->SetTryResult(req.m_text, req.m_isError);
+            }
+            break;
+
+        //令牌与签名密钥已重新生成：编辑窗正在编辑这个机器人时更新显示
+        case EnterpriseBotScreen::kUiSecretsReset:
+            if (m_botModal != nullptr)
+            {
+                m_botModal->SetSecrets(req.m_bot.m_botId, req.m_bot.m_webhookToken, req.m_bot.m_secret);
+            }
+            break;
+
+        //打开「外部服务域名白名单」窗
+        case EnterpriseBotScreen::kUiOpenDomainsModal:
+            if (m_botDomainsModal != nullptr && m_root != nullptr)
+            {
+                m_botDomainsModal->ShowWithDomains(req.m_domains);
+                SetEditsVisible(m_shellPage, false);
+                m_root->ShowModal(m_botDomainsModal);
+                FA_LOGI(_T("enterprise bot: open domains modal, count: %u"), static_cast<unsigned>(req.m_domains.size()));
+            }
+            break;
+
+        //白名单已保存：关闭白名单窗
+        case EnterpriseBotScreen::kUiCloseDomainsModal:
+            HideBotDomainsModal();
+            break;
+
+        //白名单保存失败：窗口不关，显示原因，「保存」恢复可用
+        case EnterpriseBotScreen::kUiDomainsModalError:
+            if (m_botDomainsModal != nullptr)
+            {
+                m_botDomainsModal->SetBusy(false);
+                m_botDomainsModal->SetError(req.m_text);
+            }
+            break;
+
+        //白名单拉到了或改了：编辑窗与规则编辑窗本地校验外部服务地址时用新的白名单
+        case EnterpriseBotScreen::kUiDomainsLoaded:
+            if (m_botScreen != nullptr && m_botModal != nullptr)
+            {
+                m_botModal->SetDomains(m_botScreen->Domains(), m_botScreen->DomainsLoaded());
+            }
+            if (m_botScreen != nullptr && m_botRuleModal != nullptr)
+            {
+                m_botRuleModal->SetDomains(m_botScreen->Domains(), m_botScreen->DomainsLoaded());
+            }
+            break;
+
+        //未知请求：不处理
+        default:
+            break;
+        }
+    }
+}
+
+void AdminFrame::HideBotModal()
+{
+    if (m_root == nullptr)
+    {
+        return;
+    }
+    m_root->HideModal();
+    SetEditsVisible(m_shellPage, true);
+}
+
+void AdminFrame::SubmitBotModal()
+{
+    if (m_botModal == nullptr || m_botScreen == nullptr || m_botModal->IsBusy())
+    {
+        return;
+    }
+    CString error;
+    if (!m_botModal->Validate(&error))
+    {
+        m_botModal->SetError(error);
+        return;
+    }
+    m_botModal->SetError(CString());
+    m_botModal->SetBusy(true);
+    m_botScreen->SubmitBot(m_botModal->GetBot());
+}
+
+void AdminFrame::OpenBotRuleModal(bool isNew)
+{
+    if (m_botModal == nullptr || m_botRuleModal == nullptr || m_botScreen == nullptr || m_root == nullptr
+        || !m_botModal->IsVisible())
+    {
+        return;
+    }
+    botapi::BotRule rule;
+    const bool ready = isNew ? m_botModal->BeginAddRule(&rule) : m_botModal->BeginEditRule(&rule);
+    if (!ready)
+    {
+        return;
+    }
+    m_botModal->SetError(CString());
+    m_botRuleModal->SetDomains(m_botScreen->Domains(), m_botScreen->DomainsLoaded());
+    m_botRuleModal->ShowForRule(rule, isNew, m_botScreen->Groups());
+    m_root->ShowModal(m_botRuleModal);
+    FA_LOGI(_T("enterprise bot: open rule modal, new: %d, trigger: %d"), isNew ? 1 : 0, rule.m_trigger.m_type);
+}
+
+void AdminFrame::CloseBotRuleModal()
+{
+    if (m_root == nullptr || m_botModal == nullptr)
+    {
+        return;
+    }
+    //回到机器人编辑窗：它只是被隐藏，内容还在
+    m_root->ShowModal(m_botModal);
+}
+
+void AdminFrame::SubmitBotRuleModal()
+{
+    if (m_botRuleModal == nullptr || m_botModal == nullptr || m_root == nullptr)
+    {
+        return;
+    }
+    CString error;
+    if (!m_botRuleModal->Validate(&error))
+    {
+        m_botRuleModal->SetError(error);
+        return;
+    }
+    m_botModal->ApplyRuleEdit(m_botRuleModal->GetRule());
+    m_root->ShowModal(m_botModal);
+}
+
+void AdminFrame::RunBotTry()
+{
+    if (m_botModal == nullptr || m_botScreen == nullptr)
+    {
+        return;
+    }
+    const botapi::BotTryInput input = m_botModal->GetTryInput();
+    if (input.m_text.IsEmpty())
+    {
+        m_botModal->SetTryResult(_T("请先输入一句要试的消息"), true);
+        return;
+    }
+    m_botModal->SetTryResult(_T("正在判定…"), false);
+    m_botScreen->RequestTry(m_botModal->GetBot(), input);
+}
+
+void AdminFrame::HideBotDomainsModal()
+{
+    if (m_root == nullptr)
+    {
+        return;
+    }
+    m_root->HideModal();
+    SetEditsVisible(m_shellPage, true);
+}
+
+void AdminFrame::SubmitBotDomainsModal()
+{
+    if (m_botDomainsModal == nullptr || m_botScreen == nullptr || m_botDomainsModal->IsBusy())
+    {
+        return;
+    }
+    CString error;
+    if (!m_botDomainsModal->Validate(&error))
+    {
+        m_botDomainsModal->SetError(error);
+        return;
+    }
+    m_botDomainsModal->SetError(CString());
+    m_botDomainsModal->SetBusy(true);
+    m_botScreen->SubmitDomains(m_botDomainsModal->GetDomains());
+}
+
+void AdminFrame::HideSensitiveWordModal()
+{
+    if (m_root == nullptr)
+    {
+        return;
+    }
+    m_root->HideModal();
+    SetEditsVisible(m_shellPage, true);
+}
+
+void AdminFrame::SubmitSensitiveWordModal()
+{
+    if (m_swModal == nullptr || m_sensitiveWordsScreen == nullptr || m_swModal->IsBusy())
+    {
+        return;
+    }
+    CString error;
+    if (!m_swModal->Validate(&error))
+    {
+        m_swModal->SetError(error);
+        return;
+    }
+    m_swModal->SetError(CString());
+    m_swModal->SetBusy(true);
+    m_sensitiveWordsScreen->SubmitWord(m_swModal->EditingId(), m_swModal->GetWord(),
+                                       m_swModal->GetCategory(), m_swModal->GetRemark());
+}
+
+void AdminFrame::HideSensitiveImportModal()
+{
+    //导入进行中不关闭：批次还在依次提交，关掉之后结果没有地方显示（按钮此时本就不可用）
+    if (m_root == nullptr || (m_swImportModal != nullptr && m_swImportModal->IsImporting()))
+    {
+        return;
+    }
+    m_root->HideModal();
+    SetEditsVisible(m_shellPage, true);
+}
+
+void AdminFrame::SubmitSensitiveImportModal()
+{
+    if (m_swImportModal == nullptr || m_sensitiveWordsScreen == nullptr || m_swImportModal->IsImporting())
+    {
+        return;
+    }
+    //已经显示结果：主按钮是「完成」，关闭弹窗
+    if (m_swImportModal->IsDone())
+    {
+        HideSensitiveImportModal();
+        return;
+    }
+    CString error;
+    if (!m_sensitiveWordsScreen->StartImport(m_swImportModal->GetText(), m_swImportModal->GetDefaultCategory(),
+                                             &error))
+    {
+        m_swImportModal->SetStatus(error, true);
+        return;
+    }
+    //StartImport 已同步发出第一批的进度请求，它排在界面请求队列里，稍后才到弹窗；这里先切到导入中
+    m_swImportModal->SetImporting(true);
+}
+
+void AdminFrame::ReadSensitiveImportFile()
+{
+    if (m_swImportModal == nullptr || m_swImportModal->IsImporting() || m_swImportModal->IsDone())
+    {
+        return;
+    }
+    TCHAR pathBuf[MAX_PATH] = {};
+    OPENFILENAME ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = m_hWnd;
+    ofn.lpstrFilter = _T("文本文件 (*.txt)\0*.txt\0所有文件 (*.*)\0*.*\0");
+    ofn.lpstrFile   = pathBuf;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    if (!::GetOpenFileName(&ofn))
+    {
+        // 用户取消对话框，不算失败。
+        return;
+    }
+
+    HANDLE file = ::CreateFile(pathBuf, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        m_swImportModal->SetStatus(_T("无法打开所选文件"), true);
+        FA_LOGW(_T("sensitive words: open import file failed, error: %lu"), ::GetLastError());
+        return;
+    }
+    LARGE_INTEGER size = {};
+    if (!::GetFileSizeEx(file, &size) || size.QuadPart > static_cast<LONGLONG>(swtext::kImportFileMaxBytes))
+    {
+        ::CloseHandle(file);
+        CString error;
+        error.Format(_T("文件不能超过 %d MB"), static_cast<int>(swtext::kImportFileMaxBytes / (1024 * 1024)));
+        m_swImportModal->SetStatus(error, true);
+        FA_LOGW(_T("sensitive words: import file too large, bytes: %lld"), size.QuadPart);
+        return;
+    }
+    std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD read = 0;
+    const BOOL ok = bytes.empty() ? TRUE
+                                  : ::ReadFile(file, &bytes[0], static_cast<DWORD>(bytes.size()), &read, nullptr);
+    ::CloseHandle(file);
+    if (!ok || read != static_cast<DWORD>(bytes.size()))
+    {
+        m_swImportModal->SetStatus(_T("读取文件失败"), true);
+        FA_LOGW(_T("sensitive words: read import file failed, %lu of %d bytes"), read,
+                static_cast<int>(bytes.size()));
+        return;
+    }
+
+    const CString text = swtext::DecodeImportFile(bytes, nullptr);
+    m_swImportModal->SetText(text);
+    const std::vector<std::string> lines = swtext::SplitLines(text);
+    CString status;
+    status.Format(_T("已读取 %d 行，其中非空行 %d 行；确认无误后点「开始导入」"),
+                  static_cast<int>(lines.size()), swtext::CountNonBlankLines(lines));
+    m_swImportModal->SetStatus(status, false);
+    FA_LOGI(_T("sensitive words: import file read, bytes: %d, lines: %d"), static_cast<int>(bytes.size()),
+            static_cast<int>(lines.size()));
 }
 
 } // namespace flamingoadmin

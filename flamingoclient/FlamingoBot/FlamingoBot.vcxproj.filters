@@ -1,0 +1,207 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{83168e6c-b289-d732-cc78-427b51f93153}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{fadd1363-4aa9-d02c-f68a-ae2fcdbc5321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonMain">
+      <UniqueIdentifier>{8c406ee6-61e4-c2e3-aa2c-1a2d79bfd56f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party">
+      <UniqueIdentifier>{9eab2112-6210-c38a-271b-d8cbe3106a1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\jsoncpp-1.9.0">
+      <UniqueIdentifier>{f4787265-9915-ba4f-0c42-241643d8f88f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{71ff7152-6d15-db86-eb50-fcac245d183b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\BotLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\BotModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\HostLogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BotCodec.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BotRequestBook.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BotRuleForm.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BotRules.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BotStrings.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BotText.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotDialogBase.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotEditLayout.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotEditWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotListLayout.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotManagerWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotRuleLayout.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotRuleWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotUiFactory.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BotWidgets.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\MyBotsWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="BotApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\BalloonUiText.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\BotLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\BotModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\BotWindowApi.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotCodec.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotRequestBook.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotRuleForm.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotRules.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotStrings.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotText.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BotTypes.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotDialogBase.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotEditLayout.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotEditWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotListLayout.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotManagerWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotRuleLayout.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotRuleWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotUiFactory.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BotWidgets.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\MyBotsWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoBotVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoBot.def" />
+  </ItemGroup>
+</Project>

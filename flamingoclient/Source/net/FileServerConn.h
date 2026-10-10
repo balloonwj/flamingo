@@ -22,7 +22,7 @@
 #include "FrameCrypto.h"         // net::ClientHandshake（本连接自己的会话密钥）
 #include "FramePayload.h"        // net::decodeFramePayload（收包时的解密与解压）
 #include "HandshakeRunner.h"     // net::performClientHandshake / IHandshakeChannel
-#include "IUSocket.h"            // CIUSocket::GetServerPublicKey（四条链路共用同一把公钥）
+#include "IUSocket.h"            // CIUSocket::GetServerPublicKey（连到三个服务的各条链路共用同一把公钥）
 #include "../Common/Log/IULog.h"            // LOG_INFO / LOG_ERROR
 
 #include <string>
@@ -247,7 +247,7 @@ private:
      */
     bool PerformHandshake(int timeoutSec)
     {
-        //四条链路共用同一把服务端公钥，因为三个服务共用同一份身份密钥文件
+        //连到三个服务的各条链路共用同一把服务端公钥，因为三个服务共用同一份身份密钥文件
         const unsigned char* pServerPubKey = CIUSocket::GetInstance().GetServerPublicKey();
         if (pServerPubKey == NULL)
             return true;

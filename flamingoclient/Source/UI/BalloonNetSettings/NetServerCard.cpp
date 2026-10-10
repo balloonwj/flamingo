@@ -40,6 +40,7 @@ extern CAppModule _Module;
 #include "NetServerCard.h"
 #include "NetSettingsModel.h"
 #include "../BalloonChatWnd/ChatIcons.h"
+#include "../../Common/I18n/I18n.h"      // TR / TRF / TR_NOOP：界面文字的多语言查找
 
 namespace balloonnetsettings {
 
@@ -95,18 +96,18 @@ COLORREF ConnColor(int state)
     return RGB(0xA8, 0xA6, 0xA2);       // 未连接：灰
 }
 
-// 连接状态的中文文字。
+// 连接状态的文字（当前界面语言）。
 LPCWSTR ConnText(int state)
 {
     if (state == kNetConnConnected)
     {
-        return L"已连接";
+        return TR(L"已连接");
     }
     if (state == kNetConnConnecting)
     {
-        return L"连接中";
+        return TR(L"连接中");
     }
-    return L"未连接";
+    return TR(L"未连接");
 }
 
 // 向 path 添加一个圆角矩形。
@@ -138,7 +139,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -164,7 +165,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight)
     HFONT hFont = ::CreateFontW(
         -pixelHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;

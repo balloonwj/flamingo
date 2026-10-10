@@ -81,18 +81,6 @@ int  SendKeyIndexFromPressEnter(bool pressEnterToSend);
 bool PressEnterFromSendKeyIndex(int index);
 
 // =====================================================================
-// 语言（design 系统设置1.png：下拉「简体中文」）—— 本期仅存索引、暂不真正切换
-// =====================================================================
-
-const wchar_t* const* LanguageOptions();
-int                   LanguageOptionCount();
-
-/**
- *  把语言索引夹到合法区间 [0, LanguageOptionCount())。越界 / 负数夹到 0。
- */
-int ClampLanguageIndex(int index);
-
-// =====================================================================
 // 自动离开的等待时长（通用页：下拉「5 / 10 / 15 / 30 分钟」）
 // 对应 CUserConfig::GetAutoAwayDelayIndex —— 存的是<u>索引</u>不是分钟数，
 // 与语言等下拉项同口径。分钟数只在这里映射一次，别处不再写死。

@@ -147,3 +147,11 @@ TEST_CASE("FWD-C10c 最近会话候选：只留单聊与群聊，去掉自己、
     CHECK(recent[1].m_name == L"张三");
     CHECK(recent[2].m_cid == 100003);
 }
+
+TEST_CASE("FWDF1 发送本地文件时选会话窗口的预览为「[文件] 文件名」", "[forward][record]")
+{
+    CHECK(MakeFileForwardPreview(L"C:\\Users\\a\\Videos\\Flamingo录屏\\Flamingo录屏_20261003_083012.mp4") ==
+          L"[文件] Flamingo录屏_20261003_083012.mp4");
+    CHECK(MakeFileForwardPreview(L"plain.mp4") == L"[文件] plain.mp4");
+    CHECK(MakeFileForwardPreview(L"") == L"[文件]");
+}

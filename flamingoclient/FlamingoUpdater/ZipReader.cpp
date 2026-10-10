@@ -7,6 +7,7 @@
 #include <windows.h>   // MultiByteToWideChar（条目名转宽字符）
 
 #include "ZipPathSafety.h"   // IsDirectoryEntry（目录项的判定只写一处）
+#include "../Source/Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace iupdate {
 
@@ -136,14 +137,14 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
 
     if (data == NULL || size == 0)
     {
-        errmsg = L"升级包内容为空。";
+        errmsg = TR(L"升级包内容为空。");
         return false;
     }
 
     size_t eocd = 0;
     if (!FindEndOfCentralDir(data, size, eocd))
     {
-        errmsg = L"找不到 zip 中央目录结束记录，文件可能被截断或不是 zip 包。";
+        errmsg = TR(L"找不到 zip 中央目录结束记录，文件可能被截断或不是 zip 包。");
         return false;
     }
 
@@ -156,14 +157,14 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
     //zip64 的标志：这几个字段被写成全 1，真实值放在 zip64 扩展记录里。本更新器不支持。
     if (cdSize == kZip64Marker || cdOffset == kZip64Marker || totalEntries == 0xFFFF)
     {
-        errmsg = L"该升级包是 zip64 格式，更新器不支持。";
+        errmsg = TR(L"该升级包是 zip64 格式，更新器不支持。");
         return false;
     }
 
     //顺带看一眼有没有 zip64 定位记录，有的话同样不支持
     if (eocd >= 20 && ReadU32(data + eocd - 20) == kSigZip64Locator)
     {
-        errmsg = L"该升级包是 zip64 格式，更新器不支持。";
+        errmsg = TR(L"该升级包是 zip64 格式，更新器不支持。");
         return false;
     }
 
@@ -176,7 +177,7 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
     //中央目录必须整体落在文件内
     if ((size_t)cdOffset > size || (size_t)cdSize > size - (size_t)cdOffset)
     {
-        errmsg = L"zip 中央目录位置越界，文件已损坏。";
+        errmsg = TR(L"zip 中央目录位置越界，文件已损坏。");
         return false;
     }
 
@@ -187,12 +188,12 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
     {
         if (pos + kCentralFixedSize > cdEnd)
         {
-            errmsg = L"zip 中央目录被截断。";
+            errmsg = TR(L"zip 中央目录被截断。");
             return false;
         }
         if (ReadU32(data + pos) != kSigCentralHeader)
         {
-            errmsg = L"zip 中央目录条目签名不正确，文件已损坏。";
+            errmsg = TR(L"zip 中央目录条目签名不正确，文件已损坏。");
             return false;
         }
 
@@ -212,18 +213,18 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
 
         if ((flags & kFlagEncrypted) != 0)
         {
-            errmsg = L"升级包中含有加密条目，更新器不支持。";
+            errmsg = TR(L"升级包中含有加密条目，更新器不支持。");
             return false;
         }
         if (method != zip_method_store && method != zip_method_deflate)
         {
-            errmsg = L"升级包中含有不支持的压缩方法。";
+            errmsg = TR(L"升级包中含有不支持的压缩方法。");
             return false;
         }
         if (compSize == kZip64Marker || uncompSize == kZip64Marker
             || localOffset == kZip64Marker)
         {
-            errmsg = L"该升级包是 zip64 格式，更新器不支持。";
+            errmsg = TR(L"该升级包是 zip64 格式，更新器不支持。");
             return false;
         }
 
@@ -231,7 +232,7 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
         const size_t varLen = (size_t)nameLen + (size_t)extraLen + (size_t)commentLen;
         if (varStart + varLen > cdEnd)
         {
-            errmsg = L"zip 中央目录条目被截断。";
+            errmsg = TR(L"zip 中央目录条目被截断。");
             return false;
         }
 
@@ -240,7 +241,7 @@ bool ParseCentralDirectory(const unsigned char* data, size_t size,
                                        (flags & kFlagUtf8Name) != 0);
         if (entry.m_name.empty())
         {
-            errmsg = L"zip 条目名为空或无法解码。";
+            errmsg = TR(L"zip 条目名为空或无法解码。");
             return false;
         }
 
@@ -266,19 +267,19 @@ bool LocateEntryData(const unsigned char* data, size_t size,
 
     if (data == NULL || size == 0)
     {
-        errmsg = L"升级包内容为空。";
+        errmsg = TR(L"升级包内容为空。");
         return false;
     }
 
     const size_t local = (size_t)entry.m_localHeaderOffset;
     if (local + kLocalFixedSize > size)
     {
-        errmsg = L"zip 本地文件头位置越界。";
+        errmsg = TR(L"zip 本地文件头位置越界。");
         return false;
     }
     if (ReadU32(data + local) != kSigLocalHeader)
     {
-        errmsg = L"zip 本地文件头签名不正确。";
+        errmsg = TR(L"zip 本地文件头签名不正确。");
         return false;
     }
 
@@ -289,7 +290,7 @@ bool LocateEntryData(const unsigned char* data, size_t size,
     const size_t start = local + kLocalFixedSize + (size_t)nameLen + (size_t)extraLen;
     if (start > size || (size_t)entry.m_compressedSize > size - start)
     {
-        errmsg = L"zip 条目数据范围越界，文件已损坏。";
+        errmsg = TR(L"zip 条目数据范围越界，文件已损坏。");
         return false;
     }
 

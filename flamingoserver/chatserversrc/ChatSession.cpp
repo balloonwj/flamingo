@@ -13,7 +13,7 @@
 #include "../net/TcpConnection.h"
 #include "../net/EventLoop.h"
 #include "../net/FrameCodec.h"
-#include "../zlib1.2.11/ZlibUtil.h"
+#include "../zlib1.3.2/ZlibUtil.h"
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "Protocol.h"
@@ -24,8 +24,6 @@
 #include "ContactsProtocol.h"
 #include "FavoriteProtocol.h"
 #include "FavoriteManager.h"
-#include "StarredProtocol.h"
-#include "StarredManager.h"
 //联系人备注名（cmd_set_friend_remark 落库 / cmd_get_contacts 读出）
 #include "ContactRemarkManager.h"
 //联系人标签（cmd_set_contact_tags 落库 / cmd_get_contacts 读出）
@@ -38,7 +36,7 @@
 #include "RegisterService.h"
 #include "SmsCodeManager.h"
 #include "FriendProtocol.h"
-//平台公告的投递（消息盒子）：报文编解码 + 受众匹配与已读落库。
+//平台公告的投递（公告中心）：报文编解码 + 受众匹配与已读落库。
 #include "AnnouncementProtocol.h"
 #include "AnnouncementManager.h"
 #include "MessageProtocol.h"
@@ -48,6 +46,15 @@
 #include "GroupProtocol.h"
 #include "GroupPermission.h"
 #include "GroupManager.h"
+#include "GroupFollowManager.h"
+#include "GroupQaManager.h"      //群问答（docs/群问答方案.md）
+#include "BotEngine.h"           //机器人的判定入口（docs/机器人方案.md §5.2）
+#include "BotManager.h"          //机器人存储与群解散清理
+#include "BotRules.h"            //删除客户端伪造的机器人标记
+#include "GroupLinkManager.h"    //加群链接（docs/邀请入群方案.md §12）
+#include "GroupInviteProtocol.h"    //入群邀请卡片的组装、状态与点「加入群聊」的判定（docs/邀请入群方案.md 第 3 期）
+#include "GroupInviteManager.h"     //t_group_invite 的读写
+#include "EmployeeManager.h"        //getEmployeeEnterpriseId：「邀请入群需被邀请人同意」按被邀请人所属企业取值
 #include "CardProtocol.h"
 #include "CardManager.h"
 #include "FileProtocol.h"
@@ -56,15 +63,38 @@
 #include "RemoteDesktopManager.h"
 #include "CallProtocol.h"
 #include "CallManager.h"
+#include "CallCardWriter.h"   //一对一通话卡片：呼叫时写入单聊，结束时改写
+#include "ScreenShareService.h"
+#include "ScreenShareRules.h"   // IScreenShareSensitiveChecker（第 15 期，共享标题与描述的敏感词检查）
+//群通话（cmd_groupcall_* 1740~1751）：房间状态、处理流程与线上环境
+#include "GroupCallManager.h"
+#include "GroupCallService.h"
+#include "GroupCallServerEnv.h"
 //单聊文件夹传输（cmd_folder_* 1810~1817）：八条信令的 JSON 编解码 + 内存会话表
 #include "FolderTransferProtocol.h"
 #include "FolderTransferManager.h"
+#include "FileShareProtocol.h"
+#include "FileShareManager.h"
+#include "FileSharePolicy.h"
+#include "FileShareSessionManager.h"
+#include "FeatureSwitchManager.h"
+#include "P2PSessionManager.h"
+#include "P2PSignalService.h"
+#include "SecretChatManager.h"
+#include "ThreadWatchRegistry.h"
+#include "P2PServerSetup.h"          //P2PFeatureGate：按用户所属企业的开关判断能否建 P2P 会话
 #include "../utils/RelayToken.h"
 #include "GroupFileProtocol.h"
+#include "GlobalSearchProtocol.h"   //cmd_global_search 的报文编解码
+#include "MessageSearchText.h"      //MakeSearchExcerpt：群公告命中的正文摘录
 #include "GroupFileManager.h"
 #include "../utils/FileToken.h"
 #include "DepartmentManager.h"
 #include "EnterpriseManager.h"
+#include "SensitiveWordManager.h"   //企业级敏感词检查（hitSensitive）
+#include "MemoProtocol.h"           //MemoMemberRole：群成员变化时的备忘推送（实现在 ChatSessionMemo.cpp）
+#include "AdminLinkServer.h"        //管理控制台的在线名单：登录、注销、改状态、会话置为失效时通知
+#include "CloudRecordService.h"     //云端录制的列表与操作（第 26 期）
 
 using namespace std;
 using namespace net;
@@ -114,12 +144,15 @@ ChatSession::ChatSession(const std::shared_ptr<TcpConnection>& conn, int session
     TcpSession(conn),
     m_id(sessionid),
     m_seq(0),
-    m_isLogin(false)
+    m_isLogin(false),
+    m_screenShareOfflineDone(false),
+    m_groupCallOfflineDone(false)
 {
     m_userinfo.userid = 0;
     m_userinfo.clienttype = 0;
     m_userinfo.status = 0;
     m_lastPackageTime = time(NULL);
+    m_loginTimeMs.store(0);
 
     //掉线检测暂不在构造时启用，便于联调；需要时调用 enableHearbeatCheck()
     //enableHearbeatCheck();
@@ -236,12 +269,22 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
     //记录请求序列号，应答时回填，使客户端能将应答与请求关联
     m_seq = static_cast<int32_t>(seq);
 
-    //心跳过于频繁，不打印日志
+    //心跳过于频繁，不打印日志。密聊号段（2600~2699）只记长度、不记包体：包体里是端到端加密的密文与临时公钥，
+    //按方案不留任何记录（docs/密聊方案.md 4.5）
     if (cmd != cmd_heartbeat)
     {
-        LOGI("recv v2 frame: userid=%d, cmd=%u, seq=%u, bodylen=%u, body=%s, client=%s",
-             m_userinfo.userid, (unsigned)cmd, seq, (unsigned)body.size(),
-             body.c_str(), conn->peerAddress().toIpPort().c_str());
+        if (SecretChatManager::isSecretCommand(cmd))
+        {
+            LOGI("recv v2 frame: userid=%d, cmd=%u, seq=%u, bodylen=%u, body=<secret>, client=%s",
+                 m_userinfo.userid, (unsigned)cmd, seq, (unsigned)body.size(),
+                 conn->peerAddress().toIpPort().c_str());
+        }
+        else
+        {
+            LOGI("recv v2 frame: userid=%d, cmd=%u, seq=%u, bodylen=%u, body=%s, client=%s",
+                 m_userinfo.userid, (unsigned)cmd, seq, (unsigned)body.size(),
+                 body.c_str(), conn->peerAddress().toIpPort().c_str());
+        }
     }
 
     switch (cmd)
@@ -346,12 +389,6 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onSetBlacklist(body, conn);
             break;
 
-        //加入 / 取消对某个联系人的「特别关注」。服务端只保管这份名单，
-        //上下线推送不因它改变（弹不弹提示由客户端拿名单自己判断）
-        case cmd_set_starred:
-            onSetStarred(body, conn);
-            break;
-
         case cmd_set_favorite:
             onSetFavorite(body, conn);
             break;
@@ -370,6 +407,11 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_sync_messages:
             onSyncMessages(body, conn);
+            break;
+
+        //客户端登录后按改写序号补上离线期间被改写过或被撤回的消息
+        case cmd_sync_rewritten_messages:
+            onSyncRewrittenMessages(body, conn);
             break;
 
         case cmd_mark_read:
@@ -432,8 +474,74 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onCallSwitchMedia(body, conn);
             break;
 
+        //屏幕共享：发起人发起共享
+        case cmd_screenshare_start:
+        //屏幕共享：观看者申请加入
+        case cmd_screenshare_join:
+        //屏幕共享：成员离开（发起人离开等同结束）
+        case cmd_screenshare_leave:
+        //屏幕共享：发起人结束共享
+        case cmd_screenshare_stop:
+        //屏幕共享：查询某会话有无进行中的共享
+        case cmd_screenshare_query:
+        //屏幕共享：成员上报麦克风、摄像头、电脑声音开关
+        case cmd_screenshare_member_media:
+        //屏幕共享：发起人设置标注 / 录制权限或全员静音
+        case cmd_screenshare_set_permission:
+        //屏幕共享：成员开始 / 停止录制
+        case cmd_screenshare_record_state:
+        //屏幕共享：发起人移出某个观看者（第 14 期）
+        case cmd_screenshare_remove_member:
+        //屏幕共享：发起人修改共享标题与描述（第 15 期）
+        case cmd_screenshare_set_info:
+        //屏幕共享：控制键鼠的申请、撤回、授予、拒绝、收回（第 18 期）
+        case cmd_screenshare_control:
+        //屏幕共享：多人共享的申请、撤回、同意、拒绝、停止（第 22 期）
+        case cmd_screenshare_sharing:
+        //屏幕共享：移交主持人（第 22 期）
+        case cmd_screenshare_transfer_host:
+        //屏幕共享：主持人取得、重置、停用分享链接或设置免输密码（第 25 期）
+        case cmd_screenshare_link:
+        //屏幕共享：凭分享链接码查共享概要（第 25 期）
+        case cmd_screenshare_link_resolve:
+        //屏幕共享：主持人开始、暂停、继续、停止云端录制（第 26 期）
+        case cmd_cloudrecord_control:
+            onScreenShare(cmd, body);
+            break;
+
+        //云端录制：分页列出本人的云端录像（第 26 期）
+        case cmd_cloudrecord_list:
+        //云端录制：重命名、删除、取下载 / 上传令牌、发到会话（第 26 期）
+        case cmd_cloudrecord_op:
+            onCloudRecord(cmd, body);
+            break;
+
+        //群通话：发起人选人振铃、建房间（docs/协议设计-v2.md 第 21 节）
+        case cmd_groupcall_start:
+        //群通话：接听邀请，或从横幅 / 卡片加入
+        case cmd_groupcall_join:
+        //群通话：被邀请人拒绝
+        case cmd_groupcall_decline:
+        //群通话：离开；最后一个已加入的人离开时结束
+        case cmd_groupcall_leave:
+        //群通话：通话中追加邀请
+        case cmd_groupcall_invite_more:
+        //群通话：成员上报麦克风、摄像头开关
+        case cmd_groupcall_member_media:
+        //群通话：查询某群有无进行中的群通话
+        case cmd_groupcall_query:
+        //群通话：发起人、群主、管理员静音或移出别人（第 6 期）
+        case cmd_groupcall_manage:
+            onGroupCall(cmd, body);
+            break;
+
         case cmd_set_conversation:
             onSetConversation(body, conn);
+            break;
+
+        //批量设置多个会话的消息提醒模式（批量管理窗口）。单个会话走上面的 cmd_set_conversation
+        case cmd_set_notify_modes:
+            onSetNotifyModes(body, conn);
             break;
 
         case cmd_search_messages:
@@ -451,6 +559,11 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
         //按时间范围清理本人的全部单聊与群聊记录（系统设置 → 聊天 → 清理聊天记录）
         case cmd_delete_messages_by_time:
             onDeleteMessagesByTime(body, conn);
+            break;
+
+        //按会话清空本人的聊天记录（联系人 / 群 / 会话右键、聊天窗头部的「清空聊天记录」）
+        case cmd_clear_conversation:
+            onClearConversation(body, conn);
             break;
 
         case cmd_mass_send:
@@ -485,6 +598,11 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onInviteToGroup(body, conn);
             break;
 
+        //被邀请人点入群邀请卡片上的「加入群聊」
+        case cmd_accept_group_invite:
+            onAcceptGroupInvite(body, conn);
+            break;
+
         case cmd_join_group_request:
             onJoinGroupRequest(body, conn);
             break;
@@ -495,14 +613,6 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_get_group_join_requests:
             onGetGroupJoinRequests(body, conn);
-            break;
-
-        case cmd_get_sensitive_words:
-            onGetSensitiveWords(body, conn);
-            break;
-
-        case cmd_operate_sensitive_word:
-            onOperateSensitiveWord(body, conn);
             break;
 
         case cmd_get_group_announcements:
@@ -541,6 +651,126 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onSetMemberCard(body, conn);
             break;
 
+        //设置本人在某个群里关注的成员（模式 5「只提醒 @我和关注的人」用，整份覆盖）
+        case cmd_set_group_follow:
+            onSetGroupFollow(body, conn);
+            break;
+
+        //设置 / 取消入群必读（仅群主与管理员）
+        case cmd_set_must_read:
+            onSetMustRead(body, conn);
+            break;
+
+        //本人确认已阅读入群必读
+        case cmd_confirm_must_read:
+            onConfirmMustRead(body, conn);
+            break;
+
+        //群主 / 管理员代为确认入群必读
+        case cmd_release_must_read:
+            onReleaseMustRead(body, conn);
+            break;
+
+        //取本群的入群必读与本人是否待确认
+        case cmd_get_must_read:
+            onGetMustRead(body, conn);
+            break;
+
+        //拉取本群问答
+        case cmd_get_group_qa:
+            onGetGroupQa(body, conn);
+            break;
+
+        //新增 / 修改一条本群问答（仅群主与管理员）
+        case cmd_save_group_qa:
+            onSaveGroupQa(body, conn);
+            break;
+
+        //删除一条本群问答（仅群主与管理员）
+        case cmd_delete_group_qa:
+            onDeleteGroupQa(body, conn);
+            break;
+
+        //拉取本群可用的机器人（docs/机器人方案.md 6.1）
+        case cmd_get_group_bots:
+            onGetGroupBots(body, conn);
+            break;
+
+        //拉取一个机器人及其规则（群机器人给群主，个人机器人给主人）
+        case cmd_get_bot_detail:
+            onGetBotDetail(body, conn);
+            break;
+
+        //群主新建或修改群机器人
+        case cmd_save_group_bot:
+            onSaveGroupBot(body, conn);
+            break;
+
+        //群主删除群机器人
+        case cmd_delete_group_bot:
+            onDeleteGroupBot(body, conn);
+            break;
+
+        //群主在本群关闭 / 打开企业机器人，或停用 / 启用群机器人
+        case cmd_set_group_bot_off:
+            onSetGroupBotOff(body, conn);
+            break;
+
+        //拉取本人的个人机器人
+        case cmd_get_my_bots:
+            onGetMyBots(body, conn);
+            break;
+
+        //新建或修改本人的个人机器人
+        case cmd_save_my_bot:
+            onSaveMyBot(body, conn);
+            break;
+
+        //删除本人的个人机器人
+        case cmd_delete_my_bot:
+            onDeleteMyBot(body, conn);
+            break;
+
+        //「试一试」：判定一段模拟输入，不发消息
+        case cmd_try_bot:
+            onTryBot(body, conn);
+            break;
+
+        //拉取本人的「离开 / 忙碌自动回复」设置
+        case cmd_get_auto_reply:
+            onGetAutoReply(body, conn);
+            break;
+
+        //保存本人的「离开 / 忙碌自动回复」设置
+        case cmd_set_auto_reply:
+            onSetAutoReply(body, conn);
+            break;
+
+        //生成加群链接
+        case cmd_create_group_link:
+            onCreateGroupLink(body, conn);
+            break;
+
+        //列出本群可用的加群链接
+        case cmd_get_group_links:
+            onGetGroupLinks(body, conn);
+            break;
+
+        //作废一条加群链接
+        case cmd_revoke_group_link:
+            onRevokeGroupLink(body, conn);
+            break;
+
+        //点加群链接后查群的样子
+        case cmd_get_group_link_info:
+            onGetGroupLinkInfo(body, conn);
+            break;
+
+        //凭加群链接入群
+        case cmd_join_group_by_link:
+            onJoinGroupByLink(body, conn);
+            break;
+
         case cmd_transfer_owner:
             onTransferOwner(body, conn);
             break;
@@ -551,6 +781,16 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_join_relay:
             onJoinRelay(body, conn);
+            break;
+
+        //撤回本人在某张接龙卡片里的那一条
+        case cmd_withdraw_relay:
+            onWithdrawRelay(body, conn);
+            break;
+
+        //提前结束一张接龙（发起人、群主、管理员）
+        case cmd_close_relay:
+            onCloseRelay(body, conn);
             break;
 
         case cmd_update_todo:
@@ -567,6 +807,16 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_get_group_files:
             onGetGroupFiles(body, conn);
+            break;
+
+        //PC 主面板全局搜索：按文件名搜本人所在全部群的群文件
+        case cmd_search_group_files:
+            onSearchGroupFiles(body, conn);
+            break;
+
+        //PC 主面板全局搜索：在服务器上的全部聊天记录与群公告里搜关键字
+        case cmd_global_search:
+            onGlobalSearch(body, conn);
             break;
 
         case cmd_add_group_file:
@@ -604,6 +854,236 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
         //接收端复用上次那个目录做断点续传，不再被询问是否同意
         case cmd_folder_retry:
             onFolderRetry(body, conn);
+            break;
+
+        //文件共享：分享者在单聊或群聊里发起共享，服务端建记录、给被指定的成员发一张只有他们看得到的卡片
+        case cmd_share_create:
+            onShareCreate(body, conn);
+            break;
+
+        //文件共享：分享者本人，或群共享所在群的群主、管理员取消共享，共享从此对所有人失效
+        case cmd_share_cancel:
+            onShareCancel(body, conn);
+            break;
+
+        //文件共享：分享者追加、移除成员或修改成员的写权限
+        case cmd_share_update_members:
+            onShareUpdateMembers(body, conn);
+            break;
+
+        //文件共享：「文件共享」窗口与聊天窗按钮拉取「我的共享」或「共享给我的」
+        case cmd_share_list:
+            onShareList(body, conn);
+            break;
+
+        //文件共享：分享者客户端登录后、以及共享根可用性变化时报告各共享能否提供
+        case cmd_share_serve_report:
+            onShareServeReport(body, conn);
+            break;
+
+        //文件共享：成员打开共享（浏览窗口），服务端建访问会话并向两端下发中转参数
+        case cmd_share_open:
+            onShareOpen(body, conn);
+            break;
+
+        //文件共享：任一端结束访问会话（关闭浏览窗口、空闲回收、分享者停止提供）
+        case cmd_share_close_access:
+            onShareCloseAccess(body, conn);
+            break;
+
+        //文件共享：访问者申请一次下载或上传，服务端校验权限与名额后建传输子会话
+        case cmd_share_request_transfer:
+            onShareRequestTransfer(body, conn);
+            break;
+
+        //文件共享：任一端结束一次传输（完成、失败或取消）
+        case cmd_share_transfer_close:
+            onShareTransferClose(body, conn);
+            break;
+
+        //文件共享：分享者客户端批量上报每个请求的执行结果，写入审计表
+        case cmd_share_audit_report:
+            onShareAuditReport(body, conn);
+            break;
+
+        //备忘与提醒：登录后拉取本人可见的全部备忘，群聊窗「备忘」页签只拉本群的
+        case cmd_memo_list:
+            onMemoList(body, conn);
+            break;
+
+        //备忘与提醒：新建或修改个人备忘、群备忘
+        case cmd_memo_save:
+            onMemoSave(body, conn);
+            break;
+
+        //备忘与提醒：删除个人备忘、群备忘
+        case cmd_memo_delete:
+            onMemoDelete(body, conn);
+            break;
+
+        //P2P：客户端登录后报到协议版本，应答告诉它本企业是否开启、地址探测服务器在哪
+        case cmd_p2p_register:
+            onP2PCommand(cmd, body);
+            break;
+
+        //P2P：2302 只由服务端推送，客户端发来时交给信令处理按报文非法应答
+        case cmd_p2p_session_notify:
+            onP2PCommand(cmd, body);
+            break;
+
+        //P2P：交换候选地址与公钥，转给会话的另一端
+        case cmd_p2p_signal:
+            onP2PCommand(cmd, body);
+            break;
+
+        //P2P：上报建链结果（路径、NAT 判断），只核对成员身份并记日志
+        case cmd_p2p_result:
+            onP2PCommand(cmd, body);
+            break;
+
+        //P2P：一端结束会话（业务结束或建链失败），删除会话并通知另一端
+        case cmd_p2p_close:
+            onP2PCommand(cmd, body);
+            break;
+
+        //P2P：联调用的直接建会话，配置项 p2pdebugopen 为 1 时才受理
+        case cmd_p2p_debug_open:
+            onP2PCommand(cmd, body);
+            break;
+
+        //单聊密聊：FlamingoSecretChat.dll 报到协议版本与本机的防截图级别
+        case cmd_secret_register:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：发起密聊，推邀请给对方全部已报到的连接
+        case cmd_secret_invite:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：2603 只由服务端推送，客户端发来时交给密聊处理按报文非法应答
+        case cmd_secret_invite_notify:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：被邀请人同意或忽略
+        case cmd_secret_respond:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：2605 只由服务端推送，客户端发来时按报文非法应答
+        case cmd_secret_state_notify:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：发起方在对方应答前撤回邀请
+        case cmd_secret_cancel:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：任一方结束密聊
+        case cmd_secret_close:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：转发一帧密文给对方绑定的那条连接，不落库
+        case cmd_secret_message:
+            onSecretCommand(cmd, body);
+            break;
+
+        //单聊密聊：2609 只由服务端推送，客户端发来时按报文非法应答
+        case cmd_secret_message_notify:
+            onSecretCommand(cmd, body);
+            break;
+
+        //帖子群：拉一页帖子
+        case cmd_thread_list_posts:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：拉一条完整帖子
+        case cmd_thread_get_post:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：发帖
+        case cmd_thread_publish_post:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：作者修改帖子
+        case cmd_thread_edit_post:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：删除帖子
+        case cmd_thread_delete_post:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：置顶或取消置顶
+        case cmd_thread_pin_post:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：拉一页留言
+        case cmd_thread_list_comments:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：拉一页回复
+        case cmd_thread_list_replies:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：留言或回复
+        case cmd_thread_add_comment:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：删除留言或回复
+        case cmd_thread_delete_comment:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：点赞、表情回应或取消
+        case cmd_thread_react:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：拉互动名单
+        case cmd_thread_get_reactors:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：登记或撤销「正在查看」
+        case cmd_thread_watch:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：楼主追加补充
+        case cmd_thread_add_addendum:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：删除补充
+        case cmd_thread_delete_addendum:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：核对客户端本地存的卡片，返回已改写为已删除形态的（docs/帖子群方案.md 14.6）
+        case cmd_thread_check_cards:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：2720 只由服务端推送，客户端发来时按报文非法应答
+        case cmd_thread_changed_notify:
+            onThreadCommand(cmd, body);
+            break;
+
+        //帖子群：2721 只由服务端推送，客户端发来时按报文非法应答
+        case cmd_thread_cards_notify:
+            onThreadCommand(cmd, body);
             break;
 
         default:
@@ -652,15 +1132,23 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
         return;
     }
 
-    //2. 账号查询：账号不存在返回未注册
+    //2. 账号查询：账号与手机号都能登录（2026-10-06，docs/登录账号与手机号登录方案.md 第 3.4 节）。
+    //   先按账号（不区分大小写），查不到且输入像手机号时再按手机号；都查不到返回未注册
     User cachedUser;
     cachedUser.userid = 0;
-    Singleton<UserManager>::Instance().getUserInfoByUsername(req.account, cachedUser);
-    if (cachedUser.userid == 0)
+    bool matchedByPhone = false;
+    if (!Singleton<UserManager>::Instance().findLoginUser(req.account, cachedUser, matchedByPhone)
+        || cachedUser.userid == 0)
     {
+        LOGI("login rejected: no account or phone matches '%s', client: %s",
+             req.account.c_str(), conn->peerAddress().toIpPort().c_str());
         send(cmd_login, m_seq,
              LoginProtocol::buildLoginFailResponse(error_code_not_registered, "account not registered"));
         return;
+    }
+    if (matchedByPhone)
+    {
+        LOGI("login matched by phone, userid: %d, account: %s", cachedUser.userid, cachedUser.username.c_str());
     }
 
     //3. 账号停用校验：被 admin 控制台停用的账号禁止登录
@@ -668,6 +1156,15 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
     {
         send(cmd_login, m_seq,
              LoginProtocol::buildLoginFailResponse(error_code_account_disabled, "account disabled"));
+        return;
+    }
+
+    //3-1. 机器人与服务号账号不能登录：它们只由服务端代为发消息（docs/机器人方案.md §3.2）
+    if (cachedUser.usertype != user_type_normal)
+    {
+        LOGW("login rejected for non-human account, userid: %d, usertype: %d", cachedUser.userid, cachedUser.usertype);
+        send(cmd_login, m_seq,
+             LoginProtocol::buildLoginFailResponse(error_code_account_disabled, "account cannot login"));
         return;
     }
 
@@ -748,7 +1245,12 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
     m_userinfo.password = cachedUser.password;
     m_userinfo.clienttype = req.clienttype;
     m_userinfo.status = req.presence;
+    m_userinfo.deviceid = req.deviceid;
+    //登录时间先于登录态写入：管理端口的推送线程看到 isLoggedIn() 为 true 时，登录时间已是本次的
+    m_loginTimeMs.store(static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND);
     m_isLogin = true;
+    //管理控制台的在线名单：本用户多了一台在线设备
+    Singleton<AdminLinkServer>::Instance().onUserOnlineChanged(m_userinfo.userid);
 
     //8. 组装并下发成功应答
     LoginProfile profile;
@@ -762,7 +1264,11 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
     profile.signature = cachedUser.signature;
     profile.address = cachedUser.address;
     profile.phonenumber = cachedUser.phonenumber;
+    profile.landline    = cachedUser.landline;
+    profile.post        = cachedUser.post;
     profile.mail = cachedUser.mail;
+    profile.phonevisible    = cachedUser.phonevisible;
+    profile.landlinevisible = cachedUser.landlinevisible;
     //企业归属不取自 UserManager 的用户缓存（那里没有加载 f_enterprise_id），
     //而是问 DepartmentManager —— 它按 t_department_member 维护着 userid 到
     //企业ID的映射。下面广播上线通知时还要用同一个值，故只查这一次。
@@ -771,8 +1277,10 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
     profile.enterpriseid = loginEnterpriseId;
 
     int64_t servertime = static_cast<int64_t>(time(NULL)) * 1000;
+    //登录应答带上本企业的功能开关（docs/文件共享方案.md 5.8），客户端据此决定是否加载文件共享模块
     send(cmd_login, m_seq,
-         LoginProtocol::buildLoginSuccessResponse(cachedUser.userid, profile, servertime));
+         LoginProtocol::buildLoginSuccessResponse(cachedUser.userid, profile, servertime,
+                                                  Singleton<FeatureSwitchManager>::Instance().featuresFor(loginEnterpriseId)));
 
     LOGI("user login ok, userid: %d, account: %s, clienttype: %d, client: %s",
          cachedUser.userid, req.account.c_str(), req.clienttype,
@@ -793,6 +1301,29 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
         server.broadcastToEnterprise(loginEnterpriseId, cmd_presence_changed_notify,
                                      onlineBody, m_userinfo.userid);
     }
+
+    //通话：宽限期内重新登录，他参与的通话继续
+    Singleton<CallManager>::Instance().markUserOnline(m_userinfo.userid);
+    //远程桌面同理
+    Singleton<RemoteDesktopManager>::Instance().markUserOnline(m_userinfo.userid);
+
+    //屏幕共享：宽限期内重新登录的发起人恢复房间，新的中转参数发给这条连接（推送，seq 填 0）
+    m_screenShareOfflineDone = false;
+    std::vector<ScreenShareReply> shareReplies;
+    ScreenShareService::onUserLogin(m_userinfo.userid, shareReplies);
+    for (size_t i = 0; i < shareReplies.size(); ++i)
+        send(shareReplies[i].m_cmd, 0, shareReplies[i].m_body);
+
+    //群通话：宽限期内重新登录的已加入成员回到房间，新的中转参数发给这条连接（推送，seq 填 0）
+    m_groupCallOfflineDone = false;
+    {
+        GroupCallServerEnv env;
+        GroupCallService service(Singleton<GroupCallManager>::Instance(), env);
+        std::vector<GroupCallReply> callReplies;
+        service.onUserLogin(m_userinfo.userid, static_cast<int64_t>(time(NULL)) * 1000, callReplies);
+        for (size_t i = 0; i < callReplies.size(); ++i)
+            send(callReplies[i].m_cmd, 0, callReplies[i].m_body);
+    }
 }
 
 void ChatSession::onHeartbeat(const std::shared_ptr<TcpConnection>& conn)
@@ -808,11 +1339,37 @@ void ChatSession::onLogout(const std::shared_ptr<TcpConnection>& conn)
          m_userinfo.userid, conn->peerAddress().toIpPort().c_str());
     send(cmd_logout, m_seq, std::string("{\"code\":0,\"msg\":\"ok\"}"));
     m_isLogin = false;
+    //管理控制台的在线名单：注销后的会话不再计入在线（连接可能还留着，等断开时还会再通知一次，无害）
+    Singleton<AdminLinkServer>::Instance().onUserOnlineChanged(m_userinfo.userid);
 
     //本连接名下若还挂着一笔文件夹传输，此刻即作废：续传位点存在客户端内存里，退出登录
     //就丢了。此处主动清一次而不是等连接断开，是因为客户端可以只登出、不断开连接（换账号
     //登录走的就是这条路），那样对端会一直停在"传输中"直到中转通道超时才发现不对
     cleanupFolderTransferOnOffline();
+
+    //文件共享同理：退出登录后这台电脑不再提供共享，成员要立刻看到「暂不可用」
+    cleanupFileShareOnOffline();
+
+    //屏幕共享同理：若这是本用户最后一个登录态的连接，观看者按离开处理、发起人进入宽限期
+    cleanupScreenShareOnOffline();
+
+    //通话同理：若这是本用户最后一个登录态的连接，他参与的通话进入掉线宽限期
+    cleanupCallOnOffline();
+
+    //群通话同理：振铃中的人从房间移除，已加入的人进入掉线宽限期
+    cleanupGroupCallOnOffline();
+
+    //远程桌面同理
+    cleanupRemoteDesktopOnOffline();
+
+    //P2P：退出登录后本连接不再参与 P2P，结束它的会话并通知对端；换账号重新登录时客户端会重新发 2301
+    cleanupP2POnOffline();
+
+    //密聊同理：退出登录后本连接不再参与密聊，进行中的密聊对方转为「只能查看」；重新登录时客户端会重新发 2601
+    cleanupSecretOnOffline();
+
+    //帖子群：退出登录后撤销本连接的「正在查看」登记
+    cleanupThreadWatchOnOffline();
 
     //登出通常紧跟连接断开，设备下线通知由 ChatServer::onDisconnected 统一推送
 }
@@ -910,10 +1467,137 @@ static const char* registerFailReason(int32_t code)
         return "company not active";
     case error_code_enterprise_no_root_dept:
         return "company has no root department";
+    //企业关闭了允许用户自助注册，只能由管理员新建账号
+    case error_code_register_closed:
+        return "self registration closed by company";
+    //昵称命中所加入企业的敏感词库，账号没有建出来
+    case error_code_profile_sensitive_word:
+        return "nickname contains sensitive word";
     default:
         return "register failed";
     }
 }
+
+/**
+ *  按某企业的敏感词库检查一组文字，命中时写一条拦截记录、记一条日志并返回 true。
+ *  ChatSession::hitSensitive（已登录的会话）与自助注册的数据源适配器（此时尚未登录、
+ *  还没有账号）共用本函数，规则见 ChatSession::hitSensitive 的注释。
+ *    enterpriseId： 提交者所属企业ID；不大于 0 时视为未命中
+ *    userId：       提交者 userid；自助注册时为 0
+ *    userName：     写进拦截记录的提交者名称
+ *    source：       拦截来源，取值见 chatserver::sensitive_hit_source
+ *    ctype / cid：  会话类型与会话ID；与会话无关时都传 0
+ *    targetName：   写进拦截记录的会话名称；传空串时单聊按 cid 取对方昵称、群聊按 cid 取群名
+ *    texts：        待检查的文字（UTF-8），空串跳过
+ */
+static bool checkSensitiveAndRecord(int64_t enterpriseId, int64_t userId, const std::string& userName,
+                                    int source, int ctype, int64_t cid, const std::string& targetName,
+                                    const std::vector<std::string>& texts)
+{
+    SensitiveWordManager& sensitiveMgr = Singleton<SensitiveWordManager>::Instance();
+    SensitiveCheckResult result;
+    if (!sensitiveMgr.checkTexts(enterpriseId, texts, &result))
+        return false;
+
+    SensitiveHitRecord record;
+    record.m_enterpriseId = enterpriseId;
+    record.m_userId = userId;
+    record.m_userName = userName;
+    record.m_source = source;
+    record.m_ctype = ctype;
+    record.m_cid = cid;
+    record.m_targetName = targetName;
+    //会话名只在命中时才取，未命中的请求不多做一次查询
+    if (record.m_targetName.empty())
+    {
+        if (ctype == CHAT_TYPE_SINGLE)
+        {
+            User peer;
+            peer.userid = 0;
+            if (Singleton<UserManager>::Instance().getUserInfoByUserId(static_cast<int32_t>(cid), peer))
+                record.m_targetName = peer.nickname;
+        }
+        else if (ctype == CHAT_TYPE_GROUP)
+        {
+            GroupRecord group;
+            if (Singleton<GroupManager>::Instance().getGroup(cid, group))
+                record.m_targetName = group.name;
+        }
+    }
+    record.m_wordId = result.m_wordId;
+    record.m_word = result.m_word;
+    record.m_category = result.m_category;
+    record.m_snippet = result.m_snippet;
+    record.m_createTime = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+    //写记录失败只影响管理员事后查询，本次请求照样拒绝；失败原因 SensitiveWordManager 已记日志
+    sensitiveMgr.writeHit(record);
+
+    LOGI("sensitive word hit, userid: %lld, enterpriseid: %lld, source: %d, ctype: %d, cid: %lld, "
+         "wordid: %lld, category: %d, textindex: %u",
+         (long long)userId, (long long)enterpriseId, source, ctype, (long long)cid,
+         (long long)result.m_wordId, result.m_category, static_cast<unsigned>(result.m_textIndex));
+    return true;
+}
+
+bool ChatSession::checkSensitiveForServer(int64_t enterpriseId, int64_t userId, const std::string& userName, int source,
+                                          int ctype, int64_t cid, const std::vector<std::string>& texts)
+{
+    return checkSensitiveAndRecord(enterpriseId, userId, userName, source, ctype, cid, std::string(), texts);
+}
+
+//屏幕共享标题与描述的敏感词检查（第 15 期）：按提交者所属企业的词库检查，命中时记一条来源为
+//sensitive_source_screenshare 的拦截记录。企业 id 在真正要检查时才查，不发起、不修改标题的屏幕共享请求不多做一次查询。
+class ChatSessionShareSensitiveChecker : public IScreenShareSensitiveChecker
+{
+public:
+    /**
+     *  @param userId   提交者 userid
+     *  @param userName 写进拦截记录的提交者名称
+     */
+    ChatSessionShareSensitiveChecker(int64_t userId, const std::string& userName)
+        : m_userId(userId)
+        , m_userName(userName)
+    {
+    }
+
+    virtual bool hitShareInfo(int ctype, int64_t cid, const std::vector<std::string>& texts)
+    {
+        const int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userId);
+        return checkSensitiveAndRecord(enterpriseId, m_userId, m_userName, chatserver::sensitive_source_screenshare,
+                                       ctype, cid, std::string(), texts);
+    }
+
+private:
+    int64_t     m_userId;     //提交者 userid
+    std::string m_userName;   //写进拦截记录的提交者名称：优先昵称，昵称为空时为登录账号
+};
+
+//云端录像标题的敏感词检查（第 26 期）：按提交者所属企业的词库检查，命中时记一条来源为 sensitive_source_cloudrecord 的拦截记录
+class ChatSessionCloudRecordTitleChecker : public ICloudRecordTitleChecker
+{
+public:
+    /**
+     *  @param userId   提交者 userid
+     *  @param userName 写进拦截记录的提交者名称
+     */
+    ChatSessionCloudRecordTitleChecker(int64_t userId, const std::string& userName)
+        : m_userId(userId)
+        , m_userName(userName)
+    {
+    }
+
+    virtual bool hitTitle(const std::string& title) override
+    {
+        const int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userId);
+        std::vector<std::string> texts(1, title);
+        return checkSensitiveAndRecord(enterpriseId, m_userId, m_userName, chatserver::sensitive_source_cloudrecord, 0, 0,
+                                       std::string(), texts);
+    }
+
+private:
+    int64_t     m_userId;     //提交者 userid
+    std::string m_userName;   //写进拦截记录的提交者名称：优先昵称，昵称为空时为登录账号
+};
 
 //把 RegisterService 的数据访问接口接到本进程的几个管理器单例上。
 //这层只做"转接 + 类型翻译"，不含任何业务判断——判断顺序与错误码全在
@@ -934,6 +1618,11 @@ public:
         return true;
     }
 
+    virtual bool isRegisterAllowed(int64_t enterpriseId)
+    {
+        return Singleton<FeatureSwitchManager>::Instance().isEnabled(enterpriseId, kFeatureRegister);
+    }
+
     virtual bool isPhoneTaken(const std::string& phone)
     {
         User existing;
@@ -941,13 +1630,26 @@ public:
         return Singleton<UserManager>::Instance().getUserInfoByPhone(phone, existing) && existing.userid != 0;
     }
 
+    virtual bool hitSensitiveNickname(int64_t enterpriseId, const RegisterRequest& req)
+    {
+        std::vector<std::string> texts;
+        texts.push_back(req.nickname);
+        //此时还没有账号：提交者 userid 记 0，名称记手机号，管理员据此找到是哪一次注册
+        return checkSensitiveAndRecord(enterpriseId, 0, req.phone, chatserver::sensitive_source_register,
+                                       0, 0, std::string(), texts);
+    }
+
     virtual bool createUser(const RegisterRequest& req, int64_t enterpriseId,
                             int64_t& outUserId, std::string& outUsername)
     {
         //v2 口令存储为 MD5(客户端SHA256哈希 + 每用户随机盐)。
         User u;
-        //username 刻意留空：交给 addUser 按新分配的用户ID自动生成登录账号
-        //（见 AccountName.h 的 MakeEmployeeAccount），与 admin 控制台建员工同规则。
+        //登录账号按企业账号前缀抽一个随机号（没设前缀时用 EMP），与 admin 控制台建员工同规则
+        //（docs/登录账号与手机号登录方案.md 第 3.3 节）。不再用连续的用户ID拼账号，免得暴露注册先后
+        const std::string prefix = Singleton<EnterpriseManager>::Instance().getAccountPrefix(enterpriseId);
+        u.username = Singleton<UserManager>::Instance().allocRandomAccount(prefix);
+        if (u.username.empty())
+            return false;
         u.nickname    = req.nickname;
         u.phonenumber = req.phone;
         u.usertype    = user_type_normal;
@@ -1011,7 +1713,7 @@ void ChatSession::onRegister(const std::string& body, const std::shared_ptr<TcpC
     {
         //账号已经建出来且能登录，只是没进组织架构，登录后通讯录会是空的。
         //这属于必须人工介入的情况，用 LOGE 打出来，事后由运维把这类孤儿账号补挂回
-        //公司根部门（参照 migrations/v3_add_enterprise_root_dept.py 的补挂逻辑）。
+        //公司根部门。
         LOGE("register: user created but not attached to root department, userid: %lld, enterpriseid: %lld",
              (long long)outcome.userid, (long long)outcome.enterpriseId);
     }
@@ -1109,27 +1811,18 @@ void ChatSession::onResetPassword(const std::string& body, const std::shared_ptr
 }
 
 //把 UserManager 的 User 资料与实时在线状态填充成应答用的 ContactInfo
+//  viewerUserId：本次请求通讯录的用户ID。联系人设为不公开的手机号、座机只发给本人
+//           （docs/联系人资料字段扩充方案.md 第 9 节，见 ContactsProtocol::fillContactFromUser）。
 //  remarks：本次请求发起人的"联系人 → 备注名"映射（见 ContactRemarkManager::getRemarks）。
 //           备注名是单向的，同一个联系人在不同人的通讯录里备注不同，故要按
 //           发起人的映射来填；不在映射里（没给这个人设过备注）则留空串。
 //  tags：   本次请求发起人的"联系人 → 标签列表"映射（见 ContactTagManager::getTagsAll）。
 //           标签同样是单向的，填法与备注名一致；没贴过标签则留空列表。
-static void fillContactInfo(ContactInfo& c, const User& u, ChatServer& server,
+static void fillContactInfo(ContactInfo& c, const User& u, ChatServer& server, int64_t viewerUserId,
                             const std::map<int32_t, std::string>& remarks,
                             const std::map<int32_t, std::vector<std::string> >& tags)
 {
-    c.userid      = u.userid;
-    c.username    = u.username;
-    c.nickname    = u.nickname;
-    c.usertype    = u.usertype;
-    c.facetype    = u.facetype;
-    c.customface  = u.customface;
-    c.gender      = u.gender;
-    c.birthday    = u.birthday;
-    c.signature   = u.signature;
-    c.address     = u.address;
-    c.phonenumber = u.phonenumber;
-    c.mail        = u.mail;
+    ContactsProtocol::fillContactFromUser(c, u, viewerUserId);
     //在线状态与设备类型由 ChatServer 会话表实时给出，离线时为 0
     c.presence    = server.getUserStatusByUserId(u.userid);
     c.clienttype  = server.getUserClientTypeByUserId(u.userid);
@@ -1207,7 +1900,7 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
                 if (userMgr.getUserInfoByUserId(static_cast<int32_t>(om.userid), u))
                 {
                     ContactInfo c;
-                    fillContactInfo(c, u, server, remarks, contactTags);
+                    fillContactInfo(c, u, server, m_userinfo.userid, remarks, contactTags);
                     data.contacts.push_back(c);
                 }
             }
@@ -1237,9 +1930,8 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
     //   查询失败就让整棵部门树也发不出去。serviceaccounts 留待后续，仍为空数组。
     Singleton<FavoriteManager>::Instance().getFavorites(m_userinfo.userid, data.favorites);
 
-    //6. starred（特别关注）：只装联系人 userid，按标记时间倒序。同样按"拉不到就当
-    //   没关注任何人"降级 —— 名单拉不到只是少一层上下线提醒，不该连通讯录也发不出去。
-    Singleton<StarredManager>::Instance().getStarred(m_userinfo.userid, data.starred);
+    //原第 6 项 starred（特别关注名单）已于 2026-10-03 删除：特别关注并入会话的消息提醒模式，
+    //名单改由 cmd_sync_conversations 应答的 notifymodes 下发（docs/消息提醒模式与消息盒子方案.md §5.5）
 
     std::string resp = ContactsProtocol::buildContactsResponse(data);
     send(cmd_get_contacts, m_seq, resp);
@@ -1255,25 +1947,35 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
          conn->peerAddress().toIpPort().c_str());
 }
 
-//把 UserManager 的 User 转换为账号资料应答用的 UserProfile（含实时在线状态）
+//把 UserManager 的 User 转换为账号资料应答用的 UserProfile（含实时在线状态）。
+//得到的是号码完整的一份资料；发给谁之前须经 ProfileProtocol::applyViewer 或
+//buildUserInfoChangedNotifies 按查看者处理（docs/联系人资料字段扩充方案.md 第 9 节）
 static void fillUserProfile(UserProfile& p, const User& u)
 {
     ChatServer& server = Singleton<ChatServer>::Instance();
-    p.userid       = u.userid;
-    p.usertype     = u.usertype;
-    p.username     = u.username;
-    p.nickname     = u.nickname;
-    p.facetype     = u.facetype;
-    p.customface   = u.customface;
-    p.gender       = u.gender;
-    p.birthday     = u.birthday;
-    p.signature    = u.signature;
-    p.address      = u.address;
-    p.phonenumber  = u.phonenumber;
-    p.mail         = u.mail;
+    ProfileProtocol::fillProfileFromUser(p, u);
     p.enterpriseid = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(u.userid);
     p.presence     = server.getUserStatusByUserId(u.userid);
     p.clienttype   = server.getUserClientTypeByUserId(u.userid);
+}
+
+//向本人所在企业推送资料变更（cmd_user_info_changed_notify）。改资料与改头像共用。
+//同事收到按公开范围隐藏了号码的一份；本人的全部在线会话收到号码完整、带公开范围标志的一份
+//（PC 客户端通讯录树里本人那一行与本人的其它设备靠它同步）。
+//  enterpriseId：本人所属企业ID，调用方保证不为 0
+//  u：           本人更新后的用户记录
+static void broadcastProfileChanged(int64_t enterpriseId, const User& u)
+{
+    UserProfile p;
+    fillUserProfile(p, u);
+    std::string ownerBody;
+    std::string colleagueBody;
+    ProfileProtocol::buildUserInfoChangedNotifies(p, ownerBody, colleagueBody);
+
+    ChatServer& server = Singleton<ChatServer>::Instance();
+    server.broadcastToEnterprise(enterpriseId, cmd_user_info_changed_notify, colleagueBody, u.userid);
+    std::vector<int64_t> owner(1, static_cast<int64_t>(u.userid));
+    server.pushToUsers(owner, cmd_user_info_changed_notify, ownerBody);
 }
 
 void ChatSession::onGetUserInfo(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -1297,6 +1999,8 @@ void ChatSession::onGetUserInfo(const std::string& body, const std::shared_ptr<T
 
     UserProfile p;
     fillUserProfile(p, u);
+    //取别人的资料时，对方不公开的号码不下发；取自己的资料时号码完整，并带上两个公开范围标志
+    ProfileProtocol::applyViewer(p, m_userinfo.userid);
     send(cmd_get_user_info, m_seq, ProfileProtocol::buildGetUserInfoResponse(0, "ok", p));
 }
 
@@ -1323,19 +2027,21 @@ void ChatSession::onUpdateProfile(const std::string& body, const std::shared_ptr
     //原昵称，写库成功后据此判断昵称是否真的改变（改变时要重算所在的自动命名群）
     const std::string oldNickname = u.nickname;
 
-    //把本次提交的字段合并进当前资料；updateUserInfoInDb 会整体写回
-    if (req.has_nickname)
-        u.nickname = req.nickname;
-    if (req.has_signature)
-        u.signature = req.signature;
-    if (req.has_gender)
-        u.gender = req.gender;
-    if (req.has_birthday)
-        u.birthday = req.birthday;
-    if (req.has_address)
-        u.address = req.address;
-    if (req.has_mail)
-        u.mail = req.mail;
+    //企业级敏感词：只查本次提交、且与当前值不同的昵称、签名、所在地、邮箱、岗位（规则见
+    //ProfileProtocol::collectChangedProfileTexts）。放在合并与写库之前，被拦下时资料保持原样
+    UserProfile currentProfile;
+    fillUserProfile(currentProfile, u);
+    std::vector<std::string> sensitiveTexts;
+    ProfileProtocol::collectChangedProfileTexts(req, currentProfile, sensitiveTexts);
+    if (hitSensitive(chatserver::sensitive_source_profile, 0, 0, std::string(), sensitiveTexts))
+    {
+        send(cmd_update_profile, m_seq,
+             ProfileProtocol::buildSimpleResponse(error_code_profile_sensitive_word, "profile contains sensitive word"));
+        return;
+    }
+
+    //把本次提交的字段合并进当前资料（带了才改，手机号永不改动）；updateUserInfoInDb 会整体写回
+    ProfileProtocol::applyProfileUpdate(req, u);
 
     if (!userMgr.updateUserInfoInDb(m_userinfo.userid, u))
     {
@@ -1345,24 +2051,23 @@ void ChatSession::onUpdateProfile(const std::string& body, const std::shared_ptr
 
     send(cmd_update_profile, m_seq, ProfileProtocol::buildSimpleResponse(0, "ok"));
 
-    //广播资料变更。客户端"联系人树"是企业组织架构（同事），故按企业范围推送，使同事端实时刷新
-    //该联系人昵称/签名等。排除发起者自己。与改头像(onChangeAvatar)、在线状态(onChangePresence)
-    //同口径。无企业归属的账号不推 —— 企业版里它没有联系人可推。
+    //广播资料变更。客户端"联系人树"是企业组织架构，故按企业范围推送，使同事端实时刷新该联系人
+    //昵称/签名等。发起者本人也推（2026-10-04 起）：PC 客户端的通讯录树里有本人那一行（带「（我）」），
+    //靠这条推送同步；本人在线的其它设备也据此同步。与改头像(onChangeAvatar)同口径。
+    //同事与本人收到的内容不同：不公开的号码只发给本人（2026-10-06 起，见 broadcastProfileChanged）。
+    //无企业归属的账号不推 —— 企业版里它没有联系人可推。
     int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
     if (enterpriseId != 0)
-    {
-        UserProfile p;
-        fillUserProfile(p, u);
-        std::string notifyBody = ProfileProtocol::buildUserInfoChangedNotify(p);
-        Singleton<ChatServer>::Instance().broadcastToEnterprise(
-            enterpriseId, cmd_user_info_changed_notify, notifyBody, m_userinfo.userid);
-    }
+        broadcastProfileChanged(enterpriseId, u);
 
     //昵称改变后，本人所在的自动命名群的群名随之重算，群名改变的向全群推送资料变更
     if (u.nickname != oldNickname)
         Singleton<ChatServer>::Instance().refreshAutoGroupNamesOfMemberAndNotify(m_userinfo.userid);
 
     LOGI("update profile ok, userid: %d", m_userinfo.userid);
+    if (req.has_phonevisible || req.has_landlinevisible)
+        LOGI("update profile visibility, userid: %d, phonevisible: %d, landlinevisible: %d",
+             m_userinfo.userid, u.phonevisible, u.landlinevisible);
 }
 
 void ChatSession::onChangePassword(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -1455,18 +2160,13 @@ void ChatSession::onChangeAvatar(const std::string& body, const std::shared_ptr<
     Singleton<DepartmentManager>::Instance().updateCachedMemberAvatar(
         m_userinfo.userid, req.facetype, req.customface);
 
-    //广播资料变更。客户端"联系人树"是企业组织架构（同事），故按企业范围推送，使同事端
-    //实时刷新该联系人头像。排除发起者自己。与在线状态变更同口径。
-    //无企业归属的账号不推 —— 企业版里它没有联系人可推。
+    //广播资料变更。客户端"联系人树"是企业组织架构，故按企业范围推送，使同事端实时刷新该联系人
+    //头像。发起者本人也推（2026-10-04 起），理由同改资料(onUpdateProfile)：本人那一行在通讯录树里，
+    //本人的其它设备也要同步。无企业归属的账号不推 —— 企业版里它没有联系人可推。
+    //推送内容同样按查看者区分：不公开的号码只发给本人（见 broadcastProfileChanged）。
     int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
     if (enterpriseId != 0)
-    {
-        UserProfile p;
-        fillUserProfile(p, u);
-        std::string notifyBody = ProfileProtocol::buildUserInfoChangedNotify(p);
-        Singleton<ChatServer>::Instance().broadcastToEnterprise(
-            enterpriseId, cmd_user_info_changed_notify, notifyBody, m_userinfo.userid);
-    }
+        broadcastProfileChanged(enterpriseId, u);
 
     LOGI("change avatar ok, userid: %d", m_userinfo.userid);
 
@@ -1490,6 +2190,8 @@ void ChatSession::onChangePresence(const std::string& body, const std::shared_pt
     //在线状态是会话运行态，不入库
     m_userinfo.status = req.presence;
     send(cmd_change_presence, m_seq, ProfileProtocol::buildSimpleResponse(0, "ok"));
+    //管理控制台的在线名单：本设备的在线状态变了
+    Singleton<AdminLinkServer>::Instance().onUserOnlineChanged(m_userinfo.userid);
 
     //广播在线状态变更。客户端的"联系人树"是企业组织架构（同事），
     //故按<u>企业范围</u>推送：同企业的在线用户都能实时刷新该联系人的状态点。
@@ -1793,93 +2495,110 @@ void ChatSession::onSetContactTags(const std::string& body, const std::shared_pt
          static_cast<unsigned>(respTags.size()));
 }
 
-void ChatSession::onSetStarred(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+int ChatSession::checkSingleChatNotifyTarget(int64_t peerId, int mode)
 {
-    SetStarredRequest req;
-    if (!StarredProtocol::parseSetStarredRequest(body, req))
+    //设回「允许提醒」不做归属校验：对方离职、被移出企业之后，用户更需要能把这一行清掉
+    if (mode == notify_mode_allow)
+        return error_code_ok;
+
+    const int32_t targetId = static_cast<int32_t>(peerId);
+
+    //不能对自己设置 —— 自己与自己没有会话
+    if (targetId == m_userinfo.userid)
+        return error_code_bad_request;
+
+    //目标用户须存在
+    User target;
+    target.userid = 0;
+    Singleton<UserManager>::Instance().getUserInfoByUserId(targetId, target);
+    if (target.userid == 0)
+        return error_code_not_found;
+
+    //够得着的判定：同属一个企业即可，与收藏对联系人的校验同口径（沿用并入前特别关注的校验）。
+    //跨企业的人在通讯录里根本看不见，与他也不会有消息往来，设了提醒模式没有意义
+    DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+    const int64_t myEnterpriseId     = deptMgr.getUserEnterpriseId(m_userinfo.userid);
+    const int64_t targetEnterpriseId = deptMgr.getUserEnterpriseId(targetId);
+    if (myEnterpriseId == 0 || myEnterpriseId != targetEnterpriseId)
+        return error_code_not_friend;
+
+    return error_code_ok;
+}
+
+void ChatSession::onSetNotifyModes(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::vector<SetNotifyModeEntry> entries;
+    if (!MessageProtocol::parseSetNotifyModesRequest(body, entries))
     {
-        //parseSetStarredRequest 已经把格式与取值域全查过了（target 须为正、
-        //starred 只认 0/1），失败一律回 bad_request，这里不必再分类。
-        send(cmd_set_starred, m_seq,
-             StarredProtocol::buildSetStarredResponse(error_code_bad_request, "bad request",
-                                                      req.target, req.starred));
+        LOGI("set notify modes rejected, bad request, userid: %d, body bytes: %u",
+             m_userinfo.userid, static_cast<unsigned>(body.size()));
+        send(cmd_set_notify_modes, m_seq,
+             MessageProtocol::buildSetNotifyModesResponse(error_code_bad_request, "bad request",
+                                                          std::vector<NotifyModeResult>()));
         return;
     }
 
-    //取消关注不做归属校验：对方离职、被移出企业之后，用户更需要能把这条死行清掉。
-    //只有"加入关注"才要求对方确实是够得着的同事。
-    if (req.starred == 1)
+    //本人加入的群一次取全，逐条判断成员身份时查集合，不必每条都查一次库
+    std::vector<GroupRecord> myGroups;
+    Singleton<GroupManager>::Instance().getUserGroups(m_userinfo.userid, myGroups);
+    std::set<int64_t> myGroupIds;
+    for (size_t i = 0; i < myGroups.size(); ++i)
+        myGroupIds.insert(myGroups[i].groupid);
+
+    //逐条预先校验：格式、取值、群成员身份、单聊对象。不通过的条目带上各自的错误码，
+    //MessageManager::setNotifyModes 会跳过它们
+    std::vector<NotifyModeItem> items;
+    std::vector<NotifyModeResult> results;
+    for (size_t i = 0; i < entries.size(); ++i)
     {
-        const int32_t targetId = static_cast<int32_t>(req.target);
+        const NotifyModeItem& item = entries[i].item;
+        NotifyModeResult result;
+        result.ctype = item.ctype;
+        result.cid   = item.cid;
+        result.code  = error_code_ok;
 
-        //不能关注自己 —— 自己的上下线自己最清楚，给自己弹提示没有意义。
-        if (targetId == m_userinfo.userid)
-        {
-            send(cmd_set_starred, m_seq,
-                 StarredProtocol::buildSetStarredResponse(error_code_bad_request,
-                                                          "cannot star yourself",
-                                                          req.target, req.starred));
-            return;
-        }
+        if (!entries[i].wellformed || !MessageProtocol::isValidNotifyMode(item.ctype, item.mode))
+            result.code = error_code_bad_request;
+        else if (item.ctype == conversation_group && myGroupIds.count(item.cid) == 0)
+            result.code = error_code_not_group_member;
+        else if (item.ctype == conversation_single)
+            result.code = checkSingleChatNotifyTarget(item.cid, item.mode);
 
-        //目标用户须存在
-        User target;
-        target.userid = 0;
-        Singleton<UserManager>::Instance().getUserInfoByUserId(targetId, target);
-        if (target.userid == 0)
-        {
-            send(cmd_set_starred, m_seq,
-                 StarredProtocol::buildSetStarredResponse(error_code_not_found,
-                                                          "target user not found",
-                                                          req.target, req.starred));
-            return;
-        }
-
-        //够得着的判定：同属一个企业即可，与收藏对联系人的校验同口径。
-        //跨企业的人在通讯录里根本看不见，他的上下线推送也收不到（上下线按企业广播），
-        //标了也永远不会弹提示，故这里直接拒绝。
-        DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
-        const int64_t myEnterpriseId     = deptMgr.getUserEnterpriseId(m_userinfo.userid);
-        const int64_t targetEnterpriseId = deptMgr.getUserEnterpriseId(targetId);
-        const bool sameEnterprise = (myEnterpriseId != 0 && myEnterpriseId == targetEnterpriseId);
-
-        if (!sameEnterprise)
-        {
-            send(cmd_set_starred, m_seq,
-                 StarredProtocol::buildSetStarredResponse(error_code_not_friend,
-                                                          "not a colleague",
-                                                          req.target, req.starred));
-            return;
-        }
+        items.push_back(item);
+        results.push_back(result);
     }
 
-    //一秒合多少毫秒。标记时间与本文件其它落库时间戳同一口径。
+    //一秒合多少毫秒。更新时间与本文件其它落库时间戳同一口径
     const int64_t kMillisPerSecond = 1000;
     const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
 
-    int errorCode = error_code_ok;
-    if (!Singleton<StarredManager>::Instance().setStarred(
-            m_userinfo.userid, req.target, req.starred, nowMs, errorCode))
+    std::vector<NotifyModeItem> changed;
+    const bool ok = Singleton<MessageManager>::Instance().setNotifyModes(
+        m_userinfo.userid, items, nowMs, results, changed);
+
+    if (!ok)
     {
-        const char* msg = "set starred failed";
-        if (errorCode == error_code_starred_limit)
-            msg = "starred count limit reached";
-
-        LOGI("set starred failed, userid: %d, target: %lld, starred: %d, code: %d",
-             m_userinfo.userid, (long long)req.target, req.starred, errorCode);
-
-        send(cmd_set_starred, m_seq,
-             StarredProtocol::buildSetStarredResponse(errorCode, msg,
-                                                      req.target, req.starred));
+        LOGE("set notify modes failed, userid: %d, items: %u", m_userinfo.userid,
+             static_cast<unsigned>(items.size()));
+        send(cmd_set_notify_modes, m_seq,
+             MessageProtocol::buildSetNotifyModesResponse(error_code_server_internal,
+                                                          "set notify modes failed", results));
         return;
     }
 
-    send(cmd_set_starred, m_seq,
-         StarredProtocol::buildSetStarredResponse(error_code_ok, "ok",
-                                                  req.target, req.starred));
+    send(cmd_set_notify_modes, m_seq,
+         MessageProtocol::buildSetNotifyModesResponse(error_code_ok, "ok", results));
 
-    LOGI("set starred ok, userid: %d, target: %lld, starred: %d",
-         m_userinfo.userid, (long long)req.target, req.starred);
+    //改成功的条目推给本人全部在线设备（含发起的这一台），各端据此刷新模式表
+    if (!changed.empty())
+    {
+        sendToUser(m_userinfo.userid, cmd_notify_modes_changed_notify,
+                   MessageProtocol::buildNotifyModesChangedNotify(changed));
+    }
+
+    LOGI("set notify modes ok, userid: %d, items: %u, changed: %u", m_userinfo.userid,
+         static_cast<unsigned>(items.size()), static_cast<unsigned>(changed.size()));
 }
 
 void ChatSession::onSetFavorite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2043,6 +2762,28 @@ void ChatSession::onSetBlacklist(const std::string& body, const std::shared_ptr<
          m_userinfo.userid, targetId, req.action);
 }
 
+//发送消息（cmd_send_message）与群发助手（cmd_mass_send）被敏感词拦下时，拦截记录的来源
+//按消息类型区分：文件消息记为文件名，三种卡片记为卡片，其余记为文字
+static int sensitiveSourceOfMsgType(int msgtype)
+{
+    switch (msgtype)
+    {
+    //文件消息：检查的是文件名
+    case message_type_file:
+        return chatserver::sensitive_source_file_name;
+
+    //投票、接龙、待办卡片：检查的是卡片里的标题、选项、说明
+    case message_type_poll:
+    case message_type_relay:
+    case message_type_todo:
+        return chatserver::sensitive_source_card;
+
+    //文字消息、合并记录及其它类型：检查的是正文与引用
+    default:
+        return chatserver::sensitive_source_text;
+    }
+}
+
 void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
@@ -2055,7 +2796,7 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
     }
 
     //内容体积超限：不落库、不推送。放在单聊群聊分流之前，两种会话一并拦下。超大消息推送给
-    //对方、或在同步时整页下发，都会超过客户端的单帧上限导致对方断线（bugs.md 的 BUG-32）。
+    //对方、或在同步时整页下发，都会超过客户端的单帧上限导致对方断线。
     //回执带上 clientmsgid，客户端据此知道是哪一条没有发出去。
     if (MessageProtocol::isMessageContentTooLarge(req.content, req.quote))
     {
@@ -2068,6 +2809,59 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
         return;
     }
 
+    //共享卡片与系统提示只能由服务端生成：客户端自行发送等于伪造一张指向别人共享的卡片，或一行系统提示（理由见
+    //isClientOperableMsgType 与 isClientSendableMsgType，bugs.md BUG-124）。放在单聊群聊分流之前，两种会话一并拦下
+    if (!MessageProtocol::isClientSendableMsgType(req.msgtype))
+    {
+        LOGW("send message rejected by server-only msgtype, userid: %d, ctype: %d, cid: %lld, msgtype: %d",
+             m_userinfo.userid, req.ctype, static_cast<long long>(req.cid), req.msgtype);
+        send(cmd_send_message, m_seq,
+             MessageProtocol::buildSendMessageResponse(error_code_permission_denied,
+                                                       "msgtype is generated by server only",
+                                                       req.clientmsgid, 0, 0));
+        return;
+    }
+
+    //按消息类型检查 content（目前只检查语音：文件走聊天文件的上传通道、上传时不限大小，在这里检查
+    //字段与时长、大小、波形的取值范围，见 checkSendContent）。放在单聊群聊分流之前，两种会话一并拦下；
+    //不合格的不落库、不推送，回执带上 clientmsgid
+    const int contentCode = MessageProtocol::checkSendContent(req.msgtype, req.content);
+    if (contentCode != error_code_ok)
+    {
+        LOGW("send message rejected by invalid content, userid: %d, ctype: %d, cid: %lld, msgtype: %d, bytes: %u",
+             m_userinfo.userid, req.ctype, static_cast<long long>(req.cid), req.msgtype,
+             static_cast<unsigned>(req.content.size()));
+        send(cmd_send_message, m_seq,
+             MessageProtocol::buildSendMessageResponse(contentCode, "invalid message content",
+                                                       req.clientmsgid, 0, 0));
+        return;
+    }
+
+    //机器人标记只能由服务端产生：客户端带来的 bot 字段一律删掉，免得普通成员冒充机器人（docs/机器人方案.md §5.6）
+    if (bot::StripBotMarker(req.content))
+        LOGW("send message: bot marker stripped from client content, userid: %d", m_userinfo.userid);
+
+    //接龙卡片：服务端规范化 content，只保留标题、说明与截止时间，客户端自带的接龙名单、
+    //结束状态等字段一律丢弃。放在单聊群聊分流之前，两种会话共用；规范化后的内容替换掉
+    //请求原文，此后的落库、回执与推送用的都是它
+    if (req.msgtype == message_type_relay)
+    {
+        const int64_t kMillisPerSecond = 1000;
+        const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+        std::string normalized;
+        const int cardCode = CardProtocol::normalizeRelayContent(req.content, nowMs, normalized);
+        if (cardCode != error_code_ok)
+        {
+            LOGI("send relay card rejected, code: %d, userid: %d, ctype: %d, cid: %lld",
+                 cardCode, m_userinfo.userid, req.ctype, static_cast<long long>(req.cid));
+            send(cmd_send_message, m_seq,
+                 MessageProtocol::buildSendMessageResponse(cardCode, "invalid relay card",
+                                                           req.clientmsgid, 0, 0));
+            return;
+        }
+        req.content = normalized;
+    }
+
     //群聊消息走专门的发送路径
     if (req.ctype == CHAT_TYPE_GROUP)
     {
@@ -2077,8 +2871,7 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
     //其余非单聊类型暂不支持
     if (req.ctype != CHAT_TYPE_SINGLE)
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_bad_request, "unsupported ctype"));
+        replySendRejected(error_code_bad_request, "unsupported ctype", req.clientmsgid);
         return;
     }
 
@@ -2087,8 +2880,7 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
     //不能给自己发消息
     if (peerId == m_userinfo.userid)
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_bad_request, "cannot send to yourself"));
+        replySendRejected(error_code_bad_request, "cannot send to yourself", req.clientmsgid);
         return;
     }
 
@@ -2100,16 +2892,14 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
     userMgr.getUserInfoByUserId(peerId, peer);
     if (peer.userid == 0)
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_not_found, "target user not found"));
+        replySendRejected(error_code_not_found, "target user not found", req.clientmsgid);
         return;
     }
 
     //被对方拉黑则拒发：消息不落库、不推送
     if (userMgr.isInBlacklist(peerId, m_userinfo.userid))
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_in_blacklist, "you are in the target's blacklist"));
+        replySendRejected(error_code_in_blacklist, "you are in the target's blacklist", req.clientmsgid);
         return;
     }
 
@@ -2128,6 +2918,17 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
         return;
     }
 
+    //企业级敏感词检查：放在幂等去重之后，客户端重发一条早已发送成功的消息时照常回执原来的
+    //msgid，不因为期间新加了词而回 507（那条消息已经送达）；放在落库之前，被拦的消息不留痕迹
+    std::vector<std::string> sensitiveTexts;
+    MessageProtocol::collectSensitiveTexts(req.msgtype, req.content, req.quote, sensitiveTexts);
+    if (hitSensitive(sensitiveSourceOfMsgType(req.msgtype), CHAT_TYPE_SINGLE, peerId, peer.nickname,
+                     sensitiveTexts))
+    {
+        replySendRejected(error_code_sensitive_word, "message contains sensitive word", req.clientmsgid);
+        return;
+    }
+
     //落库：content/mentions/mentionall/quote 打包进 f_content
     std::string storedContent = MessageProtocol::buildStoredContent(
         req.content, req.mentions, req.mentionall, req.quote);
@@ -2135,8 +2936,7 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
                                        peerId, req.msgtype, storedContent, now);
     if (msgId == 0)
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_send_msg_fail, "save message failed"));
+        replySendRejected(error_code_send_msg_fail, "save message failed", req.clientmsgid);
         return;
     }
 
@@ -2165,6 +2965,16 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
     LOGI("send message ok, from: %d, to: %d, msgid: %lld, msgtype: %d",
          m_userinfo.userid, peerId, (long long)msgId, req.msgtype);
 
+    //机器人判定入口：收发任一方有个人机器人时投递给机器人线程（docs/机器人方案.md §5.2）
+    BotSingleEvent botEv;
+    botEv.m_from = m_userinfo.userid;
+    botEv.m_to = peerId;
+    botEv.m_msgid = msgId;
+    botEv.m_msgtype = req.msgtype;
+    botEv.m_content = req.content;
+    botEv.m_timestamp = now;
+    Singleton<BotEngine>::Instance().onSingleMessage(botEv);
+
     //图片 / 文件等消息：发送方若是上传者，把所引用的文件记录标记为已完成
     markMessageFileCompleted(req.msgtype, req.content);
 }
@@ -2176,37 +2986,20 @@ void ChatSession::sendGroupMessage(const SendMessageRequest& req)
     //群成员身份、群是否存在、禁言三项校验，与转发到群共用；不通过时已回过错误应答
     int myrole = group_role_member;
     GroupRecord group;
-    if (!checkGroupSpeakAllowed(cmd_send_message, groupid, myrole, group))
+    if (!checkGroupSpeakAllowed(cmd_send_message, groupid, req.clientmsgid, myrole, group))
         return;
 
-    //@全体校验：群设为"仅群主和管理员可@全体"时，普通成员发带 mentionall 的消息被拒
-    if (req.mentionall && group.atallscope == group_at_all_owner_admin
-        && myrole < group_role_admin)
+    //@全体：请求顶层的 mentionall 或 content.at.all（PC 客户端写在后者）任一为真都算，
+    //落库与推送的 mentionall 也按这个结果写
+    const bool mentionAll = req.mentionall || MessageProtocol::contentMentionsAll(req.content);
+
+    //@全体校验：群设为"仅群主和管理员可@全体"时，普通成员发带 @全体 的消息被拒
+    if (mentionAll && !GroupProtocol::canMentionAll(group.atallscope, myrole))
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_at_all_denied,
-                                                  "only owner or admin can mention all"));
+        replySendRejected(error_code_at_all_denied, "only owner or admin can mention all", req.clientmsgid);
         LOGI("mention all denied, groupid: %lld, userid: %d, role: %d",
              (long long)groupid, m_userinfo.userid, myrole);
         return;
-    }
-
-    //敏感词过滤：仅对开启了过滤的群、且仅对文本消息生效。非文本消息（图片 /
-    //文件 / 卡片等）的 content 是结构化 JSON，拿去做子串匹配没有意义。
-    if (req.msgtype == message_type_text)
-    {
-        std::vector<std::string> texts;
-        texts.push_back(MessageProtocol::extractText(req.content));
-        std::string hitWord;
-        if (hitGroupSensitiveWord(groupid, group, texts, hitWord))
-        {
-            send(cmd_send_message, m_seq,
-                 MessageProtocol::buildSimpleResponse(error_code_sensitive_word,
-                                                      "message contains sensitive word"));
-            LOGI("message rejected by sensitive word, groupid: %lld, userid: %d, word: %s",
-                 (long long)groupid, m_userinfo.userid, hitWord.c_str());
-            return;
-        }
     }
 
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
@@ -2223,15 +3016,25 @@ void ChatSession::sendGroupMessage(const SendMessageRequest& req)
         return;
     }
 
+    //企业级敏感词检查：位置的理由与单聊分支相同（去重之后、落库之前）。原先的群级敏感词
+    //已于 2026-10-02 删除，现在单聊与群聊按发送者所属企业的同一份词库检查
+    std::vector<std::string> sensitiveTexts;
+    MessageProtocol::collectSensitiveTexts(req.msgtype, req.content, req.quote, sensitiveTexts);
+    if (hitSensitive(sensitiveSourceOfMsgType(req.msgtype), CHAT_TYPE_GROUP, groupid, group.name,
+                     sensitiveTexts))
+    {
+        replySendRejected(error_code_sensitive_word, "message contains sensitive word", req.clientmsgid);
+        return;
+    }
+
     //落库：ctype=2、f_to 取群id
     std::string storedContent = MessageProtocol::buildStoredContent(
-        req.content, req.mentions, req.mentionall, req.quote);
+        req.content, req.mentions, mentionAll, req.quote);
     int64_t msgId = msgMgr.saveMessage(req.clientmsgid, CHAT_TYPE_GROUP, m_userinfo.userid,
                                        static_cast<int32_t>(groupid), req.msgtype, storedContent, now);
     if (msgId == 0)
     {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_send_msg_fail, "save message failed"));
+        replySendRejected(error_code_send_msg_fail, "save message failed", req.clientmsgid);
         return;
     }
 
@@ -2249,7 +3052,7 @@ void ChatSession::sendGroupMessage(const SendMessageRequest& req)
     rec.msgtype     = req.msgtype;
     rec.content     = req.content;
     rec.mentions    = req.mentions;
-    rec.mentionall  = req.mentionall;
+    rec.mentionall  = mentionAll;
     rec.quote       = req.quote;
     rec.timestamp   = now;
     rec.recalled    = false;
@@ -2258,6 +3061,17 @@ void ChatSession::sendGroupMessage(const SendMessageRequest& req)
 
     LOGI("send group message ok, from: %d, group: %lld, msgid: %lld, msgtype: %d",
          m_userinfo.userid, (long long)groupid, (long long)msgId, req.msgtype);
+
+    //机器人判定入口：本群可能有机器人时投递给机器人线程；群所属企业从内存缓存取，I/O 线程上不查库
+    BotGroupEvent botEv;
+    botEv.m_groupid = groupid;
+    botEv.m_enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(group.ownerid);
+    botEv.m_from = m_userinfo.userid;
+    botEv.m_msgid = msgId;
+    botEv.m_msgtype = req.msgtype;
+    botEv.m_content = req.content;
+    botEv.m_timestamp = now;
+    Singleton<BotEngine>::Instance().onGroupMessage(botEv);
 
     //图片 / 文件等消息：发送方若是上传者，把所引用的文件记录标记为已完成
     markMessageFileCompleted(req.msgtype, req.content);
@@ -2315,13 +3129,23 @@ void ChatSession::onSyncConversations(const std::shared_ptr<TcpConnection>& conn
     for (size_t i = 0; i < groupBriefs.size(); ++i)
         briefs.push_back(groupBriefs[i]);
 
+    //本人全部非默认提醒模式的会话（含还没有消息、因而不在 briefs 里的群与联系人）。
+    //取不到时按"全部是默认模式"降级，不让整个会话列表发不出去
+    std::vector<NotifyModeItem> notifyModes;
+    msgMgr.getNotifyModes(m_userinfo.userid, notifyModes);
+
+    //本人在各群关注的成员（docs/消息提醒模式与消息盒子方案.md §12.4）；取不到时按没有名单降级
+    std::vector<GroupFollowList> groupFollows;
+    Singleton<GroupFollowManager>::Instance().getFollowsAll(m_userinfo.userid, groupFollows);
+
     //synctime 取服务器当前时间，供客户端作下次同步水位
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
     send(cmd_sync_conversations, m_seq,
-         MessageProtocol::buildSyncConversationsResponse(0, "ok", now, briefs));
+         MessageProtocol::buildSyncConversationsResponse(0, "ok", now, briefs, notifyModes, groupFollows));
 
-    LOGI("sync conversations ok, userid: %d, count: %u",
-         m_userinfo.userid, static_cast<unsigned>(briefs.size()));
+    LOGI("sync conversations ok, userid: %d, count: %u, notify modes: %u, group follows: %u",
+         m_userinfo.userid, static_cast<unsigned>(briefs.size()),
+         static_cast<unsigned>(notifyModes.size()), static_cast<unsigned>(groupFollows.size()));
 }
 
 void ChatSession::onGetUserGroups(const std::shared_ptr<TcpConnection>& conn)
@@ -2347,9 +3171,89 @@ void ChatSession::onGetUserGroups(const std::shared_ptr<TcpConnection>& conn)
          static_cast<unsigned>(pinnedGroupIds.size()));
 }
 
+//两个时刻之间相隔的毫秒数（带小数），供 onSyncMessages 的分段计时使用
+static double MillisBetween(const std::chrono::steady_clock::time_point& from,
+                            const std::chrono::steady_clock::time_point& to)
+{
+    return std::chrono::duration<double, std::milli>(to - from).count();
+}
+
+void ChatSession::augmentSyncedRecord(MessageRecord& rec, int64_t nowMs, unsigned& cardAugments,
+                                      unsigned& fileAckLookups)
+{
+    const int mt = rec.msgtype;
+    if (mt == message_type_poll || mt == message_type_relay || mt == message_type_todo
+        || mt == message_type_fileshare || mt == message_type_group_invite)
+    {
+        augmentCardRecord(rec, nowMs);
+        ++cardAugments;
+    }
+    //自己发出的文件消息：补上对方的收取状态。发送方离线期间对方的接收 / 拒绝
+    //就是靠这一步补看到的。只查本人发出的那些 —— 接收方自己知道自己收没收，
+    //不必为它多查一次库。
+    else if (mt == message_type_file && rec.from == m_userinfo.userid)
+    {
+        rec.fileackstate = Singleton<MessageManager>::Instance().getFileAckState(rec.msgid);
+        ++fileAckLookups;
+    }
+}
+
+void ChatSession::onSyncRewrittenMessages(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    SyncRewrittenRequest req;
+    if (!MessageProtocol::parseSyncRewrittenRequest(body, req))
+    {
+        send(cmd_sync_rewritten_messages, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //可见范围与全局搜索相同：本人参与的单聊，加本人当前所在的群（按各群的历史下界过滤）
+    std::vector<GroupSearchScope> scopes;
+    if (!Singleton<GroupManager>::Instance().getUserHistoryScopes(m_userinfo.userid, scopes))
+    {
+        send(cmd_sync_rewritten_messages, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_server_internal, "db error"));
+        return;
+    }
+
+    std::vector<RewrittenMessage> items;
+    bool more = false;
+    int64_t currev = 0;
+    if (!Singleton<MessageManager>::Instance().getRewrittenMessages(m_userinfo.userid, scopes, req.since, req.limit,
+                                                                     items, more, currev))
+    {
+        send(cmd_sync_rewritten_messages, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_server_internal, "db error"));
+        return;
+    }
+
+    //条目与 cmd_sync_messages 同样加工（卡片状态、文件收取状态），须在按体积截断之前
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    unsigned cardAugments = 0;
+    unsigned fileAckLookups = 0;
+    for (size_t i = 0; i < items.size(); ++i)
+        augmentSyncedRecord(items[i].record, nowMs, cardAugments, fileAckLookups);
+
+    size_t trimmed = 0;
+    const std::string response = MessageProtocol::buildSyncRewrittenResponseWithinBudget(
+        error_code_ok, "ok", m_userinfo.userid, req.since, items, more, currev, RESPONSE_MESSAGES_BUDGET_BYTES,
+        trimmed);
+    send(cmd_sync_rewritten_messages, m_seq, response);
+    LOGI("sync rewritten messages, userid: %d, since: %lld, limit: %d, items: %u, trimmed: %u, more: %d, "
+         "currev: %lld, card augments: %u, file ack lookups: %u",
+         m_userinfo.userid, (long long)req.since, req.limit, static_cast<unsigned>(items.size()),
+         static_cast<unsigned>(trimmed), more ? 1 : 0, (long long)currev, cardAugments, fileAckLookups);
+}
+
 void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
+    //分段计时（2026-10-04）：打开聊天窗时拉第一页历史是用户等得最久的一步，处理结束时按阶段记一行日志，
+    //查消息、补卡片与文件状态、查已读位点、按体积裁剪、组装应答、发送各花多久，能直接从日志看出来
+    const std::chrono::steady_clock::time_point tStart = std::chrono::steady_clock::now();
     SyncMessagesRequest req;
     if (!MessageProtocol::parseSyncMessagesRequest(body, req))
     {
@@ -2366,35 +3270,18 @@ void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<
         return;
     }
 
-    //群聊：须为群成员才能拉取群历史消息。同时算出历史消息的时间下界 ——
-    //群设为"新成员不可查看入群前的历史消息"时，下界取本人的入群时间。
-    int64_t minCreateTime = 0;
+    //群聊：须为群成员才能拉取群历史消息。同时算出本人能看到的历史范围 ——
+    //群设为"新成员不可查看入群前的历史消息"时取入群时间，邀请时选了「同步最近 N 条」时取那条消息的 msgid。
+    GroupHistoryBound bound;
     if (req.ctype == CHAT_TYPE_GROUP)
     {
-        GroupManager& groupMgr = Singleton<GroupManager>::Instance();
-        if (!groupMgr.isGroupMember(req.cid, m_userinfo.userid))
+        if (!Singleton<GroupManager>::Instance().isGroupMember(req.cid, m_userinfo.userid))
         {
             send(cmd_sync_messages, m_seq,
                  MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
             return;
         }
-
-        GroupRecord group;
-        if (groupMgr.getGroup(req.cid, group) && group.newseehistory == 0)
-        {
-            //取本人成员行的入群时间。群主与管理员不受此限 —— 这项设置是拿来
-            //防新人翻旧账的，管理者需要看全量记录才能处理纠纷。
-            std::vector<GroupMemberRecord> members;
-            groupMgr.getGroupMembers(req.cid, members);
-            for (size_t i = 0; i < members.size(); ++i)
-            {
-                if (members[i].userid != m_userinfo.userid)
-                    continue;
-                if (members[i].role < group_role_admin)
-                    minCreateTime = members[i].jointime;
-                break;
-            }
-        }
+        bound = groupHistoryBound(req.cid);
     }
 
     //limit 夹到合理区间：缺省 20、上限 100
@@ -2406,27 +3293,22 @@ void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     std::vector<MessageRecord> messages;
     bool hasMore = false;
-    msgMgr.getConversationMessages(m_userinfo.userid, req, messages, hasMore, minCreateTime);
+    const std::chrono::steady_clock::time_point tPrepared = std::chrono::steady_clock::now();
+    msgMgr.getConversationMessages(m_userinfo.userid, req, messages, hasMore, bound.m_minCreateTime,
+                                   bound.m_minMsgId);
+    const std::chrono::steady_clock::time_point tQueried = std::chrono::steady_clock::now();
 
-    //卡片消息（投票/接龙/待办）：把当前互动状态合并进 content，使客户端打开会话即见最新
-    CardManager& cardMgr = Singleton<CardManager>::Instance();
+    //卡片消息（投票/接龙/待办）：把当前互动状态合并进 content，使客户端打开会话即见最新；
+    //文件共享卡片：按本人合并共享状态与权限。客户端用这里拿到的消息体覆盖本地库，共享卡片不合并时
+    //本地的那份也就没有状态，已取消的共享在客户端上会一直显示「正在获取状态」（2026-10-03 用户发现）。
+    //须在下面按体积截断之前做，合并后消息体会变大
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    unsigned cardAugments = 0;     //补了互动状态的卡片消息条数（计时日志用）
+    unsigned fileAckLookups = 0;   //查了收取状态的文件消息条数（计时日志用）
     for (size_t i = 0; i < messages.size(); ++i)
-    {
-        int mt = messages[i].msgtype;
-        if (mt == message_type_poll || mt == message_type_relay || mt == message_type_todo)
-        {
-            std::vector<CardInteractionRecord> rows;
-            cardMgr.getCardInteractions(messages[i].msgid, rows);
-            messages[i].content = CardProtocol::augmentCardContent(mt, messages[i].content, rows);
-        }
-        //自己发出的文件消息：补上对方的收取状态。发送方离线期间对方的接收 / 拒绝
-        //就是靠这一步补看到的。只查本人发出的那些 —— 接收方自己知道自己收没收，
-        //不必为它多查一次库。
-        else if (mt == message_type_file && messages[i].from == m_userinfo.userid)
-        {
-            messages[i].fileackstate = msgMgr.getFileAckState(messages[i].msgid);
-        }
-    }
+        augmentSyncedRecord(messages[i], nowMs, cardAugments, fileAckLookups);
+    const std::chrono::steady_clock::time_point tAugmented = std::chrono::steady_clock::now();
 
     //单聊：带上对方的已读位点（查对方那一行 t_conversation：userid=对端、cid=本人）。
     //实时的 cmd_message_read_notify 只推给在线的发送方；发送方重开聊天窗、或离线期间
@@ -2438,26 +3320,29 @@ void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<
         msgMgr.getReadMsgid(static_cast<int32_t>(req.cid), CHAT_TYPE_SINGLE,
                             m_userinfo.userid, peerReadMsgid);
     }
+    const std::chrono::steady_clock::time_point tPeerRead = std::chrono::steady_clock::now();
 
-    //按体积截断：一页里有几条长消息（或合并记录）就能超过客户端的单帧上限，客户端收到后
-    //会断线重连（bugs.md 的 BUG-32）。截掉的是远离锚点的那一端，并把 hasmore 置为真：
+    //组装应答并按体积截断：一页里有几条长消息（或合并记录）就能超过客户端的单帧上限，客户端收到后
+    //会断线重连。截掉的是远离锚点的那一端，并把 hasmore 置为真：
     //翻历史模式锚点在最新一端（升序数组的末尾），补齐模式锚点在开头。客户端据留下的消息
-    //计算覆盖区间，截掉的消息在区间之外，不会被当作已删除
-    const size_t trimmed = MessageProtocol::trimMessagesToBudget(
-        messages, req.cid, !req.isAfterMode, RESPONSE_MESSAGES_BUDGET_BYTES);
+    //计算覆盖区间，截掉的消息在区间之外，不会被当作已删除。
+    //先整页组装、超过预算才截断后重新组装，绝大多数页面每条消息只构造、序列化一遍。
+    //传入请求本身，应答据此原样回带锚点（beforemsgid 或 aftermsgid），客户端用它计算本页
+    //覆盖了哪段 msgid，见 docs/清理聊天记录方案.md §7.2。
+    //组装与发送分开写，是为了分别计时：一页里有几条长消息时，组装 JSON 与发送（含压缩、加密）都不便宜
+    size_t trimmed = 0;
+    const std::string response = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+        0, "ok", req.ctype, req.cid, hasMore, messages, peerReadMsgid, &req,
+        !req.isAfterMode, RESPONSE_MESSAGES_BUDGET_BYTES, trimmed);
+    const std::chrono::steady_clock::time_point tBuilt = std::chrono::steady_clock::now();
     if (trimmed > 0)
     {
-        hasMore = true;
         LOGI("sync messages trimmed by size, userid: %d, ctype: %d, cid: %lld, kept: %u, trimmed: %u",
              m_userinfo.userid, req.ctype, (long long)req.cid,
              static_cast<unsigned>(messages.size()), static_cast<unsigned>(trimmed));
     }
-
-    //传入请求本身，应答据此原样回带锚点（beforemsgid 或 aftermsgid），客户端用它计算本页
-    //覆盖了哪段 msgid，见 docs/清理聊天记录方案.md §7.2
-    send(cmd_sync_messages, m_seq,
-         MessageProtocol::buildSyncMessagesResponse(0, "ok", req.ctype, req.cid, hasMore, messages,
-                                                    peerReadMsgid, &req));
+    send(cmd_sync_messages, m_seq, response);
+    const std::chrono::steady_clock::time_point tSent = std::chrono::steady_clock::now();
 
     LOGI("sync messages ok, userid: %d, cid: %lld, before: %lld, after: %lld, count: %u, "
          "hasmore: %d, peerreadmsgid: %lld",
@@ -2465,6 +3350,16 @@ void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<
          req.isAfterMode ? 0LL : (long long)req.beforemsgid,
          req.isAfterMode ? (long long)req.aftermsgid : 0LL,
          static_cast<unsigned>(messages.size()), hasMore ? 1 : 0, (long long)peerReadMsgid);
+    LOGI("sync messages timing, userid: %d, cid: %lld, count: %u: prepare %.1f ms, query %.1f ms, "
+         "augment %.1f ms (cards %u, file acks %u), peer read %.1f ms, "
+         "build %.1f ms (%u bytes, trimmed %u), send %.1f ms, total %.1f ms",
+         m_userinfo.userid, (long long)req.cid, static_cast<unsigned>(messages.size()),
+         MillisBetween(tStart, tPrepared), MillisBetween(tPrepared, tQueried),
+         MillisBetween(tQueried, tAugmented), cardAugments, fileAckLookups,
+         MillisBetween(tAugmented, tPeerRead),
+         MillisBetween(tPeerRead, tBuilt), static_cast<unsigned>(response.size()),
+         static_cast<unsigned>(trimmed),
+         MillisBetween(tBuilt, tSent), MillisBetween(tStart, tSent));
 }
 
 void ChatSession::onMarkRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2527,6 +3422,16 @@ void ChatSession::onRecallMessage(const std::string& body, const std::shared_ptr
         return;
     }
 
+    //共享卡片不能撤回：撤回与「取消共享」语义重叠，统一走 cmd_share_cancel
+    if (!MessageProtocol::isClientOperableMsgType(rec.msgtype))
+    {
+        send(cmd_recall_message, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_permission_denied, "msgtype cannot be recalled"));
+        LOGI("recall message rejected by server-only msgtype, userid: %d, msgid: %lld, msgtype: %d",
+             m_userinfo.userid, (long long)req.msgid, rec.msgtype);
+        return;
+    }
+
     //已撤回则幂等返回，不重复落库与推送
     if (rec.recalled)
     {
@@ -2564,7 +3469,7 @@ void ChatSession::onRecallMessage(const std::string& body, const std::shared_ptr
             return;
         }
 
-        if (!msgMgr.recallMessage(req.msgid))
+        if (!msgMgr.recallMessage(req.msgid, m_userinfo.userid))
         {
             send(cmd_recall_message, m_seq,
                  MessageProtocol::buildSimpleResponse(error_code_server_internal, "recall failed"));
@@ -2600,7 +3505,7 @@ void ChatSession::onRecallMessage(const std::string& body, const std::shared_ptr
         return;
     }
 
-    if (!msgMgr.recallMessage(req.msgid))
+    if (!msgMgr.recallMessage(req.msgid, m_userinfo.userid))
     {
         send(cmd_recall_message, m_seq,
              MessageProtocol::buildSimpleResponse(error_code_server_internal, "recall failed"));
@@ -2649,6 +3554,18 @@ void ChatSession::onPinMessage(const std::string& body, const std::shared_ptr<Tc
                                                       req.ctype, req.cid, req.msgid, req.pin));
         LOGI("pin message rejected, message not exist or recalled, userid: %d, msgid: %lld",
              m_userinfo.userid, (long long)req.msgid);
+        return;
+    }
+
+    //共享卡片不能置顶：Pin 列表对会话内所有人可见，置顶会让可见范围之外的人看到它
+    if (!MessageProtocol::isClientOperableMsgType(rec.msgtype))
+    {
+        send(cmd_pin_message, m_seq,
+             MessageProtocol::buildPinMessageResponse(error_code_permission_denied,
+                                                      "msgtype cannot be pinned",
+                                                      req.ctype, req.cid, req.msgid, req.pin));
+        LOGI("pin message rejected by server-only msgtype, userid: %d, msgid: %lld, msgtype: %d",
+             m_userinfo.userid, (long long)req.msgid, rec.msgtype);
         return;
     }
 
@@ -2800,7 +3717,9 @@ void ChatSession::onGetPinnedMessages(const std::string& body,
 
     //群会话先确认请求者确实在群里 —— 本应答带的是完整消息体，放行等于把别人群里的
     //聊天内容送出去。单聊不需要这一步：getPinnedMessages 的条件里已经含了"消息的
-    //收发双方之一必须是我"，非参与方查出来恒为空。
+    //收发双方之一必须是我"，非参与方查出来恒为空。同理，本人看不到的入群前历史也不能
+    //经 Pin 列表送出去（docs/邀请入群方案.md §5.3）
+    GroupHistoryBound bound;
     if (req.ctype == CHAT_TYPE_GROUP)
     {
         if (Singleton<GroupManager>::Instance().getMemberRole(req.cid, m_userinfo.userid) < 0)
@@ -2812,11 +3731,13 @@ void ChatSession::onGetPinnedMessages(const std::string& body,
                                                                  messages, pins));
             return;
         }
+        bound = groupHistoryBound(req.cid);
     }
 
     int64_t total = 0;
     if (!Singleton<MessagePinManager>::Instance().getPinnedMessages(
-            req.ctype, req.cid, m_userinfo.userid, PIN_FETCH_LIMIT, messages, pins, total))
+            req.ctype, req.cid, m_userinfo.userid, PIN_FETCH_LIMIT, messages, pins, total,
+            bound.m_minCreateTime, bound.m_minMsgId))
     {
         send(cmd_get_pinned_messages, m_seq,
              MessageProtocol::buildGetPinnedMessagesResponse(error_code_server_internal,
@@ -2828,16 +3749,18 @@ void ChatSession::onGetPinnedMessages(const std::string& body,
         return;
     }
 
+    //卡片消息合并当前互动状态，理由同 onSyncMessages：客户端用这里拿到的消息体补齐本地库，
+    //不带名单与状态的卡片会把本地已有的接龙名单覆盖掉。须在按体积截断之前做
+    augmentCardRecords(messages);
+
     //按体积截断，理由同 onSyncMessages。列表按消息时间倒序，与 PIN_FETCH_LIMIT 的条数截断
     //一样保留开头（较新的）、截掉末尾（较老的）；pins 与 messages 一一对应，同步截短。
-    //total 保持真实总数不变，客户端据 total 大于返回条数得知发生了截断
-    MessageProtocol::trimMessagesToBudget(messages, req.cid, false, RESPONSE_MESSAGES_BUDGET_BYTES);
-    if (pins.size() > messages.size())
-        pins.resize(messages.size());
-
+    //total 保持真实总数不变，客户端据 total 大于返回条数得知发生了截断。
+    //先整页组装、超过预算才截断后重新组装，理由同 onSyncMessages
     send(cmd_get_pinned_messages, m_seq,
-         MessageProtocol::buildGetPinnedMessagesResponse(0, "ok", req.ctype, req.cid, total,
-                                                         messages, pins));
+         MessageProtocol::buildGetPinnedMessagesResponseWithinBudget(0, "ok", req.ctype, req.cid, total,
+                                                                     messages, pins,
+                                                                     RESPONSE_MESSAGES_BUDGET_BYTES));
 
     //截断要单独打一条日志：线上出现"用户说钉了却看不到"时，第一眼就能判断是不是撞上
     //了单次返回上限，而不是去猜推送丢没丢。
@@ -2902,7 +3825,39 @@ int64_t ChatSession::deliverConversationMessage(int ctype, int64_t cid, int32_t 
     return msgId;
 }
 
-bool ChatSession::checkGroupSpeakAllowed(uint16_t cmd, int64_t groupid, int& myrole, GroupRecord& group)
+bool ChatSession::checkGroupSpeakAllowed(uint16_t cmd, int64_t groupid, const std::string& clientmsgid,
+                                         int& myrole, GroupRecord& group)
+{
+    std::string reason;
+    const int code = checkGroupSpeak(cmd, groupid, myrole, group, reason);
+    if (code == error_code_ok)
+        return true;
+    //发送消息的回执要带回 clientmsgid，客户端才知道是哪一条被拒；转发按帧 seq 对应请求，回 { code, msg }
+    if (cmd == cmd_send_message)
+        replySendRejected(code, reason, clientmsgid);
+    else
+        send(cmd, m_seq, MessageProtocol::buildSimpleResponse(code, reason));
+    return false;
+}
+
+void ChatSession::replySendRejected(int code, const std::string& msg, const std::string& clientmsgid)
+{
+    send(cmd_send_message, m_seq, MessageProtocol::buildSendMessageResponse(code, msg, clientmsgid, 0, 0));
+}
+
+bool ChatSession::hitSensitive(int source, int ctype, int64_t cid, const std::string& targetName,
+                               const std::vector<std::string>& texts)
+{
+    const int64_t enterpriseId =
+        Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
+    //拦截记录给管理员看，提交者名称优先记昵称；昵称为空时记登录账号
+    const std::string userName = m_userinfo.nickname.empty() ? m_userinfo.username : m_userinfo.nickname;
+    return checkSensitiveAndRecord(enterpriseId, m_userinfo.userid, userName, source, ctype, cid,
+                                   targetName, texts);
+}
+
+int ChatSession::checkGroupSpeak(uint16_t cmd, int64_t groupid, int& myrole, GroupRecord& group,
+                                 std::string& reason)
 {
     GroupManager& groupMgr = Singleton<GroupManager>::Instance();
 
@@ -2911,11 +3866,11 @@ bool ChatSession::checkGroupSpeakAllowed(uint16_t cmd, int64_t groupid, int& myr
     myrole = group_role_member;
     int mymuted = 0;
     int64_t mymuteuntil = 0;
-    if (!groupMgr.getMemberRoleAndMuted(groupid, m_userinfo.userid, myrole, mymuted, &mymuteuntil))
+    int mymustread = 0;
+    if (!groupMgr.getMemberRoleAndMuted(groupid, m_userinfo.userid, myrole, mymuted, &mymuteuntil, &mymustread))
     {
-        send(cmd, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
-        return false;
+        reason = "not a group member";
+        return error_code_not_group_member;
     }
 
     //定时禁言刚过期：库里 f_muted 还是 1，趁这条本来就要写库的路径顺手清掉，
@@ -2935,36 +3890,39 @@ bool ChatSession::checkGroupSpeakAllowed(uint16_t cmd, int64_t groupid, int& myr
 
     if (!groupMgr.getGroup(groupid, group))
     {
-        send(cmd, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_group_not_exist, "group not exist"));
-        return false;
+        reason = "group not exist";
+        return error_code_group_not_exist;
+    }
+
+    //帖子群没有普通聊天（docs/帖子群方案.md 6.2）：发消息、转发到群、群发助手一律拒收；发帖与留言用的是 2700 段命令，不受影响
+    if (group.grouptype == group_type_thread
+        && (cmd == cmd_send_message || cmd == cmd_forward_message || cmd == cmd_mass_send))
+    {
+        LOGI("group speak rejected, thread group has no chat, cmd: %u, groupid: %lld, userid: %d",
+             static_cast<unsigned>(cmd), (long long)groupid, m_userinfo.userid);
+        reason = "thread group has no chat";
+        return error_code_thread_not_thread_group;
     }
 
     //禁言校验：本人被单独禁言、或全员禁言且本人非管理员 → 拒发
     if (chatserver::IsMutedForSpeaking(mymuted, group.muteall, myrole))
     {
-        send(cmd, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_member_muted, "you are muted in this group"));
         LOGI("group speak rejected by mute, cmd: %u, groupid: %lld, userid: %d, role: %d",
              static_cast<unsigned>(cmd), (long long)groupid, m_userinfo.userid, myrole);
-        return false;
+        reason = "you are muted in this group";
+        return error_code_member_muted;
     }
-    return true;
-}
 
-bool ChatSession::hitGroupSensitiveWord(int64_t groupid, const GroupRecord& group,
-                                        const std::vector<std::string>& texts, std::string& hitWord)
-{
-    if (group.sensitiveon == 0)
-        return false;
-
-    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
-    for (size_t i = 0; i < texts.size(); ++i)
+    //入群必读还没确认：确认前不能发言（docs/群公告接入方案.md §14）。只约束设定之后入群的人，
+    //所以这里只看本人成员行上的标记，不看群有没有设必读
+    if (mymustread != 0)
     {
-        if (groupMgr.hitSensitiveWord(groupid, texts[i], &hitWord))
-            return true;
+        LOGI("group speak rejected by must-read, cmd: %u, groupid: %lld, userid: %d",
+             static_cast<unsigned>(cmd), (long long)groupid, m_userinfo.userid);
+        reason = "confirm the must-read announcement first";
+        return error_code_must_read_pending;
     }
-    return false;
+    return error_code_ok;
 }
 
 void ChatSession::onTypingNotify(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -3082,6 +4040,20 @@ void ChatSession::onRemoteDesktopInvite(const std::string& body, const std::shar
          m_userinfo.userid, (long long)peerId, sessionId.c_str());
 }
 
+namespace {
+
+//以下两个函数定义在本文件末尾的 P2P 信令一节，这里先声明，供远程桌面下发 1716 前建 P2P 会话时使用
+int64_t p2pNowMs();
+int64_t lookupUserEnterpriseForP2P(int64_t userId);
+
+//远程桌面建 P2P 会话时的用途（2302 的 purpose，客户端 FlamingoMedia.dll 以此登记业务方，P2P 方案第 6 期）
+const char* const kP2PPurposeRd = "rd";
+
+//一对一通话建 P2P 会话时的用途（同上，响铃阶段就建，接通时链路多半已经打通）
+const char* const kP2PPurposeCall = "call";
+
+} // namespace
+
 void ChatSession::onRemoteDesktopResponse(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
@@ -3128,12 +4100,28 @@ void ChatSession::onRemoteDesktopResponse(const std::string& body, const std::sh
     const std::string& relayIp = mgr.getRelayHost();
     int relayPort = mgr.getRelayPort();
 
+    //P2P 方案第 6 期：先尝试为这次远程桌面在两端之间建 P2P 会话（控制端为发起方，会话号直接用作功能会话号）。
+    //两端都报到了用途 rd、所在企业都开着 P2P 才会建成；建成时 1716 带上 p2psessionid，两端优先走 P2P 链路，
+    //建链失败再改走 imgserver 中转；建不成时照旧只走中转
+    std::string p2pSessionId;
+    std::vector<P2POutFrame> p2pFrames;
+    {
+        P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+        P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+        const int p2pCode = service.createForFeature(kP2PPurposeRd, sessionId, s.controllerId, s.controlledId,
+                                                     p2pNowMs(), p2pSessionId, p2pFrames);
+        LOGI("remote desktop p2p session: session: %s, code: %d, p2p session: %s.", sessionId.c_str(), p2pCode,
+             p2pSessionId.c_str());
+    }
+
     sendToUser(static_cast<int32_t>(s.controllerId), cmd_rd_relay_info,
                RemoteDesktopProtocol::buildRelayInfo(sessionId, RelayToken::role_controller,
-                                                     relayIp, relayPort, tokenController));
+                                                     relayIp, relayPort, tokenController, p2pSessionId));
     sendToUser(static_cast<int32_t>(s.controlledId), cmd_rd_relay_info,
                RemoteDesktopProtocol::buildRelayInfo(sessionId, RelayToken::role_controlled,
-                                                     relayIp, relayPort, tokenControlled));
+                                                     relayIp, relayPort, tokenControlled, p2pSessionId));
+    //2302 排在 1716 之后：客户端先知道这次远程桌面带着哪个 P2P 会话，再收到会话本身
+    sendP2PFrames(p2pFrames);
 
     LOGI("remote desktop accepted, session: %s, controller: %lld, controlled: %lld",
          sessionId.c_str(), (long long)s.controllerId, (long long)s.controlledId);
@@ -3218,6 +4206,42 @@ void ChatSession::onCallInvite(const std::string& body, const std::shared_ptr<Tc
         return;
     }
 
+    //与屏幕共享互斥：本人在共享房间里不能发起通话；被叫在共享房间里按「对方忙」回复
+    if (ScreenShareService::isUserInShare(m_userinfo.userid))
+    {
+        send(cmd_call_invite, m_seq,
+             CallProtocol::buildInviteResponse(error_code_screenshare_in_call, "in screen share", ""));
+        LOGI("call invite failed, caller in screen share, from: %d, to: %lld",
+             m_userinfo.userid, (long long)peerId);
+        return;
+    }
+    if (ScreenShareService::isUserInShare(peerId))
+    {
+        send(cmd_call_invite, m_seq,
+             CallProtocol::buildInviteResponse(error_code_peer_busy, "peer busy", ""));
+        LOGI("call invite failed, peer in screen share, from: %d, to: %lld",
+             m_userinfo.userid, (long long)peerId);
+        return;
+    }
+
+    //与群通话互斥：本人在群通话里（含振铃中）不能发起一对一通话；被叫在群通话里按「对方忙」回复
+    if (GroupCallService::isUserInGroupCall(m_userinfo.userid))
+    {
+        send(cmd_call_invite, m_seq,
+             CallProtocol::buildInviteResponse(error_code_groupcall_busy, "in group call", ""));
+        LOGI("call invite failed, caller in group call, from: %d, to: %lld",
+             m_userinfo.userid, (long long)peerId);
+        return;
+    }
+    if (GroupCallService::isUserInGroupCall(peerId))
+    {
+        send(cmd_call_invite, m_seq,
+             CallProtocol::buildInviteResponse(error_code_peer_busy, "peer busy", ""));
+        LOGI("call invite failed, peer in group call, from: %d, to: %lld",
+             m_userinfo.userid, (long long)peerId);
+        return;
+    }
+
     CallManager& mgr = Singleton<CallManager>::Instance();
 
     //对方忙：被叫已在另一通话中
@@ -3234,11 +4258,33 @@ void ChatSession::onCallInvite(const std::string& body, const std::shared_ptr<Tc
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
     std::string sessionId = mgr.createSession(m_userinfo.userid, peerId, media, now);
 
-    send(cmd_call_invite, m_seq,
-         CallProtocol::buildInviteResponse(error_code_ok, "ok", sessionId));
+    //P2P 方案第 6 期：响铃阶段就为这通电话在两端之间建 P2P 会话（主叫为发起方，通话会话号直接用作功能会话号），
+    //接通时链路多半已经打通。两端都报到了用途 call、所在企业都开着 P2P 才会建成；建成时邀请应答与来电推送都带
+    //p2psessionid。通话没有接通（拒绝、取消、超时）时由客户端关闭链路，服务端收到 2305 即结束这个 P2P 会话；
+    //客户端掉线时按原有的断开处理结束
+    std::string p2pSessionId;
+    std::vector<P2POutFrame> p2pFrames;
+    {
+        P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+        P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+        const int p2pCode = service.createForFeature(kP2PPurposeCall, sessionId, m_userinfo.userid, peerId,
+                                                     p2pNowMs(), p2pSessionId, p2pFrames);
+        LOGI("call p2p session: session: %s, code: %d, p2p session: %s.", sessionId.c_str(), p2pCode,
+             p2pSessionId.c_str());
+    }
 
+    send(cmd_call_invite, m_seq,
+         CallProtocol::buildInviteResponse(error_code_ok, "ok", sessionId, p2pSessionId));
+
+    //邀请带上剩余振铃毫秒数（第 15 期），被叫的来电弹窗据此显示倒计时
     sendToUser(static_cast<int32_t>(peerId), cmd_call_invite_notify,
-               CallProtocol::buildInviteNotify(sessionId, m_userinfo.userid, m_userinfo.nickname, media));
+               CallProtocol::buildInviteNotify(sessionId, m_userinfo.userid, m_userinfo.nickname, media,
+                                               mgr.ringRemainingMs(sessionId, now), p2pSessionId));
+    //2302 排在应答与来电推送之后：客户端先知道这通电话带着哪个 P2P 会话，再收到会话本身
+    sendP2PFrames(p2pFrames);
+
+    //往两人的单聊写一张通话卡片（排在来电推送之后，不拖慢振铃），结束时改写成结果与时长
+    CallCardWriter::writeStartCard(sessionId, m_userinfo.userid, m_userinfo.nickname, peerId, media, now);
 
     LOGI("call invite, from: %d, to: %lld, media: %d, sessionid: %s",
          m_userinfo.userid, (long long)peerId, media, sessionId.c_str());
@@ -3270,21 +4316,22 @@ void ChatSession::onCallResponse(const std::string& body, const std::shared_ptr<
         return;
     }
 
-    //拒绝：通知主叫、清会话
+    //拒绝：通知主叫、改写通话卡片、清会话
     if (accept == 0)
     {
         sendToUser(static_cast<int32_t>(s.callerId), cmd_call_state_notify,
                    CallProtocol::buildStateNotify(sessionId, call_state_rejected, "rejected"));
+        CallCardWriter::finishCard(s, call_state_rejected, static_cast<int64_t>(time(NULL)) * 1000);
         mgr.removeSession(sessionId);
         LOGI("call rejected, session: %s, by: %d", sessionId.c_str(), m_userinfo.userid);
         return;
     }
 
-    //接听：会话置为已接通（接通后不再受响铃超时清理影响）
-    mgr.setState(sessionId, call_state_connected);
+    //接听：会话置为已接通（接通后不再受响铃超时清理影响），记下接通时刻（通话卡片据此算时长）
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    mgr.markConnected(sessionId, now);
 
     //给双方各签一枚 relay 令牌（同会话、相反角色）
-    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
     std::string tokenCaller;
     std::string tokenCallee;
     mgr.signTokenFor(sessionId, RelayToken::role_caller, now, tokenCaller);
@@ -3327,9 +4374,10 @@ void ChatSession::onCallCancel(const std::string& body, const std::shared_ptr<Tc
     if (m_userinfo.userid != s.callerId)
         return;
 
-    //通知被叫已取消、清会话
+    //通知被叫已取消、改写通话卡片、清会话
     sendToUser(static_cast<int32_t>(s.calleeId), cmd_call_state_notify,
                CallProtocol::buildStateNotify(sessionId, call_state_canceled, "canceled"));
+    CallCardWriter::finishCard(s, call_state_canceled, static_cast<int64_t>(time(NULL)) * 1000);
     mgr.removeSession(sessionId);
     LOGI("call canceled, session: %s, by: %d", sessionId.c_str(), m_userinfo.userid);
 }
@@ -3350,10 +4398,11 @@ void ChatSession::onCallHangup(const std::string& body, const std::shared_ptr<Tc
     if (m_userinfo.userid != s.callerId && m_userinfo.userid != s.calleeId)
         return;
 
-    //通知对端通话已结束、清会话
+    //通知对端通话已结束、改写通话卡片（带时长）、清会话
     int64_t peerId = (m_userinfo.userid == s.callerId) ? s.calleeId : s.callerId;
     sendToUser(static_cast<int32_t>(peerId), cmd_call_state_notify,
                CallProtocol::buildStateNotify(sessionId, call_state_ended, "ended"));
+    CallCardWriter::finishCard(s, call_state_ended, static_cast<int64_t>(time(NULL)) * 1000);
     mgr.removeSession(sessionId);
     LOGI("call hangup, session: %s, by: %d", sessionId.c_str(), m_userinfo.userid);
 }
@@ -3408,6 +4457,23 @@ void ChatSession::onCallSwitchMedia(const std::string& body, const std::shared_p
          sessionId.c_str(), m_userinfo.userid, media);
 }
 
+namespace {
+
+//以下两个函数定义在本文件末尾的 P2P 信令一节，这里先声明，供文件夹传输与单文件直传建 P2P 会话时使用
+int64_t p2pNowMs();
+int64_t lookupUserEnterpriseForP2P(int64_t userId);
+
+//单聊文件夹传输建 P2P 会话时的用途（2302 的 purpose，客户端据此找到文件夹传输的业务方）
+const char* const kP2PPurposeFolder = "folder";
+
+//单聊单文件直传建 P2P 会话时的用途（2026-10-04 起，客户端以此登记直传的业务方；旧版客户端不报到它）
+const char* const kP2PPurposeDirectFile = "file";
+
+//文件共享传输建 P2P 会话时的用途（P2P 方案第 6 期，客户端 FlamingoFileShare.dll 以此登记业务方）
+const char* const kP2PPurposeFileShare = "fileshare";
+
+} // namespace
+
 void ChatSession::onFolderInvite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
@@ -3433,9 +4499,13 @@ void ChatSession::onFolderInvite(const std::string& body, const std::shared_ptr<
 
     FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
 
+    //单文件直传（2026-10-04 起）：数据只走 P2P 链路，不占文件夹传输的名额，按 directfilemaxperuser 另行限额
+    const bool directFile = (req.kind == folder_kind_file);
+
     //规模上限、双方各自的并发笔数、服务器活跃会话总数三项校验集中在 checkInvite 里，
     //本方法按它给出的错误码回话即可，不必自己逐项判，避免与单元测试里的口径分叉
-    int code = mgr.checkInvite(m_userinfo.userid, req.peerid, req.totalfiles, req.totalsize);
+    int code = directFile ? mgr.checkDirectFileInvite(m_userinfo.userid, req.peerid)
+                          : mgr.checkInvite(m_userinfo.userid, req.peerid, req.totalfiles, req.totalsize);
     if (code != error_code_ok)
     {
         //规模超限的那两种失败要回带服务端配置的上限值：上限是配置项、随部署环境变化，
@@ -3473,12 +4543,48 @@ void ChatSession::onFolderInvite(const std::string& body, const std::shared_ptr<
         return;
     }
 
+    //单文件直传先确认此刻能为双方建用途 file 的 P2P 会话（双方都报到了 file、所在企业开着 P2P、会话数没到上限），
+    //建不成回 622、不建会话：发送端随即改为上传服务器发离线文件，接收端看不到这次邀请
+    if (directFile)
+    {
+        P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+        P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+        const int p2pCode = service.checkForFeature(kP2PPurposeDirectFile, m_userinfo.userid, req.peerid);
+        if (p2pCode != error_code_ok)
+        {
+            send(cmd_folder_invite, m_seq,
+                 FolderTransferProtocol::buildInviteResponse(error_code_folder_direct_unavailable,
+                                                             "direct file transfer unavailable",
+                                                             "", folder_state_ringing));
+            LOGI("direct file invite rejected, p2p unavailable, from: %d, to: %lld, p2p code: %d.",
+                 m_userinfo.userid, (long long)req.peerid, p2pCode);
+            return;
+        }
+    }
+
+    //企业级敏感词：文件夹名会显示在对方的邀请提示与传输记录条里，要检查。放在各项校验之后、
+    //建会话之前，被拦下时不建会话，对方收不到邀请
+    //单文件直传时 foldername 是文件名，按文件名的来源检查（与申请上传 1801 同一来源）
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(req.foldername);
+    if (hitSensitive(directFile ? chatserver::sensitive_source_file_name : chatserver::sensitive_source_folder_name,
+                     CHAT_TYPE_SINGLE, req.peerid, std::string(), sensitiveTexts))
+    {
+        send(cmd_folder_invite, m_seq,
+             FolderTransferProtocol::buildInviteResponse(error_code_file_sensitive_word,
+                                                         directFile ? "file name contains sensitive word"
+                                                                    : "folder name contains sensitive word",
+                                                         "", folder_state_ringing));
+        return;
+    }
+
     //建会话：发送端=本人，接收端=peer，初始状态为响铃中
     FolderTransferScale scale;
     scale.folderName = req.foldername;
     scale.totalDirs  = req.totaldirs;
     scale.totalFiles = req.totalfiles;
     scale.totalSize  = req.totalsize;
+    scale.kind       = req.kind;
 
     int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
     std::string sessionId = mgr.createSession(m_userinfo.userid, req.peerid, scale, now);
@@ -3493,11 +4599,11 @@ void ChatSession::onFolderInvite(const std::string& body, const std::shared_ptr<
                FolderTransferProtocol::buildInviteNotify(sessionId, m_userinfo.userid,
                                                           m_userinfo.nickname, req));
 
-    LOGI("folder invite, from: %d, to: %lld, sessionid: %s, dirs: %lld, files: %lld, size: %lld, "
+    LOGI("folder invite, from: %d, to: %lld, sessionid: %s, kind: %d, dirs: %lld, files: %lld, size: %lld, "
          "invite timeout: %lld ms.",
-         m_userinfo.userid, (long long)req.peerid, sessionId.c_str(),
+         m_userinfo.userid, (long long)req.peerid, sessionId.c_str(), req.kind,
          (long long)req.totaldirs, (long long)req.totalfiles, (long long)req.totalsize,
-         (long long)mgr.getInviteTimeoutMs());
+         (long long)(directFile ? mgr.getDirectFileInviteTimeoutMs() : mgr.getInviteTimeoutMs()));
 }
 
 void ChatSession::onFolderResponse(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -3568,7 +4674,27 @@ void ChatSession::onFolderResponse(const std::string& body, const std::shared_pt
 
     //先下发中转参数再回应答：签发失败时还来得及把失败码回给接收端，不至于让它以为
     //已经同意成功、却永远等不到 cmd_folder_relay_info
-    if (!pushFolderRelayInfo(s, now))
+    const int relayCode = pushFolderRelayInfo(s, now);
+    if (relayCode == error_code_folder_direct_unavailable)
+    {
+        send(cmd_folder_response, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_folder_direct_unavailable,
+                                                          "direct file transfer unavailable", sessionId));
+
+        //单文件直传建不起 P2P 会话：向双方推「已失败（622）」，发送端随即改为上传服务器，会话不进重试保留期
+        std::vector<int64_t> notifyBoth;
+        notifyBoth.push_back(s.senderId);
+        notifyBoth.push_back(s.receiverId);
+        finishFolderTransferSession(s, folder_state_failed, error_code_folder_direct_unavailable,
+                                    "p2p session unavailable", notifyBoth);
+
+        mgr.removeSession(sessionId);
+        m_folderTransferSessionId.clear();
+        LOGI("direct file accepted but p2p session unavailable, session: %s, receiver: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+    if (relayCode != error_code_ok)
     {
         send(cmd_folder_response, m_seq,
              FolderTransferProtocol::buildSessionResponse(error_code_server_internal,
@@ -3602,7 +4728,9 @@ void ChatSession::onFolderCancel(const std::string& body, const std::shared_ptr<
 {
     (void)conn;
     std::string sessionId;
-    if (!FolderTransferProtocol::parseSessionRequest(body, sessionId))
+    //tooffline（2026-10-04 起）：单文件直传的发送端改为上传服务器发离线文件，缺省为 0
+    int tooffline = 0;
+    if (!FolderTransferProtocol::parseCancelRequest(body, sessionId, tooffline))
     {
         send(cmd_folder_cancel, m_seq,
              FolderTransferProtocol::buildSessionResponse(error_code_bad_request, "bad request", ""));
@@ -3645,14 +4773,27 @@ void ChatSession::onFolderCancel(const std::string& body, const std::shared_ptr<
         return;
     }
 
+    //「改为离线发送」只属于单文件直传，文件夹传输没有离线的去处
+    if (tooffline != 0 && s.kind != folder_kind_file)
+    {
+        send(cmd_folder_cancel, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_bad_request,
+                                                          "tooffline is only for direct file transfer", sessionId));
+        LOGW("folder cancel rejected, tooffline on a folder session %s, userid: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
     send(cmd_folder_cancel, m_seq,
          FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", sessionId));
 
-    //终态收口：通知接收端邀请已被撤回，让它那侧的气泡收起，同时在双方会话里留下记录。
+    //终态收口：通知接收端邀请已被撤回（或已改为离线发送），让它那侧的气泡收起；文件夹传输同时在双方会话里
+    //留下记录，单文件直传这两种结局都不留（发送端随后那条离线文件消息代替它）。
     //发送端不在推送名单里 —— 撤回是它自己的动作，结果由上面那条应答告诉它
     std::vector<int64_t> notifyReceiver;
     notifyReceiver.push_back(s.receiverId);
-    finishFolderTransferSession(s, folder_state_canceled, error_code_ok, "", notifyReceiver);
+    finishFolderTransferSession(s, tooffline != 0 ? folder_state_to_offline : folder_state_canceled,
+                                error_code_ok, "", notifyReceiver);
 
     mgr.removeSession(sessionId);
     m_folderTransferSessionId.clear();
@@ -3714,14 +4855,31 @@ void ChatSession::onFolderClose(const std::string& body, const std::shared_ptr<T
     {
         std::vector<int64_t> notifyPeer;
         notifyPeer.push_back(peerId);
-        finishFolderTransferSession(s, folder_state_completed, error_code_ok, "", notifyPeer);
+        finishFolderTransferSession(s, folder_state_completed, error_code_ok, "", notifyPeer,
+                                    req.linkpath, req.md5);
 
         mgr.removeSession(req.sessionid);
         m_folderTransferSessionId.clear();
 
-        LOGI("folder transfer completed, session: %s, closed by: %d, peer: %lld, files: %lld, size: %lld.",
-             req.sessionid.c_str(), m_userinfo.userid, (long long)peerId,
-             (long long)s.totalFiles, (long long)s.totalSize);
+        LOGI("folder transfer completed, session: %s, kind: %d, closed by: %d, peer: %lld, files: %lld, "
+             "size: %lld, linkpath: %d.",
+             req.sessionid.c_str(), s.kind, m_userinfo.userid, (long long)peerId,
+             (long long)s.totalFiles, (long long)s.totalSize, req.linkpath);
+        return;
+    }
+
+    //单文件直传从没走上 P2P 链路（622）：向对端推「已失败（622）」后立即销毁会话，不进重试保留期 ——
+    //发送端随即改为上传服务器发离线文件，留着会话只会多占一个直传名额
+    if (s.kind == folder_kind_file && req.errcode == error_code_folder_direct_unavailable)
+    {
+        std::vector<int64_t> notifyPeer;
+        notifyPeer.push_back(peerId);
+        finishFolderTransferSession(s, folder_state_failed, req.errcode, req.errmsg, notifyPeer);
+
+        mgr.removeSession(req.sessionid);
+        m_folderTransferSessionId.clear();
+        LOGI("direct file transfer failed without a p2p link, session: %s, closed by: %d, peer: %lld.",
+             req.sessionid.c_str(), m_userinfo.userid, (long long)peerId);
         return;
     }
 
@@ -3739,7 +4897,7 @@ void ChatSession::onFolderClose(const std::string& body, const std::shared_ptr<T
     //（见 docs/协议设计-v2.md 12.8）
     std::vector<int64_t> notifyPeer;
     notifyPeer.push_back(peerId);
-    finishFolderTransferSession(s, folder_state_failed, req.errcode, req.errmsg, notifyPeer);
+    finishFolderTransferSession(s, folder_state_failed, req.errcode, req.errmsg, notifyPeer, req.linkpath);
 
     //本连接与这笔传输的绑定<u>不解除</u>：保留期内本端掉线仍要通知对端，
     //故此处不清 m_folderTransferSessionId
@@ -3830,7 +4988,27 @@ void ChatSession::onFolderRetry(const std::string& body, const std::shared_ptr<T
     //本地这份会话快照是加一之前取的，同步成新序号，使下面失败分支里留的记录挂在本次尝试上
     s.attemptSeq = attemptSeq;
 
-    if (!pushFolderRelayInfo(s, now))
+    const int relayCode = pushFolderRelayInfo(s, now);
+    if (relayCode == error_code_folder_direct_unavailable)
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_folder_direct_unavailable,
+                                                          "direct file transfer unavailable", sessionId));
+
+        //理由同 onFolderResponse 的同名分支：单文件直传重试时建不起 P2P 会话，推给双方后销毁会话
+        std::vector<int64_t> notifyBoth;
+        notifyBoth.push_back(s.senderId);
+        notifyBoth.push_back(s.receiverId);
+        finishFolderTransferSession(s, folder_state_failed, error_code_folder_direct_unavailable,
+                                    "p2p session unavailable", notifyBoth);
+
+        mgr.removeSession(sessionId);
+        m_folderTransferSessionId.clear();
+        LOGI("direct file retry but p2p session unavailable, session: %s, sender: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+    if (relayCode != error_code_ok)
     {
         send(cmd_folder_retry, m_seq,
              FolderTransferProtocol::buildSessionResponse(error_code_server_internal,
@@ -3857,7 +5035,7 @@ void ChatSession::onFolderRetry(const std::string& body, const std::shared_ptr<T
          sessionId.c_str(), attemptSeq, (long long)s.senderId, (long long)s.receiverId);
 }
 
-bool ChatSession::pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_t now)
+int ChatSession::pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_t now)
 {
     FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
 
@@ -3869,7 +5047,7 @@ bool ChatSession::pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_
         || !mgr.signTokenFor(s.sessionid, RelayToken::role_folder_receiver, now, tokenReceiver))
     {
         LOGE("folder relay info: sign relay token failed, session: %s.", s.sessionid.c_str());
-        return false;
+        return error_code_server_internal;
     }
 
     //中转地址即 fileserver 对客户端公布的那个上传下载地址，本功能不新开端口
@@ -3878,23 +5056,45 @@ bool ChatSession::pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_
     //数据通道条数不含 lane 0 那条控制通道，客户端据此共建 lanes + 1 条连接
     int lanes = mgr.getDataLanes();
 
+    //P2P 方案第 5 期：先尝试在两端之间建 P2P 会话（发送端为发起方）。两端都报到过 P2P 能力、所在企业都开着 P2P
+    //才会建成；建成时 1816 带上 p2psessionid，客户端优先走 P2P 链路，建链失败再改走 fileserver 中转。
+    //建不成（老客户端、手机端、企业关闭、会话数到上限）时照旧只下发中转参数。
+    //单文件直传（2026-10-04 起）用用途 file，数据只走 P2P 链路：建不成就不下发 1816，由调用方按 622 收尾
+    const bool directFile = (s.kind == folder_kind_file);
+    std::string p2pSessionId;
+    std::vector<P2POutFrame> p2pFrames;
+    {
+        P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+        P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+        const int p2pCode = service.createForFeature(directFile ? kP2PPurposeDirectFile : kP2PPurposeFolder,
+                                                     s.sessionid, s.senderId, s.receiverId,
+                                                     p2pNowMs(), p2pSessionId, p2pFrames);
+        LOGI("folder transfer p2p session: session: %s, kind: %d, code: %d, p2p session: %s.", s.sessionid.c_str(),
+             s.kind, p2pCode, p2pSessionId.c_str());
+    }
+    if (directFile && p2pSessionId.empty())
+        return error_code_folder_direct_unavailable;
+
     sendToUser(static_cast<int32_t>(s.senderId), cmd_folder_relay_info,
                FolderTransferProtocol::buildRelayInfo(s.sessionid, RelayToken::role_folder_sender,
-                                                      relayIp, relayPort, tokenSender, lanes));
+                                                      relayIp, relayPort, tokenSender, lanes, p2pSessionId));
     sendToUser(static_cast<int32_t>(s.receiverId), cmd_folder_relay_info,
                FolderTransferProtocol::buildRelayInfo(s.sessionid, RelayToken::role_folder_receiver,
-                                                      relayIp, relayPort, tokenReceiver, lanes));
+                                                      relayIp, relayPort, tokenReceiver, lanes, p2pSessionId));
+    //2302 排在 1816 之后：客户端先知道这次传输带着哪个 P2P 会话，再收到会话本身
+    sendP2PFrames(p2pFrames);
 
-    LOGI("folder relay info pushed, session: %s, sender: %lld, receiver: %lld, relay: %s:%d, lanes: %d.",
+    LOGI("folder relay info pushed, session: %s, sender: %lld, receiver: %lld, relay: %s:%d, lanes: %d, p2p: %s.",
          s.sessionid.c_str(), (long long)s.senderId, (long long)s.receiverId,
-         relayIp.c_str(), relayPort, lanes);
+         relayIp.c_str(), relayPort, lanes, p2pSessionId.empty() ? "none" : p2pSessionId.c_str());
 
-    return true;
+    return error_code_ok;
 }
 
 bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s,
                                               int state, int errcode, const std::string& errmsg,
-                                              const std::vector<int64_t>& notifyUsers)
+                                              const std::vector<int64_t>& notifyUsers,
+                                              int linkPath, const std::string& md5)
 {
     const int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
 
@@ -3937,7 +5137,16 @@ bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
             FolderTransferProtocol::buildStateNotify(s.sessionid, state, errcode, errmsg));
     }
 
-    //（4）留记录。幂等键由会话 id 与本次尝试的序号一起派生，与上面那道闸门的去重粒度
+    //（4）留记录：单文件直传只在完成与拒绝时留一条文件消息，其余结局之后发送端要么续传、要么改为离线文件，
+    //随后的结局或离线文件消息代替它（见 FolderTransferProtocol::shouldWriteRecord）
+    if (!FolderTransferProtocol::shouldWriteRecord(s.kind, state))
+    {
+        LOGI("folder transfer record not written for this result, session: %s, kind: %d, attempt: %d, state: %d.",
+             s.sessionid.c_str(), s.kind, s.attemptSeq, state);
+        return true;
+    }
+
+    //幂等键由会话 id 与本次尝试的序号一起派生，与上面那道闸门的去重粒度
     //完全一致；它是第二道防线，挡的是日后新增的、绕开闸门的调用路径与进程重启前后的
     //重复落库
     const std::string clientMsgId =
@@ -3968,6 +5177,7 @@ bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
     record.totalfiles = s.totalFiles;
     record.totalsize  = s.totalSize;
     record.result     = state;
+    record.linkpath   = linkPath;
 
     //只有"已失败"这一种结局才带有意义的失败原因。buildRecordContent 内部同样会做这一步
     //归一（那条不变式由它统一保证），此处先归一一次是为了让下面那条日志打出来的 errcode
@@ -3976,8 +5186,30 @@ bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
     if (state == folder_state_failed)
         record.errcode = errcode;
 
-    //content 只有动作与结局，没有文件清单、路径与 md5
-    const std::string content = FolderTransferProtocol::buildRecordContent(record);
+    //文件夹传输：content 只有动作与结局，没有文件清单、路径与 md5，msgtype=18。
+    //单文件直传：留一条普通文件消息（msgtype=3），content 带直传标记、会话 id、结局、链路路径与 MD5，没有 fileid
+    const bool directFile = (s.kind == folder_kind_file);
+    const int msgType = directFile ? message_type_file : message_type_folder;
+    std::string content;
+    if (directFile)
+    {
+        DirectFileRecord fileRecord;
+        fileRecord.sessionid = s.sessionid;
+        fileRecord.filename  = s.folderName;
+        fileRecord.filesize  = s.totalSize;
+        fileRecord.result    = state;
+        //拒绝时一个字节都没传：不写 MD5 与链路路径
+        if (state == folder_state_completed)
+        {
+            fileRecord.md5      = md5;
+            fileRecord.linkpath = linkPath;
+        }
+        content = FolderTransferProtocol::buildDirectFileContent(fileRecord);
+    }
+    else
+    {
+        content = FolderTransferProtocol::buildRecordContent(record);
+    }
 
     //落库前还要再套一层 buildStoredContent 的外壳（content/mentions/mentionall/quote），
     //与单聊 / 群聊 / 转发那几条落库路径口径一致。读回时 parseStoredContent 只认最外层的
@@ -3991,7 +5223,7 @@ bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
     //t_chatmsg 派生（见 MessageManager::getConversationBriefs），这条记录一入库，双方的
     //会话列表下次拉取时自然带上它，接收方的未读也照常计入
     const int64_t msgId = msgMgr.saveMessage(clientMsgId, CHAT_TYPE_SINGLE, fromId, toId,
-                                             message_type_folder, storedContent, now);
+                                             msgType, storedContent, now);
     if (msgId == 0)
     {
         LOGE("save folder transfer record failed, session: %s, attempt: %d, from: %d, to: %d, "
@@ -4006,7 +5238,7 @@ bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
     rec.ctype       = CHAT_TYPE_SINGLE;
     rec.from        = s.senderId;
     rec.to          = s.receiverId;
-    rec.msgtype     = message_type_folder;
+    rec.msgtype     = msgType;
     rec.content     = content;
     rec.mentionall  = false;
     rec.timestamp   = now;
@@ -4025,11 +5257,11 @@ bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
     Singleton<ChatServer>::Instance().pushToUsers(
         senderOnly, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, s.receiverId));
 
-    LOGI("folder transfer record saved, session: %s, attempt: %d, msgid: %lld, from: %d, to: %d, "
-         "folder: %s, dirs: %lld, files: %lld, size: %lld, result: %d, errcode: %d.",
-         s.sessionid.c_str(), s.attemptSeq, (long long)msgId, fromId, toId,
+    LOGI("folder transfer record saved, session: %s, kind: %d, attempt: %d, msgid: %lld, from: %d, to: %d, "
+         "name: %s, dirs: %lld, files: %lld, size: %lld, result: %d, errcode: %d, linkpath: %d.",
+         s.sessionid.c_str(), s.kind, s.attemptSeq, (long long)msgId, fromId, toId,
          s.folderName.c_str(), (long long)s.totalDirs, (long long)s.totalFiles,
-         (long long)s.totalSize, state, record.errcode);
+         (long long)s.totalSize, state, record.errcode, linkPath);
 
     return true;
 }
@@ -4190,7 +5422,31 @@ void ChatSession::onSetConversation(const std::string& body, const std::shared_p
         return;
     }
 
-    //群聊：须为群成员才能设置该群会话（置顶 / 免打扰 / 删除）
+    //消息提醒模式：取值须在 0~5 之内，单聊不能设为屏蔽与「只提醒 @我和关注的人」
+    if (req.has_notifymode && !MessageProtocol::isValidNotifyMode(req.ctype, req.notifymode))
+    {
+        LOGI("set conversation rejected, invalid notify mode, userid: %d, ctype: %d, cid: %lld, mode: %d",
+             m_userinfo.userid, req.ctype, (long long)req.cid, req.notifymode);
+        send(cmd_set_conversation, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_bad_request, "invalid notify mode"));
+        return;
+    }
+
+    //单聊改提醒模式：对象须是够得着的同事（设回允许提醒除外）
+    if (req.ctype == CHAT_TYPE_SINGLE && req.has_notifymode)
+    {
+        int targetCode = checkSingleChatNotifyTarget(req.cid, req.notifymode);
+        if (targetCode != error_code_ok)
+        {
+            LOGI("set conversation rejected, notify target check failed, userid: %d, cid: %lld, mode: %d, code: %d",
+                 m_userinfo.userid, (long long)req.cid, req.notifymode, targetCode);
+            send(cmd_set_conversation, m_seq,
+                 MessageProtocol::buildSimpleResponse(targetCode, "invalid notify target"));
+            return;
+        }
+    }
+
+    //群聊：须为群成员才能设置该群会话（置顶 / 消息提醒模式 / 删除）
     if (req.ctype == CHAT_TYPE_GROUP &&
         !Singleton<GroupManager>::Instance().isGroupMember(req.cid, m_userinfo.userid))
     {
@@ -4201,10 +5457,15 @@ void ChatSession::onSetConversation(const std::string& body, const std::shared_p
 
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
-    if (!msgMgr.setConversation(m_userinfo.userid, req, now))
+    int errorCode = error_code_ok;
+    if (!msgMgr.setConversation(m_userinfo.userid, req, now, errorCode))
     {
-        send(cmd_set_conversation, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_server_internal, "set conversation failed"));
+        const char* msg = "set conversation failed";
+        if (errorCode == error_code_starred_limit)
+            msg = "starred count limit reached";
+        LOGI("set conversation failed, userid: %d, ctype: %d, cid: %lld, code: %d",
+             m_userinfo.userid, req.ctype, (long long)req.cid, errorCode);
+        send(cmd_set_conversation, m_seq, MessageProtocol::buildSimpleResponse(errorCode, msg));
         return;
     }
 
@@ -4212,12 +5473,13 @@ void ChatSession::onSetConversation(const std::string& body, const std::shared_p
 
     //读回完整状态，向本人所有在线会话推 conversation_changed_notify 做多端同步
     bool pinned = false;
-    bool mute = false;
+    int notifymode = notify_mode_allow;
     bool deleted = false;
-    msgMgr.getConversationState(m_userinfo.userid, req.ctype, req.cid, pinned, mute, deleted);
+    bool unreadmark = false;
+    msgMgr.getConversationState(m_userinfo.userid, req.ctype, req.cid, pinned, notifymode, deleted, unreadmark);
     sendToUser(m_userinfo.userid, cmd_conversation_changed_notify,
                MessageProtocol::buildConversationChangedNotify(req.ctype, req.cid,
-                                                               pinned, mute, deleted));
+                                                               pinned, notifymode, deleted, unreadmark));
 
     LOGI("set conversation ok, userid: %d, cid: %lld", m_userinfo.userid, (long long)req.cid);
 }
@@ -4241,13 +5503,17 @@ void ChatSession::onSearchMessages(const std::string& body, const std::shared_pt
         return;
     }
 
-    //群聊：须为群成员才能搜本群消息
-    if (req.ctype == CHAT_TYPE_GROUP &&
-        !Singleton<GroupManager>::Instance().isGroupMember(req.cid, m_userinfo.userid))
+    //群聊：须为群成员才能搜本群消息；本人看不到的入群前历史，搜索同样不返回
+    GroupHistoryBound bound;
+    if (req.ctype == CHAT_TYPE_GROUP)
     {
-        send(cmd_search_messages, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
-        return;
+        if (!Singleton<GroupManager>::Instance().isGroupMember(req.cid, m_userinfo.userid))
+        {
+            send(cmd_search_messages, m_seq,
+                 MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+            return;
+        }
+        bound = groupHistoryBound(req.cid);
     }
 
     //limit 夹到合理区间：复用 sync_messages 的缺省 20、上限 100
@@ -4259,26 +5525,111 @@ void ChatSession::onSearchMessages(const std::string& body, const std::shared_pt
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     std::vector<MessageRecord> messages;
     bool hasMore = false;
-    msgMgr.searchMessages(m_userinfo.userid, req, messages, hasMore);
+    msgMgr.searchMessages(m_userinfo.userid, req, messages, hasMore, bound.m_minCreateTime, bound.m_minMsgId);
+
+    //卡片消息合并当前互动状态，理由同 onGetPinnedMessages。须在按体积截断之前做
+    augmentCardRecords(messages);
 
     //按体积截断，理由同 onSyncMessages：搜索按 beforemsgid 往前翻页，锚点在最新一端
-    //（升序数组的末尾），截掉更早的命中并把 hasmore 置为真，下一页从留下的最早一条接着搜
-    const size_t trimmed = MessageProtocol::trimMessagesToBudget(
-        messages, req.cid, true, RESPONSE_MESSAGES_BUDGET_BYTES);
+    //（升序数组的末尾），截掉更早的命中并把 hasmore 置为真，下一页从留下的最早一条接着搜。
+    //search 应答与 sync_messages 同构，复用同一个组装函数（不带已读位点与锚点）
+    size_t trimmed = 0;
+    const std::string response = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+        0, "ok", req.ctype, req.cid, hasMore, messages, MessageProtocol::kPeerReadMsgidOmitted, NULL,
+        true, RESPONSE_MESSAGES_BUDGET_BYTES, trimmed);
     if (trimmed > 0)
     {
-        hasMore = true;
         LOGI("search messages trimmed by size, userid: %d, cid: %lld, kept: %u, trimmed: %u",
              m_userinfo.userid, (long long)req.cid,
              static_cast<unsigned>(messages.size()), static_cast<unsigned>(trimmed));
     }
-
-    //search 应答与 sync_messages 同构，复用 buildSyncMessagesResponse
-    send(cmd_search_messages, m_seq,
-         MessageProtocol::buildSyncMessagesResponse(0, "ok", req.ctype, req.cid, hasMore, messages));
+    send(cmd_search_messages, m_seq, response);
 
     LOGI("search messages ok, userid: %d, cid: %lld, count: %u",
          m_userinfo.userid, (long long)req.cid, static_cast<unsigned>(messages.size()));
+}
+
+void ChatSession::onGlobalSearch(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    const std::vector<GlobalSearchConversationHit> noConvs;
+    const std::vector<GlobalSearchAnnouncementHit> noAnns;
+    GlobalSearchRequest req;
+    if (!GlobalSearchProtocol::parseRequest(body, req))
+    {
+        send(cmd_global_search, m_seq,
+             GlobalSearchProtocol::buildResponse(error_code_bad_request, "bad request", "", noConvs, noAnns));
+        return;
+    }
+
+    //本人所在的群，以及每个群里能看到的历史范围（规则与 groupHistoryBound 相同，见 getUserHistoryScopes）
+    std::vector<GroupSearchScope> scopes;
+    Singleton<GroupManager>::Instance().getUserHistoryScopes(m_userinfo.userid, scopes);
+    std::vector<int64_t> groupIds;
+    for (size_t i = 0; i < scopes.size(); ++i)
+        groupIds.push_back(scopes[i].groupid);
+
+    std::vector<GlobalSearchConversationHit> convs;
+    if (!Singleton<MessageManager>::Instance().globalSearchConversations(
+            m_userinfo.userid, req.keyword, scopes, req.limit, convs))
+    {
+        send(cmd_global_search, m_seq,
+             GlobalSearchProtocol::buildResponse(error_code_server_internal, "db error", "", noConvs, noAnns));
+        return;
+    }
+
+    std::vector<GlobalSearchAnnouncementHit> anns;
+    if (req.announcementlimit > 0)
+    {
+        std::vector<GroupAnnouncementRecord> records;
+        //群公告查失败只少这一段，聊天记录照常返回
+        if (Singleton<GroupManager>::Instance().searchAnnouncements(groupIds, req.keyword, req.announcementlimit, records))
+        {
+            for (size_t i = 0; i < records.size(); ++i)
+            {
+                GlobalSearchAnnouncementHit hit;
+                hit.groupid = records[i].groupid;
+                hit.id = records[i].id;
+                hit.title = records[i].title;
+                hit.excerpt = chatserver::MakeSearchExcerpt(records[i].content, req.keyword, GLOBAL_SEARCH_EXCERPT_MAX_BYTES);
+                hit.publishtime = records[i].publishtime;
+                anns.push_back(hit);
+            }
+        }
+    }
+
+    send(cmd_global_search, m_seq, GlobalSearchProtocol::buildResponse(0, "ok", req.keyword, convs, anns));
+    //关键字只记字节数，日志里不留用户搜过什么
+    LOGI("global search ok, userid: %d, keyword bytes: %u, groups: %u, conversations: %u, announcements: %u",
+         m_userinfo.userid, static_cast<unsigned>(req.keyword.size()), static_cast<unsigned>(scopes.size()),
+         static_cast<unsigned>(convs.size()), static_cast<unsigned>(anns.size()));
+}
+
+GroupHistoryBound ChatSession::groupHistoryBound(int64_t groupid)
+{
+    //取本人的成员行（角色、入群时间、历史边界）与群设置。群主与管理员不受限 —— 这两项限制是拿来
+    //防新人翻旧账的，管理者需要看全量记录才能处理纠纷（GroupProtocol::computeHistoryBound）
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    GroupMemberRecord me;
+    if (!groupMgr.getMember(groupid, m_userinfo.userid, me))
+        return GroupHistoryBound();
+    if (me.role >= group_role_admin)
+        return GroupHistoryBound();
+    GroupRecord group;
+    if (!groupMgr.getGroup(groupid, group))
+        return GroupHistoryBound();
+    return GroupProtocol::computeHistoryBound(me.role, group.newseehistory, me.jointime, me.historyfrom);
+}
+
+int64_t ChatSession::inviteHistoryFrom(const GroupRecord& group, int historyLimit)
+{
+    //群设为不可看历史：以群设置为准（时间下界会在查询时生效），不另设边界
+    if (group.newseehistory == 0 || historyLimit == kInviteHistoryLimitAll)
+        return 0;
+    int64_t from = 0;
+    if (!Singleton<MessageManager>::Instance().computeGroupHistoryFrom(group.groupid, historyLimit, from))
+        return 0;
+    return from;
 }
 
 void ChatSession::onForwardMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -4301,7 +5652,7 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
     }
 
     //目标会话校验：单聊查对端存在 + 黑名单；群聊与普通群发同一套校验（群成员身份、
-    //群是否存在、禁言），敏感词要等取到源消息之后才能匹配，放在下面
+    //群是否存在、禁言）
     GroupRecord targetGroup;
     if (req.toctype == CHAT_TYPE_SINGLE)
     {
@@ -4334,12 +5685,14 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
     {
         //不通过时已回过错误应答（不是群成员 / 群不存在 / 禁言中）
         int myrole = group_role_member;
-        if (!checkGroupSpeakAllowed(cmd_forward_message, req.tocid, myrole, targetGroup))
+        //转发的错误应答是 { code, msg }，不需要 clientmsgid
+        if (!checkGroupSpeakAllowed(cmd_forward_message, req.tocid, std::string(), myrole, targetGroup))
             return;
     }
 
-    //取转发源消息；本人已删除的在取的时候就已排除，这里再只保留本人可见且未撤回的
-    //（单聊须为收发方之一、群聊须为该群成员）
+    //取转发源消息；本人已删除的、不在本人可见范围内的在取的时候就已排除，这里再只保留本人
+    //所在会话里（单聊须为收发方之一、群聊须为该群成员）未撤回、且不是共享卡片的。共享卡片只给
+    //部分成员看，与已撤回的消息一样静默跳过；全部被跳过时按「没有可转发的消息」回复
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     GroupManager& groupMgr = Singleton<GroupManager>::Instance();
     std::vector<MessageRecord> sources;
@@ -4348,7 +5701,7 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
     for (size_t i = 0; i < sources.size(); ++i)
     {
         const MessageRecord& s = sources[i];
-        if (s.recalled)
+        if (!MessageProtocol::isForwardableSource(s))
             continue;
 
         bool canSee = false;
@@ -4366,22 +5719,9 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
         return;
     }
 
-    //转发到开启了敏感词过滤的群：文字消息、以及合并记录里的文字逐条匹配，命中任意一条
-    //即整体拒绝。否则可以先把含敏感词的消息发到不过滤的会话，再转发进来，绕开过滤
-    if (req.toctype == CHAT_TYPE_GROUP)
-    {
-        std::string hitWord;
-        if (hitGroupSensitiveWord(req.tocid, targetGroup,
-                                  MessageProtocol::collectForwardTexts(visible), hitWord))
-        {
-            send(cmd_forward_message, m_seq,
-                 MessageProtocol::buildSimpleResponse(error_code_sensitive_word,
-                                                      "message contains sensitive word"));
-            LOGI("forward rejected by sensitive word, groupid: %lld, userid: %d, word: %s",
-                 (long long)req.tocid, m_userinfo.userid, hitWord.c_str());
-            return;
-        }
-    }
+    //企业级敏感词检查放在下面两个分支里、新内容组装完成之后：查的是对方实际会收到的内容
+    //（逐条转发会去掉引用，合并转发会加上标题），转发到单聊与群聊都检查。原先只对转发到群
+    //做的群级检查已于 2026-10-02 删除
 
     //本次新建的消息，按新建顺序排列；应答把它们的完整消息体回带给转发人
     std::vector<MessageRecord> created;
@@ -4415,6 +5755,20 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
                  static_cast<unsigned>(mergedContent.size()));
             return;
         }
+
+        //敏感词：标题与全部子消息（含子消息上的引用、嵌套的合并记录）一并检查，命中即整体拒绝
+        std::vector<std::string> sensitiveTexts;
+        MessageProtocol::collectSensitiveTexts(MSGTYPE_MERGED_FORWARD, mergedContent, std::string(),
+                                               sensitiveTexts);
+        if (hitSensitive(chatserver::sensitive_source_forward, req.toctype, req.tocid, std::string(),
+                         sensitiveTexts))
+        {
+            send(cmd_forward_message, m_seq,
+                 MessageProtocol::buildSimpleResponse(error_code_sensitive_word,
+                                                      "message contains sensitive word"));
+            return;
+        }
+
         MessageRecord rec;
         if (deliverConversationMessage(req.toctype, req.tocid, MSGTYPE_MERGED_FORWARD,
                                        mergedContent, req.clientmsgid, &rec) != 0)
@@ -4426,31 +5780,71 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
         //文字消息去掉 content 里的 at 与 quote，理由见 MessageProtocol::buildForwardedContent
         //
         //先把每条要新建的内容组装好并逐条检查体积，有一条超限就整体拒绝、一条都不发出，
-        //避免目标会话里只出现其中一部分。会超限的只可能是单条上限生效之前存进库的旧消息
-        //（bugs.md 的 BUG-32），它被推送或同步时同样会让对方断线。
-        std::vector<std::string> contents;
-        contents.reserve(visible.size());
+        //避免目标会话里只出现其中一部分。会超限的只可能是单条上限生效之前存进库的旧消息，
+        //它被推送或同步时同样会让对方断线。
+        //
+        //接龙卡片不能逐条转发（理由见 CardProtocol::canForwardSeparately），与已撤回的源消息
+        //一样跳过、其余照常转发；客户端据应答里实际新建的消息提示用户哪些没有转发出去。
+        //跳过之后一条不剩时按"没有可转发的消息"回复
+        std::vector<MessageRecord> separate;
+        separate.reserve(visible.size());
         for (size_t i = 0; i < visible.size(); ++i)
         {
-            contents.push_back(MessageProtocol::buildForwardedContent(visible[i].msgtype,
-                                                                      visible[i].content));
+            if (CardProtocol::canForwardSeparately(visible[i].msgtype))
+                separate.push_back(visible[i]);
+        }
+        if (separate.size() != visible.size())
+        {
+            LOGI("forward skipped relay cards, userid: %d, skipped: %u, remaining: %u",
+                 m_userinfo.userid, static_cast<unsigned>(visible.size() - separate.size()),
+                 static_cast<unsigned>(separate.size()));
+        }
+        if (separate.empty())
+        {
+            send(cmd_forward_message, m_seq,
+                 MessageProtocol::buildSimpleResponse(error_code_message_not_exist, "no forwardable message"));
+            return;
+        }
+
+        std::vector<std::string> contents;
+        contents.reserve(separate.size());
+        for (size_t i = 0; i < separate.size(); ++i)
+        {
+            contents.push_back(MessageProtocol::buildForwardedContent(separate[i].msgtype,
+                                                                      separate[i].content));
             if (MessageProtocol::isMessageContentTooLarge(contents.back(), std::string()))
             {
                 send(cmd_forward_message, m_seq,
                      MessageProtocol::buildSimpleResponse(error_code_msg_too_large,
                                                           "forwarded content too large"));
                 LOGI("forward rejected by message content size, userid: %d, msgid: %lld, bytes: %u",
-                     m_userinfo.userid, (long long)visible[i].msgid,
+                     m_userinfo.userid, (long long)separate[i].msgid,
                      static_cast<unsigned>(contents.back().size()));
                 return;
             }
         }
-        for (size_t i = 0; i < visible.size(); ++i)
+
+        //敏感词：逐条检查要新建的内容，有一条命中就整体拒绝、一条都不发出（理由同上面的体积检查）。
+        //逐条转发的新消息不带顶层 quote，文字消息 content 里的 quote 也已被 buildForwardedContent
+        //去掉，这些引用文字不会出现在目标会话；这里检查的是去掉之后、实际要新建的内容
+        std::vector<std::string> sensitiveTexts;
+        for (size_t i = 0; i < separate.size(); ++i)
+            MessageProtocol::collectSensitiveTexts(separate[i].msgtype, contents[i], std::string(), sensitiveTexts);
+        if (hitSensitive(chatserver::sensitive_source_forward, req.toctype, req.tocid, std::string(),
+                         sensitiveTexts))
+        {
+            send(cmd_forward_message, m_seq,
+                 MessageProtocol::buildSimpleResponse(error_code_sensitive_word,
+                                                      "message contains sensitive word"));
+            return;
+        }
+
+        for (size_t i = 0; i < separate.size(); ++i)
         {
             std::string cmid = req.clientmsgid + "-" + std::to_string(i);
             MessageRecord rec;
             if (deliverConversationMessage(req.toctype, req.tocid,
-                                           visible[i].msgtype, contents[i], cmid, &rec) != 0)
+                                           separate[i].msgtype, contents[i], cmid, &rec) != 0)
                 created.push_back(rec);
         }
     }
@@ -4519,6 +5913,60 @@ void ChatSession::onDeleteMessage(const std::string& body, const std::shared_ptr
          m_userinfo.userid, rec.ctype, (long long)cid, (long long)msgid);
 }
 
+void ChatSession::onClearConversation(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    ClearConversationRequest req;
+    if (!MessageProtocol::parseClearConversationRequest(body, req))
+    {
+        LOGE("clear conversation bad request, userid: %d", m_userinfo.userid);
+        send(cmd_clear_conversation, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //群聊须是该群成员：不在群里的人本来就看不到这个群的记录，也不该凭空写一行会话状态
+    if (req.ctype == conversation_group
+        && Singleton<GroupManager>::Instance().getMemberRole(req.cid, m_userinfo.userid) < 0)
+    {
+        LOGE("clear conversation not a group member, userid: %d, groupid: %lld",
+             m_userinfo.userid, (long long)req.cid);
+        send(cmd_clear_conversation, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    //单聊不能以自己为对象
+    if (req.ctype == conversation_single && req.cid == m_userinfo.userid)
+    {
+        send(cmd_clear_conversation, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_bad_request, "cannot clear conversation with yourself"));
+        return;
+    }
+
+    //只写一个锚点，写入量与会话里的消息条数无关，不会长时间占住本 I/O 线程
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+    int64_t anchor = 0;
+    if (!Singleton<MessageManager>::Instance().clearConversation(m_userinfo.userid, req.ctype, req.cid,
+                                                                  nowMs, anchor))
+    {
+        LOGE("clear conversation db error, userid: %d, ctype: %d, cid: %lld",
+             m_userinfo.userid, req.ctype, (long long)req.cid);
+        send(cmd_clear_conversation, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_server_internal, "clear conversation failed"));
+        return;
+    }
+
+    send(cmd_clear_conversation, m_seq,
+         MessageProtocol::buildClearConversationResponse(0, "ok", req.ctype, req.cid, anchor));
+
+    //推给本人全部在线设备（含发起的这一台），各设备据此删掉本地库里该会话锚点之前的消息、刷新界面
+    sendToUser(m_userinfo.userid, cmd_messages_deleted_notify,
+               MessageProtocol::buildMessagesClearedNotify(req.ctype, req.cid, anchor));
+
+    LOGI("clear conversation ok, userid: %d, ctype: %d, cid: %lld, anchor: %lld",
+         m_userinfo.userid, req.ctype, (long long)req.cid, (long long)anchor);
+}
+
 void ChatSession::onDeleteMessagesByTime(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
@@ -4584,7 +6032,8 @@ void ChatSession::onMassSend(const std::string& body, const std::shared_ptr<TcpC
         return;
     }
 
-    //内容体积超限：一个目标都不发。与 cmd_send_message 同一上限，理由见 bugs.md 的 BUG-32
+    //内容体积超限：一个目标都不发。与 cmd_send_message 同一上限，理由也相同：超大消息推送给对方时
+    //会超过客户端的单帧上限，导致对方断线
     if (MessageProtocol::isMessageContentTooLarge(req.content, std::string()))
     {
         LOGW("mass send rejected by content size, userid: %d, targets: %u, bytes: %u",
@@ -4595,8 +6044,50 @@ void ChatSession::onMassSend(const std::string& body, const std::shared_ptr<TcpC
         return;
     }
 
+    //共享卡片与系统提示只能由服务端生成，客户端群发同样拒绝，一个目标都不发（理由见 isClientSendableMsgType）
+    if (!MessageProtocol::isClientSendableMsgType(req.msgtype))
+    {
+        LOGW("mass send rejected by server-only msgtype, userid: %d, msgtype: %d",
+             m_userinfo.userid, req.msgtype);
+        send(cmd_mass_send, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_permission_denied, "msgtype is generated by server only"));
+        return;
+    }
+
+    //按消息类型检查 content（目前只检查语音，见 checkSendContent）：不合格时一个目标都不发
+    const int massContentCode = MessageProtocol::checkSendContent(req.msgtype, req.content);
+    if (massContentCode != error_code_ok)
+    {
+        LOGW("mass send rejected by invalid content, userid: %d, msgtype: %d, targets: %u",
+             m_userinfo.userid, req.msgtype, static_cast<unsigned>(req.targets.size()));
+        send(cmd_mass_send, m_seq,
+             MessageProtocol::buildSimpleResponse(massContentCode, "invalid message content"));
+        return;
+    }
+
+    //机器人标记只能由服务端产生：客户端带来的 bot 字段一律删掉（docs/机器人方案.md §5.6）
+    if (bot::StripBotMarker(req.content))
+        LOGW("mass send: bot marker stripped from client content, userid: %d", m_userinfo.userid);
+    //@ 的文字位置只对一个会话有意义，群发到多个会话时没有用处；也免得借群发绕过群的 @全体 权限
+    if (MessageProtocol::stripContentMentions(req.content))
+        LOGI("mass send: mentions stripped from client content, userid: %d", m_userinfo.userid);
+
+    //企业级敏感词：所有目标收到的是同一份内容，投递之前检查一次，命中就整条拒绝、一个目标都不发。
+    //群发请求不带引用。拦截记录不对应某一个会话，会话类型记 0，会话名写明目标个数。
+    //会话名要写进库、显示在管理端，中文须用 u8"" 前缀（chatserver 工程未加 /utf-8，不带前缀时
+    //MSVC 按 GBK 编码字符串常量）
+    std::vector<std::string> sensitiveTexts;
+    MessageProtocol::collectSensitiveTexts(req.msgtype, req.content, std::string(), sensitiveTexts);
+    const std::string massSendTargetName =
+        std::string(u8"群发助手（") + std::to_string(req.targets.size()) + u8" 个对象）";
+    if (hitSensitive(sensitiveSourceOfMsgType(req.msgtype), 0, 0, massSendTargetName, sensitiveTexts))
+    {
+        send(cmd_mass_send, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_sensitive_word, "message contains sensitive word"));
+        return;
+    }
+
     UserManager& userMgr = Singleton<UserManager>::Instance();
-    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
     std::vector<MassSendResult> results;
     for (size_t i = 0; i < req.targets.size(); ++i)
     {
@@ -4607,7 +6098,8 @@ void ChatSession::onMassSend(const std::string& body, const std::shared_ptr<TcpC
 
         //每条派生独立 clientmsgid，便于各目标分别去重
         std::string cmid = req.clientmsgid + "-" + std::to_string(i);
-        //单聊：对端存在、非本人、未被对方拉黑才发；群聊：本人为群成员才发；其余跳过（msgid 留 0）
+        //单聊：对端存在、非本人、未被对方拉黑才发；群聊：本人为群成员且未被禁言才发；
+        //其余跳过（msgid 留 0）
         if (t.ctype == CHAT_TYPE_SINGLE)
         {
             int32_t targetId = static_cast<int32_t>(t.cid);
@@ -4623,7 +6115,13 @@ void ChatSession::onMassSend(const std::string& body, const std::shared_ptr<TcpC
         }
         else if (t.ctype == CHAT_TYPE_GROUP)
         {
-            if (groupMgr.isGroupMember(t.cid, m_userinfo.userid))
+            //成员身份、群是否存在、禁言三项与普通群发同一套判定（2026-10-02 补上：原先只判
+            //是否为群成员，被禁言的成员可以借群发往群里发消息）。不通过的群与其它被跳过的目标
+            //一样把 msgid 留 0，不影响其余目标；被禁言时 checkGroupSpeak 已记日志
+            int myrole = group_role_member;
+            GroupRecord group;
+            std::string reason;
+            if (checkGroupSpeak(cmd_mass_send, t.cid, myrole, group, reason) == error_code_ok)
                 r.msgid = deliverConversationMessage(CHAT_TYPE_GROUP, t.cid,
                                                      req.msgtype, req.content, cmid);
         }
@@ -4646,7 +6144,36 @@ void ChatSession::onCreateGroup(const std::string& body, const std::shared_ptr<T
         return;
     }
 
+    //企业级敏感词：查群名。群名为空时由服务端用成员昵称拼成自动群名，没有用户输入的文字；
+    //空串由 checkTexts 跳过，不必单独判断。群还没有建出来，拦截记录的会话类型记 0
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(req.name);
+    if (hitSensitive(chatserver::sensitive_source_group_info, 0, 0, std::string(), sensitiveTexts))
+    {
+        send(cmd_create_group, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_sensitive_word, "group name contains sensitive word"));
+        return;
+    }
+
+    //帖子群要求创建者所属企业开着帖子群开关（docs/帖子群方案.md 4.7）；普通群不受影响
+    if (req.grouptype == group_type_thread)
+    {
+        const int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
+        if (!Singleton<FeatureSwitchManager>::Instance().isEnabled(enterpriseId, kFeatureThreadGroup))
+        {
+            LOGI("create thread group rejected, feature off, userid: %d, enterpriseid: %lld", m_userinfo.userid,
+                 (long long)enterpriseId);
+            send(cmd_create_group, m_seq,
+                 GroupProtocol::buildSimpleResponse(error_code_thread_disabled, "thread group disabled"));
+            return;
+        }
+    }
+
     UserManager& userMgr = Singleton<UserManager>::Instance();
+
+    //分段计时（2026-10-08 用户反馈 166 人建群要等约 9 秒）：过滤成员、写库（含自动群名）、推送各花多久，
+    //处理结束时记在 create group ok 那一行日志里，慢在哪一步能直接从日志看出来
+    const std::chrono::steady_clock::time_point tStart = std::chrono::steady_clock::now();
 
     //过滤初始成员：去重、剔除创建者本人、剔除不存在的用户
     std::vector<int64_t> members;
@@ -4669,9 +6196,14 @@ void ChatSession::onCreateGroup(const std::string& body, const std::shared_ptr<T
 
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
     GroupManager& groupMgr = Singleton<GroupManager>::Instance();
-    int64_t groupid = groupMgr.createGroup(req.name, m_userinfo.userid, members, now);
+    const std::chrono::steady_clock::time_point tFiltered = std::chrono::steady_clock::now();
+    int64_t groupid = groupMgr.createGroup(req.name, m_userinfo.userid, members, now, req.grouptype);
+    const std::chrono::steady_clock::time_point tStored = std::chrono::steady_clock::now();
     if (groupid == 0)
     {
+        LOGE("create group failed, owner: %d, members: %u, store took %lld ms", m_userinfo.userid,
+             static_cast<unsigned>(members.size()),
+             (long long)std::chrono::duration_cast<std::chrono::milliseconds>(tStored - tFiltered).count());
         send(cmd_create_group, m_seq,
              GroupProtocol::buildSimpleResponse(error_code_create_group_fail, "create group failed"));
         return;
@@ -4688,9 +6220,14 @@ void ChatSession::onCreateGroup(const std::string& body, const std::shared_ptr<T
         groupid, group_member_change_join, roster, m_userinfo.userid);
     for (size_t i = 0; i < roster.size(); ++i)
         sendToUser(static_cast<int32_t>(roster[i]), cmd_group_member_changed_notify, notify);
+    const std::chrono::steady_clock::time_point tNotified = std::chrono::steady_clock::now();
 
-    LOGI("create group ok, groupid: %lld, owner: %d, members: %u",
-         (long long)groupid, m_userinfo.userid, static_cast<unsigned>(members.size()));
+    LOGI("create group ok, groupid: %lld, owner: %d, members: %u, grouptype: %d, filter %lld ms, store %lld ms, "
+         "notify %lld ms",
+         (long long)groupid, m_userinfo.userid, static_cast<unsigned>(members.size()), req.grouptype,
+         (long long)std::chrono::duration_cast<std::chrono::milliseconds>(tFiltered - tStart).count(),
+         (long long)std::chrono::duration_cast<std::chrono::milliseconds>(tStored - tFiltered).count(),
+         (long long)std::chrono::duration_cast<std::chrono::milliseconds>(tNotified - tStored).count());
 }
 
 void ChatSession::onDismissGroup(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -4737,7 +6274,23 @@ void ChatSession::onDismissGroup(const std::string& body, const std::shared_ptr<
     //与他无关，但对留下的人仍然有效。
     Singleton<MessagePinManager>::Instance().removePinsForGroup(groupid);
 
+    //该群的文件共享全部取消（原因「群已解散」），在发出解散通知之前完成：成员收到解散通知时，
+    //卡片已经是「已失效」（docs/文件共享方案.md 6.1）
+    handleShareGroupDismissed(groupid, m_userinfo.userid);
+
+    //该群的群机器人软删除，企业机器人在该群的所选与关闭记录删除（docs/机器人方案.md §5.5）
+    Singleton<BotManager>::Instance().onGroupDismissed(groupid, static_cast<int64_t>(time(NULL)) * 1000);
+
     send(cmd_dismiss_group, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+
+    //该群的群备忘全部删除，按解散前的成员名单推删除
+    std::vector<MemoMemberRole> memoMembers;
+    for (size_t i = 0; i < members.size(); ++i)
+        memoMembers.push_back(MemoMemberRole(members[i].userid, members[i].role));
+    handleMemoGroupDismissed(groupid, memoMembers);
+
+    //帖子群：群没了，撤销全部「正在查看」登记（普通群里本来就没有登记）
+    Singleton<ThreadWatchRegistry>::Instance().removeGroup(groupid);
 
     //向全体原成员推 group_info_changed_notify（群已解散）
     GroupRecord dismissed;
@@ -4858,6 +6411,18 @@ void ChatSession::onUpdateGroupInfo(const std::string& body, const std::shared_p
         return;
     }
 
+    //企业级敏感词：只查本次提交、且与当前值不同的群名、简介、欢迎语、旧版公告字段（规则见
+    //GroupProtocol::collectChangedGroupInfoTexts）。放在写库之前，被拦下时整次修改都不生效
+    std::vector<std::string> sensitiveTexts;
+    GroupProtocol::collectChangedGroupInfoTexts(req, group, sensitiveTexts);
+    if (hitSensitive(chatserver::sensitive_source_group_info, CHAT_TYPE_GROUP, req.groupid, group.name,
+                     sensitiveTexts))
+    {
+        send(cmd_update_group_info, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_sensitive_word, "group info contains sensitive word"));
+        return;
+    }
+
     if (!groupMgr.updateGroupInfo(req))
     {
         send(cmd_update_group_info, m_seq,
@@ -4897,79 +6462,6 @@ void ChatSession::notifyGroupMembers(int64_t groupid, uint16_t cmd, const std::s
     Singleton<GroupManager>::Instance().getGroupMembers(groupid, members);
     for (size_t i = 0; i < members.size(); ++i)
         sendToUser(static_cast<int32_t>(members[i].userid), cmd, body);
-}
-
-void ChatSession::onGetSensitiveWords(const std::string& body,
-                                      const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    int64_t groupid = 0;
-    if (!GroupProtocol::parseGroupIdRequest(body, groupid))
-    {
-        send(cmd_get_sensitive_words, m_seq,
-             GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
-        return;
-    }
-
-    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
-    const int myrole = groupMgr.getMemberRole(groupid, m_userinfo.userid);
-    if (myrole < group_role_admin)
-    {
-        send(cmd_get_sensitive_words, m_seq,
-             GroupProtocol::buildSimpleResponse(error_code_not_group_admin,
-                                                "only owner or admin can view sensitive words"));
-        return;
-    }
-
-    std::vector<GroupSensitiveWordRecord> words;
-    groupMgr.getSensitiveWords(groupid, words);
-    send(cmd_get_sensitive_words, m_seq,
-         GroupProtocol::buildSensitiveWordsResponse(0, "ok", groupid, words));
-
-    LOGI("get sensitive words ok, groupid: %lld, userid: %d, count: %d",
-         (long long)groupid, m_userinfo.userid, static_cast<int>(words.size()));
-}
-
-void ChatSession::onOperateSensitiveWord(const std::string& body,
-                                         const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    SensitiveWordOpRequest req;
-    if (!GroupProtocol::parseSensitiveWordOpRequest(body, req))
-    {
-        send(cmd_operate_sensitive_word, m_seq,
-             GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
-        return;
-    }
-
-    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
-    const int myrole = groupMgr.getMemberRole(req.groupid, m_userinfo.userid);
-    if (myrole < group_role_admin)
-    {
-        send(cmd_operate_sensitive_word, m_seq,
-             GroupProtocol::buildSimpleResponse(error_code_not_group_admin,
-                                                "only owner or admin can edit sensitive words"));
-        return;
-    }
-
-    const int64_t kMillisPerSecond = 1000;
-    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
-
-    if (req.operation == sensitive_word_add)
-    {
-        //重复的词返回 0，但对调用方而言"这个词现在在库里"这一目标已经达成，
-        //故仍回 ok —— 让界面上重复添加同一个词表现为无害的幂等操作。
-        groupMgr.addSensitiveWord(req.groupid, req.word, now);
-    }
-    else
-    {
-        groupMgr.deleteSensitiveWord(req.groupid, req.id);
-    }
-
-    send(cmd_operate_sensitive_word, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
-
-    LOGI("operate sensitive word ok, groupid: %lld, userid: %d, operation: %d",
-         (long long)req.groupid, m_userinfo.userid, req.operation);
 }
 
 // ====================================================================
@@ -5062,7 +6554,8 @@ void ChatSession::onPublishGroupAnnouncement(const std::string& body,
 
     //重新发布：按ID读回原件，把标题 / 正文 / 优先级原样再发一条。校验归属是必须的，
     //否则拿着别的群的公告ID就能把那条内容搬到本群来。
-    if (req.id > 0)
+    const bool republish = (req.id > 0);
+    if (republish)
     {
         GroupAnnouncementRecord origin;
         if (!groupMgr.getAnnouncement(req.id, origin) || origin.groupid != req.groupid)
@@ -5075,6 +6568,20 @@ void ChatSession::onPublishGroupAnnouncement(const std::string& body,
         req.title    = origin.title;
         req.content  = origin.content;
         req.severity = origin.severity;
+    }
+
+    //企业级敏感词：查标题与正文。重新发布时查的是上面复制过来的最终内容：重新发布会生成一条
+    //新公告、再次推送给全群，与原公告是否在加词之前发布无关
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(req.title);
+    sensitiveTexts.push_back(req.content);
+    if (hitSensitive(chatserver::sensitive_source_announcement, CHAT_TYPE_GROUP, req.groupid, group.name,
+                     sensitiveTexts))
+    {
+        send(cmd_publish_group_announcement, m_seq,
+             GroupProtocol::buildPublishAnnouncementResponse(
+                 error_code_group_sensitive_word, "announcement contains sensitive word", 0));
+        return;
     }
 
     const int64_t kMillisPerSecond = 1000;
@@ -5106,10 +6613,10 @@ void ChatSession::onPublishGroupAnnouncement(const std::string& body,
     fillAnnouncementPublisherName(item);
 
     notifyAnnouncementChanged(item, group_announcement_change_publish);
-    sendAnnouncementSystemMessage(item);
+    const int64_t cardMsgId = sendAnnouncementCard(item, republish);
 
-    LOGI("publish group announcement ok, groupid: %lld, id: %lld, by: %d",
-         (long long)req.groupid, (long long)newId, m_userinfo.userid);
+    LOGI("publish group announcement ok, groupid: %lld, id: %lld, by: %d, republish: %d, card msgid: %lld",
+         (long long)req.groupid, (long long)newId, m_userinfo.userid, republish ? 1 : 0, (long long)cardMsgId);
 }
 
 void ChatSession::onDeleteGroupAnnouncement(const std::string& body,
@@ -5154,17 +6661,38 @@ void ChatSession::onDeleteGroupAnnouncement(const std::string& body,
 
     send(cmd_delete_group_announcement, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
 
-    fillAnnouncementPublisherName(item);
-    notifyAnnouncementChanged(item, group_announcement_change_delete);
+    //删的正是入群必读公告：按取消入群必读处理，待确认的人一并解除限制（docs/群公告接入方案.md §14.1）。
+    //群资料变更随下面 notifyAnnouncementChanged 一起推出去
+    GroupRecord groupNow;
+    if (groupMgr.getGroup(groupid, groupNow) && groupNow.mustreadid == id)
+    {
+        std::vector<int64_t> cleared;
+        if (groupMgr.setMustRead(groupid, 0, cleared) && !cleared.empty())
+        {
+            notifyGroupMembers(groupid, cmd_group_member_changed_notify,
+                               GroupProtocol::buildGroupMemberChangedNotify(
+                                   groupid, group_member_change_must_read, cleared, m_userinfo.userid));
+        }
+        LOGI("must-read announcement deleted, must-read cancelled, groupid: %lld, id: %lld, cleared: %u",
+             (long long)groupid, (long long)id, static_cast<unsigned>(cleared.size()));
+    }
 
-    LOGI("delete group announcement ok, groupid: %lld, id: %lld, by: %d",
-         (long long)groupid, (long long)id, m_userinfo.userid);
+    //公告卡片改写为已删除形态，改写结果随删除推送带给在线成员（docs/群公告接入方案.md §13.3）
+    std::string cardContent;
+    const int64_t cardMsgId = rewriteAnnouncementCardAsDeleted(item, cardContent);
+
+    fillAnnouncementPublisherName(item);
+    notifyAnnouncementChanged(item, group_announcement_change_delete, cardMsgId, cardContent);
+
+    LOGI("delete group announcement ok, groupid: %lld, id: %lld, by: %d, card msgid: %lld",
+         (long long)groupid, (long long)id, m_userinfo.userid, (long long)cardMsgId);
 }
 
-void ChatSession::notifyAnnouncementChanged(const GroupAnnouncementRecord& item, int changetype)
+void ChatSession::notifyAnnouncementChanged(const GroupAnnouncementRecord& item, int changetype,
+                                            int64_t cardMsgId, const std::string& cardContent)
 {
     notifyGroupMembers(item.groupid, cmd_group_announcement_notify,
-                       GroupProtocol::buildAnnouncementNotify(item, changetype));
+                       GroupProtocol::buildAnnouncementNotify(item, changetype, cardMsgId, cardContent));
 
     //公告快照四列刚被 refreshLatestAnnouncement 改过，读回最新群资料再推一条群资料
     //变更 —— 群资料对话框与群聊窗头部摘要行只认这条。
@@ -5176,27 +6704,99 @@ void ChatSession::notifyAnnouncementChanged(const GroupAnnouncementRecord& item,
     }
 }
 
-void ChatSession::sendAnnouncementSystemMessage(const GroupAnnouncementRecord& item)
+int64_t ChatSession::sendAnnouncementCard(const GroupAnnouncementRecord& item, bool republish)
 {
-    //发布人昵称取不到时退而用"有人"，不让提示语里出现一个空的书名号
-    std::string who = item.publishername;
-    if (who.empty())
-        who = u8"有人";
+    const std::string content = GroupProtocol::buildAnnouncementCardContent(item, republish);
 
-    const std::string text = u8"「" + who + u8"」发布了群公告：" + item.title;
+    //落库前套上 buildStoredContent 的外壳，与系统消息、共享卡片的落库口径一致；卡片不带 @ 与引用
+    std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(content, noMentions, false, "");
 
-    //占位的客户端消息ID带上公告ID：同一条公告重新发布时去重键不同，各自成一条提示
-    const std::string clientMsgId = "sys-announce-" + std::to_string(item.groupid)
-                                    + "-" + std::to_string(item.id);
-    sendGroupSystemMessage(item.groupid, text, clientMsgId);
+    //clientmsgid 由群 id 与公告 id 拼成：重新发布得到的是新的公告 id，各自成一张卡片；
+    //删除公告时也靠它找回这张卡片
+    const std::string clientMsgId = GroupProtocol::announcementCardClientMsgId(item.groupid, item.id);
+
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+    const int64_t msgId = msgMgr.saveMessage(clientMsgId, CHAT_TYPE_GROUP,
+                                             static_cast<int32_t>(item.publisher),
+                                             static_cast<int32_t>(item.groupid),
+                                             message_type_announcement, stored, item.publishtime);
+    if (msgId == 0)
+    {
+        LOGE("save announcement card failed, groupid: %lld, announcement id: %lld",
+             (long long)item.groupid, (long long)item.id);
+        return 0;
+    }
+
+    MessageRecord rec;
+    rec.msgid       = msgId;
+    rec.clientmsgid = clientMsgId;
+    rec.ctype       = CHAT_TYPE_GROUP;
+    rec.from        = item.publisher;
+    rec.to          = item.groupid;
+    rec.msgtype     = message_type_announcement;
+    rec.content     = content;
+    rec.mentionall  = false;
+    rec.timestamp   = item.publishtime;
+    rec.recalled    = false;
+    //推给全体成员，包括发布人本人的各台设备：发布人自己的群聊窗里同样要出现这张卡片
+    notifyGroupMembers(item.groupid, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, item.groupid));
+
+    LOGI("announcement card sent, groupid: %lld, announcement id: %lld, msgid: %lld, republish: %d",
+         (long long)item.groupid, (long long)item.id, (long long)msgId, republish ? 1 : 0);
+    return msgId;
 }
 
-int64_t ChatSession::sendGroupSystemMessage(int64_t groupid, const std::string& text,
+int64_t ChatSession::rewriteAnnouncementCardAsDeleted(const GroupAnnouncementRecord& item, std::string& outContent)
+{
+    outContent.clear();
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+
+    //本功能上线前发布的公告没有卡片（当时插的是系统提示），查不到属正常
+    const std::string clientMsgId = GroupProtocol::announcementCardClientMsgId(item.groupid, item.id);
+    const int64_t cardMsgId = msgMgr.getMsgIdByClientId(static_cast<int32_t>(item.publisher), clientMsgId);
+    if (cardMsgId <= 0)
+    {
+        LOGI("announcement card not found, nothing to rewrite, groupid: %lld, announcement id: %lld",
+             (long long)item.groupid, (long long)item.id);
+        return 0;
+    }
+
+    MessageRecord card;
+    if (!msgMgr.getMessageById(cardMsgId, card) || card.msgtype != message_type_announcement)
+    {
+        LOGE("announcement card unreadable, groupid: %lld, announcement id: %lld, msgid: %lld",
+             (long long)item.groupid, (long long)item.id, (long long)cardMsgId);
+        return 0;
+    }
+
+    std::string deleted;
+    if (!GroupProtocol::buildDeletedAnnouncementCardContent(card.content, deleted))
+    {
+        LOGE("announcement card content is not an object, msgid: %lld", (long long)cardMsgId);
+        return 0;
+    }
+
+    //改写落库时同样套上外壳；updateMessageContent 会按新内容重算搜索文本，正文从此搜不到
+    std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(deleted, noMentions, false, "");
+    if (!msgMgr.updateMessageContent(cardMsgId, stored))
+    {
+        LOGE("rewrite announcement card failed, msgid: %lld", (long long)cardMsgId);
+        return 0;
+    }
+
+    outContent = deleted;
+    LOGI("announcement card rewritten as deleted, groupid: %lld, announcement id: %lld, msgid: %lld",
+         (long long)item.groupid, (long long)item.id, (long long)cardMsgId);
+    return cardMsgId;
+}
+
+int64_t ChatSession::sendGroupSystemMessage(int64_t groupid, const std::string& content,
                                             const std::string& clientMsgId)
 {
-    //系统消息的 content 与文本消息同构（只有一个 text 字段），客户端的文本渲染
-    //路径可以直接复用。
-    const std::string content = MessageProtocol::buildTextContent(text);
+    //系统消息的 content 与文本消息同构（带 text 字段），客户端的文本渲染路径可以直接复用。
+    //另带的 tipkind / tipargs（多语言第 5 期）与接龙提示的 cardmsgid，不认识的客户端照常按 text 显示。
 
     //落库前还要再套一层 buildStoredContent 的外壳（content/mentions/mentionall/quote），
     //与单聊/群聊/转发那几条落库路径口径一致。读回时 parseStoredContent 只认最外层的
@@ -5259,10 +6859,10 @@ void ChatSession::sendGroupWelcomeMessage(const GroupRecord& group,
     if (group.welcomeon == 0 || group.welcometext.empty() || newMembers.empty())
         return;
 
-    //把新成员的昵称拼在欢迎语前面，形如"张三、李四 欢迎加入本群"。
+    //新成员的昵称拼在欢迎语前面，形如"张三、李四 欢迎加入本群"（GroupProtocol::buildWelcomeTip）。
     //取不到昵称的（用户已注销等）跳过，不让空名字污染这句话。
     UserManager& userMgr = Singleton<UserManager>::Instance();
-    std::string names;
+    std::vector<std::string> names;
     for (size_t i = 0; i < newMembers.size(); ++i)
     {
         User u;
@@ -5270,27 +6870,746 @@ void ChatSession::sendGroupWelcomeMessage(const GroupRecord& group,
             continue;
         if (u.nickname.empty())
             continue;
-
-        if (!names.empty())
-            names += u8"、";
-        names += u.nickname;
+        names.push_back(u.nickname);
     }
-
-    std::string text = group.welcometext;
-    if (!names.empty())
-        text = names + u8" " + group.welcometext;
+    const std::string content = GroupProtocol::buildWelcomeTipContent(names, group.welcometext);
 
     //占位的客户端消息ID带上群ID与时间戳：欢迎语没有可用的业务ID
     const int64_t kMillisPerSecond = 1000;
     const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
     const std::string clientMsgId = "sys-welcome-" + std::to_string(group.groupid)
                                     + "-" + std::to_string(now);
-    const int64_t msgId = sendGroupSystemMessage(group.groupid, text, clientMsgId);
+    const int64_t msgId = sendGroupSystemMessage(group.groupid, content, clientMsgId);
     if (msgId != 0)
     {
         LOGI("group welcome message sent, groupid: %lld, msgid: %lld, newmembers: %d",
              (long long)group.groupid, (long long)msgId, static_cast<int>(newMembers.size()));
     }
+}
+
+void ChatSession::completeGroupJoin(const GroupRecord& group, const std::vector<int64_t>& newMembers,
+                                    int64_t inviterId, int64_t operatorId)
+{
+    if (newMembers.empty())
+        return;
+
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+
+    //1) 已读位点推到本群最新一条：新成员原先没有会话行，位点按 0 处理，入群前别人发的消息
+    //   会全部算成未读（docs/邀请入群方案.md §2.5）。失败只影响未读数，不影响入群本身
+    if (!Singleton<MessageManager>::Instance().initNewMembersReadPos(group.groupid, newMembers, now))
+    {
+        LOGE("init new members read position failed, groupid: %lld, newmembers: %u",
+             (long long)group.groupid, static_cast<unsigned>(newMembers.size()));
+    }
+
+    //1-1) 本群设了入群必读：新成员标为待确认，确认前不能发言（docs/群公告接入方案.md §14）。须在推成员变更之前标好，
+    //   各端收到推送后重拉成员列表时才看得到标记
+    if (group.mustreadid > 0 && !Singleton<GroupManager>::Instance().markMustReadPending(group.groupid, newMembers))
+    {
+        LOGE("mark must-read pending failed, groupid: %lld, newmembers: %u",
+             (long long)group.groupid, static_cast<unsigned>(newMembers.size()));
+    }
+
+    //2) 向全体成员（含新成员）推 member_changed_notify（加入）
+    const std::string notify = GroupProtocol::buildGroupMemberChangedNotify(
+        group.groupid, group_member_change_join, newMembers, operatorId);
+    notifyGroupMembers(group.groupid, cmd_group_member_changed_notify, notify);
+
+    //3) 自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
+    Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(group.groupid);
+
+    //4) 「有人入群」系统提示：用账号昵称（新成员此时还没有群名片），取不到昵称的只计人数
+    UserManager& userMgr = Singleton<UserManager>::Instance();
+    std::vector<JoinTipMember> tipMembers;
+    for (size_t i = 0; i < newMembers.size(); ++i)
+    {
+        User u;
+        u.userid = 0;
+        std::string nickname;
+        if (userMgr.getUserInfoByUserId(static_cast<int32_t>(newMembers[i]), u))
+            nickname = u.nickname;
+        tipMembers.push_back(JoinTipMember(newMembers[i], nickname));
+    }
+    std::string inviterNickname;
+    if (inviterId != 0)
+    {
+        User inviter;
+        inviter.userid = 0;
+        if (userMgr.getUserInfoByUserId(static_cast<int32_t>(inviterId), inviter))
+            inviterNickname = inviter.nickname;
+    }
+    //占位消息ID带上群、第一位新成员与时间戳：同一批人退了又进时各成一条
+    const std::string clientMsgId = "sys-join-" + std::to_string(group.groupid) + "-"
+                                    + std::to_string(newMembers[0]) + "-" + std::to_string(now);
+    const int64_t tipMsgId = sendGroupSystemMessage(
+        group.groupid, GroupProtocol::buildMemberJoinTipContent(inviterId, inviterNickname, tipMembers), clientMsgId);
+
+    //5) 入群欢迎语
+    sendGroupWelcomeMessage(group, newMembers);
+
+    //6) 新成员能看到本群提醒全体成员的群备忘
+    handleMemoMembersJoinedGroup(group.groupid, newMembers);
+
+    //7) 入群必读卡片：每位新成员各一张，只有他本人看得到
+    if (group.mustreadid > 0)
+        sendMustReadCards(group, newMembers, now);
+
+    //8) 机器人的入群规则（docs/机器人方案.md §3.5 T3）
+    Singleton<BotEngine>::Instance().onMembersJoined(
+        group.groupid, Singleton<DepartmentManager>::Instance().getUserEnterpriseId(group.ownerid), newMembers);
+
+    LOGI("group join completed, groupid: %lld, newmembers: %u, inviter: %lld, operator: %lld, tipmsgid: %lld",
+         (long long)group.groupid, static_cast<unsigned>(newMembers.size()), (long long)inviterId,
+         (long long)operatorId, (long long)tipMsgId);
+}
+
+void ChatSession::sendMustReadCards(const GroupRecord& group, const std::vector<int64_t>& newMembers, int64_t nowMs)
+{
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    GroupAnnouncementRecord item;
+    if (!groupMgr.getAnnouncement(group.mustreadid, item) || item.groupid != group.groupid)
+    {
+        LOGE("send must-read cards: announcement not found, groupid: %lld, id: %lld",
+             (long long)group.groupid, (long long)group.mustreadid);
+        return;
+    }
+    fillAnnouncementPublisherName(item);
+    const std::string content = GroupProtocol::buildMustReadCardContent(item);
+    std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(content, noMentions, false, "");
+
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+    for (size_t i = 0; i < newMembers.size(); ++i)
+    {
+        //以系统的名义写入（发送者 0），可见范围只登记这位新成员：别人看不到，系统也没有设备
+        std::vector<int32_t> audience(1, static_cast<int32_t>(newMembers[i]));
+        const std::string clientMsgId = "mustread-" + std::to_string(group.groupid) + "-"
+                                        + std::to_string(newMembers[i]) + "-" + std::to_string(nowMs);
+        const int64_t msgId = msgMgr.saveMessage(clientMsgId, CHAT_TYPE_GROUP, kSystemMessageSenderId,
+                                                 static_cast<int32_t>(group.groupid), message_type_announcement,
+                                                 stored, nowMs, &audience);
+        if (msgId == 0)
+        {
+            LOGE("save must-read card failed, groupid: %lld, userid: %lld",
+                 (long long)group.groupid, (long long)newMembers[i]);
+            continue;
+        }
+        MessageRecord rec;
+        rec.msgid       = msgId;
+        rec.clientmsgid = clientMsgId;
+        rec.ctype       = CHAT_TYPE_GROUP;
+        rec.from        = kSystemMessageSenderId;
+        rec.to          = group.groupid;
+        rec.msgtype     = message_type_announcement;
+        rec.content     = content;
+        rec.mentionall  = false;
+        rec.timestamp   = nowMs;
+        rec.recalled    = false;
+        sendToUser(static_cast<int32_t>(newMembers[i]), cmd_message_notify,
+                   MessageProtocol::buildMessageNotify(rec, group.groupid));
+        LOGI("must-read card sent, groupid: %lld, userid: %lld, announcement: %lld, msgid: %lld",
+             (long long)group.groupid, (long long)newMembers[i], (long long)item.id, (long long)msgId);
+    }
+}
+
+void ChatSession::onSetMustRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    int64_t announcementId = 0;
+    if (!GroupProtocol::parseSetMustReadRequest(body, groupid, announcementId))
+    {
+        send(cmd_set_must_read, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    const int myrole = groupMgr.getMemberRole(groupid, m_userinfo.userid);
+    if (myrole < 0)
+    {
+        send(cmd_set_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    if (myrole < group_role_admin)
+    {
+        send(cmd_set_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_admin, "only owner or admin can set must-read"));
+        return;
+    }
+
+    //指定的公告须是本群的
+    if (announcementId > 0)
+    {
+        GroupAnnouncementRecord item;
+        if (!groupMgr.getAnnouncement(announcementId, item) || item.groupid != groupid)
+        {
+            send(cmd_set_must_read, m_seq,
+                 GroupProtocol::buildSimpleResponse(error_code_announcement_404, "announcement not exist"));
+            return;
+        }
+    }
+
+    std::vector<int64_t> cleared;
+    if (!groupMgr.setMustRead(groupid, announcementId, cleared))
+    {
+        send(cmd_set_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "set must-read failed"));
+        return;
+    }
+    send(cmd_set_must_read, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+
+    //群资料带着新的 mustreadid 推给全群；取消时被解除限制的人另推成员变更，他们的输入区与成员标记随之恢复
+    GroupRecord updated;
+    if (groupMgr.getGroup(groupid, updated))
+    {
+        notifyGroupMembers(groupid, cmd_group_info_changed_notify,
+                           GroupProtocol::buildGroupInfoChangedNotify(updated, group_info_change_updated));
+    }
+    if (!cleared.empty())
+    {
+        notifyGroupMembers(groupid, cmd_group_member_changed_notify,
+                           GroupProtocol::buildGroupMemberChangedNotify(
+                               groupid, group_member_change_must_read, cleared, m_userinfo.userid));
+    }
+    LOGI("set must-read ok, groupid: %lld, announcement: %lld, by: %d, cleared: %u",
+         (long long)groupid, (long long)announcementId, m_userinfo.userid, static_cast<unsigned>(cleared.size()));
+}
+
+void ChatSession::onConfirmMustRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    if (!GroupProtocol::parseGroupIdRequest(body, groupid))
+    {
+        send(cmd_confirm_must_read, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    if (!groupMgr.isGroupMember(groupid, m_userinfo.userid))
+    {
+        send(cmd_confirm_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    std::vector<int64_t> self(1, m_userinfo.userid);
+    std::vector<int64_t> cleared;
+    if (!groupMgr.clearMustReadPending(groupid, self, cleared))
+    {
+        send(cmd_confirm_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "confirm must-read failed"));
+        return;
+    }
+    //本来就不是待确认的（重复点、别处已确认）也回成功，界面照样恢复
+    send(cmd_confirm_must_read, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+    if (!cleared.empty())
+    {
+        notifyGroupMembers(groupid, cmd_group_member_changed_notify,
+                           GroupProtocol::buildGroupMemberChangedNotify(
+                               groupid, group_member_change_must_read, cleared, m_userinfo.userid));
+    }
+    LOGI("confirm must-read ok, groupid: %lld, userid: %d, changed: %u",
+         (long long)groupid, m_userinfo.userid, static_cast<unsigned>(cleared.size()));
+}
+
+void ChatSession::onReleaseMustRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    GroupMembersOpRequest req;
+    if (!GroupProtocol::parseGroupMembersOpRequest(body, req) || req.userids.empty())
+    {
+        send(cmd_release_must_read, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    const int myrole = groupMgr.getMemberRole(req.groupid, m_userinfo.userid);
+    if (myrole < 0)
+    {
+        send(cmd_release_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    if (myrole < group_role_admin)
+    {
+        send(cmd_release_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_admin, "only owner or admin can release must-read"));
+        return;
+    }
+    std::vector<int64_t> cleared;
+    if (!groupMgr.clearMustReadPending(req.groupid, req.userids, cleared))
+    {
+        send(cmd_release_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "release must-read failed"));
+        return;
+    }
+    send(cmd_release_must_read, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+    if (!cleared.empty())
+    {
+        notifyGroupMembers(req.groupid, cmd_group_member_changed_notify,
+                           GroupProtocol::buildGroupMemberChangedNotify(
+                               req.groupid, group_member_change_must_read, cleared, m_userinfo.userid));
+    }
+    LOGI("release must-read ok, groupid: %lld, by: %d, requested: %u, changed: %u",
+         (long long)req.groupid, m_userinfo.userid, static_cast<unsigned>(req.userids.size()),
+         static_cast<unsigned>(cleared.size()));
+}
+
+void ChatSession::onGetMustRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    if (!GroupProtocol::parseGroupIdRequest(body, groupid))
+    {
+        send(cmd_get_must_read, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    int role = group_role_member;
+    int muted = 0;
+    int mustRead = 0;
+    if (!groupMgr.getMemberRoleAndMuted(groupid, m_userinfo.userid, role, muted, NULL, &mustRead))
+    {
+        send(cmd_get_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    GroupRecord group;
+    if (!groupMgr.getGroup(groupid, group))
+    {
+        send(cmd_get_must_read, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_not_exist, "group not exist"));
+        return;
+    }
+    GroupAnnouncementRecord item;
+    const GroupAnnouncementRecord* pItem = NULL;
+    if (group.mustreadid > 0 && groupMgr.getAnnouncement(group.mustreadid, item) && item.groupid == groupid)
+    {
+        fillAnnouncementPublisherName(item);
+        pItem = &item;
+    }
+    send(cmd_get_must_read, m_seq,
+         GroupProtocol::buildGetMustReadResponse(0, "ok", groupid, group.mustreadid, mustRead != 0, pItem));
+    LOGI("get must-read ok, groupid: %lld, userid: %d, mustreadid: %lld, pending: %d",
+         (long long)groupid, m_userinfo.userid, (long long)group.mustreadid, mustRead);
+}
+
+void ChatSession::onGetGroupQa(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    if (!GroupProtocol::parseGroupIdRequest(body, groupid))
+    {
+        send(cmd_get_group_qa, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    GroupRecord group;
+    if (!groupMgr.getGroup(groupid, group))
+    {
+        send(cmd_get_group_qa, m_seq, GroupProtocol::buildSimpleResponse(error_code_group_not_exist, "group not exist"));
+        return;
+    }
+    if (!groupMgr.isGroupMember(groupid, m_userinfo.userid))
+    {
+        send(cmd_get_group_qa, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+
+    GroupQaManager& qaMgr = Singleton<GroupQaManager>::Instance();
+    std::vector<GroupQaRecord> groupItems;
+    std::vector<GroupQaRecord> entItems;
+    qaMgr.listGroupQa(groupid, groupItems);
+    //群所属企业按群主所属企业认定（t_group 没有企业列，docs/群问答方案.md §1）
+    const int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(group.ownerid);
+    qaMgr.listEnterpriseQaForGroup(enterpriseId, groupid, entItems);
+
+    //本群问答的修改人显示昵称
+    UserManager& userMgr = Singleton<UserManager>::Instance();
+    for (size_t i = 0; i < groupItems.size(); ++i)
+    {
+        User u;
+        u.userid = 0;
+        if (userMgr.getUserInfoByUserId(static_cast<int32_t>(groupItems[i].editor), u))
+            groupItems[i].editorname = u.nickname;
+    }
+    const std::vector<GroupQaRecord> merged = GroupQaProtocol::mergeForGroup(groupItems, entItems);
+    send(cmd_get_group_qa, m_seq, GroupQaProtocol::buildGetResponse(0, "ok", groupid, merged));
+    LOGI("get group qa ok, groupid: %lld, userid: %d, group items: %u, enterprise items: %u, merged: %u",
+         (long long)groupid, m_userinfo.userid, static_cast<unsigned>(groupItems.size()),
+         static_cast<unsigned>(entItems.size()), static_cast<unsigned>(merged.size()));
+}
+
+void ChatSession::onSaveGroupQa(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    SaveGroupQaRequest req;
+    if (!GroupQaProtocol::parseSaveRequest(body, req))
+    {
+        send(cmd_save_group_qa, m_seq, GroupQaProtocol::buildSaveResponse(error_code_bad_request, "bad request", 0, 0));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    const int myrole = groupMgr.getMemberRole(req.groupid, m_userinfo.userid);
+    if (myrole < 0)
+    {
+        send(cmd_save_group_qa, m_seq,
+             GroupQaProtocol::buildSaveResponse(error_code_not_group_member, "not a group member", req.groupid, 0));
+        return;
+    }
+    if (myrole < group_role_admin)
+    {
+        send(cmd_save_group_qa, m_seq,
+             GroupQaProtocol::buildSaveResponse(error_code_not_group_admin, "only owner or admin can edit qa", req.groupid, 0));
+        return;
+    }
+    if (GroupQaProtocol::checkContent(req.question, req.answer) != group_qa_check_ok)
+    {
+        send(cmd_save_group_qa, m_seq,
+             GroupQaProtocol::buildSaveResponse(error_code_bad_request, "invalid question or answer", req.groupid, 0));
+        return;
+    }
+    GroupQaManager& qaMgr = Singleton<GroupQaManager>::Instance();
+    if (req.id > 0)
+    {
+        GroupQaRecord exist;
+        if (!qaMgr.getGroupQa(req.id, exist) || exist.groupid != req.groupid)
+        {
+            send(cmd_save_group_qa, m_seq,
+                 GroupQaProtocol::buildSaveResponse(error_code_group_qa_not_exist, "qa not exist", req.groupid, 0));
+            return;
+        }
+    }
+    else if (qaMgr.countGroupQa(req.groupid) >= kGroupQaPerGroupMax)
+    {
+        send(cmd_save_group_qa, m_seq,
+             GroupQaProtocol::buildSaveResponse(error_code_group_qa_limit, "qa limit reached", req.groupid, 0));
+        return;
+    }
+
+    //企业级敏感词：问题与答案都查
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(req.question);
+    sensitiveTexts.push_back(req.answer);
+    if (hitSensitive(chatserver::sensitive_source_group_qa, CHAT_TYPE_GROUP, req.groupid, std::string(), sensitiveTexts))
+    {
+        send(cmd_save_group_qa, m_seq,
+             GroupQaProtocol::buildSaveResponse(error_code_group_sensitive_word, "qa contains sensitive word", req.groupid, 0));
+        return;
+    }
+
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    int64_t savedId = req.id;
+    bool ok = false;
+    if (req.id > 0)
+        ok = qaMgr.updateGroupQa(req.groupid, req.id, req.question, req.answer, m_userinfo.userid, now);
+    else
+        ok = qaMgr.addGroupQa(req.groupid, req.question, req.answer, m_userinfo.userid, now, savedId);
+    if (!ok)
+    {
+        send(cmd_save_group_qa, m_seq,
+             GroupQaProtocol::buildSaveResponse(error_code_server_internal, "save qa failed", req.groupid, 0));
+        return;
+    }
+    send(cmd_save_group_qa, m_seq, GroupQaProtocol::buildSaveResponse(0, "ok", req.groupid, savedId));
+    notifyGroupMembers(req.groupid, cmd_group_qa_changed_notify, GroupQaProtocol::buildChangedNotify(req.groupid));
+    LOGI("save group qa ok, groupid: %lld, id: %lld, by: %d, new: %d",
+         (long long)req.groupid, (long long)savedId, m_userinfo.userid, req.id > 0 ? 0 : 1);
+}
+
+void ChatSession::onDeleteGroupQa(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    int64_t id = 0;
+    if (!GroupQaProtocol::parseDeleteRequest(body, groupid, id))
+    {
+        send(cmd_delete_group_qa, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    const int myrole = groupMgr.getMemberRole(groupid, m_userinfo.userid);
+    if (myrole < 0)
+    {
+        send(cmd_delete_group_qa, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    if (myrole < group_role_admin)
+    {
+        send(cmd_delete_group_qa, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_admin, "only owner or admin can delete qa"));
+        return;
+    }
+    GroupQaManager& qaMgr = Singleton<GroupQaManager>::Instance();
+    GroupQaRecord exist;
+    if (!qaMgr.getGroupQa(id, exist) || exist.groupid != groupid)
+    {
+        send(cmd_delete_group_qa, m_seq, GroupProtocol::buildSimpleResponse(error_code_group_qa_not_exist, "qa not exist"));
+        return;
+    }
+    if (!qaMgr.deleteGroupQa(groupid, id))
+    {
+        send(cmd_delete_group_qa, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "delete qa failed"));
+        return;
+    }
+    send(cmd_delete_group_qa, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+    notifyGroupMembers(groupid, cmd_group_qa_changed_notify, GroupQaProtocol::buildChangedNotify(groupid));
+    LOGI("delete group qa ok, groupid: %lld, id: %lld, by: %d", (long long)groupid, (long long)id, m_userinfo.userid);
+}
+
+void ChatSession::onCreateGroupLink(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    int days = kGroupLinkDaysSeven;
+    if (!GroupLinkProtocol::parseCreateRequest(body, groupid, days))
+    {
+        send(cmd_create_group_link, m_seq,
+             GroupLinkProtocol::buildCreateResponse(error_code_bad_request, "bad request", NULL));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    GroupRecord group;
+    if (!groupMgr.getGroup(groupid, group))
+    {
+        send(cmd_create_group_link, m_seq,
+             GroupLinkProtocol::buildCreateResponse(error_code_group_not_exist, "group not exist", NULL));
+        return;
+    }
+    if (!groupMgr.isGroupMember(groupid, m_userinfo.userid))
+    {
+        send(cmd_create_group_link, m_seq,
+             GroupLinkProtocol::buildCreateResponse(error_code_not_group_member, "not a group member", NULL));
+        return;
+    }
+    //禁止加入的群：链接点了也进不来，干脆不让生成
+    if (group.joinmode == group_join_forbid)
+    {
+        send(cmd_create_group_link, m_seq,
+             GroupLinkProtocol::buildCreateResponse(error_code_permission_denied, "group forbids joining", NULL));
+        return;
+    }
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    GroupLinkRecord rec;
+    rec.groupid = groupid;
+    rec.creator = m_userinfo.userid;
+    rec.enterpriseid = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
+    rec.expiretime = GroupLinkProtocol::computeExpire(now, days);
+    if (!Singleton<GroupLinkManager>::Instance().create(rec, now))
+    {
+        send(cmd_create_group_link, m_seq,
+             GroupLinkProtocol::buildCreateResponse(error_code_server_internal, "create link failed", NULL));
+        return;
+    }
+    rec.creatorname = m_userinfo.nickname;
+    send(cmd_create_group_link, m_seq, GroupLinkProtocol::buildCreateResponse(0, "ok", &rec));
+    LOGI("create group link ok, groupid: %lld, id: %lld, by: %d, days: %d",
+         (long long)groupid, (long long)rec.id, m_userinfo.userid, days);
+}
+
+void ChatSession::onGetGroupLinks(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    if (!GroupProtocol::parseGroupIdRequest(body, groupid))
+    {
+        send(cmd_get_group_links, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    const int myrole = Singleton<GroupManager>::Instance().getMemberRole(groupid, m_userinfo.userid);
+    if (myrole < 0)
+    {
+        send(cmd_get_group_links, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    //群主与管理员看全部，普通成员只看本人生成的
+    const int64_t creatorFilter = (myrole >= group_role_admin) ? 0 : m_userinfo.userid;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    std::vector<GroupLinkRecord> links;
+    if (!Singleton<GroupLinkManager>::Instance().listUsable(groupid, creatorFilter, now, links))
+    {
+        send(cmd_get_group_links, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "list links failed"));
+        return;
+    }
+    UserManager& userMgr = Singleton<UserManager>::Instance();
+    for (size_t i = 0; i < links.size(); ++i)
+    {
+        User u;
+        u.userid = 0;
+        if (userMgr.getUserInfoByUserId(static_cast<int32_t>(links[i].creator), u))
+            links[i].creatorname = u.nickname;
+    }
+    send(cmd_get_group_links, m_seq, GroupLinkProtocol::buildListResponse(0, "ok", groupid, links));
+    LOGI("get group links ok, groupid: %lld, userid: %d, count: %u",
+         (long long)groupid, m_userinfo.userid, static_cast<unsigned>(links.size()));
+}
+
+void ChatSession::onRevokeGroupLink(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t groupid = 0;
+    int64_t id = 0;
+    if (!GroupLinkProtocol::parseRevokeRequest(body, groupid, id))
+    {
+        send(cmd_revoke_group_link, m_seq, GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+    const int myrole = Singleton<GroupManager>::Instance().getMemberRole(groupid, m_userinfo.userid);
+    if (myrole < 0)
+    {
+        send(cmd_revoke_group_link, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+    GroupLinkManager& linkMgr = Singleton<GroupLinkManager>::Instance();
+    GroupLinkRecord link;
+    if (!linkMgr.getById(id, link) || link.groupid != groupid)
+    {
+        send(cmd_revoke_group_link, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_link_invalid, "link not exist"));
+        return;
+    }
+    if (myrole < group_role_admin && link.creator != m_userinfo.userid)
+    {
+        send(cmd_revoke_group_link, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_permission_denied, "only owner, admin or creator can revoke"));
+        return;
+    }
+    if (!linkMgr.revoke(groupid, id))
+    {
+        send(cmd_revoke_group_link, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "revoke link failed"));
+        return;
+    }
+    send(cmd_revoke_group_link, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+    LOGI("revoke group link ok, groupid: %lld, id: %lld, by: %d", (long long)groupid, (long long)id, m_userinfo.userid);
+}
+
+int ChatSession::resolveGroupLink(const std::string& code, GroupLinkRecord& link, GroupRecord& group)
+{
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    if (!Singleton<GroupLinkManager>::Instance().getByCode(code, link) || !GroupLinkProtocol::isUsable(link, now))
+        return error_code_group_link_invalid;
+    if (!Singleton<GroupManager>::Instance().getGroup(link.groupid, group))
+        return error_code_group_link_invalid;
+    //只对生成者所在企业的同事有效
+    const int64_t myEnterprise = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
+    if (link.enterpriseid != 0 && myEnterprise != link.enterpriseid)
+        return error_code_group_link_enterprise;
+    return error_code_ok;
+}
+
+void ChatSession::onGetGroupLinkInfo(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string code;
+    if (!GroupLinkProtocol::parseCodeRequest(body, code))
+    {
+        send(cmd_get_group_link_info, m_seq,
+             GroupLinkProtocol::buildInfoResponse(error_code_group_link_invalid, "invalid link", NULL));
+        return;
+    }
+    GroupLinkRecord link;
+    GroupRecord group;
+    const int rc = resolveGroupLink(code, link, group);
+    if (rc != error_code_ok)
+    {
+        LOGI("get group link info rejected, userid: %d, code: %d", m_userinfo.userid, rc);
+        send(cmd_get_group_link_info, m_seq, GroupLinkProtocol::buildInfoResponse(rc, "link not usable", NULL));
+        return;
+    }
+    GroupLinkInfo info;
+    info.groupid     = group.groupid;
+    info.name        = group.name;
+    info.facetype    = group.facetype;
+    info.customface  = group.customface;
+    info.membercount = group.membercount;
+    info.joinmode    = group.joinmode;
+    info.member      = Singleton<GroupManager>::Instance().isGroupMember(group.groupid, m_userinfo.userid);
+    send(cmd_get_group_link_info, m_seq, GroupLinkProtocol::buildInfoResponse(0, "ok", &info));
+    LOGI("get group link info ok, userid: %d, groupid: %lld, member: %d",
+         m_userinfo.userid, (long long)group.groupid, info.member ? 1 : 0);
+}
+
+void ChatSession::onJoinGroupByLink(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string code;
+    if (!GroupLinkProtocol::parseCodeRequest(body, code))
+    {
+        send(cmd_join_group_by_link, m_seq,
+             GroupLinkProtocol::buildJoinResponse(error_code_group_link_invalid, "invalid link", 0, false));
+        return;
+    }
+    GroupLinkRecord link;
+    GroupRecord group;
+    const int rc = resolveGroupLink(code, link, group);
+    if (rc != error_code_ok)
+    {
+        LOGI("join group by link rejected, userid: %d, code: %d", m_userinfo.userid, rc);
+        send(cmd_join_group_by_link, m_seq, GroupLinkProtocol::buildJoinResponse(rc, "link not usable", 0, false));
+        return;
+    }
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    //已经在群里：当作入群成功，客户端直接打开群聊窗
+    if (groupMgr.isGroupMember(group.groupid, m_userinfo.userid))
+    {
+        send(cmd_join_group_by_link, m_seq, GroupLinkProtocol::buildJoinResponse(0, "ok", group.groupid, true));
+        return;
+    }
+    if (group.joinmode == group_join_forbid)
+    {
+        send(cmd_join_group_by_link, m_seq,
+             GroupLinkProtocol::buildJoinResponse(error_code_permission_denied, "group forbids joining", group.groupid, false));
+        return;
+    }
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    std::vector<int64_t> self(1, m_userinfo.userid);
+    if (group.joinmode == group_join_free)
+    {
+        if (!groupMgr.addMembers(group.groupid, self, now))
+        {
+            send(cmd_join_group_by_link, m_seq,
+                 GroupLinkProtocol::buildJoinResponse(error_code_server_internal, "join failed", group.groupid, false));
+            return;
+        }
+        send(cmd_join_group_by_link, m_seq, GroupLinkProtocol::buildJoinResponse(0, "ok", group.groupid, true));
+        //入群提示里的邀请人记链接生成者（docs/邀请入群方案.md §12.1）
+        completeGroupJoin(group, self, link.creator, m_userinfo.userid);
+        LOGI("join group by link ok (free), groupid: %lld, userid: %d, link: %lld",
+             (long long)group.groupid, m_userinfo.userid, (long long)link.id);
+        return;
+    }
+
+    //需审批：落一条加群申请，来源记「扫码加群」，推荐人记链接生成者
+    const int64_t requestId = groupMgr.addJoinRequest(group.groupid, m_userinfo.userid, std::string(), now,
+                                                      group_join_source_qrcode, link.creator, kInviteHistoryLimitAll);
+    if (requestId <= 0)
+    {
+        send(cmd_join_group_by_link, m_seq,
+             GroupLinkProtocol::buildJoinResponse(error_code_server_internal, "join request failed", group.groupid, false));
+        return;
+    }
+    send(cmd_join_group_by_link, m_seq, GroupLinkProtocol::buildJoinResponse(0, "ok", group.groupid, false));
+    GroupJoinRequestRecord item;
+    if (groupMgr.getJoinRequestById(requestId, item))
+    {
+        User self;
+        self.userid = 0;
+        Singleton<UserManager>::Instance().getUserInfoByUserId(m_userinfo.userid, self);
+        item.nickname   = self.nickname;
+        item.facetype   = self.facetype;
+        item.customface = self.customface;
+        notifyGroupAdmins(group.groupid, cmd_join_group_request_notify, GroupProtocol::buildJoinGroupRequestNotify(item));
+    }
+    LOGI("join group by link submitted as request, groupid: %lld, userid: %d, link: %lld, request: %lld",
+         (long long)group.groupid, m_userinfo.userid, (long long)link.id, (long long)requestId);
 }
 
 void ChatSession::onInviteToGroup(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -5345,14 +7664,42 @@ void ChatSession::onInviteToGroup(const std::string& body, const std::shared_ptr
         toAdd.push_back(uid);
     }
 
-    //没有可邀请的有效用户：无人变动，直接回 ok
+    //没有可邀请的有效用户：无人变动，直接回 ok（三项统计都为 0）
     if (toAdd.empty())
     {
-        send(cmd_invite_to_group, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+        send(cmd_invite_to_group, m_seq, GroupProtocol::buildInviteToGroupResponse(0, "ok", 0, 0, 0));
         return;
     }
 
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+
+    //「邀请入群需被邀请人同意」按被邀请人所属企业取值（docs/邀请入群方案.md §3.3、§3.5）：开启的被邀请人一律先收到
+    //入群邀请卡片，等他点「加入群聊」时再按那一刻的情况入群或转为审批（先发卡片，后审批）；其余被邀请人按原来的逻辑处理
+    int invited = 0;
+    {
+        std::vector<int64_t> rest;
+        FeatureSwitchManager& switches = Singleton<FeatureSwitchManager>::Instance();
+        EmployeeManager& employees = Singleton<EmployeeManager>::Instance();
+        for (size_t i = 0; i < toAdd.size(); ++i)
+        {
+            const int64_t enterpriseId = employees.getEmployeeEnterpriseId(toAdd[i]);
+            if (!switches.isEnabled(enterpriseId, kFeatureInviteConfirm))
+            {
+                rest.push_back(toAdd[i]);
+                continue;
+            }
+            if (sendGroupInviteCard(group, toAdd[i], req.historylimit, now))
+                ++invited;
+        }
+        toAdd.swap(rest);
+    }
+    if (toAdd.empty())
+    {
+        send(cmd_invite_to_group, m_seq, GroupProtocol::buildInviteToGroupResponse(0, "ok", 0, invited, 0));
+        LOGI("invite to group sent as cards, groupid: %lld, by: %d, invited: %d, historylimit: %d",
+             (long long)req.groupid, m_userinfo.userid, invited, req.historylimit);
+        return;
+    }
 
     //普通成员邀请是否免审批，由群设置 f_member_invite 决定：
     //  · 群主 / 管理员 —— 始终直接拉人；
@@ -5367,9 +7714,10 @@ void ChatSession::onInviteToGroup(const std::string& body, const std::shared_ptr
         int converted = 0;
         for (size_t i = 0; i < toAdd.size(); ++i)
         {
+            //同步条数随申请记下，审批通过时再按它算历史边界（docs/邀请入群方案.md §3.4）
             const int64_t requestId = groupMgr.addJoinRequest(
                 req.groupid, static_cast<int32_t>(toAdd[i]), std::string(), now,
-                group_join_source_friend, m_userinfo.userid);
+                group_join_source_friend, m_userinfo.userid, req.historylimit);
             if (requestId <= 0)
                 continue;
 
@@ -5390,35 +7738,252 @@ void ChatSession::onInviteToGroup(const std::string& body, const std::shared_ptr
             }
         }
 
-        send(cmd_invite_to_group, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
-        LOGI("invite converted to join requests, groupid: %lld, by: %d, converted: %d",
-             (long long)req.groupid, m_userinfo.userid, converted);
+        //应答带上转为审批的人数，邀请人的客户端据此提示「已提交邀请，等待群主或管理员审批」
+        send(cmd_invite_to_group, m_seq, GroupProtocol::buildInviteToGroupResponse(0, "ok", 0, invited, converted));
+        LOGI("invite converted to join requests, groupid: %lld, by: %d, converted: %d, historylimit: %d",
+             (long long)req.groupid, m_userinfo.userid, converted, req.historylimit);
         return;
     }
 
-    if (!groupMgr.addMembers(req.groupid, toAdd, now))
+    //按邀请人选择的同步条数算这批新成员的历史边界，随成员行一起写入；须在插入入群提示之前算
+    const int64_t historyFrom = inviteHistoryFrom(group, req.historylimit);
+    if (!groupMgr.addMembers(req.groupid, toAdd, now, historyFrom))
     {
         send(cmd_invite_to_group, m_seq,
              GroupProtocol::buildSimpleResponse(error_code_server_internal, "invite failed"));
         return;
     }
 
-    send(cmd_invite_to_group, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+    send(cmd_invite_to_group, m_seq,
+         GroupProtocol::buildInviteToGroupResponse(0, "ok", static_cast<int>(toAdd.size()), invited, 0));
 
-    //向全体成员（含新成员）推 member_changed_notify（加入）
-    std::string notify = GroupProtocol::buildGroupMemberChangedNotify(
-        req.groupid, group_member_change_join, toAdd, m_userinfo.userid);
-    notifyGroupMembers(req.groupid, cmd_group_member_changed_notify, notify);
+    //已读位点、成员变动推送、自动群名、入群提示、欢迎语、群备忘：邀请人既是邀请者也是操作者
+    completeGroupJoin(group, toAdd, m_userinfo.userid, m_userinfo.userid);
 
-    //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
-    Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(req.groupid);
+    LOGI("invite to group ok, groupid: %lld, by: %d, added: %u, historylimit: %d, historyfrom: %lld",
+         (long long)req.groupid, m_userinfo.userid, static_cast<unsigned>(toAdd.size()), req.historylimit,
+         (long long)historyFrom);
+}
 
-    //入群欢迎语须在成员变动通知<u>之后</u>发：客户端要先把新成员并进成员列表，
-    //才能把欢迎语里提到的人对应上。
-    sendGroupWelcomeMessage(group, toAdd);
+bool ChatSession::sendGroupInviteCard(const GroupRecord& group, int64_t invitee, int historyLimit, int64_t nowMs)
+{
+    //先落一行 t_group_invite 拿到邀请 id：卡片 content 里要带它，点「加入群聊」时据此找到这次邀请
+    GroupInviteRecord invite;
+    invite.m_groupid      = group.groupid;
+    invite.m_inviter      = m_userinfo.userid;
+    invite.m_invitee      = invitee;
+    invite.m_historyLimit = historyLimit;
+    invite.m_state        = group_invite_pending;
+    invite.m_createTime   = nowMs;
+    invite.m_expireTime   = nowMs + kGroupInviteExpireMs;
+    GroupInviteManager& inviteMgr = Singleton<GroupInviteManager>::Instance();
+    invite.m_id = inviteMgr.addInvite(invite);
+    if (invite.m_id <= 0)
+    {
+        LOGE("send group invite card failed: add invite, groupid: %lld, inviter: %d, invitee: %lld",
+             (long long)group.groupid, m_userinfo.userid, (long long)invitee);
+        return false;
+    }
 
-    LOGI("invite to group ok, groupid: %lld, by: %d, added: %u",
-         (long long)req.groupid, m_userinfo.userid, static_cast<unsigned>(toAdd.size()));
+    //卡片上的展示信息：发出那一刻的群名、群头像与双方昵称（下发时群名与头像会被群的当前资料覆盖）
+    GroupInviteCardNames names;
+    names.m_groupName   = group.name;
+    names.m_facetype    = group.facetype;
+    names.m_customface  = group.customface;
+    names.m_inviterName = m_userinfo.nickname;
+    User inviteeUser;
+    inviteeUser.userid = 0;
+    if (Singleton<UserManager>::Instance().getUserInfoByUserId(static_cast<int32_t>(invitee), inviteeUser))
+        names.m_inviteeName = inviteeUser.nickname;
+    const std::string content = GroupInviteProtocol::buildCardContent(invite, names);
+
+    //卡片是邀请人与被邀请人之间的一条单聊消息，发送者为邀请人。落库前套一层 buildStoredContent 的外壳，
+    //与其它落库路径口径一致；占位的客户端消息 id 带上邀请 id，保证去重键唯一
+    std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(content, noMentions, false, "");
+    const std::string clientMsgId = "sys-ginv-" + std::to_string(invite.m_id);
+    const int64_t msgId = Singleton<MessageManager>::Instance().saveMessage(
+        clientMsgId, CHAT_TYPE_SINGLE, m_userinfo.userid, static_cast<int32_t>(invitee), message_type_group_invite,
+        stored, nowMs);
+    if (msgId == 0)
+    {
+        LOGE("send group invite card failed: save message, inviteid: %lld, groupid: %lld, invitee: %lld",
+             (long long)invite.m_id, (long long)group.groupid, (long long)invitee);
+        return false;
+    }
+    invite.m_msgid = msgId;
+    inviteMgr.setMsgId(invite.m_id, msgId);
+
+    MessageRecord rec;
+    rec.msgid       = msgId;
+    rec.clientmsgid = clientMsgId;
+    rec.ctype       = CHAT_TYPE_SINGLE;
+    rec.from        = m_userinfo.userid;
+    rec.to          = invitee;
+    rec.msgtype     = message_type_group_invite;
+    rec.content     = content;
+    rec.mentionall  = false;
+    rec.timestamp   = nowMs;
+    rec.recalled    = false;
+    //推送前合并状态与成员数，与同步时下发的口径一致
+    augmentGroupInviteCardRecord(rec, nowMs);
+
+    //双方都要收到（双方的其它在线设备也一样）。两帧的差别只在会话 id：各自视角下都是对方的 userid
+    std::vector<int64_t> inviteeOnly(1, invitee);
+    Singleton<ChatServer>::Instance().pushToUsers(
+        inviteeOnly, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, m_userinfo.userid));
+    std::vector<int64_t> inviterOnly(1, static_cast<int64_t>(m_userinfo.userid));
+    Singleton<ChatServer>::Instance().pushToUsers(
+        inviterOnly, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, invitee));
+
+    LOGI("group invite card sent, inviteid: %lld, msgid: %lld, groupid: %lld, inviter: %d, invitee: %lld, "
+         "historylimit: %d",
+         (long long)invite.m_id, (long long)msgId, (long long)group.groupid, m_userinfo.userid, (long long)invitee,
+         historyLimit);
+    return true;
+}
+
+void ChatSession::notifyGroupInviteChanged(const GroupInviteRecord& invite, int state)
+{
+    std::vector<int64_t> both;
+    both.push_back(invite.m_inviter);
+    both.push_back(invite.m_invitee);
+    Singleton<ChatServer>::Instance().pushToUsers(both, cmd_group_invite_changed_notify,
+                                                  GroupInviteProtocol::buildChangedNotify(invite, state));
+    LOGI("group invite changed notify, inviteid: %lld, msgid: %lld, state: %d",
+         (long long)invite.m_id, (long long)invite.m_msgid, state);
+}
+
+void ChatSession::augmentGroupInviteCardRecord(MessageRecord& message, int64_t nowMs)
+{
+    const int64_t inviteId = GroupInviteProtocol::parseCardInviteId(message.content);
+    GroupInviteRecord invite;
+    if (inviteId <= 0 || !Singleton<GroupInviteManager>::Instance().getInvite(inviteId, invite))
+    {
+        LOGE("augment group invite card skipped: invite not found, msgid: %lld, inviteid: %lld",
+             (long long)message.msgid, (long long)inviteId);
+        return;
+    }
+
+    //显示状态要看群是否还在、邀请人与被邀请人此刻是否在群里
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    GroupRecord group;
+    const bool groupExists = groupMgr.getGroup(invite.m_groupid, group);
+    const bool inviterIsMember =
+        groupExists && groupMgr.isGroupMember(invite.m_groupid, static_cast<int32_t>(invite.m_inviter));
+    const bool inviteeIsMember =
+        groupExists && groupMgr.isGroupMember(invite.m_groupid, static_cast<int32_t>(invite.m_invitee));
+    const int state = GroupInviteProtocol::computeDisplayState(invite.m_state, invite.m_expireTime, nowMs, groupExists,
+                                                               inviterIsMember, inviteeIsMember);
+    message.content = GroupInviteProtocol::augmentCardContent(message.content, state, groupExists, group.name,
+                                                              group.facetype, group.customface, group.membercount);
+}
+
+void ChatSession::onAcceptGroupInvite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t inviteId = 0;
+    if (!GroupInviteProtocol::parseAcceptRequest(body, inviteId))
+    {
+        send(cmd_accept_group_invite, m_seq,
+             GroupInviteProtocol::buildAcceptResponse(error_code_bad_request, "bad request", 0, 0, false));
+        return;
+    }
+
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    GroupInviteManager& inviteMgr = Singleton<GroupInviteManager>::Instance();
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+
+    //查好判定要用的事实：邀请本身、群是否还在、本人与邀请人此刻是否在群里、邀请人的角色、群的邀请设置
+    GroupInviteAcceptFacts facts;
+    facts.m_selfId = m_userinfo.userid;
+    facts.m_nowMs  = now;
+    facts.m_found  = inviteMgr.getInvite(inviteId, facts.m_invite);
+    GroupRecord group;
+    if (facts.m_found)
+    {
+        const int64_t gid = facts.m_invite.m_groupid;
+        facts.m_groupExists = groupMgr.getGroup(gid, group);
+        if (facts.m_groupExists)
+        {
+            facts.m_selfIsMember     = groupMgr.isGroupMember(gid, m_userinfo.userid);
+            facts.m_inviterRole      = groupMgr.getMemberRole(gid, static_cast<int32_t>(facts.m_invite.m_inviter));
+            facts.m_inviterIsMember  = (facts.m_inviterRole >= 0);
+            facts.m_memberInviteFree = (group.memberinvite != 0);
+        }
+    }
+    const GroupInviteAcceptDecision decision = GroupInviteProtocol::decideAccept(facts);
+    const GroupInviteRecord& invite = facts.m_invite;
+    const int64_t groupid = facts.m_found ? invite.m_groupid : 0;
+
+    //拒绝：已在群中时顺带把卡片记为已加入，双方的卡片随之刷新
+    if (decision.m_action == group_invite_accept_reject)
+    {
+        if (decision.m_errorCode == error_code_already_in_group)
+        {
+            inviteMgr.updateState(invite.m_id, group_invite_joined, now);
+            notifyGroupInviteChanged(invite, group_invite_joined);
+        }
+        send(cmd_accept_group_invite, m_seq,
+             GroupInviteProtocol::buildAcceptResponse(decision.m_errorCode, "cannot accept group invite", inviteId, groupid,
+                                                      false));
+        LOGI("accept group invite rejected, inviteid: %lld, by: %d, code: %d",
+             (long long)inviteId, m_userinfo.userid, decision.m_errorCode);
+        return;
+    }
+
+    //转为加群申请：来源好友邀请、推荐人为邀请人，带上同步条数与邀请 id，审批结果据此回写卡片（§3.4）
+    if (decision.m_action == group_invite_accept_approval)
+    {
+        const int64_t requestId = groupMgr.addJoinRequest(groupid, m_userinfo.userid, std::string(), now,
+                                                          group_join_source_friend, invite.m_inviter,
+                                                          invite.m_historyLimit, invite.m_id);
+        if (requestId <= 0)
+        {
+            send(cmd_accept_group_invite, m_seq,
+                 GroupInviteProtocol::buildAcceptResponse(error_code_server_internal, "join request failed", inviteId, groupid,
+                                                          false));
+            return;
+        }
+        inviteMgr.updateState(invite.m_id, group_invite_approving, now);
+        send(cmd_accept_group_invite, m_seq, GroupInviteProtocol::buildAcceptResponse(0, "ok", inviteId, groupid, false));
+
+        //推给群主与管理员，让他们的审批入口立刻出现红点
+        GroupJoinRequestRecord rec;
+        if (groupMgr.getJoinRequestById(requestId, rec))
+        {
+            User applicant;
+            applicant.userid = 0;
+            Singleton<UserManager>::Instance().getUserInfoByUserId(m_userinfo.userid, applicant);
+            rec.nickname   = applicant.nickname;
+            rec.facetype   = applicant.facetype;
+            rec.customface = applicant.customface;
+            notifyGroupAdmins(groupid, cmd_join_group_request_notify, GroupProtocol::buildJoinGroupRequestNotify(rec));
+        }
+        notifyGroupInviteChanged(invite, group_invite_approving);
+        LOGI("accept group invite converted to join request, inviteid: %lld, groupid: %lld, by: %d, requestid: %lld",
+             (long long)inviteId, (long long)groupid, m_userinfo.userid, (long long)requestId);
+        return;
+    }
+
+    //直接入群：按邀请时选择的同步条数算历史边界，入群提示里的邀请人取卡片的邀请人
+    std::vector<int64_t> self(1, static_cast<int64_t>(m_userinfo.userid));
+    const int64_t historyFrom = inviteHistoryFrom(group, invite.m_historyLimit);
+    if (!groupMgr.addMembers(groupid, self, now, historyFrom))
+    {
+        send(cmd_accept_group_invite, m_seq,
+             GroupInviteProtocol::buildAcceptResponse(error_code_server_internal, "join failed", inviteId, groupid, false));
+        return;
+    }
+    inviteMgr.updateState(invite.m_id, group_invite_joined, now);
+    send(cmd_accept_group_invite, m_seq, GroupInviteProtocol::buildAcceptResponse(0, "ok", inviteId, groupid, true));
+    notifyGroupInviteChanged(invite, group_invite_joined);
+    completeGroupJoin(group, self, invite.m_inviter, m_userinfo.userid);
+
+    LOGI("accept group invite ok, inviteid: %lld, groupid: %lld, by: %d, inviter: %lld, historyfrom: %lld",
+         (long long)inviteId, (long long)groupid, m_userinfo.userid, (long long)invite.m_inviter,
+         (long long)historyFrom);
 }
 
 void ChatSession::onJoinGroupRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -5473,17 +8038,23 @@ void ChatSession::onJoinGroupRequest(const std::string& body, const std::shared_
 
         send(cmd_join_group_request, m_seq, GroupProtocol::buildJoinGroupResponse(0, "ok", true));
 
-        std::string notify = GroupProtocol::buildGroupMemberChangedNotify(
-            req.groupid, group_member_change_join, self, m_userinfo.userid);
-        notifyGroupMembers(req.groupid, cmd_group_member_changed_notify, notify);
-
-        //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
-        Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(req.groupid);
-
-        sendGroupWelcomeMessage(group, self);
+        //自由加群没有邀请人，入群提示写成「某某加入了群聊」；操作者是本人
+        completeGroupJoin(group, self, 0, m_userinfo.userid);
 
         LOGI("join group (free) ok, groupid: %lld, userid: %d",
              (long long)req.groupid, m_userinfo.userid);
+        return;
+    }
+
+    //企业级敏感词：查验证消息。只在需审批时检查，因为验证消息只在这里落库、展示给群主与管理员；
+    //上面自由加入的分支不保存也不展示它，不检查
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(req.verifymsg);
+    if (hitSensitive(chatserver::sensitive_source_join_request, CHAT_TYPE_GROUP, req.groupid, group.name,
+                     sensitiveTexts))
+    {
+        send(cmd_join_group_request, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_sensitive_word, "verify message contains sensitive word"));
         return;
     }
 
@@ -5557,39 +8128,79 @@ void ChatSession::onHandleJoinGroup(const std::string& body, const std::shared_p
 
     bool accept = (req.action == GROUP_JOIN_ACTION_ACCEPT);
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
-    groupMgr.updateJoinRequestStatus(req.requestid, accept ? 1 : 2, now, m_userinfo.userid);
+    //改状态带「仍是待处理」的条件：上面的检查与这里之间，另一位管理员可能已经处理了同一条申请（两个请求在不同的 IO 线程上
+    //同时执行）。只有真正改到的请求继续入群与推送，没改到的按「已处理」回 308（docs/邀请入群方案.md 第 4 期，用例 JQ1）
+    bool changed = false;
+    if (!groupMgr.updateJoinRequestStatus(req.requestid, accept ? 1 : 2, now, m_userinfo.userid, changed))
+    {
+        send(cmd_handle_join_group, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "handle join request failed"));
+        return;
+    }
+    if (!changed)
+    {
+        send(cmd_handle_join_group, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_join_req_not_exist, "join request already handled"));
+        LOGI("handle join group skipped: request handled by someone else meanwhile, requestid: %lld, by: %d",
+             (long long)req.requestid, m_userinfo.userid);
+        return;
+    }
 
+    //同意时要用到群资料：算历史边界要看群设置，收尾要读欢迎语开关与正文。上面的流程里只用到了申请记录，
+    //手头没有 GroupRecord，这里读一次；群恰好在这期间被解散时读不到，按不限处理边界、跳过收尾
+    GroupRecord group;
+    const bool groupFound = accept && groupMgr.getGroup(rec.groupid, group);
+    std::vector<int64_t> applicant;
+    applicant.push_back(rec.userid);
     if (accept)
     {
-        std::vector<int64_t> applicant;
-        applicant.push_back(rec.userid);
-        groupMgr.addMembers(rec.groupid, applicant, now);
+        //由邀请转来的申请记着邀请人选择的同步条数，本人主动申请的为全部（docs/邀请入群方案.md §3.4）
+        const int64_t historyFrom = groupFound ? inviteHistoryFrom(group, rec.historylimit) : 0;
+        groupMgr.addMembers(rec.groupid, applicant, now, historyFrom);
     }
 
     send(cmd_handle_join_group, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
 
-    //同意时向全体成员（含新成员）推 member_changed_notify（加入）；
+    //同意时走入群收尾（成员变动推送、入群提示、欢迎语等）；
     //拒绝不向申请人单独推结果（申请人可重新申请）
     if (accept)
     {
-        std::vector<int64_t> applicant;
-        applicant.push_back(rec.userid);
-        std::string notify = GroupProtocol::buildGroupMemberChangedNotify(
-            rec.groupid, group_member_change_join, applicant, m_userinfo.userid);
-        notifyGroupMembers(rec.groupid, cmd_group_member_changed_notify, notify);
-
-        //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
-        Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(rec.groupid);
-
-        //审批通过也算入群，同样要发欢迎语。这里重新读一次群资料 —— 上面的
-        //流程里只用到了申请记录，手头没有 GroupRecord。
-        GroupRecord group;
-        if (groupMgr.getGroup(rec.groupid, group))
-            sendGroupWelcomeMessage(group, applicant);
+        //由普通成员的邀请或加群链接转来的申请，入群提示里的邀请人取推荐人（邀请人 / 链接生成者）；
+        //本人主动申请的没有邀请人（2026-10-07 之前链接来源不取，提示里没有生成者，与链接直接入群不一致）
+        const int64_t inviterId = GroupProtocol::joinTipInviterForRequest(rec.source, rec.recommender);
+        if (groupFound)
+            completeGroupJoin(group, applicant, inviterId, m_userinfo.userid);
+        else
+            LOGE("handle join group: group vanished before completing join, groupid: %lld", (long long)rec.groupid);
     }
 
-    LOGI("handle join group ok, requestid: %lld, action: %d, by: %d",
-         (long long)req.requestid, req.action, m_userinfo.userid);
+    //由入群邀请卡片转来的申请：审批结果回写卡片，邀请人与被邀请人的卡片随之变为已加入 / 未通过审批。
+    //拒绝时这就是被邀请人得知结果的途径（docs/邀请入群方案.md §3.4）
+    if (rec.inviteid > 0)
+    {
+        GroupInviteManager& inviteMgr = Singleton<GroupInviteManager>::Instance();
+        GroupInviteRecord invite;
+        if (inviteMgr.getInvite(rec.inviteid, invite))
+        {
+            const int state = accept ? group_invite_joined : group_invite_rejected;
+            inviteMgr.updateState(invite.m_id, state, now);
+            notifyGroupInviteChanged(invite, state);
+        }
+        else
+        {
+            LOGE("handle join group: invite of the request not found, requestid: %lld, inviteid: %lld",
+                 (long long)req.requestid, (long long)rec.inviteid);
+        }
+    }
+
+    //告诉该群全体群主与管理员（含本人的其他设备）这条申请已处理，他们的待审批列表据此去掉这一条，
+    //避免再去处理一条已处理过的申请（docs/邀请入群方案.md 第 4 期）
+    notifyGroupAdmins(rec.groupid, cmd_join_request_handled_notify,
+                      GroupProtocol::buildJoinRequestHandledNotify(rec.groupid, req.requestid, accept ? 1 : 2,
+                                                                   m_userinfo.userid, m_userinfo.nickname));
+
+    LOGI("handle join group ok, requestid: %lld, action: %d, by: %d, inviteid: %lld",
+         (long long)req.requestid, req.action, m_userinfo.userid, (long long)rec.inviteid);
 }
 
 void ChatSession::onGetGroupJoinRequests(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -5686,14 +8297,17 @@ void ChatSession::onLeaveGroup(const std::string& body, const std::shared_ptr<Tc
     //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
     Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(groupid);
 
-    //给留下的成员插一条"「某人」退出了群聊"的系统提示。退群者已不在成员表里，收不到这条推送，
-    //他本端的该群数据会在收到上面的成员变动推送后整体清理。占位消息ID带上退群者与时间戳，
-    //同一个人退了又进、再退时各成一条
-    const int64_t kMillisPerSecond = 1000;
-    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
-    const std::string clientMsgId = "sys-leave-" + std::to_string(groupid) + "-"
-                                    + std::to_string(m_userinfo.userid) + "-" + std::to_string(now);
-    sendGroupSystemMessage(groupid, GroupProtocol::buildMemberLeaveTip(m_userinfo.nickname), clientMsgId);
+    //2026-10-04 起不再插「「某人」退出了群聊」的系统提示（用户决定，docs/邀请入群方案.md 第 4 期）：留下的成员只收到上面的
+    //成员变动推送，成员列表随之更新；此前已存在的退群提示留在聊天记录里，客户端仍按 member_leave 的模板显示
+
+    //文件共享：他在本群的共享取消，他能看到的本群共享把他移出（docs/文件共享方案.md 6.1）
+    handleShareMemberLeftGroup(groupid, m_userinfo.userid);
+
+    //备忘：他原先能看到的本群群备忘推删除，并从各条群备忘的提醒对象里移除
+    handleMemoMembersLeftGroup(groupid, std::vector<MemoMemberRole>(1, MemoMemberRole(m_userinfo.userid, myrole)));
+
+    //帖子群：退群后不再收到本群的留言与互动推送
+    Singleton<ThreadWatchRegistry>::Instance().removeUsers(groupid, std::vector<int64_t>(1, m_userinfo.userid));
 
     LOGI("leave group ok, groupid: %lld, userid: %d", (long long)groupid, m_userinfo.userid);
 }
@@ -5735,6 +8349,8 @@ void ChatSession::onKickGroupMember(const std::string& body, const std::shared_p
     //逐个筛选可踢对象。被筛掉的静默跳过而不是让整个请求失败 —— 一次踢多人时，
     //个别人刚好已退群不该拖垮其余人。
     std::vector<int64_t> toKick;
+    //被移出的人与他们被移出前的角色，备忘按它判断原先能看到哪些
+    std::vector<MemoMemberRole> kickedRoles;
     std::set<int64_t> seen;
     for (size_t i = 0; i < req.userids.size(); ++i)
     {
@@ -5749,6 +8365,7 @@ void ChatSession::onKickGroupMember(const std::string& body, const std::shared_p
             continue;
 
         toKick.push_back(uid);
+        kickedRoles.push_back(MemoMemberRole(uid, trole));
     }
 
     //没有可踢的有效对象：无人变动，直接回 ok
@@ -5776,6 +8393,21 @@ void ChatSession::onKickGroupMember(const std::string& body, const std::shared_p
 
     //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
     Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(req.groupid);
+
+    //文件共享：被移出的人在本群的共享取消，他能看到的本群共享把他移出（与退群相同，docs/文件共享方案.md 6.1）
+    for (size_t i = 0; i < toKick.size(); ++i)
+        handleShareMemberLeftGroup(req.groupid, toKick[i]);
+
+    //备忘：与退群相同
+    handleMemoMembersLeftGroup(req.groupid, kickedRoles);
+
+    //帖子群：被移出的人不再收到本群的留言与互动推送
+    {
+        std::vector<int64_t> kickedIds;
+        for (size_t i = 0; i < kickedRoles.size(); ++i)
+            kickedIds.push_back(kickedRoles[i].userid);
+        Singleton<ThreadWatchRegistry>::Instance().removeUsers(req.groupid, kickedIds);
+    }
 
     LOGI("kick group member ok, groupid: %lld, by: %d, kicked: %u",
          (long long)req.groupid, m_userinfo.userid, static_cast<unsigned>(toKick.size()));
@@ -5834,6 +8466,9 @@ void ChatSession::onSetMemberRole(const std::string& body, const std::shared_ptr
         req.groupid, group_member_change_role, changed, m_userinfo.userid);
     notifyGroupMembers(req.groupid, cmd_group_member_changed_notify, notify);
 
+    //备忘：设为或取消管理员会改变他能看到的群备忘
+    handleMemoRoleChanged(req.groupid, req.userid, targetRole, req.value);
+
     LOGI("set member role ok, groupid: %lld, target: %d, role: %d, by: %d",
          (long long)req.groupid, targetId, req.value, m_userinfo.userid);
 }
@@ -5890,6 +8525,18 @@ void ChatSession::onMuteMember(const std::string& body, const std::shared_ptr<Tc
     const int64_t kMillisPerSecond = 1000;
     const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
     const int64_t muteUntil = GroupProtocol::computeMuteUntil(muted, req.duration, nowMs);
+
+    //企业级敏感词：查禁言原因（与禁言状态一起写库，会展示给被禁言的成员）。放在写库之前，
+    //被拦下时对方的禁言状态不变
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(req.reason);
+    if (hitSensitive(chatserver::sensitive_source_mute_reason, CHAT_TYPE_GROUP, req.groupid, group.name,
+                     sensitiveTexts))
+    {
+        send(cmd_mute_member, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_sensitive_word, "mute reason contains sensitive word"));
+        return;
+    }
 
     if (!groupMgr.updateMemberMuted(req.groupid, targetId, muted, muteUntil, req.reason))
     {
@@ -5962,8 +8609,65 @@ void ChatSession::onMuteAll(const std::string& body, const std::shared_ptr<TcpCo
         notifyGroupMembers(groupid, cmd_group_info_changed_notify, notify);
     }
 
-    LOGI("mute all ok, groupid: %lld, muteall: %d, by: %d",
-         (long long)groupid, ureq.muteall, m_userinfo.userid);
+    //开关真的变了才在群里写一条「开启 / 关闭了仅通知模式」的系统提示（docs/群管理接入方案.md §14）；
+    //重复设置同一个值不写，免得群里出现一串相同的提示
+    const bool changed = ((group.muteall != 0) != (ureq.muteall != 0));
+    if (changed)
+    {
+        const int64_t kMillisPerSecond = 1000;
+        const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+        const std::string clientMsgId = "sys-muteall-" + std::to_string(groupid) + "-" + std::to_string(now);
+        sendGroupSystemMessage(groupid,
+                               GroupProtocol::buildMuteAllTipContent(ureq.muteall, m_userinfo.nickname,
+                                                                     static_cast<int64_t>(m_userinfo.userid)),
+                               clientMsgId);
+    }
+
+    LOGI("mute all ok, groupid: %lld, muteall: %d, changed: %d, by: %d",
+         (long long)groupid, ureq.muteall, changed ? 1 : 0, m_userinfo.userid);
+}
+
+void ChatSession::onSetGroupFollow(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    GroupFollowList req;
+    if (!GroupProtocol::parseSetGroupFollowRequest(body, req))
+    {
+        send(cmd_set_group_follow, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //本人须为群成员、不超过上限、不含自己、都是本群成员（细节见 GroupFollowManager::checkTargets）
+    GroupFollowManager& followMgr = Singleton<GroupFollowManager>::Instance();
+    const int checkCode = followMgr.checkTargets(m_userinfo.userid, req.groupid, req.targets);
+    if (checkCode != error_code_ok)
+    {
+        send(cmd_set_group_follow, m_seq,
+             GroupProtocol::buildSimpleResponse(checkCode, checkCode == error_code_not_group_member
+                                                           ? "not a group member" : "invalid follow targets"));
+        return;
+    }
+
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    if (!followMgr.setFollows(m_userinfo.userid, req.groupid, req.targets, now))
+    {
+        send(cmd_set_group_follow, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_server_internal, "set group follow failed"));
+        return;
+    }
+
+    send(cmd_set_group_follow, m_seq, GroupProtocol::buildSimpleResponse(0, "ok"));
+
+    //读回完整名单，推给本人全部在线设备（含发起端），各端以推送为准
+    GroupFollowList saved;
+    saved.groupid = req.groupid;
+    followMgr.getFollows(m_userinfo.userid, req.groupid, saved.targets);
+    sendToUser(m_userinfo.userid, cmd_group_follow_changed_notify,
+               GroupProtocol::buildGroupFollowChangedNotify(saved));
+
+    LOGI("set group follow ok, userid: %d, groupid: %lld, count: %u",
+         m_userinfo.userid, (long long)req.groupid, static_cast<unsigned>(saved.targets.size()));
 }
 
 void ChatSession::onSetMemberCard(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -5985,6 +8689,18 @@ void ChatSession::onSetMemberCard(const std::string& body, const std::shared_ptr
     {
         send(cmd_set_member_card, m_seq,
              GroupProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return;
+    }
+
+    //企业级敏感词：查群名片；空串表示清除名片，由 checkTexts 跳过。会话名由 hitSensitive
+    //在命中时按群ID取
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(card);
+    if (hitSensitive(chatserver::sensitive_source_member_card, CHAT_TYPE_GROUP, groupid, std::string(),
+                     sensitiveTexts))
+    {
+        send(cmd_set_member_card, m_seq,
+             GroupProtocol::buildSimpleResponse(error_code_group_sensitive_word, "member card contains sensitive word"));
         return;
     }
 
@@ -6044,7 +8760,8 @@ void ChatSession::onTransferOwner(const std::string& body, const std::shared_ptr
         return;
     }
     //新群主须为该群现有成员
-    if (groupMgr.getMemberRole(groupid, targetId) < 0)
+    const int targetOldRole = groupMgr.getMemberRole(groupid, targetId);
+    if (targetOldRole < 0)
     {
         send(cmd_transfer_owner, m_seq,
              GroupProtocol::buildSimpleResponse(error_code_not_group_member, "new owner is not a group member"));
@@ -6071,6 +8788,11 @@ void ChatSession::onTransferOwner(const std::string& body, const std::shared_ptr
     //自动群名不含群主，换了群主之后原群主进入群名、新群主移出群名
     Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(groupid);
 
+    //备忘：原群主降为普通成员、新群主升为群主，两人能看到的群备忘都可能变化
+    handleMemoRoleChanged(groupid, m_userinfo.userid, group_role_owner,
+                          groupMgr.getMemberRole(groupid, m_userinfo.userid));
+    handleMemoRoleChanged(groupid, newOwnerId, targetOldRole, group_role_owner);
+
     //插一条"「原群主」已将群主转让给「新群主」"的系统提示。新群主的昵称取不到时（资料缺失）
     //提示里省掉他的名字，不影响转让本身
     std::string newOwnerNickname;
@@ -6081,7 +8803,7 @@ void ChatSession::onTransferOwner(const std::string& body, const std::shared_ptr
     const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
     const std::string clientMsgId = "sys-transfer-" + std::to_string(groupid) + "-" + std::to_string(now);
     sendGroupSystemMessage(groupid,
-                           GroupProtocol::buildOwnerTransferTip(m_userinfo.nickname, newOwnerNickname),
+                           GroupProtocol::buildOwnerTransferTipContent(m_userinfo.nickname, newOwnerNickname),
                            clientMsgId);
 
     LOGI("transfer owner ok, groupid: %lld, from: %d, to: %d",
@@ -6130,10 +8852,15 @@ void ChatSession::onVotePoll(const std::string& body, const std::shared_ptr<TcpC
              CardProtocol::buildSimpleResponse(error_code_message_not_exist, "card not exist"));
         return;
     }
-    if (card.msgtype != message_type_poll)
+    //卡片已撤回、或类型不是投票，都不接受投票（2026-10-02 之前只判断类型，撤回后仍可投票）
+    const int targetCode = CardProtocol::checkCardTarget(card.msgtype, card.recalled, message_type_poll);
+    if (targetCode != error_code_ok)
     {
         send(cmd_vote_poll, m_seq,
-             CardProtocol::buildSimpleResponse(error_code_bad_request, "not a poll card"));
+             CardProtocol::buildSimpleResponse(targetCode,
+                 targetCode == error_code_message_not_exist ? "card recalled" : "not a poll card"));
+        LOGI("vote poll rejected, card unusable, code: %d, userid: %d, msgid: %lld",
+             targetCode, m_userinfo.userid, (long long)req.msgid);
         return;
     }
     if (!canAccessCard(card))
@@ -6205,40 +8932,411 @@ void ChatSession::onJoinRelay(const std::string& body, const std::shared_ptr<Tcp
         return;
     }
 
-    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+    //请求解析成功之后的应答，无论成败都带回请求里的 ctype / cid / msgid，
+    //客户端据 msgid 把结果送到对应卡片的详情窗（2026-10-02 与用户确认：原样带回请求里的值）
+
+    //接龙文本先规范化：去掉首尾空白，拒绝只有空白、中间含换行与超长的文本。这一步不访问
+    //数据库，放在取卡片之前，非法请求不必再查库
+    std::string text;
+    const int textCode = CardProtocol::normalizeRelayText(req.text, text);
+    if (textCode != error_code_ok)
+    {
+        send(cmd_join_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(textCode,
+                 textCode == error_code_msg_too_large ? "relay text too long" : "invalid relay text",
+                 req.ctype, req.cid, req.msgid));
+        LOGI("join relay rejected by text check, code: %d, userid: %d, msgid: %lld",
+             textCode, m_userinfo.userid, (long long)req.msgid);
+        return;
+    }
+
     MessageRecord card;
-    if (!msgMgr.getMessageById(req.msgid, card))
+    RelayStatus status;
+    std::string reason;
+    const int cardCode = loadRelayCardForOp(cmd_join_relay, req.msgid, true, card, status, reason);
+    if (cardCode != error_code_ok)
     {
         send(cmd_join_relay, m_seq,
-             CardProtocol::buildSimpleResponse(error_code_message_not_exist, "card not exist"));
+             CardProtocol::buildRelayOpResponse(cardCode, reason, req.ctype, req.cid, req.msgid));
         return;
     }
-    if (card.msgtype != message_type_relay)
+
+    //人数上限：已在名单里的人是修改，不占新名额。数人数与写库之间不加锁，两人同时抢最后
+    //一个名额时偶尔会多出一两条（2026-10-02 与用户确认可以接受）
+    CardManager& cardMgr = Singleton<CardManager>::Instance();
+    std::vector<CardInteractionRecord> rows;
+    if (!cardMgr.getCardInteractions(req.msgid, rows))
     {
         send(cmd_join_relay, m_seq,
-             CardProtocol::buildSimpleResponse(error_code_bad_request, "not a relay card"));
+             CardProtocol::buildRelayOpResponse(error_code_server_internal, "load relay failed",
+                                                req.ctype, req.cid, req.msgid));
         return;
     }
+    const int joinKind = CardProtocol::classifyRelayJoin(rows, m_userinfo.userid, text);
+
+    //内容与本人已提交的完全相同（如双击提交）：名单没有变化，直接回成功，
+    //不写库、不推送、不发提示（2026-10-02 与用户确认）
+    if (joinKind == relay_join_unchanged)
+    {
+        send(cmd_join_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_ok, "ok", req.ctype, req.cid, req.msgid));
+        LOGI("join relay skipped, text unchanged, userid: %d, msgid: %lld",
+             m_userinfo.userid, (long long)req.msgid);
+        return;
+    }
+
+    //企业级敏感词：放在「内容未变」判断之后，重复提交一条早已成功的接龙照常回成功，不因为
+    //期间新加了词而失败；放在写库之前，被拦的文字不进名单。拦截记录的会话取卡片所在会话：
+    //群聊为群ID，单聊为对方 userid（卡片可能是本人发的，也可能是对方发的）
+    std::vector<std::string> sensitiveTexts;
+    sensitiveTexts.push_back(text);
+    int64_t relayCid = card.to;
+    if (card.ctype == CHAT_TYPE_SINGLE && card.to == m_userinfo.userid)
+        relayCid = card.from;
+    if (hitSensitive(chatserver::sensitive_source_card, card.ctype, relayCid, std::string(), sensitiveTexts))
+    {
+        send(cmd_join_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_sensitive_word, "relay text contains sensitive word",
+                                                req.ctype, req.cid, req.msgid));
+        return;
+    }
+
+    const bool alreadyJoined = (joinKind != relay_join_new);
+    const int capacityCode = CardProtocol::checkRelayJoinCapacity(alreadyJoined, rows.size());
+    if (capacityCode != error_code_ok)
+    {
+        send(cmd_join_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(capacityCode, "relay is full",
+                                                req.ctype, req.cid, req.msgid));
+        LOGI("join relay rejected, full, userid: %d, msgid: %lld, count: %u",
+             m_userinfo.userid, (long long)req.msgid, static_cast<unsigned>(rows.size()));
+        return;
+    }
+
+    //互动时间以 Unix 毫秒落库
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    //每人一条接龙，重复参与即更新本人的接龙文本，名次保持首次参与时的位置。
+    //写库失败时如实回错（原先忽略返回值，一律回成功），CardManager 内部已记错误日志
+    if (!cardMgr.upsertInteraction(req.msgid, m_userinfo.userid, text, now))
+    {
+        send(cmd_join_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_server_internal, "save relay failed",
+                                                req.ctype, req.cid, req.msgid));
+        return;
+    }
+
+    send(cmd_join_relay, m_seq,
+         CardProtocol::buildRelayOpResponse(error_code_ok, "ok", req.ctype, req.cid, req.msgid));
+    notifyRelayChanged(card);
+    sendRelayTip(card, alreadyJoined ? relay_tip_modify : relay_tip_join, 0);
+
+    LOGI("join relay ok, userid: %d, msgid: %lld, kind: %d",
+         m_userinfo.userid, (long long)req.msgid, joinKind);
+}
+
+void ChatSession::onWithdrawRelay(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    RelayTargetRequest req;
+    if (!CardProtocol::parseRelayTargetRequest(body, req))
+    {
+        send(cmd_withdraw_relay, m_seq,
+             CardProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //与参与接龙同一套前置校验：卡片存在、未撤回、是接龙、本人在会话内、群卡片不在禁言中、
+    //接龙仍在进行中。撤回本人那条也会改变群里可见的内容，被禁言时同样拒绝（2026-10-02 与用户确认）
+    MessageRecord card;
+    RelayStatus status;
+    std::string reason;
+    const int cardCode = loadRelayCardForOp(cmd_withdraw_relay, req.msgid, true, card, status, reason);
+    if (cardCode != error_code_ok)
+    {
+        send(cmd_withdraw_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(cardCode, reason, req.ctype, req.cid, req.msgid));
+        return;
+    }
+
+    CardManager& cardMgr = Singleton<CardManager>::Instance();
+    CardInteractionRecord mine;
+    bool found = false;
+    if (!cardMgr.getInteraction(req.msgid, m_userinfo.userid, mine, found))
+    {
+        send(cmd_withdraw_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_server_internal, "load relay failed",
+                                                req.ctype, req.cid, req.msgid));
+        return;
+    }
+
+    //本人没参与过：直接回成功，名单没有变化，不推送
+    if (!found)
+    {
+        send(cmd_withdraw_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_ok, "ok", req.ctype, req.cid, req.msgid));
+        LOGI("withdraw relay skipped, not joined, userid: %d, msgid: %lld",
+             m_userinfo.userid, (long long)req.msgid);
+        return;
+    }
+
+    if (!cardMgr.removeInteraction(req.msgid, m_userinfo.userid))
+    {
+        send(cmd_withdraw_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_server_internal, "withdraw relay failed",
+                                                req.ctype, req.cid, req.msgid));
+        return;
+    }
+
+    send(cmd_withdraw_relay, m_seq,
+         CardProtocol::buildRelayOpResponse(error_code_ok, "ok", req.ctype, req.cid, req.msgid));
+    notifyRelayChanged(card);
+    sendRelayTip(card, relay_tip_withdraw, 0);
+
+    LOGI("withdraw relay ok, userid: %d, msgid: %lld", m_userinfo.userid, (long long)req.msgid);
+}
+
+void ChatSession::onCloseRelay(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    RelayTargetRequest req;
+    if (!CardProtocol::parseRelayTargetRequest(body, req))
+    {
+        send(cmd_close_relay, m_seq,
+             CardProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //前置校验与参与接龙相同，只是不查禁言：提前结束是管理动作，被禁言的发起人或管理员
+    //仍可结束（docs/群接龙方案.md §3.6）。已结束或已截止时在这里回 error_code_card_closed
+    MessageRecord card;
+    RelayStatus status;
+    std::string reason;
+    const int cardCode = loadRelayCardForOp(cmd_close_relay, req.msgid, false, card, status, reason);
+    if (cardCode != error_code_ok)
+    {
+        send(cmd_close_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(cardCode, reason, req.ctype, req.cid, req.msgid));
+        return;
+    }
+
+    //权限：发起人总可以；群卡片另外允许群主与管理员。canAccessCard 已保证本人在群内
+    const bool isGroupCard = (card.ctype == CHAT_TYPE_GROUP);
+    int myrole = group_role_member;
+    if (isGroupCard)
+        myrole = Singleton<GroupManager>::Instance().getMemberRole(card.to, m_userinfo.userid);
+    if (!CardProtocol::canCloseRelay(isGroupCard, card.from, m_userinfo.userid, myrole))
+    {
+        send(cmd_close_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_permission_denied,
+                                                "only creator, owner or admin can close relay",
+                                                req.ctype, req.cid, req.msgid));
+        LOGI("close relay rejected, no permission, userid: %d, role: %d, msgid: %lld",
+             m_userinfo.userid, myrole, (long long)req.msgid);
+        return;
+    }
+
+    //写入结束记录。两人几乎同时结束时只有先写入的那一次生效，后到的一方按"已结束"回复
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    bool inserted = false;
+    if (!Singleton<CardManager>::Instance().closeCard(req.msgid, m_userinfo.userid, now, inserted))
+    {
+        send(cmd_close_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_server_internal, "close relay failed",
+                                                req.ctype, req.cid, req.msgid));
+        return;
+    }
+    if (!inserted)
+    {
+        send(cmd_close_relay, m_seq,
+             CardProtocol::buildRelayOpResponse(error_code_card_closed, "relay already closed",
+                                                req.ctype, req.cid, req.msgid));
+        LOGI("close relay skipped, already closed, userid: %d, msgid: %lld",
+             m_userinfo.userid, (long long)req.msgid);
+        return;
+    }
+
+    send(cmd_close_relay, m_seq,
+         CardProtocol::buildRelayOpResponse(error_code_ok, "ok", req.ctype, req.cid, req.msgid));
+    notifyRelayChanged(card);
+
+    //提示里带上结束时的参与人数；读名单失败时人数按 0 写，只影响提示文字
+    std::vector<CardInteractionRecord> rows;
+    Singleton<CardManager>::Instance().getCardInteractions(req.msgid, rows);
+    sendRelayTip(card, relay_tip_close, rows.size());
+
+    LOGI("close relay ok, userid: %d, role: %d, msgid: %lld, count: %u",
+         m_userinfo.userid, myrole, (long long)req.msgid, static_cast<unsigned>(rows.size()));
+}
+
+void ChatSession::sendRelayTip(const MessageRecord& card, int kind, size_t count)
+{
+    //只对群卡片发：服务端没有单聊系统提示的发送路径，客户端也只在群聊里提供接龙入口
+    if (card.ctype != CHAT_TYPE_GROUP)
+        return;
+
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    const std::string content = CardProtocol::buildRelayTipContent(kind, m_userinfo.nickname,
+                                                                   CardProtocol::getRelayTitle(card.content),
+                                                                   count, card.msgid);
+    const std::string clientMsgId = CardProtocol::buildRelayTipClientMsgId(kind, card.msgid,
+                                                                           m_userinfo.userid, nowMs);
+    //落库失败时 sendGroupSystemMessage 已记错误日志；提示只是附带的通知，不影响操作本身的结果
+    sendGroupSystemMessage(card.to, content, clientMsgId);
+}
+
+int ChatSession::loadRelayCardForOp(uint16_t cmd, int64_t msgid, bool checkSpeak, MessageRecord& card,
+                                    RelayStatus& status, std::string& reason)
+{
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+    if (!msgMgr.getMessageById(msgid, card))
+    {
+        reason = "card not exist";
+        return error_code_message_not_exist;
+    }
+
+    //卡片已撤回、或类型不是接龙，都不接受操作（2026-10-02 之前只判断类型，撤回后仍可参与）
+    const int targetCode = CardProtocol::checkCardTarget(card.msgtype, card.recalled, message_type_relay);
+    if (targetCode != error_code_ok)
+    {
+        reason = (targetCode == error_code_message_not_exist) ? "card recalled" : "not a relay card";
+        LOGI("relay op rejected, card unusable, cmd: %u, code: %d, userid: %d, msgid: %lld",
+             static_cast<unsigned>(cmd), targetCode, m_userinfo.userid, (long long)msgid);
+        return targetCode;
+    }
+
     if (!canAccessCard(card))
     {
-        send(cmd_join_relay, m_seq,
-             CardProtocol::buildSimpleResponse(error_code_permission_denied, "no access to this card"));
+        reason = "no access to this card";
+        return error_code_permission_denied;
+    }
+
+    //群卡片：参与或撤回接龙都会改变群里可见的内容，按群内发言对待，被禁言时拒绝
+    //（checkGroupSpeak 被禁言时已记日志）；提前结束是管理动作，由调用方传 checkSpeak=false 跳过。
+    //接龙文字的敏感词检查不在这里做，由企业级敏感词统一处理（docs/敏感词方案.md §6.3「参与接龙」检查点）
+    if (checkSpeak && card.ctype == CHAT_TYPE_GROUP)
+    {
+        int myrole = group_role_member;
+        GroupRecord group;
+        const int speakCode = checkGroupSpeak(cmd, card.to, myrole, group, reason);
+        if (speakCode != error_code_ok)
+            return speakCode;
+    }
+
+    //接龙已被提前结束或已过截止时间：名单冻结，参与、修改、撤回、再次结束一律拒绝。
+    //读结束记录失败时不能确定状态，按服务端内部错误回复，不冒险放行
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    if (!loadRelayStatus(card, nowMs, status))
+    {
+        reason = "load relay state failed";
+        return error_code_server_internal;
+    }
+    if (status.state != relay_state_open)
+    {
+        reason = (status.state == relay_state_closed) ? "relay closed" : "relay expired";
+        LOGI("relay op rejected, not open, cmd: %u, state: %d, userid: %d, msgid: %lld",
+             static_cast<unsigned>(cmd), status.state, m_userinfo.userid, (long long)msgid);
+        return error_code_card_closed;
+    }
+    return error_code_ok;
+}
+
+bool ChatSession::loadRelayStatus(const MessageRecord& card, int64_t nowMs, RelayStatus& status)
+{
+    CardStateRecord row;
+    bool found = false;
+    const bool ok = Singleton<CardManager>::Instance().getCardState(card.msgid, row, found);
+    //读库失败时 found 为 false，下面按"没有结束记录"计算，只看截止时间；调用方据返回值决定是否放行
+    status = CardProtocol::computeRelayStatus(found ? row : CardStateRecord(),
+                                              CardProtocol::getRelayDeadline(card.content), nowMs);
+    return ok;
+}
+
+void ChatSession::notifyRelayChanged(const MessageRecord& card)
+{
+    std::vector<CardInteractionRecord> rows;
+    Singleton<CardManager>::Instance().getCardInteractions(card.msgid, rows);
+
+    //读结束记录失败时不推送：带着可能不对的状态推出去，客户端会把已结束的接龙显示成进行中。
+    //这种情况下各端在下次同步时拿到正确结果
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    RelayStatus status;
+    if (!loadRelayStatus(card, nowMs, status))
+    {
+        LOGE("relay changed notify skipped, load state failed, msgid: %lld", (long long)card.msgid);
         return;
     }
 
-    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
-    CardManager& cardMgr = Singleton<CardManager>::Instance();
-    //每人一条接龙，重复参与即更新本人的接龙文本
-    cardMgr.upsertInteraction(req.msgid, m_userinfo.userid, req.text, now);
+    if (card.ctype == CHAT_TYPE_GROUP)
+    {
+        //群卡片：会话ID就是群id，全体成员共用同一份推送
+        notifyGroupMembers(card.to, cmd_relay_changed_notify,
+                           CardProtocol::buildRelayChangedNotify(card.ctype, card.to, card.msgid, rows,
+                                                                 status));
+        return;
+    }
 
-    send(cmd_join_relay, m_seq, CardProtocol::buildSimpleResponse(0, "ok"));
+    //单聊卡片：双方的会话ID互为对方，各发一份
+    const int64_t peers[] = { card.from, card.to };
+    for (size_t i = 0; i < sizeof(peers) / sizeof(peers[0]); ++i)
+    {
+        const int64_t cid = CardProtocol::cardConversationIdFor(card.ctype, card.from, card.to, peers[i]);
+        sendToUser(static_cast<int32_t>(peers[i]), cmd_relay_changed_notify,
+                   CardProtocol::buildRelayChangedNotify(card.ctype, cid, card.msgid, rows, status));
+    }
+}
 
+void ChatSession::augmentCardRecord(MessageRecord& message, int64_t nowMs)
+{
+    //文件共享卡片：按本会话的登录用户合并共享状态与他的权限（docs/文件共享方案.md 5.6）。
+    //放在群卡片的判断之前：共享卡片不是群投票 / 接龙 / 待办那一类，走自己的合并逻辑
+    if (message.msgtype == message_type_fileshare)
+    {
+        augmentShareCardRecord(message);
+        return;
+    }
+
+    //入群邀请卡片：合并显示状态与群的当前资料（docs/邀请入群方案.md §4.3）
+    if (message.msgtype == message_type_group_invite)
+    {
+        augmentGroupInviteCardRecord(message, nowMs);
+        return;
+    }
+
+    //非卡片消息、以及已撤回的卡片都不合并：后者的名单与投票结果不随它下发，也省掉两次查库
+    if (!CardProtocol::shouldAugmentCard(message.msgtype, message.recalled))
+        return;
+
+    const int mt = message.msgtype;
     std::vector<CardInteractionRecord> rows;
-    cardMgr.getCardInteractions(req.msgid, rows);
-    notifyCardConversation(card, cmd_relay_changed_notify,
-                           CardProtocol::buildRelayChangedNotify(req.msgid, rows));
+    Singleton<CardManager>::Instance().getCardInteractions(message.msgid, rows);
 
-    LOGI("join relay ok, userid: %d, msgid: %lld", m_userinfo.userid, (long long)req.msgid);
+    //投票、待办：合并互动结果
+    if (mt != message_type_relay)
+    {
+        message.content = CardProtocol::augmentCardContent(mt, message.content, rows);
+        return;
+    }
+
+    //接龙：合并名单与状态。读结束记录失败时 loadRelayStatus 已按截止时间算出状态并记了日志，
+    //这里照样下发，客户端下次同步或收到推送时会更正
+    RelayStatus status;
+    if (!loadRelayStatus(message, nowMs, status))
+        LOGE("augment relay card with deadline-only state, load state failed, msgid: %lld",
+             (long long)message.msgid);
+    message.content = CardProtocol::augmentRelayContent(message.content, rows, status);
+}
+
+void ChatSession::augmentCardRecords(std::vector<MessageRecord>& messages)
+{
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    for (size_t i = 0; i < messages.size(); ++i)
+        augmentCardRecord(messages[i], nowMs);
 }
 
 void ChatSession::onUpdateTodo(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -6260,10 +9358,15 @@ void ChatSession::onUpdateTodo(const std::string& body, const std::shared_ptr<Tc
              CardProtocol::buildSimpleResponse(error_code_message_not_exist, "card not exist"));
         return;
     }
-    if (card.msgtype != message_type_todo)
+    //卡片已撤回、或类型不是待办，都不接受勾选（2026-10-02 之前只判断类型，撤回后仍可勾选）
+    const int targetCode = CardProtocol::checkCardTarget(card.msgtype, card.recalled, message_type_todo);
+    if (targetCode != error_code_ok)
     {
         send(cmd_update_todo, m_seq,
-             CardProtocol::buildSimpleResponse(error_code_bad_request, "not a todo card"));
+             CardProtocol::buildSimpleResponse(targetCode,
+                 targetCode == error_code_message_not_exist ? "card recalled" : "not a todo card"));
+        LOGI("update todo rejected, card unusable, code: %d, userid: %d, msgid: %lld",
+             targetCode, m_userinfo.userid, (long long)req.msgid);
         return;
     }
     if (!canAccessCard(card))
@@ -6337,6 +9440,21 @@ void ChatSession::onRequestUpload(const std::string& body, const std::shared_ptr
         send(cmd_request_upload, m_seq,
              FileProtocol::buildSimpleResponse(errcode, "file too large"));
         return;
+    }
+
+    //企业级敏感词：聊天文件与群文件的文件名会显示在聊天记录与群文件库里，要检查（场景划分见
+    //FileProtocol::isNameCheckedScene）。放在秒传判断之前，否则秒传命中的文件会跳过检查。
+    //申请上传时还不知道文件要发到哪个会话，拦截记录的会话类型记 0
+    if (FileProtocol::isNameCheckedScene(req.scene))
+    {
+        std::vector<std::string> sensitiveTexts;
+        sensitiveTexts.push_back(req.name);
+        if (hitSensitive(chatserver::sensitive_source_file_name, 0, 0, std::string(), sensitiveTexts))
+        {
+            send(cmd_request_upload, m_seq,
+                 FileProtocol::buildSimpleResponse(error_code_file_sensitive_word, "file name contains sensitive word"));
+            return;
+        }
     }
 
     FileStoreManager& fileMgr = Singleton<FileStoreManager>::Instance();
@@ -6579,6 +9697,48 @@ void ChatSession::onGetGroupFiles(const std::string& body, const std::shared_ptr
          static_cast<unsigned>(files.size()), total);
 }
 
+void ChatSession::onSearchGroupFiles(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    SearchGroupFilesRequest req;
+    if (!GroupFileProtocol::parseSearchGroupFilesRequest(body, req))
+    {
+        send(cmd_search_group_files, m_seq,
+             GroupFileProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGI("search group files rejected: bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    //成员范围由查询本身限定（只 JOIN 本人的成员行），这里不必再逐群校验
+    std::vector<SearchedGroupFile> files;
+    bool hasMore = false;
+    if (!Singleton<GroupFileManager>::Instance().searchGroupFilesByName(
+            m_userinfo.userid, req.keyword, req.limit, files, hasMore))
+    {
+        send(cmd_search_group_files, m_seq,
+             GroupFileProtocol::buildSimpleResponse(error_code_server_internal, "search group files failed"));
+        return;
+    }
+
+    //从 UserManager 补全每个条目登记者的昵称（与 onGetGroupFiles 相同）
+    UserManager& userMgr = Singleton<UserManager>::Instance();
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        User u;
+        u.userid = 0;
+        userMgr.getUserInfoByUserId(static_cast<int32_t>(files[i].entry.uploaderid), u);
+        if (u.userid != 0)
+            files[i].entry.uploadername = u.nickname;
+    }
+
+    send(cmd_search_group_files, m_seq,
+         GroupFileProtocol::buildSearchGroupFilesResponse(req.keyword, hasMore, files));
+    //搜索关键字是用户输入的内容，日志只记字节数，不记原文
+    LOGI("search group files ok, userid: %d, keyword bytes: %u, limit: %d, returned: %u, hasmore: %d",
+         m_userinfo.userid, static_cast<unsigned>(req.keyword.size()), req.limit,
+         static_cast<unsigned>(files.size()), hasMore ? 1 : 0);
+}
+
 void ChatSession::onAddGroupFile(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
@@ -6715,7 +9875,11 @@ void ChatSession::onDeleteGroupFile(const std::string& body, const std::shared_p
 
 void ChatSession::makeSessionInvalid()
 {
+    //管理控制台的在线名单：被顶号、被管理员踢、被本人其它设备踢的会话不再计入在线。
+    //必须在清零之前取 userid；之后连接断开时 userid 已是 0，ChatServer::onDisconnected 不会再通知
+    const int32_t userid = m_userinfo.userid;
     m_userinfo.userid = 0;
+    Singleton<AdminLinkServer>::Instance().onUserOnlineChanged(userid);
 }
 
 bool ChatSession::isSessionValid()
@@ -6756,4 +9920,1447 @@ void ChatSession::checkHeartbeat(const std::shared_ptr<TcpConnection>& conn)
 
     //超过允许的最大收包间隔仍无数据包，判定掉线，主动断开
     conn->forceClose();
+}
+
+//==================== 文件共享（cmd_share_* 2201~2210，docs/文件共享方案.md 6.1） ====================
+
+namespace {
+
+//审计记录里调整成员名单摘要的最大字节数：t_file_share_audit.f_path 为 varchar(1024)，摘要只含 ASCII，
+//留出余量后截断，末尾补 "..."
+const size_t kShareAuditSummaryMaxBytes = 1000;
+
+//卡片 clientmsgid 的前缀。服务端生成的消息要用一个能区分来源、不会与客户端 UUID 相撞的串，
+//saveMessage 的幂等去重键是「发送方 + clientmsgid」
+const char* const kShareCardClientMsgIdPrefix = "share-card-";
+
+//向若干人各推一帧内容各不相同的通知：只取一次在线会话快照，按 userid 找到各自的内容再发送。
+//逐人调用 sendToUser 会为每个人复制一遍全部在线会话，群里人多时开销与「人数 × 在线会话数」成正比
+void pushDistinctBodies(uint16_t cmd, const std::map<int64_t, std::string>& bodies)
+{
+    if (bodies.empty())
+        return;
+
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if (!(*it) || (*it)->getUserId() == 0)
+            continue;
+        std::map<int64_t, std::string>::const_iterator found = bodies.find(static_cast<int64_t>((*it)->getUserId()));
+        if (found != bodies.end())
+            (*it)->send(cmd, 0, found->second);
+    }
+}
+
+//把一组 userid 拼成逗号分隔的文本，写审计摘要用
+std::string joinUserIds(const std::vector<int64_t>& ids)
+{
+    std::string text;
+    for (size_t i = 0; i < ids.size(); ++i)
+    {
+        if (i > 0)
+            text += ",";
+        text += std::to_string(static_cast<long long>(ids[i]));
+    }
+    return text;
+}
+
+//成员列表里的 userid
+std::vector<int64_t> userIdsOf(const std::vector<ShareMemberSpec>& members)
+{
+    std::vector<int64_t> ids;
+    for (size_t i = 0; i < members.size(); ++i)
+        ids.push_back(members[i].m_userId);
+    return ids;
+}
+
+//当前时间（Unix 毫秒）
+int64_t shareNowMs()
+{
+    const int64_t kMillisPerSecond = 1000;
+    return static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+}
+
+} // namespace
+
+ShareConnKey ChatSession::shareConnKey() const
+{
+    return static_cast<ShareConnKey>(reinterpret_cast<uintptr_t>(this));
+}
+
+void ChatSession::augmentShareCardRecord(MessageRecord& message)
+{
+    //合并不了状态时也要去掉真实路径：2026-10-04 之前入库的卡片正文带着分享者的路径，不能原样发给别人
+    ShareCardContent card;
+    if (!FileShareProtocol::parseCardContent(message.content, card))
+    {
+        message.content = FileShareProtocol::removeCardDisplayPath(message.content);
+        LOGW("augment share card skipped, bad content, msgid: %lld", (long long)message.msgid);
+        return;
+    }
+
+    ShareRecord share;
+    if (!Singleton<FileShareManager>::Instance().getShare(card.m_shareId, share))
+    {
+        message.content = FileShareProtocol::removeCardDisplayPath(message.content);
+        LOGW("augment share card skipped, share not found, msgid: %lld, shareid: %lld",
+             (long long)message.msgid, (long long)card.m_shareId);
+        return;
+    }
+
+    ShareViewerFacts facts;
+    loadShareViewerFacts(share, m_userinfo.userid, facts);
+    message.content = FileSharePolicy::augmentCardFor(message.content, share, facts);
+}
+
+void ChatSession::cleanupFileShareOnOffline()
+{
+    const ShareConnKey key = shareConnKey();
+
+    //结束涉及本连接的访问会话：本连接是分享者一端时告诉访问者「分享者已不可用」，是访问者一端时
+    //告诉分享者「中转通道断开」
+    std::vector<ShareAccessInfo> closed = Singleton<FileShareSessionManager>::Instance().closeForConnection(key);
+    for (size_t i = 0; i < closed.size(); ++i)
+    {
+        const int errCode = (closed[i].m_ownerConn == key) ? error_code_share_unavailable
+                                                            : error_code_share_relay_broken;
+        notifyShareAccessEnded(std::vector<ShareAccessInfo>(1, closed[i]), errCode);
+    }
+
+    //本连接提供的共享：清除在线提供状态后向成员与分享者推新状态
+    std::vector<ShareOfflineNotice> notices = Singleton<FileShareManager>::Instance().takeOfflineNotices(key);
+    for (size_t i = 0; i < notices.size(); ++i)
+        pushShareStateToUsers(notices[i].m_share, notices[i].m_notifyUsers, key);
+
+    if (!closed.empty() || !notices.empty())
+        LOGI("file share offline cleanup, userid: %d, closed accesses: %u, unprovided shares: %u",
+             m_userinfo.userid, static_cast<unsigned>(closed.size()), static_cast<unsigned>(notices.size()));
+}
+
+void ChatSession::loadShareViewerFactsForUsers(const ShareRecord& share, const std::vector<int64_t>& users,
+                                               std::vector<ShareViewerFacts>& out, ShareConnKey excludeConn)
+{
+    out.clear();
+
+    //与看的人无关的部分只查一次：分享者的在线情况与在线提供状态
+    ShareViewerFacts base;
+    //分享者所属企业的文件共享开关：关闭时该企业的共享对访问者一律「暂不可用，功能已被关闭」
+    base.m_featureEnabled = Singleton<FeatureSwitchManager>::Instance().isEnabled(share.m_enterpriseId, kFeatureFileShare);
+    std::list<std::shared_ptr<ChatSession>> ownerSessions;
+    Singleton<ChatServer>::Instance().getSessionsByUserId(ownerSessions, static_cast<int32_t>(share.m_ownerId));
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = ownerSessions.begin(); it != ownerSessions.end(); ++it)
+    {
+        if (!(*it) || !(*it)->isSessionValid())
+            continue;
+        //正在下线的那条连接（退出登录时它还在在线会话表里）不算分享者在线
+        if (excludeConn != 0 && (*it)->shareConnKey() == excludeConn)
+            continue;
+        base.m_ownerOnline = true;
+        if (!share.m_deviceId.empty() && (*it)->getDeviceId() == share.m_deviceId)
+            base.m_ownerOnBoundDevice = true;
+    }
+    ShareProvideState provide;
+    if (Singleton<FileShareManager>::Instance().getProvideState(share.m_shareId, provide))
+    {
+        base.m_hasProvideState = true;
+        base.m_provideAvailable = provide.m_available;
+    }
+
+    //成员表与群成员表各查一次
+    std::vector<ShareMemberSpec> members;
+    Singleton<FileShareManager>::Instance().getMembers(share.m_shareId, members);
+    std::map<int64_t, int> permsOf;
+    for (size_t i = 0; i < members.size(); ++i)
+        permsOf[members[i].m_userId] = members[i].m_perms;
+
+    std::set<int64_t> groupUsers;
+    if (share.m_ctype == conversation_group)
+    {
+        std::vector<GroupMemberRecord> groupMembers;
+        Singleton<GroupManager>::Instance().getGroupMembers(share.m_cid, groupMembers);
+        for (size_t i = 0; i < groupMembers.size(); ++i)
+            groupUsers.insert(groupMembers[i].userid);
+    }
+
+    for (size_t i = 0; i < users.size(); ++i)
+    {
+        ShareViewerFacts facts = base;
+        facts.m_viewerId = users[i];
+        std::map<int64_t, int>::const_iterator it = permsOf.find(users[i]);
+        facts.m_isMember = (it != permsOf.end());
+        facts.m_perms = facts.m_isMember ? it->second : 0;
+        facts.m_inConversation = (share.m_ctype == conversation_group) ? (groupUsers.count(users[i]) > 0) : true;
+        out.push_back(facts);
+    }
+}
+
+void ChatSession::loadShareViewerFacts(const ShareRecord& share, int64_t viewerId, ShareViewerFacts& facts)
+{
+    std::vector<ShareViewerFacts> out;
+    loadShareViewerFactsForUsers(share, std::vector<int64_t>(1, viewerId), out);
+    facts = out.empty() ? ShareViewerFacts() : out[0];
+}
+
+void ChatSession::pushShareStateToUsers(const ShareRecord& share, const std::vector<int64_t>& users,
+                                        ShareConnKey excludeConn)
+{
+    std::vector<ShareViewerFacts> facts;
+    loadShareViewerFactsForUsers(share, users, facts, excludeConn);
+
+    std::map<int64_t, std::string> bodies;
+    for (size_t i = 0; i < facts.size(); ++i)
+    {
+        const ShareStateView view = FileSharePolicy::viewFor(share, facts[i]);
+        bodies[facts[i].m_viewerId] = FileShareProtocol::buildStateNotify(share.m_shareId, view);
+    }
+    pushDistinctBodies(cmd_share_state_notify, bodies);
+    LOGI("share state pushed, shareid: %lld, users: %u", (long long)share.m_shareId, static_cast<unsigned>(users.size()));
+}
+
+int64_t ChatSession::sendShareCard(const ShareRecord& share, const std::vector<int64_t>& audience, int64_t nowMs)
+{
+    ShareCardContent card;
+    card.m_shareId = share.m_shareId;
+    card.m_kind = share.m_kind;
+    card.m_name = share.m_name;
+    //真实路径不写进入库的正文（2026-10-04 起）：下面逐人合并时只给分享者本人补上
+    card.m_ownerId = share.m_ownerId;
+    const std::string content = FileShareProtocol::buildCardContent(card);
+    const std::string stored = MessageProtocol::buildStoredContent(content, std::vector<int64_t>(), false, "");
+
+    //clientmsgid 带上共享 id、时间与首个可见成员：同一共享在同一毫秒里先后为两批新成员发卡片也不会相撞
+    const std::string clientMsgId = std::string(kShareCardClientMsgIdPrefix)
+        + std::to_string(static_cast<long long>(share.m_shareId)) + "-" + std::to_string(static_cast<long long>(nowMs))
+        + "-" + std::to_string(static_cast<long long>(audience.empty() ? 0 : audience[0]));
+
+    std::vector<int32_t> audience32;
+    for (size_t i = 0; i < audience.size(); ++i)
+        audience32.push_back(static_cast<int32_t>(audience[i]));
+
+    const int64_t msgId = Singleton<MessageManager>::Instance().saveMessage(
+        clientMsgId, share.m_ctype, static_cast<int32_t>(share.m_ownerId), static_cast<int32_t>(share.m_cid),
+        message_type_fileshare, stored, nowMs, &audience32);
+    if (msgId == 0)
+    {
+        LOGE("save share card failed, shareid: %lld, audience: %u",
+             (long long)share.m_shareId, static_cast<unsigned>(audience.size()));
+        return 0;
+    }
+
+    MessageRecord rec;
+    rec.msgid = msgId;
+    rec.clientmsgid = clientMsgId;
+    rec.ctype = share.m_ctype;
+    rec.from = share.m_ownerId;
+    rec.to = share.m_cid;
+    rec.msgtype = message_type_fileshare;
+    rec.timestamp = nowMs;
+    rec.recalled = false;
+
+    //逐人合并状态：成员看到自己的权限，分享者本人看到的不带权限
+    const std::vector<int64_t> targets = FileSharePolicy::pushTargets(audience, share.m_ownerId);
+    std::vector<ShareViewerFacts> facts;
+    loadShareViewerFactsForUsers(share, targets, facts);
+    std::map<int64_t, std::string> bodies;
+    for (size_t i = 0; i < facts.size(); ++i)
+    {
+        MessageRecord personal = rec;
+        personal.content = FileSharePolicy::augmentCardFor(content, share, facts[i]);
+        //收件方视角的会话 id：群聊为群 id；单聊里对方看到的是分享者，分享者自己的其他设备看到的是对方
+        int64_t cid = share.m_cid;
+        if (share.m_ctype == conversation_single && facts[i].m_viewerId != share.m_ownerId)
+            cid = share.m_ownerId;
+        bodies[facts[i].m_viewerId] = MessageProtocol::buildMessageNotify(personal, cid);
+    }
+    pushDistinctBodies(cmd_message_notify, bodies);
+
+    LOGI("share card sent, shareid: %lld, msgid: %lld, audience: %u, pushed users: %u",
+         (long long)share.m_shareId, (long long)msgId, static_cast<unsigned>(audience.size()),
+         static_cast<unsigned>(targets.size()));
+    return msgId;
+}
+
+void ChatSession::notifyShareAccessEnded(const std::vector<ShareAccessInfo>& closed, int errCode)
+{
+    for (size_t i = 0; i < closed.size(); ++i)
+    {
+        std::vector<int64_t> users;
+        users.push_back(closed[i].m_ownerId);
+        users.push_back(closed[i].m_visitorId);
+        Singleton<ChatServer>::Instance().pushToUsers(users, cmd_share_access_state_notify,
+            FileShareProtocol::buildAccessEndedNotify(closed[i].m_accessId, std::string(), errCode));
+        LOGI("share access ended, accessid: %s, shareid: %lld, visitor: %lld, errcode: %d",
+             closed[i].m_accessId.c_str(), (long long)closed[i].m_shareId, (long long)closed[i].m_visitorId, errCode);
+    }
+}
+
+void ChatSession::addShareServerAudit(const ShareRecord& share, int64_t actorId, int action,
+                                      const std::string& path, int64_t nowMs, const std::string& accessId)
+{
+    ShareAuditRecord rec;
+    rec.m_shareId = share.m_shareId;
+    rec.m_ownerId = share.m_ownerId;
+    rec.m_actorId = actorId;
+    rec.m_enterpriseId = share.m_enterpriseId;
+    rec.m_action = action;
+    rec.m_source = share_audit_source_server;
+    rec.m_path = path;
+    rec.m_accessId = accessId;
+    rec.m_createTime = nowMs;
+    if (!Singleton<FileShareManager>::Instance().addAudit(rec))
+        LOGE("add share audit failed, shareid: %lld, actor: %lld, action: %d",
+             (long long)share.m_shareId, (long long)actorId, action);
+}
+
+int ChatSession::cancelShareAndNotify(int64_t shareId, int reason, int64_t operatorId, int64_t nowMs)
+{
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    const int code = shareMgr.cancelShare(shareId, reason, operatorId, nowMs);
+    if (code != error_code_ok)
+    {
+        LOGI("cancel share skipped, shareid: %lld, reason: %d, operator: %lld, code: %d",
+             (long long)shareId, reason, (long long)operatorId, code);
+        return code;
+    }
+
+    ShareRecord share;
+    if (!shareMgr.getShare(shareId, share))
+    {
+        //记录刚改过却读不回来，只可能是数据库故障；推送所需的成员与分享者无从得知，记日志后返回
+        LOGE("cancel share: record not readable after cancel, shareid: %lld", (long long)shareId);
+        return error_code_ok;
+    }
+
+    shareMgr.clearProvideState(shareId);
+    notifyShareAccessEnded(Singleton<FileShareSessionManager>::Instance().closeAllForShare(shareId),
+                           error_code_share_canceled);
+
+    //已取消对所有人都是同一个状态，推同一份内容即可
+    std::vector<ShareMemberSpec> members;
+    shareMgr.getMembers(shareId, members);
+    const std::vector<int64_t> users = FileSharePolicy::pushTargets(
+        FileSharePolicy::cardAudience(members, share.m_ownerId), share.m_ownerId);
+    ShareStateView view;
+    view.m_state = share_state_invalid;
+    view.m_reason = reason;
+    Singleton<ChatServer>::Instance().pushToUsers(users, cmd_share_state_notify,
+                                                  FileShareProtocol::buildStateNotify(shareId, view));
+
+    addShareServerAudit(share, operatorId, share_audit_cancel_share, std::string(), nowMs);
+    LOGI("share canceled, shareid: %lld, reason: %d, operator: %lld, notified users: %u",
+         (long long)shareId, reason, (long long)operatorId, static_cast<unsigned>(users.size()));
+    return error_code_ok;
+}
+
+void ChatSession::pushFeaturesNotify(int64_t enterpriseId)
+{
+    if (enterpriseId <= 0)
+        return;
+    //1013：推给本企业的全体在线用户，包体是该企业当前的全部功能开关
+    const std::string features =
+        FeatureSwitchManager::buildFeaturesJson(Singleton<FeatureSwitchManager>::Instance().featuresFor(enterpriseId));
+    Singleton<ChatServer>::Instance().broadcastToEnterprise(enterpriseId, cmd_features_notify, features, 0);
+    LOGI("features notify pushed, enterpriseid: %lld, features: %s", (long long)enterpriseId, features.c_str());
+}
+
+void ChatSession::applyFileShareSwitch(int64_t enterpriseId, bool enabledBefore, bool enabledAfter)
+{
+    if (enterpriseId <= 0)
+        return;
+    pushFeaturesNotify(enterpriseId);
+    if (enabledBefore == enabledAfter)
+    {
+        LOGI("file share switch unchanged, enterpriseid: %lld, enabled: %d, features pushed", (long long)enterpriseId,
+             enabledAfter ? 1 : 0);
+        return;
+    }
+
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    std::vector<ShareRecord> shares;
+    if (!shareMgr.listActiveEnterpriseShares(enterpriseId, shares))
+    {
+        LOGE("file share switch: list enterprise shares failed, enterpriseid: %lld", (long long)enterpriseId);
+        return;
+    }
+    size_t closedAccesses = 0;
+    for (size_t i = 0; i < shares.size(); ++i)
+    {
+        //关闭：结束这个共享上的全部访问会话与传输子会话，访问者收到 2223（800）
+        if (!enabledAfter)
+        {
+            const std::vector<ShareAccessInfo> closed = Singleton<FileShareSessionManager>::Instance().closeAllForShare(shares[i].m_shareId);
+            closedAccesses += closed.size();
+            notifyShareAccessEnded(closed, error_code_share_disabled);
+        }
+        //按新开关计算的状态推给成员与分享者（关闭时为暂不可用、功能已被关闭；打开时按在线提供状态恢复）
+        std::vector<ShareMemberSpec> members;
+        shareMgr.getMembers(shares[i].m_shareId, members);
+        pushShareStateToUsers(shares[i], FileSharePolicy::pushTargets(
+            FileSharePolicy::cardAudience(members, shares[i].m_ownerId), shares[i].m_ownerId));
+    }
+    LOGI("file share switch applied, enterpriseid: %lld, enabled: %d -> %d, shares: %u, closed accesses: %u",
+         (long long)enterpriseId, enabledBefore ? 1 : 0, enabledAfter ? 1 : 0, static_cast<unsigned>(shares.size()),
+         static_cast<unsigned>(closedAccesses));
+}
+
+void ChatSession::onShareCreate(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    const std::vector<int64_t> noInvalid;
+    ShareCreateRequest req;
+    if (!FileShareProtocol::parseCreateRequest(body, req))
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(error_code_bad_request, "bad request", 0, std::string(), noInvalid));
+        LOGW("share create bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    const int64_t me = m_userinfo.userid;
+    const int64_t nowMs = shareNowMs();
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+
+    //应答超时后的重发：直接回第一次建出的 shareid，不再做名额等校验，也不再发卡片
+    const int64_t existed = shareMgr.findShareIdByClientShareId(me, req.m_clientShareId);
+    if (existed > 0)
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(error_code_ok, "ok", existed, req.m_clientShareId, noInvalid));
+        LOGI("share create deduplicated, userid: %lld, clientshareid: %s, shareid: %lld",
+             (long long)me, req.m_clientShareId.c_str(), (long long)existed);
+        return;
+    }
+
+    //共享只由发起时的那台电脑提供，连接没有上报设备标识就无从绑定
+    if (m_userinfo.deviceid.empty())
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(error_code_bad_request, "device id required", 0,
+                                                    req.m_clientShareId, noInvalid));
+        LOGW("share create rejected, no device id, userid: %lld", (long long)me);
+        return;
+    }
+
+    //共享名称是分享者以外的人能看到的唯一称呼，按分享者所属企业的词库检查；命中时记一条来源为
+    //sensitive_source_fileshare 的拦截记录，不发起（2026-10-04 起）
+    if (hitSensitive(chatserver::sensitive_source_fileshare, req.m_ctype, req.m_cid, std::string(),
+                     std::vector<std::string>(1, req.m_name)))
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(error_code_share_name_sensitive, "share name contains sensitive word",
+                                                    0, req.m_clientShareId, noInvalid));
+        LOGI("share create rejected, name contains sensitive word, userid: %lld, ctype: %d, cid: %lld",
+             (long long)me, req.m_ctype, (long long)req.m_cid);
+        return;
+    }
+
+    //查好判定所需的事实
+    DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+    ShareCheckFacts facts;
+    facts.m_ownerEnterpriseId = deptMgr.getUserEnterpriseId(me);
+    facts.m_featureEnabled = Singleton<FeatureSwitchManager>::Instance().isEnabled(facts.m_ownerEnterpriseId, kFeatureFileShare);
+    if (req.m_ctype == conversation_group)
+    {
+        GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+        if (!groupMgr.isGroupMember(req.m_cid, m_userinfo.userid))
+        {
+            send(cmd_share_create, m_seq,
+                 FileShareProtocol::buildCreateResponse(error_code_not_group_member, "not a group member", 0,
+                                                        req.m_clientShareId, noInvalid));
+            LOGI("share create rejected, not group member, userid: %lld, groupid: %lld",
+                 (long long)me, (long long)req.m_cid);
+            return;
+        }
+        std::vector<GroupMemberRecord> groupMembers;
+        groupMgr.getGroupMembers(req.m_cid, groupMembers);
+        for (size_t i = 0; i < groupMembers.size(); ++i)
+            facts.m_conversationUsers.insert(groupMembers[i].userid);
+    }
+    else
+    {
+        facts.m_conversationUsers.insert(req.m_cid);
+    }
+    for (size_t i = 0; i < req.m_members.size(); ++i)
+        facts.m_enterpriseOf[req.m_members[i].m_userId] = deptMgr.getUserEnterpriseId(req.m_members[i].m_userId);
+    facts.m_activeShareCount = shareMgr.countActiveShares(me);
+    facts.m_maxSharesPerOwner = shareMgr.getMaxSharesPerOwner();
+    if (facts.m_activeShareCount < 0)
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(error_code_server_internal, "server internal error", 0,
+                                                    req.m_clientShareId, noInvalid));
+        LOGE("share create failed, count active shares error, userid: %lld", (long long)me);
+        return;
+    }
+
+    std::vector<int64_t> invalid;
+    int code = FileSharePolicy::checkCreate(req, me, facts, invalid);
+    if (code != error_code_ok)
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(code, "share create rejected", 0, req.m_clientShareId, invalid));
+        LOGI("share create rejected, userid: %lld, ctype: %d, cid: %lld, code: %d, invalid members: %s",
+             (long long)me, req.m_ctype, (long long)req.m_cid, code, joinUserIds(invalid).c_str());
+        return;
+    }
+
+    ShareRecord rec;
+    rec.m_clientShareId = req.m_clientShareId;
+    rec.m_ownerId = me;
+    rec.m_enterpriseId = facts.m_ownerEnterpriseId;
+    rec.m_deviceId = m_userinfo.deviceid;
+    rec.m_ctype = req.m_ctype;
+    rec.m_cid = req.m_cid;
+    rec.m_kind = req.m_kind;
+    rec.m_name = req.m_name;
+    rec.m_displayPath = req.m_displayPath;
+    rec.m_includeHidden = req.m_includeHidden;
+    rec.m_createTime = nowMs;
+
+    int64_t shareId = 0;
+    bool created = false;
+    code = shareMgr.createShare(rec, req.m_members, shareId, created);
+    if (code != error_code_ok)
+    {
+        send(cmd_share_create, m_seq,
+             FileShareProtocol::buildCreateResponse(code, "save share failed", 0, req.m_clientShareId, noInvalid));
+        return;
+    }
+
+    send(cmd_share_create, m_seq,
+         FileShareProtocol::buildCreateResponse(error_code_ok, "ok", shareId, req.m_clientShareId, noInvalid));
+
+    //并发重发时另一条请求刚刚建成了同一个共享：卡片由那一条负责发
+    if (!created)
+        return;
+
+    rec.m_shareId = shareId;
+    rec.m_state = FileShareManager::kShareRecordActive;
+    sendShareCard(rec, FileSharePolicy::cardAudience(req.m_members, me), nowMs);
+    addShareServerAudit(rec, me, share_audit_create_share, std::string(), nowMs);
+    LOGI("share created, shareid: %lld, owner: %lld, ctype: %d, cid: %lld, kind: %d, members: %u, device: %s",
+         (long long)shareId, (long long)me, req.m_ctype, (long long)req.m_cid, req.m_kind,
+         static_cast<unsigned>(req.m_members.size()), m_userinfo.deviceid.c_str());
+}
+
+void ChatSession::onShareCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t shareId = 0;
+    if (!FileShareProtocol::parseShareIdRequest(body, shareId))
+    {
+        send(cmd_share_cancel, m_seq, FileShareProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGW("share cancel bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    ShareRecord share;
+    if (!Singleton<FileShareManager>::Instance().getShare(shareId, share))
+    {
+        send(cmd_share_cancel, m_seq, FileShareProtocol::buildSimpleResponse(error_code_share_not_exist, "share not exist"));
+        LOGI("share cancel rejected, share not exist, userid: %d, shareid: %lld", m_userinfo.userid, (long long)shareId);
+        return;
+    }
+
+    //群共享：群主与管理员也能取消，需要发起者在群里的角色；单聊没有角色，传 -1
+    int groupRole = -1;
+    if (share.m_ctype == conversation_group)
+        groupRole = Singleton<GroupManager>::Instance().getMemberRole(share.m_cid, m_userinfo.userid);
+
+    int reason = 0;
+    int code = FileSharePolicy::checkCancel(share, m_userinfo.userid, groupRole, reason);
+    if (code == error_code_ok)
+        code = cancelShareAndNotify(shareId, reason, m_userinfo.userid, shareNowMs());
+
+    send(cmd_share_cancel, m_seq,
+         FileShareProtocol::buildSimpleResponse(code, code == error_code_ok ? "ok" : "share cancel rejected"));
+    if (code != error_code_ok)
+        LOGI("share cancel rejected, userid: %d, shareid: %lld, role: %d, code: %d",
+             m_userinfo.userid, (long long)shareId, groupRole, code);
+}
+
+void ChatSession::onShareUpdateMembers(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    ShareUpdateMembersRequest req;
+    if (!FileShareProtocol::parseUpdateMembersRequest(body, req))
+    {
+        send(cmd_share_update_members, m_seq, FileShareProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGW("share update members bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    ShareRecord share;
+    if (!shareMgr.getShare(req.m_shareId, share))
+    {
+        send(cmd_share_update_members, m_seq,
+             FileShareProtocol::buildSimpleResponse(error_code_share_not_exist, "share not exist"));
+        LOGI("share update members rejected, share not exist, userid: %d, shareid: %lld",
+             m_userinfo.userid, (long long)req.m_shareId);
+        return;
+    }
+
+    //只有新增成员需要查会话成员与企业归属；功能开关按分享者所属企业判定
+    ShareCheckFacts facts;
+    facts.m_featureEnabled = Singleton<FeatureSwitchManager>::Instance().isEnabled(share.m_enterpriseId, kFeatureFileShare);
+    if (!req.m_add.empty())
+    {
+        DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+        facts.m_ownerEnterpriseId = deptMgr.getUserEnterpriseId(share.m_ownerId);
+        if (share.m_ctype == conversation_group)
+        {
+            std::vector<GroupMemberRecord> groupMembers;
+            Singleton<GroupManager>::Instance().getGroupMembers(share.m_cid, groupMembers);
+            for (size_t i = 0; i < groupMembers.size(); ++i)
+                facts.m_conversationUsers.insert(groupMembers[i].userid);
+        }
+        else
+        {
+            facts.m_conversationUsers.insert(share.m_cid);
+        }
+        for (size_t i = 0; i < req.m_add.size(); ++i)
+            facts.m_enterpriseOf[req.m_add[i].m_userId] = deptMgr.getUserEnterpriseId(req.m_add[i].m_userId);
+    }
+
+    std::vector<int64_t> invalid;
+    int code = FileSharePolicy::checkUpdateMembers(share, m_userinfo.userid, req, facts, invalid);
+    if (code != error_code_ok)
+    {
+        send(cmd_share_update_members, m_seq,
+             FileShareProtocol::buildUpdateMembersResponse(code, "share update members rejected", invalid));
+        LOGI("share update members rejected, userid: %d, shareid: %lld, code: %d, invalid members: %s",
+             m_userinfo.userid, (long long)req.m_shareId, code, joinUserIds(invalid).c_str());
+        return;
+    }
+
+    const int64_t nowMs = shareNowMs();
+    ShareMemberChanges changes;
+    code = shareMgr.updateMembers(req, nowMs, changes);
+    if (code != error_code_ok)
+    {
+        send(cmd_share_update_members, m_seq, FileShareProtocol::buildSimpleResponse(code, "save members failed"));
+        return;
+    }
+    send(cmd_share_update_members, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+
+    //新成员：另发一张只给他们看的卡片（原卡片可能早已淹没在历史里，见方案 5.6）
+    if (!changes.m_added.empty())
+        sendShareCard(share, FileSharePolicy::cardAudience(changes.m_added, share.m_ownerId), nowMs);
+
+    //被移除的人：结束他们正在进行的访问，再推「已失效」
+    if (!changes.m_removed.empty())
+    {
+        FileShareSessionManager& sessionMgr = Singleton<FileShareSessionManager>::Instance();
+        for (size_t i = 0; i < changes.m_removed.size(); ++i)
+            notifyShareAccessEnded(sessionMgr.closeForMember(share.m_shareId, changes.m_removed[i]),
+                                   error_code_share_not_member);
+        pushShareStateToUsers(share, changes.m_removed);
+    }
+
+    //权限有变化的人：推给本人与分享者（分享者的客户端据此更新正在进行的访问里的权限检查）
+    for (size_t i = 0; i < changes.m_updated.size(); ++i)
+    {
+        std::vector<int64_t> users;
+        users.push_back(changes.m_updated[i].m_userId);
+        users.push_back(share.m_ownerId);
+        Singleton<ChatServer>::Instance().pushToUsers(users, cmd_share_perms_notify,
+            FileShareProtocol::buildPermsNotify(share.m_shareId, changes.m_updated[i].m_userId,
+                                                changes.m_updated[i].m_perms));
+    }
+
+    //审计摘要：add=新成员;remove=被移除的人;update=权限有变化的人，超长截断
+    std::string summary = "add=" + joinUserIds(userIdsOf(changes.m_added))
+        + ";remove=" + joinUserIds(changes.m_removed)
+        + ";update=" + joinUserIds(userIdsOf(changes.m_updated));
+    if (summary.size() > kShareAuditSummaryMaxBytes)
+        summary = summary.substr(0, kShareAuditSummaryMaxBytes) + "...";
+    addShareServerAudit(share, m_userinfo.userid, share_audit_update_members, summary, nowMs);
+    LOGI("share members updated, shareid: %lld, userid: %d, added: %u, removed: %u, updated: %u",
+         (long long)share.m_shareId, m_userinfo.userid, static_cast<unsigned>(changes.m_added.size()),
+         static_cast<unsigned>(changes.m_removed.size()), static_cast<unsigned>(changes.m_updated.size()));
+}
+
+void ChatSession::onShareList(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    const std::vector<ShareListItem> noItems;
+    ShareListRequest req;
+    if (!FileShareProtocol::parseListRequest(body, req))
+    {
+        send(cmd_share_list, m_seq,
+             FileShareProtocol::buildListResponse(error_code_bad_request, "bad request", 0, noItems));
+        LOGW("share list bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    const bool mine = (req.m_scope == share_list_scope_mine);
+    std::vector<ShareRecord> records;
+    const bool ok = mine ? shareMgr.listOwnerShares(m_userinfo.userid, req.m_ctype, req.m_cid, records)
+                         : shareMgr.listMemberShares(m_userinfo.userid, req.m_ctype, req.m_cid, records);
+    if (!ok)
+    {
+        send(cmd_share_list, m_seq,
+             FileShareProtocol::buildListResponse(error_code_server_internal, "server internal error", req.m_scope, noItems));
+        LOGE("share list failed, userid: %d, scope: %d", m_userinfo.userid, req.m_scope);
+        return;
+    }
+
+    std::vector<ShareListItem> items;
+    for (size_t i = 0; i < records.size(); ++i)
+    {
+        const ShareRecord& rec = records[i];
+        ShareViewerFacts facts;
+        loadShareViewerFacts(rec, m_userinfo.userid, facts);
+        const ShareStateView view = FileSharePolicy::viewFor(rec, facts);
+
+        ShareListItem item;
+        item.m_shareId = rec.m_shareId;
+        item.m_ownerId = rec.m_ownerId;
+        item.m_ctype = rec.m_ctype;
+        item.m_cid = rec.m_cid;
+        item.m_kind = rec.m_kind;
+        item.m_name = rec.m_name;
+        item.m_displayPath = rec.m_displayPath;
+        item.m_includeHidden = rec.m_includeHidden;
+        item.m_state = view.m_state;
+        item.m_reason = view.m_reason;
+        item.m_createTime = rec.m_createTime;
+        if (mine)
+        {
+            item.m_onThisDevice = !rec.m_deviceId.empty() && rec.m_deviceId == m_userinfo.deviceid;
+            shareMgr.getMembers(rec.m_shareId, item.m_members);
+        }
+        else
+        {
+            item.m_myPerms = facts.m_perms;
+        }
+        items.push_back(item);
+    }
+
+    send(cmd_share_list, m_seq, FileShareProtocol::buildListResponse(error_code_ok, "ok", req.m_scope, items));
+    LOGI("share list ok, userid: %d, scope: %d, ctype: %d, cid: %lld, count: %u",
+         m_userinfo.userid, req.m_scope, req.m_ctype, (long long)req.m_cid, static_cast<unsigned>(items.size()));
+}
+
+void ChatSession::onShareServeReport(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::vector<ShareServeReportItem> items;
+    if (!FileShareProtocol::parseServeReport(body, items))
+    {
+        send(cmd_share_serve_report, m_seq, FileShareProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGW("share serve report bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    size_t accepted = 0;
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        const ShareServeReportItem& item = items[i];
+        ShareRecord share;
+        if (!shareMgr.getShare(item.m_shareId, share))
+        {
+            LOGW("share serve report ignored, share not exist, userid: %d, shareid: %lld",
+                 m_userinfo.userid, (long long)item.m_shareId);
+            continue;
+        }
+        if (!FileSharePolicy::acceptServeReport(share, m_userinfo.userid, m_userinfo.deviceid))
+        {
+            LOGW("share serve report ignored, userid: %d, shareid: %lld, owner: %lld, state: %d, device: %s, bound: %s",
+                 m_userinfo.userid, (long long)item.m_shareId, (long long)share.m_ownerId, share.m_state,
+                 m_userinfo.deviceid.c_str(), share.m_deviceId.c_str());
+            continue;
+        }
+
+        ShareProvideState previous;
+        const bool hadState = shareMgr.getProvideState(item.m_shareId, previous);
+        const int reason = item.m_available ? 0 : item.m_reason;
+        shareMgr.setProvideState(item.m_shareId, shareConnKey(), item.m_available, reason);
+        ++accepted;
+
+        //状态没有变化时不打扰成员
+        if (hadState && previous.m_available == item.m_available && previous.m_reason == reason)
+            continue;
+
+        //取消在别的连接的线程上进行，可能就发生在上面读出共享之后：推送之前再读一次，已不再有效的不推，
+        //否则成员会在「已失效」之后又收到一次「可用」（第 2 期验收 SAC8 实测）。客户端同样把「已取消」当作终态
+        ShareRecord latest;
+        if (!shareMgr.getShare(item.m_shareId, latest) || latest.m_state != FileShareManager::kShareRecordActive)
+        {
+            LOGI("share provide state not pushed, share no longer active, shareid: %lld", (long long)item.m_shareId);
+            continue;
+        }
+        std::vector<ShareMemberSpec> members;
+        shareMgr.getMembers(item.m_shareId, members);
+        pushShareStateToUsers(latest, FileSharePolicy::pushTargets(
+            FileSharePolicy::cardAudience(members, latest.m_ownerId), latest.m_ownerId));
+        LOGI("share provide state changed, shareid: %lld, available: %d, reason: %d",
+             (long long)item.m_shareId, item.m_available ? 1 : 0, reason);
+    }
+
+    send(cmd_share_serve_report, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+    LOGI("share serve report done, userid: %d, items: %u, accepted: %u",
+         m_userinfo.userid, static_cast<unsigned>(items.size()), static_cast<unsigned>(accepted));
+}
+
+void ChatSession::handleShareMemberLeftGroup(int64_t groupId, int64_t userId)
+{
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    std::vector<ShareRecord> shares;
+    if (!shareMgr.listActiveConversationShares(conversation_group, groupId, shares))
+    {
+        LOGE("share cleanup on leave group failed, list shares error, groupid: %lld, userid: %lld",
+             (long long)groupId, (long long)userId);
+        return;
+    }
+    if (shares.empty())
+        return;
+
+    std::map<int64_t, std::vector<ShareMemberSpec> > membersOf;
+    std::map<int64_t, ShareRecord> shareOf;
+    for (size_t i = 0; i < shares.size(); ++i)
+    {
+        shareMgr.getMembers(shares[i].m_shareId, membersOf[shares[i].m_shareId]);
+        shareOf[shares[i].m_shareId] = shares[i];
+    }
+
+    const int64_t nowMs = shareNowMs();
+    const ShareLeavePlan plan = FileSharePolicy::planUserLeftGroup(shares, membersOf, groupId, userId);
+    for (size_t i = 0; i < plan.m_cancelShareIds.size(); ++i)
+        cancelShareAndNotify(plan.m_cancelShareIds[i], share_invalid_owner_left_group, userId, nowMs);
+
+    FileShareSessionManager& sessionMgr = Singleton<FileShareSessionManager>::Instance();
+    for (size_t i = 0; i < plan.m_removeFromShareIds.size(); ++i)
+    {
+        const int64_t shareId = plan.m_removeFromShareIds[i];
+        ShareUpdateMembersRequest req;
+        req.m_shareId = shareId;
+        req.m_remove.push_back(userId);
+        ShareMemberChanges changes;
+        if (shareMgr.updateMembers(req, nowMs, changes) != error_code_ok)
+        {
+            LOGE("share cleanup on leave group: remove member failed, shareid: %lld, userid: %lld",
+                 (long long)shareId, (long long)userId);
+            continue;
+        }
+        notifyShareAccessEnded(sessionMgr.closeForMember(shareId, userId), error_code_share_not_member);
+        //他已不在群里也不在成员表里，按他的身份算出来就是「已失效，你已退出该群」
+        pushShareStateToUsers(shareOf[shareId], std::vector<int64_t>(1, userId));
+    }
+
+    LOGI("share cleanup on leave group, groupid: %lld, userid: %lld, canceled: %u, removed from: %u",
+         (long long)groupId, (long long)userId, static_cast<unsigned>(plan.m_cancelShareIds.size()),
+         static_cast<unsigned>(plan.m_removeFromShareIds.size()));
+}
+
+void ChatSession::handleShareGroupDismissed(int64_t groupId, int64_t operatorId)
+{
+    std::vector<ShareRecord> shares;
+    if (!Singleton<FileShareManager>::Instance().listActiveConversationShares(conversation_group, groupId, shares))
+    {
+        LOGE("share cleanup on dismiss group failed, list shares error, groupid: %lld", (long long)groupId);
+        return;
+    }
+
+    const int64_t nowMs = shareNowMs();
+    for (size_t i = 0; i < shares.size(); ++i)
+        cancelShareAndNotify(shares[i].m_shareId, share_invalid_group_dismissed, operatorId, nowMs);
+    if (!shares.empty())
+        LOGI("share cleanup on dismiss group, groupid: %lld, canceled: %u",
+             (long long)groupId, static_cast<unsigned>(shares.size()));
+}
+
+std::shared_ptr<ChatSession> ChatSession::findSessionByShareConnKey(ShareConnKey key)
+{
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if ((*it) && (*it)->isSessionValid() && (*it)->shareConnKey() == key)
+            return *it;
+    }
+    return std::shared_ptr<ChatSession>();
+}
+
+void ChatSession::onShareOpen(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    int64_t shareId = 0;
+    if (!FileShareProtocol::parseShareIdRequest(body, shareId))
+    {
+        send(cmd_share_open, m_seq, FileShareProtocol::buildOpenResponse(error_code_bad_request, "bad request", std::string()));
+        LOGW("share open bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    ShareRecord share;
+    if (!Singleton<FileShareManager>::Instance().getShare(shareId, share))
+    {
+        send(cmd_share_open, m_seq,
+             FileShareProtocol::buildOpenResponse(error_code_share_not_exist, "share not exist", std::string()));
+        LOGI("share open rejected, share not exist, userid: %d, shareid: %lld", m_userinfo.userid, (long long)shareId);
+        return;
+    }
+
+    const int64_t me = m_userinfo.userid;
+    ShareViewerFacts facts;
+    loadShareViewerFacts(share, me, facts);
+    DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+    ShareEnterprisePair enterprise;
+    enterprise.m_ownerEnterpriseId = deptMgr.getUserEnterpriseId(share.m_ownerId);
+    enterprise.m_viewerEnterpriseId = deptMgr.getUserEnterpriseId(me);
+
+    int code = FileSharePolicy::checkOpen(share, facts, enterprise);
+
+    //提供该共享的那条连接：访问会话的分享者一端必须是它，中转参数只推给它
+    ShareProvideState provide;
+    std::shared_ptr<ChatSession> ownerSession;
+    if (code == error_code_ok)
+    {
+        if (Singleton<FileShareManager>::Instance().getProvideState(shareId, provide))
+            ownerSession = findSessionByShareConnKey(provide.m_conn);
+        //判定之后、取会话之前分享者恰好断开：按暂不可用处理
+        if (!ownerSession)
+            code = error_code_share_unavailable;
+    }
+    if (code != error_code_ok)
+    {
+        send(cmd_share_open, m_seq, FileShareProtocol::buildOpenResponse(code, "share open rejected", std::string()));
+        LOGI("share open rejected, userid: %lld, shareid: %lld, code: %d", (long long)me, (long long)shareId, code);
+        return;
+    }
+
+    const int64_t nowMs = shareNowMs();
+    FileShareSessionManager& sessionMgr = Singleton<FileShareSessionManager>::Instance();
+    std::string accessId;
+    code = sessionMgr.openAccess(shareId, share.m_ownerId, provide.m_conn, me, shareConnKey(), nowMs, accessId);
+    ShareAccessInfo access;
+    if (code == error_code_ok && !sessionMgr.getAccess(accessId, access))
+        code = error_code_server_internal;
+    if (code != error_code_ok)
+    {
+        send(cmd_share_open, m_seq, FileShareProtocol::buildOpenResponse(code, "share open failed", std::string()));
+        LOGI("share open failed, userid: %lld, shareid: %lld, code: %d, accesses: %u",
+             (long long)me, (long long)shareId, code, static_cast<unsigned>(sessionMgr.getAccessCount()));
+        return;
+    }
+
+    ShareRelayInfo toOwner;
+    ShareRelayInfo toVisitor;
+    FileSharePolicy::makeRelayInfos(sessionMgr, access, std::string(), 0, facts.m_perms, m_userinfo.nickname, nowMs,
+                                    toOwner, toVisitor);
+    //带上共享名称：访问者的浏览窗口用它作标题，分享者握手时不再给出取自真实路径的根名（2026-10-04 起）
+    send(cmd_share_open, m_seq, FileShareProtocol::buildOpenResponse(error_code_ok, "ok", accessId, share.m_name));
+    send(cmd_share_relay_info, 0, FileShareProtocol::buildRelayInfo(toVisitor));
+    ownerSession->send(cmd_share_relay_info, 0, FileShareProtocol::buildRelayInfo(toOwner));
+
+    addShareServerAudit(share, me, share_audit_open, std::string(), nowMs, accessId);
+    LOGI("share opened, shareid: %lld, accessid: %s, owner: %lld, visitor: %lld, perms: %d",
+         (long long)shareId, accessId.c_str(), (long long)share.m_ownerId, (long long)me, facts.m_perms);
+}
+
+void ChatSession::onShareCloseAccess(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string accessId;
+    int errCode = 0;
+    if (!FileShareProtocol::parseCloseAccessRequest(body, accessId, errCode))
+    {
+        send(cmd_share_close_access, m_seq, FileShareProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGW("share close access bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    FileShareSessionManager& sessionMgr = Singleton<FileShareSessionManager>::Instance();
+    ShareAccessInfo access;
+    //已经结束（另一端先关了、或连接断开时已收尾）：结束是幂等的，照常回成功
+    if (!sessionMgr.getAccess(accessId, access))
+    {
+        send(cmd_share_close_access, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+        return;
+    }
+
+    const int64_t me = m_userinfo.userid;
+    if (me != access.m_ownerId && me != access.m_visitorId)
+    {
+        send(cmd_share_close_access, m_seq,
+             FileShareProtocol::buildSimpleResponse(error_code_permission_denied, "not a party of this access"));
+        LOGW("share close access rejected, userid: %lld, accessid: %s", (long long)me, accessId.c_str());
+        return;
+    }
+
+    ShareAccessInfo closed;
+    if (sessionMgr.closeAccess(accessId, closed))
+    {
+        //只通知另一端：发起结束的这一端已经知道
+        const int64_t other = (me == closed.m_ownerId) ? closed.m_visitorId : closed.m_ownerId;
+        Singleton<ChatServer>::Instance().pushToUsers(std::vector<int64_t>(1, other), cmd_share_access_state_notify,
+            FileShareProtocol::buildAccessEndedNotify(accessId, std::string(), errCode));
+        LOGI("share access closed, accessid: %s, shareid: %lld, by: %lld, errcode: %d, with transfer: %s",
+             accessId.c_str(), (long long)closed.m_shareId, (long long)me, errCode, closed.m_transferId.c_str());
+    }
+    send(cmd_share_close_access, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+}
+
+void ChatSession::onShareRequestTransfer(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    ShareTransferRequest req;
+    if (!FileShareProtocol::parseTransferRequest(body, req))
+    {
+        send(cmd_share_request_transfer, m_seq,
+             FileShareProtocol::buildTransferResponse(error_code_bad_request, "bad request", std::string()));
+        LOGW("share request transfer bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    const int64_t me = m_userinfo.userid;
+    FileShareSessionManager& sessionMgr = Singleton<FileShareSessionManager>::Instance();
+    ShareAccessInfo access;
+    ShareRecord share;
+    int code = error_code_ok;
+    if (!sessionMgr.getAccess(req.m_accessId, access))
+        code = error_code_share_not_exist;
+    else if (access.m_visitorId != me)
+        code = error_code_permission_denied;
+    else if (!Singleton<FileShareManager>::Instance().getShare(access.m_shareId, share))
+        code = error_code_share_not_exist;
+    if (code != error_code_ok)
+    {
+        send(cmd_share_request_transfer, m_seq,
+             FileShareProtocol::buildTransferResponse(code, "share request transfer rejected", std::string()));
+        LOGI("share request transfer rejected, userid: %lld, accessid: %s, code: %d",
+             (long long)me, req.m_accessId.c_str(), code);
+        return;
+    }
+
+    const int64_t nowMs = shareNowMs();
+    ShareViewerFacts facts;
+    loadShareViewerFacts(share, me, facts);
+    DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+    ShareEnterprisePair enterprise;
+    enterprise.m_ownerEnterpriseId = deptMgr.getUserEnterpriseId(share.m_ownerId);
+    enterprise.m_viewerEnterpriseId = deptMgr.getUserEnterpriseId(me);
+    code = FileSharePolicy::checkTransfer(share, facts, enterprise, req.m_direction);
+
+    //分享者一端是访问会话建立时的那条提供连接
+    std::shared_ptr<ChatSession> ownerSession;
+    if (code == error_code_ok)
+    {
+        ownerSession = findSessionByShareConnKey(access.m_ownerConn);
+        if (!ownerSession)
+            code = error_code_share_unavailable;
+    }
+
+    std::string transferId;
+    if (code == error_code_ok)
+        code = sessionMgr.requestTransfer(req.m_accessId, me, req.m_direction, transferId);
+
+    //申请无论成败都记审计：被拒的申请同样是需要留痕的访问行为
+    ShareAuditRecord audit = FileSharePolicy::buildTransferAuditRecord(share, me, req, nowMs);
+    audit.m_result = code;
+    if (!Singleton<FileShareManager>::Instance().addAudit(audit))
+        LOGE("add share transfer audit failed, shareid: %lld, visitor: %lld", (long long)share.m_shareId, (long long)me);
+
+    if (code != error_code_ok)
+    {
+        send(cmd_share_request_transfer, m_seq,
+             FileShareProtocol::buildTransferResponse(code, "share request transfer rejected", std::string()));
+        LOGI("share request transfer rejected, userid: %lld, shareid: %lld, direction: %d, code: %d, transfers: %u",
+             (long long)me, (long long)share.m_shareId, req.m_direction, code,
+             static_cast<unsigned>(sessionMgr.getTransferCount()));
+        return;
+    }
+
+    ShareRelayInfo toOwner;
+    ShareRelayInfo toVisitor;
+    FileSharePolicy::makeRelayInfos(sessionMgr, access, transferId, req.m_direction, facts.m_perms, m_userinfo.nickname, nowMs,
+                                    toOwner, toVisitor);
+
+    //P2P 方案第 6 期：先尝试为这次传输在访问者（本连接，发起方）与分享者提供该共享的那条连接之间建 P2P 会话。
+    //两种连接键都是 ChatSession 对象地址，可以直接互换。两端都报到了用途 fileshare、所在企业都开着 P2P 才会建成；
+    //建成时两帧 2222 带上 p2psessionid，两端优先走 P2P 链路，建链失败再改走 fileserver 中转；建不成时照旧只走中转
+    std::vector<P2POutFrame> p2pFrames;
+    {
+        P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+        P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+        std::string p2pSessionId;
+        const int p2pCode = service.createForConnections(kP2PPurposeFileShare, transferId, p2pConnKey(), me,
+                                                         static_cast<P2PConnKey>(access.m_ownerConn), access.m_ownerId,
+                                                         p2pNowMs(), p2pSessionId, p2pFrames);
+        LOGI("share transfer p2p session: transferid: %s, code: %d, p2p session: %s.", transferId.c_str(), p2pCode,
+             p2pSessionId.c_str());
+        toOwner.m_p2pSessionId = p2pSessionId;
+        toVisitor.m_p2pSessionId = p2pSessionId;
+    }
+
+    send(cmd_share_request_transfer, m_seq, FileShareProtocol::buildTransferResponse(error_code_ok, "ok", transferId));
+    send(cmd_share_relay_info, 0, FileShareProtocol::buildRelayInfo(toVisitor));
+    ownerSession->send(cmd_share_relay_info, 0, FileShareProtocol::buildRelayInfo(toOwner));
+    //2302 排在 2222 之后：客户端先知道这次传输带着哪个 P2P 会话，再收到会话本身
+    sendP2PFrames(p2pFrames);
+    LOGI("share transfer started, shareid: %lld, accessid: %s, transferid: %s, direction: %d, items: %u, bytes: %lld",
+         (long long)share.m_shareId, req.m_accessId.c_str(), transferId.c_str(), req.m_direction,
+         static_cast<unsigned>(req.m_items.size()), (long long)req.m_totalBytes);
+}
+
+void ChatSession::onShareTransferClose(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string transferId;
+    int result = 0;
+    int errCode = 0;
+    if (!FileShareProtocol::parseTransferClose(body, transferId, result, errCode))
+    {
+        send(cmd_share_transfer_close, m_seq, FileShareProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGW("share transfer close bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    //传输子会话 id 形如「<访问会话 id>-t<序号>」，取出访问会话核对请求者是不是这次访问的两端之一
+    const std::string transferInfix = "-t";
+    const size_t pos = transferId.rfind(transferInfix);
+    FileShareSessionManager& sessionMgr = Singleton<FileShareSessionManager>::Instance();
+    ShareAccessInfo access;
+    const bool found = (pos != std::string::npos) && sessionMgr.getAccess(transferId.substr(0, pos), access)
+                       && access.m_transferId == transferId;
+    //已经结束：结束是幂等的，照常回成功
+    if (!found)
+    {
+        send(cmd_share_transfer_close, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+        return;
+    }
+
+    const int64_t me = m_userinfo.userid;
+    if (me != access.m_ownerId && me != access.m_visitorId)
+    {
+        send(cmd_share_transfer_close, m_seq,
+             FileShareProtocol::buildSimpleResponse(error_code_permission_denied, "not a party of this transfer"));
+        LOGW("share transfer close rejected, userid: %lld, transferid: %s", (long long)me, transferId.c_str());
+        return;
+    }
+
+    ShareAccessInfo closed;
+    if (sessionMgr.closeTransfer(transferId, closed))
+    {
+        const int64_t other = (me == closed.m_ownerId) ? closed.m_visitorId : closed.m_ownerId;
+        Singleton<ChatServer>::Instance().pushToUsers(std::vector<int64_t>(1, other), cmd_share_access_state_notify,
+            FileShareProtocol::buildAccessEndedNotify(closed.m_accessId, transferId, errCode));
+        LOGI("share transfer closed, transferid: %s, shareid: %lld, by: %lld, result: %d, errcode: %d",
+             transferId.c_str(), (long long)closed.m_shareId, (long long)me, result, errCode);
+    }
+    send(cmd_share_transfer_close, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+}
+
+void ChatSession::onShareAuditReport(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::vector<ShareAuditItem> items;
+    if (!FileShareProtocol::parseAuditReport(body, items))
+    {
+        send(cmd_share_audit_report, m_seq, FileShareProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        LOGW("share audit report bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    FileShareManager& shareMgr = Singleton<FileShareManager>::Instance();
+    const int64_t nowMs = shareNowMs();
+    //同一批里多条记录通常属于同一个共享，按 shareid 缓存一次查询结果；查不到的记为空记录
+    std::map<int64_t, ShareRecord> shares;
+    std::vector<ShareAuditRecord> accepted;
+    size_t ignored = 0;
+    int64_t firstIgnoredShareId = 0;
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        const ShareAuditItem& item = items[i];
+        std::map<int64_t, ShareRecord>::iterator it = shares.find(item.m_shareId);
+        if (it == shares.end())
+        {
+            ShareRecord share;
+            if (!shareMgr.getShare(item.m_shareId, share))
+                share.m_shareId = 0;
+            it = shares.insert(std::make_pair(item.m_shareId, share)).first;
+        }
+        if (it->second.m_shareId == 0 || !FileSharePolicy::acceptAuditItem(it->second, m_userinfo.userid))
+        {
+            if (ignored == 0)
+                firstIgnoredShareId = item.m_shareId;
+            ++ignored;
+            continue;
+        }
+        accepted.push_back(FileSharePolicy::buildClientAuditRecord(it->second, item, nowMs));
+    }
+    //一批在一个事务里写完：逐条提交时 200 条要几秒，这段时间本网络线程上的其他连接都得不到处理
+    const bool saved = shareMgr.addAudits(accepted);
+
+    send(cmd_share_audit_report, m_seq, FileShareProtocol::buildSimpleResponse(error_code_ok, "ok"));
+    //被忽略的记录每批只记一条汇总（上报者不是分享者、共享不存在）
+    if (ignored > 0)
+        LOGW("share audit items ignored, reporter: %d, count: %u, first shareid: %lld",
+             m_userinfo.userid, static_cast<unsigned>(ignored), (long long)firstIgnoredShareId);
+    LOGI("share audit report done, reporter: %d, items: %u, saved: %u",
+         m_userinfo.userid, static_cast<unsigned>(items.size()), static_cast<unsigned>(saved ? accepted.size() : 0));
+}
+
+// ====================================================================
+// 屏幕共享
+// ====================================================================
+
+namespace {
+
+//屏幕共享建 P2P 会话时的用途（2302 的 purpose，客户端 FlamingoMedia.dll 以此登记业务方，P2P 方案第 6 期）
+const char* const kP2PPurposeScreenShare = "screenshare";
+
+/**
+ *  单聊共享有人加入时为观看者与发起人建 P2P 会话：建成时产生的 2302 先攒在本对象里，由 onScreenShare 在发完应答与
+ *  1726 之后发出（客户端先知道这次加入带着哪个 P2P 会话，再收到会话本身）。
+ */
+class ChatSessionShareP2PLinker : public IScreenShareP2PLinker
+{
+public:
+    virtual bool createViewerLink(const std::string& featureSessionId, int64_t hostId, int64_t viewerId,
+                                  std::string& p2pSessionId)
+    {
+        P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+        P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+        const int code = service.createForFeature(kP2PPurposeScreenShare, featureSessionId, hostId, viewerId,
+                                                  p2pNowMs(), p2pSessionId, m_frames);
+        LOGI("screenshare p2p session: feature: %s, host: %lld, viewer: %lld, code: %d, p2p session: %s.",
+             featureSessionId.c_str(), (long long)hostId, (long long)viewerId, code, p2pSessionId.c_str());
+        return code == error_code_ok;
+    }
+
+    std::vector<P2POutFrame> m_frames;   //建会话产生的 2302，等应答与 1726 发完之后再发
+};
+
+} // namespace
+
+void ChatSession::onScreenShare(uint16_t cmd, const std::string& body)
+{
+    //第一帧是应答，用本次请求的 seq；其后的中转参数是推送，seq 填 0
+    std::vector<ScreenShareReply> replies;
+    //共享标题与描述的敏感词检查（第 15 期）：拦截记录给管理员看，提交者名称优先记昵称、昵称为空时记登录账号
+    ChatSessionShareSensitiveChecker checker(m_userinfo.userid,
+                                             m_userinfo.nickname.empty() ? m_userinfo.username : m_userinfo.nickname);
+    ChatSessionShareP2PLinker p2pLinker;
+    ScreenShareService::handleRequest(cmd, m_userinfo.userid, m_userinfo.nickname, body, replies, &checker, &p2pLinker);
+    for (size_t i = 0; i < replies.size(); ++i)
+        send(replies[i].m_cmd, i == 0 ? m_seq : 0, replies[i].m_body);
+    //2302 排在应答与 1726 之后；发起人那份排在已推送的 1725 之后
+    sendP2PFrames(p2pLinker.m_frames);
+}
+
+void ChatSession::onCloudRecord(uint16_t cmd, const std::string& body)
+{
+    CloudRecordService* service = CloudRecordService::instance();
+    if (service == NULL)
+    {
+        //没有配置云端录制（缺 imgserver 地址或中转端口）：两种请求都回「云端存储服务不可用」
+        std::vector<CloudRecordRow> none;
+        if (cmd == cmd_cloudrecord_list)
+            send(cmd, m_seq, CloudRecordProtocol::buildListResponse(error_code_cloudrecord_unavailable,
+                                                                    "cloud storage unavailable", none, false, false, 0, 0, 0));
+        else
+            send(cmd, m_seq, CloudRecordProtocol::buildOpResponse(error_code_cloudrecord_unavailable,
+                                                                  "cloud storage unavailable", 0, 0, NULL, NULL));
+        return;
+    }
+    if (cmd == cmd_cloudrecord_list)
+    {
+        send(cmd, m_seq, service->handleList(m_userinfo.userid, body));
+        return;
+    }
+    ChatSessionCloudRecordTitleChecker checker(m_userinfo.userid,
+                                               m_userinfo.nickname.empty() ? m_userinfo.username : m_userinfo.nickname);
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+    send(cmd, m_seq, service->handleOp(m_userinfo.userid, body, nowMs, &checker));
+}
+
+void ChatSession::cleanupCallOnOffline()
+{
+    if (m_userinfo.userid <= 0)
+        return;
+    CallManager& mgr = Singleton<CallManager>::Instance();
+    if (!mgr.isUserBusy(m_userinfo.userid))
+        return;
+
+    //本用户还有其它登录态的连接（如手机端）时仍算在线，通话不进入宽限期
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if (*it && it->get() != this && (*it)->getUserId() == m_userinfo.userid && (*it)->isLoggedIn())
+            return;
+    }
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    mgr.markUserOffline(m_userinfo.userid, now);
+    LOGI("call participant went offline, user: %d, the call ends unless the user logs in again within %lld ms",
+         m_userinfo.userid, (long long)mgr.offlineGraceMs());
+}
+
+void ChatSession::cleanupRemoteDesktopOnOffline()
+{
+    if (m_userinfo.userid <= 0)
+        return;
+
+    //本用户还有其它登录态的连接（如手机端）时仍算在线，会话不进入宽限期
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if (*it && it->get() != this && (*it)->getUserId() == m_userinfo.userid && (*it)->isLoggedIn())
+            return;
+    }
+    const int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    Singleton<RemoteDesktopManager>::Instance().markUserOffline(m_userinfo.userid, now);
+}
+
+void ChatSession::cleanupScreenShareOnOffline()
+{
+    if (m_userinfo.userid <= 0 || m_screenShareOfflineDone)
+        return;
+    m_screenShareOfflineDone = true;
+
+    //本用户还有其它登录态的连接（如手机端）时仍算在线，房间里的身份不变
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if (*it && it->get() != this && (*it)->getUserId() == m_userinfo.userid && (*it)->isLoggedIn())
+            return;
+    }
+    ScreenShareService::onUserOffline(m_userinfo.userid);
+}
+
+void ChatSession::onGroupCall(uint16_t cmd, const std::string& body)
+{
+    //第一帧是应答，用本次请求的 seq；其后的中转参数是推送，seq 填 0
+    GroupCallServerEnv env;
+    GroupCallService service(Singleton<GroupCallManager>::Instance(), env);
+    std::vector<GroupCallReply> replies;
+    service.handleRequest(cmd, m_userinfo.userid, m_userinfo.nickname, body,
+                          static_cast<int64_t>(time(NULL)) * 1000, replies);
+    for (size_t i = 0; i < replies.size(); ++i)
+        send(replies[i].m_cmd, i == 0 ? m_seq : 0, replies[i].m_body);
+}
+
+void ChatSession::cleanupGroupCallOnOffline()
+{
+    if (m_userinfo.userid <= 0 || m_groupCallOfflineDone)
+        return;
+    m_groupCallOfflineDone = true;
+    if (!GroupCallService::isUserInGroupCall(m_userinfo.userid))
+        return;
+
+    //本用户还有其它登录态的连接（如另一台电脑）时仍算在线，房间里的状态不变
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if (*it && it->get() != this && (*it)->getUserId() == m_userinfo.userid && (*it)->isLoggedIn())
+            return;
+    }
+    GroupCallServerEnv env;
+    GroupCallService service(Singleton<GroupCallManager>::Instance(), env);
+    service.onUserOffline(m_userinfo.userid, static_cast<int64_t>(time(NULL)) * 1000);
+}
+
+//==================== P2P 信令（cmd_p2p_* 2301~2306，docs/协议设计-v2.md 第 18 节） ====================
+
+namespace {
+
+//P2P 信令用的当前时间（Unix 毫秒）：会话号与回落中转令牌的有效期都以它为准
+int64_t p2pNowMs()
+{
+    return static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+//P2PFeatureGate 用的「用户 → 企业」查询；不属于任何企业时返回 0
+int64_t lookupUserEnterpriseForP2P(int64_t userId)
+{
+    return Singleton<DepartmentManager>::Instance().getUserEnterpriseId(userId);
+}
+
+} // namespace
+
+uint64_t ChatSession::p2pConnKey() const
+{
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(this));
+}
+
+std::shared_ptr<ChatSession> ChatSession::findSessionByP2PConnKey(uint64_t key)
+{
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    Singleton<ChatServer>::Instance().getSessions(sessions);
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin(); it != sessions.end(); ++it)
+    {
+        if ((*it) && (*it)->isSessionValid() && (*it)->p2pConnKey() == key)
+            return *it;
+    }
+    return std::shared_ptr<ChatSession>();
+}
+
+void ChatSession::onP2PCommand(uint16_t cmd, const std::string& body)
+{
+    P2PRequestContext ctx;
+    ctx.m_conn = p2pConnKey();
+    ctx.m_userId = m_userinfo.userid;
+    ctx.m_deviceId = m_userinfo.deviceid;
+    ctx.m_seq = static_cast<uint32_t>(m_seq);
+    ctx.m_nowMs = p2pNowMs();
+
+    //信令处理对象无状态，每次临时构造；会话状态都在 P2PSessionManager 单例里
+    P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+    P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+    std::vector<P2POutFrame> frames;
+    const int code = service.handle(cmd, ctx, body, frames);
+    //报到包体很短（协议版本与已登记的用途名），整个记下，排查「为什么没有建 P2P 会话」时要看它报了哪些用途
+    if (cmd == cmd_p2p_register)
+        LOGI("p2p register, userid: %d, body: %s", m_userinfo.userid, body.c_str());
+    LOGI("p2p cmd handled, userid: %d, cmd: %u, seq: %d, code: %d, frames: %u", m_userinfo.userid, (unsigned)cmd, m_seq,
+         code, static_cast<unsigned>(frames.size()));
+    sendP2PFrames(frames);
+}
+
+void ChatSession::sendP2PFrames(const std::vector<P2POutFrame>& frames)
+{
+    const uint64_t self = p2pConnKey();
+    for (size_t i = 0; i < frames.size(); ++i)
+    {
+        const P2POutFrame& f = frames[i];
+        //发给本连接（应答）：直接发送，不必查会话表
+        if (f.m_conn == self)
+        {
+            send(f.m_cmd, static_cast<int32_t>(f.m_seq), f.m_body);
+            continue;
+        }
+        //发给对端（转发与推送）：TcpSession::send 会投递到对端连接自己的线程执行
+        std::shared_ptr<ChatSession> peer = findSessionByP2PConnKey(f.m_conn);
+        if (!peer)
+        {
+            LOGW("p2p frame dropped, peer connection gone, cmd: %u, from userid: %d", (unsigned)f.m_cmd, m_userinfo.userid);
+            continue;
+        }
+        peer->send(f.m_cmd, static_cast<int32_t>(f.m_seq), f.m_body);
+        LOGI("p2p frame sent to peer, cmd: %u, from userid: %d, to userid: %d", (unsigned)f.m_cmd, m_userinfo.userid,
+             peer->getUserId());
+    }
+}
+
+void ChatSession::cleanupP2POnOffline()
+{
+    //断线收尾不查企业开关，但 P2PSignalService 的构造需要一个开关查询对象
+    P2PFeatureGate gate(Singleton<FeatureSwitchManager>::Instance(), lookupUserEnterpriseForP2P);
+    P2PSignalService service(Singleton<P2PSessionManager>::Instance(), gate);
+    std::vector<P2POutFrame> frames;
+    service.onDisconnect(p2pConnKey(), frames);
+    if (frames.empty())
+        return;
+    LOGI("p2p cleanup on offline, userid: %d, sessions closed: %u", m_userinfo.userid, static_cast<unsigned>(frames.size()));
+    sendP2PFrames(frames);
 }

@@ -124,6 +124,9 @@
   <ItemGroup>
     <!-- 测试工程自身的源文件 -->
     <ClCompile Include="TestMain.cpp" />
+    <ClCompile Include="FileShareScreensTests.cpp" />
+    <ClCompile Include="FeatureSwitchesPageTests.cpp" />
+    <ClCompile Include="FileShareAdminApiTests.cpp" />
     <ClCompile Include="TestFramework.cpp" />
     <ClCompile Include="DataStoreTests.cpp" />
     <ClCompile Include="DebugConsoleTests.cpp" />
@@ -135,9 +138,45 @@
     <ClCompile Include="PinyinTests.cpp" />
     <ClCompile Include="DpapiSecretTests.cpp" />
     <ClCompile Include="CommonWidgetsTests.cpp" />
+    <ClCompile Include="SharedTableWidgetsTests.cpp" />
+    <ClCompile Include="SensitiveWordsScreenTests.cpp" />
+    <ClCompile Include="SensitiveImportExportTests.cpp" />
+    <ClCompile Include="SensitiveHitsTests.cpp" />
     <ClCompile Include="AnnouncementPreviewPanelTests.cpp" />
     <ClCompile Include="RichEditScrollTests.cpp" />
     <ClCompile Include="ClientVersionApiTests.cpp" />
+    <ClCompile Include="SensitiveWordTests.cpp" />
+    <ClCompile Include="EnterpriseQaTests.cpp" />
+    <ClCompile Include="EnterpriseBotTests.cpp" />
+    <!-- 读 AdminFrame.cpp 源码做写法检查的守卫用例：加 /FC 让 __FILE__ 在编译期即为绝对路径，
+         用例据此定位源码目录 -->
+    <ClCompile Include="ServiceBindingTests.cpp" />
+    <ClCompile Include="ComposeEditScheduleTests.cpp" />
+    <ClCompile Include="ClientVersionValidateTests.cpp" />
+    <ClCompile Include="EmployeeFormTests.cpp" />
+    <ClCompile Include="RememberPasswordTests.cpp" />
+    <ClCompile Include="ShellSessionTests.cpp" />
+    <ClCompile Include="LoginTextTests.cpp" />
+    <ClCompile Include="AnnouncementRepushTests.cpp" />
+    <ClCompile Include="EnterpriseFilterTests.cpp" />
+    <ClCompile Include="TimeTextTests.cpp" />
+    <ClCompile Include="FlamingoLinkTests.cpp" />
+    <ClCompile Include="FlamingoLinkLiveTests.cpp" />
+    <ClCompile Include="FlamingoLinkHostTests.cpp" />
+    <ClCompile Include="..\Util\PluginLibrary.cpp" />
+    <ClCompile Include="..\Util\LinkPageState.cpp" />
+    <ClCompile Include="..\Screens\EnterpriseDetailScreen.cpp" />
+    <ClCompile Include="..\Screens\OrgDetailPanel.cpp" />
+    <ClCompile Include="..\Screens\ServicesPanel.cpp" />
+    <ClCompile Include="..\Widgets\LinkPageSlot.cpp" />
+    <ClCompile Include="..\FlamingoLink\Core\LinkProtocol.cpp" />
+    <ClCompile Include="..\FlamingoLink\Core\OnlineTable.cpp" />
+    <ClCompile Include="..\FlamingoLink\Core\LinkText.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\net\FrameCodec.cpp" />
+    <ClCompile Include="ColumnFitTests.cpp" />
+    <ClCompile Include="AdminFrameGuardTests.cpp">
+      <AdditionalOptions>/FC %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <!-- 被测的数据层源文件(直接编入测试 exe,不依赖主程序产物) -->
     <ClCompile Include="..\Mock\MockData.cpp" />
     <ClCompile Include="..\Mock\DataStore.cpp" />
@@ -162,15 +201,51 @@
     <ClCompile Include="..\Util\OrgToolbarLayout.cpp" />
     <ClCompile Include="..\Util\Pinyin.cpp" />
     <ClCompile Include="..\Util\DpapiSecret.cpp" />
+    <ClCompile Include="..\Util\AppConfig.cpp" />
+    <ClCompile Include="..\Util\LoginText.cpp" />
+    <ClCompile Include="..\Util\TimeText.cpp" />
+    <ClCompile Include="..\Util\ColumnFit.cpp" />
+    <ClCompile Include="..\Util\SensitiveWordText.cpp" />
+    <ClCompile Include="..\Widgets\Widgets.cpp" />
+    <ClCompile Include="..\Screens\EnterpriseSettingsModal.cpp" />
+    <ClCompile Include="..\Screens\SettingsScreen.cpp" />
+    <ClCompile Include="..\Screens\FileShareAuditScreen.cpp" />
+    <ClCompile Include="..\Screens\FileSharesScreen.cpp" />
+    <ClCompile Include="..\Screens\FileShareCenterScreen.cpp" />
+    <ClCompile Include="..\Screens\FeatureSwitchesPage.cpp" />
+    <ClCompile Include="..\Screens\FeatureSwitchPanel.cpp" />
+    <ClCompile Include="..\Screens\CloudRecordQuotaPanel.cpp" />
+    <ClCompile Include="..\Screens\FileShareUi.cpp" />
+    <ClCompile Include="..\Widgets\KeyValueGrid.cpp" />
+    <ClCompile Include="..\Util\FileShareText.cpp" />
+    <ClCompile Include="..\Util\TextFileSave.cpp" />
     <ClCompile Include="..\Util\AdminApi.cpp" />
     <!-- 被测:UI 控件层(链接 balloonui_static 后才能编;测试不调 OnPaint,
          故运行时不需要 gdiplus 初始化与真实 HDC) -->
     <ClCompile Include="..\Widgets\CommonWidgets.cpp" />
+    <ClCompile Include="..\Widgets\PagerBar.cpp" />
+    <ClCompile Include="..\Widgets\ActionTable.cpp" />
+    <ClCompile Include="..\Widgets\ColumnHeader.cpp" />
+    <ClCompile Include="..\Screens\SensitiveWordsScreen.cpp" />
+    <ClCompile Include="..\Screens\SensitiveWordModal.cpp" />
+    <ClCompile Include="..\Util\QaAdminApi.cpp" />
+    <ClCompile Include="..\Screens\EnterpriseQaScreen.cpp" />
+    <ClCompile Include="..\Screens\EnterpriseQaModal.cpp" />
+    <ClCompile Include="..\Util\BotAdminApi.cpp" />
+    <ClCompile Include="..\Util\BotRuleText.cpp" />
+    <ClCompile Include="..\Screens\EnterpriseBotScreen.cpp" />
+    <ClCompile Include="..\Screens\EnterpriseBotModal.cpp" />
+    <ClCompile Include="..\Screens\BotRuleModal.cpp" />
+    <ClCompile Include="..\Screens\BotDomainsModal.cpp" />
+    <ClCompile Include="..\Screens\SensitiveImportModal.cpp" />
     <ClCompile Include="..\Widgets\UiHelpers.cpp" />
     <ClCompile Include="..\Widgets\IconRenderer.cpp" />
     <ClCompile Include="..\Widgets\OverlayScrollbar.cpp" />
     <ClCompile Include="..\Widgets\OrgTree.cpp" />
     <ClCompile Include="..\Screens\AnnouncementPreviewPanel.cpp" />
+    <ClCompile Include="..\Screens\ComposeModal.cpp" />
+    <ClCompile Include="..\Shell\TopBar.cpp" />
+    <ClCompile Include="..\Shell\Sidebar.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TestFramework.h" />
@@ -178,13 +253,39 @@
     <ClInclude Include="..\Util\OrgToolbarLayout.h" />
     <ClInclude Include="..\Util\ListPaging.h" />
     <ClInclude Include="..\Util\DpapiSecret.h" />
+    <ClInclude Include="..\Util\SensitiveWordText.h" />
+    <ClInclude Include="..\Widgets\Widgets.h" />
+    <ClInclude Include="..\Screens\EnterpriseSettingsModal.h" />
+    <ClInclude Include="..\Screens\SettingsScreen.h" />
+    <ClInclude Include="..\Screens\FileShareAuditScreen.h" />
+    <ClInclude Include="..\Screens\FileSharesScreen.h" />
+    <ClInclude Include="..\Screens\FileShareCenterScreen.h" />
+    <ClInclude Include="..\Screens\FeatureSwitchesPage.h" />
+    <ClInclude Include="..\Screens\FeatureSwitchPanel.h" />
+    <ClInclude Include="..\Screens\CloudRecordQuotaPanel.h" />
+    <ClInclude Include="..\Screens\FileShareUi.h" />
+    <ClInclude Include="..\Widgets\KeyValueGrid.h" />
+    <ClInclude Include="..\Util\FileShareText.h" />
+    <ClInclude Include="..\Util\TextFileSave.h" />
     <ClInclude Include="..\Util\Pinyin.h" />
     <ClInclude Include="..\Widgets\OverlayScrollbar.h" />
     <ClInclude Include="..\Widgets\OrgTree.h" />
     <ClInclude Include="..\Widgets\CommonWidgets.h" />
+    <ClInclude Include="..\Widgets\PagerBar.h" />
+    <ClInclude Include="..\Widgets\ActionTable.h" />
+    <ClInclude Include="..\Widgets\ColumnHeader.h" />
+    <ClInclude Include="..\Screens\SensitiveWordsScreen.h" />
+    <ClInclude Include="..\Screens\SensitiveWordModal.h" />
+    <ClInclude Include="..\Screens\SensitiveImportModal.h" />
     <ClInclude Include="..\Widgets\UiHelpers.h" />
     <ClInclude Include="..\Widgets\IconRenderer.h" />
     <ClInclude Include="..\Screens\AnnouncementPreviewPanel.h" />
+    <ClInclude Include="..\FlamingoLink\FlamingoLinkApi.h" />
+    <ClInclude Include="..\FlamingoLink\Core\LinkProtocol.h" />
+    <ClInclude Include="..\FlamingoLink\Core\OnlineTable.h" />
+    <ClInclude Include="..\FlamingoLink\Core\LinkText.h" />
+    <ClInclude Include="..\Util\PluginLibrary.h" />
+    <ClInclude Include="..\Util\LinkPageState.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets"></ImportGroup>

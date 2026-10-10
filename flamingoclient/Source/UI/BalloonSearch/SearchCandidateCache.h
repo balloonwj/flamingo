@@ -86,6 +86,27 @@ struct GroupCandidate
 };
 
 /**
+ *  一条部门候选：部门的快照（id、名字、上级），以及按名字预处理好的匹配用数据。
+ *  名字为空的部门同样占一个位置（保持与部门列表按位置一一对应），只是名字匹配不到。
+ */
+struct DepartmentCandidate
+{
+    // —— 数据源快照 ——
+    int64_t     m_deptid;     // 部门 id
+    int64_t     m_parentid;   // 上级部门 id，0 表示顶级部门
+    std::string m_name;       // 部门名（UTF-8）
+
+    // —— 由快照算出的结果 ——
+    contactsearch::PreparedName m_preparedName;   // 按部门名预处理（名字为空时各字段为空）
+
+    DepartmentCandidate()
+        : m_deptid(0)
+        , m_parentid(0)
+    {
+    }
+};
+
+/**
  *  SearchCandidateCache —— 联系人与群的搜索候选缓存。说明见文件头。
  *  第 i 条联系人候选始终对应最近一次 SyncContacts 传入的资料池的第 i 个联系人，
  *  群候选同理。只在 UI 线程使用，不做线程同步。
@@ -109,6 +130,24 @@ public:
      *  返回：本次重算（含新追加）的条目数。
      */
     int SyncGroups(const std::vector<net::UserGroupItem>& groups);
+
+    /**
+     *  让部门候选与部门列表保持一致。逐位置比对部门 id、名字与上级部门，规则同 SyncContacts；
+     *  成员、排序权重、负责人等字段变化不会触发重算。
+     *    departments：主面板的部门列表（组织架构）。本类只读取，不持有。
+     *  返回：本次重算（含新追加）的条目数。
+     */
+    int SyncDepartments(const std::vector<net::DepartmentItem>& departments);
+
+    // 当前部门候选条数，等于最近一次 SyncDepartments 传入的部门列表大小。
+    size_t DepartmentCount() const;
+
+    /**
+     *  取第 index 条部门候选。
+     *    index：取值范围 [0, DepartmentCount())，越界属于调用方错误。
+     *  返回：候选的常引用，在下一次 SyncDepartments 或 Clear 之前有效。
+     */
+    const DepartmentCandidate& DepartmentAt(size_t index) const;
 
     // 当前联系人候选条数，等于最近一次 SyncContacts 传入的资料池大小。
     size_t ContactCount() const;
@@ -136,6 +175,7 @@ public:
 private:
     std::vector<ContactCandidate> m_contacts;   // 联系人候选，与资料池按位置一一对应
     std::vector<GroupCandidate>   m_groups;     // 群候选，与群列表按位置一一对应
+    std::vector<DepartmentCandidate> m_departments;   // 部门候选，与部门列表按位置一一对应
 };
 
 } // namespace balloonsearch

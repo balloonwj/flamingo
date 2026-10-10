@@ -14,7 +14,8 @@
  *  ------------------------------------------------------------------
  *  为什么不直接复用截图浮层里那段
  *
- *  CScreenCaptureOverlay::DoCopyToClipboard 也做同一件事，但它是那个类的私有
+ *  CScreenCaptureOverlay::DoCopyToClipboard（2026-10-07 起在 FlamingoScreenshot.dll 的
+ *  Capture/ScreenCaptureOverlay.cpp 里）也做同一件事，但它是那个类的私有
  *  成员函数，而且源是<u>已经在内存里的 HBITMAP</u>（刚截下来的那块），本函数的源
  *  是磁盘上的一个文件路径，得先解码。故另起一个通用件，日后截图浮层若要归位，
  *  也有地方可归。

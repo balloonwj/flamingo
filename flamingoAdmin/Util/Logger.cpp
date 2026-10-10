@@ -8,6 +8,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <mutex>
 
 namespace flamingoadmin {
 
@@ -15,6 +16,10 @@ namespace {
 
 // 日志文件名（位于 exe 同目录）。
 const TCHAR* const kLogFileName = _T("flamingoAdmin.log");
+
+// 保护「打开文件、追加、关闭」这一段：FlamingoLink.dll 的连接线程与 UI 线程可能同时写日志，
+// 不加锁时两行会交错写进文件，或一方打开文件失败而丢掉一行。
+std::mutex g_writeMutex;
 
 // 单条日志格式化缓冲区大小（宽字符数）。足够容纳一条关键路径日志。
 const int kLogBufferChars = 1024;
@@ -85,13 +90,17 @@ void Logger::Writef(LogLevel level, LPCTSTR format, ...)
 
     // 4) 以追加模式写文件。日志低频产生，每次开关文件即可，无需常驻句柄。
     //    日志路径在首次调用时解析一次并缓存。
+    //    函数内静态变量的初始化由编译器保证只发生一次（C++11 起线程安全）。
     static CString s_logPath = ResolveLogPath();
-    FILE* fp = nullptr;
-    if (_tfopen_s(&fp, s_logPath, _T("ab")) == 0 && fp != nullptr)
     {
-        // 写 utf8Len - 1 字节：不写结尾的 '\0'。
-        fwrite(utf8.data(), 1, static_cast<size_t>(utf8Len - 1), fp);
-        fclose(fp);
+        std::lock_guard<std::mutex> guard(g_writeMutex);
+        FILE* fp = nullptr;
+        if (_tfopen_s(&fp, s_logPath, _T("ab")) == 0 && fp != nullptr)
+        {
+            // 写 utf8Len - 1 字节：不写结尾的 '\0'。
+            fwrite(utf8.data(), 1, static_cast<size_t>(utf8Len - 1), fp);
+            fclose(fp);
+        }
     }
 
 #ifdef _DEBUG

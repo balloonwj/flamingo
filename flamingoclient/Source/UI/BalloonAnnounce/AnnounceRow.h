@@ -1,5 +1,5 @@
 /**
- *  「消息盒子」公告列表里的一行（可悬停 / 可选中），AnnounceRow.h
+ *  「公告中心」公告列表里的一行（可悬停 / 可选中），AnnounceRow.h
  *
  *  在 DuiHBox 的基础上补三件事：
  *    · 鼠标停在本行上时铺一层极淡的悬停底色；
@@ -34,7 +34,7 @@
 namespace balloonannounce {
 
 /**
- *  AnnounceRow —— 消息盒子公告列表的一行。
+ *  AnnounceRow —— 公告中心公告列表的一行。
  */
 class AnnounceRow : public balloonwjui::DuiHBox
 {

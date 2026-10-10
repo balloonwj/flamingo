@@ -21,6 +21,8 @@
 #include "FileMsg.h"
 #include "UpdatePackageIndex.h"
 #include "FileManager.h"
+#include "UploadPartPolicy.h"
+#include "CloudRecordScene.h"     //云端录像场景（scene 6，第 26 期）的录像目录与上传完成回调
 
 using namespace net;
 
@@ -145,15 +147,26 @@ FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char*
       m_fp(NULL),
       m_expectSize(0),
       m_uploadOffset(0),
+      m_partShared(false),
       m_relayEndpoint(relayhub, relaytokenkey)
 {
 }
 
 FileSession::~FileSession()
 {
-    //会话销毁时，未完成的上传留下 .part 临时文件（可由后续续传复用或清理）
     if (m_fp != NULL)
+    {
         fclose(m_fp);
+        m_fp = NULL;
+    }
+    //会话销毁时上传尚未完成：公共分片 <md5>.part 留在磁盘，供之后的连接续传；
+    //私有分片带有本会话独有的序号，之后没有任何连接能续传它，直接删除
+    if (m_mode == mode_uploading && !m_partShared && !m_partPath.empty())
+    {
+        LOGI("upload: session destroyed before completion, remove private part: %s", m_partPath.c_str());
+        remove(m_partPath.c_str());
+    }
+    releasePartClaim();
 }
 
 void FileSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer* pBuffer, Timestamp receivTime)
@@ -403,12 +416,32 @@ bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
     const std::string& md5 = payload.md5;
     int64_t expectSize = payload.size;
 
+    //云端录像（scene 6，第 26 期）：写到录像目录，最终文件名取自令牌（md5 字段放的是文件名）；不做秒传、不校验整文件 MD5，
+    //分片的完整性由帧加密与偏移、大小检查保证。分片文件与续传登记仍以令牌的 md5 字段为键，与其它场景同一套逻辑
+    const bool cloudRecord = (payload.scene == file_scene_cloud_record);
+    std::string fileBaseDir = m_strFileBaseDir;
+    std::string cloudFileName;
+    if (cloudRecord && !fileserver::ResolveCloudRecordTarget(md5, fileBaseDir, cloudFileName))
+    {
+        LOGE("upload: cloud record scene not supported or bad file key: %s, client: %s", md5.c_str(),
+             conn->peerAddress().toIpPort().c_str());
+        sendJsonResponse(cmd_file_upload, seq,
+            buildErrorJson(error_code_permission_denied, "cloud record scene not supported"));
+        return true;
+    }
+
     //首次处理该文件：判断秒传、打开 .part 临时文件
     if (m_fp == NULL)
     {
-        //最终文件已在磁盘——秒传命中，无需写入，直接回完成
-        if (Singleton<FileManager>::Instance().isFileExsit(md5.c_str()))
+        //最终文件已在磁盘——秒传命中，无需写入，直接回完成。云端录像只认同名且大小相同的文件（重复上传），并再报一次上传完成，
+        //chatserver 按录像状态去重
+        const bool alreadyDone = cloudRecord
+            ? fileserver::CloudRecordFileComplete(fileBaseDir + cloudFileName, expectSize)
+            : Singleton<FileManager>::Instance().isFileExsit(md5.c_str());
+        if (alreadyDone)
         {
+            if (cloudRecord)
+                fileserver::NotifyCloudRecordUploaded(cloudFileName, static_cast<uint64_t>(expectSize));
             Json::Value done;
             done["code"]       = error_code_ok;
             done["done"]       = true;
@@ -421,10 +454,19 @@ bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
 
         m_curMd5     = md5;
         m_expectSize = expectSize;
-        m_partPath   = m_strFileBaseDir + md5 + ".part";
 
-        //.part 已存在则续传（rb+），否则新建（wb）
-        m_fp = fopen(m_partPath.c_str(), "rb+");
+        //同一 md5 的公共分片 <md5>.part 同一时刻只允许一个会话写入：占到登记的会话用它
+        //（可续传）；没占到的说明另一条连接正在传同一文件，本会话改用私有分片从头写，
+        //互不干扰（规则见 UploadPartPolicy.h）
+        m_partShared = Singleton<fileserver::UploadPartRegistry>::Instance().claim(md5);
+        m_partPath   = fileserver::MakeUploadPartPath(fileBaseDir, md5, m_partShared,
+                           m_partShared ? 0 : fileserver::NextUploadPartTag());
+
+        m_fp = NULL;
+        m_uploadOffset = 0;
+        //公共分片已存在则续传（rb+）；私有分片总是新建
+        if (m_partShared)
+            m_fp = fopen(m_partPath.c_str(), "rb+");
         if (m_fp != NULL)
         {
             //以 .part 的现有长度作续传位点；取长度失败则从头重传，
@@ -437,14 +479,20 @@ bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
         else
         {
             m_fp = fopen(m_partPath.c_str(), "wb");
-            m_uploadOffset = 0;
         }
         if (m_fp == NULL)
         {
             LOGE("upload: open part file failed: %s", m_partPath.c_str());
+            //打开失败不进入上传模式：释放公共分片登记、清空本次状态，下一片到来时重新判定
+            resetFile();
             sendJsonResponse(cmd_file_upload, seq,
                 buildErrorJson(error_code_server_internal, "open file failed"));
             return true;
+        }
+        if (!m_partShared)
+        {
+            LOGI("upload: md5 %s is being uploaded by another session, use private part: %s, client: %s",
+                 md5.c_str(), m_partPath.c_str(), conn->peerAddress().toIpPort().c_str());
         }
         m_mode = mode_uploading;
     }
@@ -507,9 +555,9 @@ bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
         fclose(m_fp);
         m_fp = NULL;
 
-        //校验文件内容 MD5（大小写无关）
-        std::string actualMd5 = computeFileMd5(m_partPath);
-        if (toLower(actualMd5) != toLower(m_curMd5))
+        //校验文件内容 MD5（大小写无关）；云端录像不校验（令牌里没有内容 MD5，见上文）
+        std::string actualMd5 = cloudRecord ? std::string() : computeFileMd5(m_partPath);
+        if (!cloudRecord && toLower(actualMd5) != toLower(m_curMd5))
         {
             LOGE("upload: md5 mismatch, expect: %s, actual: %s",
                  m_curMd5.c_str(), actualMd5.c_str());
@@ -520,32 +568,39 @@ bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
             return true;
         }
 
-        //把 .part 转正为最终文件
-        std::string finalPath = m_strFileBaseDir + m_curMd5;
+        //把分片改名为最终文件。别的连接先行完成了同一文件时（含两边几乎同时收齐、
+        //本端改名失败而最终文件已存在的竞态），按成功处理并丢弃本端分片，见 UploadPartPolicy.h
+        std::string finalPath = cloudRecord ? fileBaseDir + cloudFileName : m_strFileBaseDir + m_curMd5;
         int64_t total = m_uploadOffset;
-        if (Singleton<FileManager>::Instance().isFileExsit(m_curMd5.c_str()))
+        bool finalKnownExists = !cloudRecord && Singleton<FileManager>::Instance().isFileExsit(m_curMd5.c_str());
+        fileserver::upload_finalize_result fr =
+            fileserver::FinalizeUploadPart(m_partPath, finalPath, finalKnownExists);
+        if (fr == fileserver::upload_finalize_failed)
         {
-            //并发情形下他方已先行完成同一文件：丢弃本端 .part
-            remove(m_partPath.c_str());
-        }
-        else if (rename(m_partPath.c_str(), finalPath.c_str()) != 0)
-        {
-            LOGE("upload: rename part to final failed: %s", finalPath.c_str());
+            LOGE("upload: rename part to final failed: %s -> %s", m_partPath.c_str(), finalPath.c_str());
             remove(m_partPath.c_str());
             resetFile();
             sendJsonResponse(cmd_file_upload, seq,
                 buildErrorJson(error_code_server_internal, "finalize file failed"));
             return true;
         }
-        else
+        if (fr == fileserver::upload_finalize_renamed && !cloudRecord)
         {
             Singleton<FileManager>::Instance().addFile(m_curMd5.c_str());
+        }
+        else
+        {
+            LOGI("upload: final file already produced by another session, discard part: %s",
+                 m_partPath.c_str());
         }
 
         LOGI("upload complete, md5: %s, size: %lld, client: %s",
              m_curMd5.c_str(), static_cast<long long>(total),
              conn->peerAddress().toIpPort().c_str());
         resetFile();
+        //云端录像：通知 chatserver（经 imgserver 的控制连接）这条录像的文件已传完
+        if (cloudRecord)
+            fileserver::NotifyCloudRecordUploaded(cloudFileName, static_cast<uint64_t>(total));
 
         Json::Value done;
         done["code"]       = error_code_ok;
@@ -608,10 +663,22 @@ bool FileSession::onDownloadChunk(const std::shared_ptr<TcpConnection>& conn,
 
         //两类文件的寻址方式不同：聊天文件 / 群文件落盘时即以 MD5 命名可直接拼接，
         //客户端升级包由运维手工放入、文件名是人起的，须经索引反查。差异收敛在
-        //ResolveDownloadPath 里，本处不做场景判断。
+        //ResolveDownloadPath 里；云端录像（第 26 期）是例外，路径由 CloudRecordScene 解析。
         std::string path;
-        if (!ResolveDownloadPath(payload.scene, md5, now, m_strFileBaseDir,
-                                 Singleton<UpdatePackageIndex>::Instance(), path))
+        //云端录像（scene 6，第 26 期）：令牌的 md5 字段是文件名，文件在录像目录里
+        std::string cloudDir;
+        std::string cloudFileName;
+        if (payload.scene == file_scene_cloud_record)
+        {
+            if (fileserver::ResolveCloudRecordTarget(md5, cloudDir, cloudFileName))
+                path = cloudDir + cloudFileName;
+        }
+        else if (!ResolveDownloadPath(payload.scene, md5, now, m_strFileBaseDir,
+                                      Singleton<UpdatePackageIndex>::Instance(), path))
+        {
+            path.clear();
+        }
+        if (path.empty())
         {
             LOGE("download: resolve path failed, scene: %d, md5: %s", payload.scene, md5.c_str());
             sendDownloadError(seq, error_code_file_not_exist, "file not exist");
@@ -817,9 +884,19 @@ void FileSession::resetFile()
         fclose(m_fp);
         m_fp = NULL;
     }
+    //须在清空 m_curMd5 之前释放登记，释放时要用它作键
+    releasePartClaim();
     m_mode         = mode_idle;
     m_curMd5.clear();
     m_partPath.clear();
     m_expectSize   = 0;
     m_uploadOffset = 0;
+}
+
+void FileSession::releasePartClaim()
+{
+    if (!m_partShared)
+        return;
+    Singleton<fileserver::UploadPartRegistry>::Instance().release(m_curMd5);
+    m_partShared = false;
 }

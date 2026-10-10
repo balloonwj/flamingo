@@ -1,0 +1,1442 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Api">
+      <UniqueIdentifier>{72664dc0-959f-3b0c-0489-1f8c7046a9f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Call">
+      <UniqueIdentifier>{c3755e61-202a-bd74-da58-85d2e9c9160e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Caption">
+      <UniqueIdentifier>{272ba7d1-64aa-8369-95be-6319a698be84}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common">
+      <UniqueIdentifier>{d13bc5b6-8b2b-d9e1-8f29-777db17cc563}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLang">
+      <UniqueIdentifier>{72a051bc-e638-3565-876a-19c5dad801f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P">
+      <UniqueIdentifier>{efdae02c-ad3b-745e-56c9-75211bb388e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="GroupCall">
+      <UniqueIdentifier>{afa94091-481a-ba75-4532-250c46c6d952}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Record">
+      <UniqueIdentifier>{6a0d9eae-e314-c567-fd72-fb97ee707a36}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RemoteDesktop">
+      <UniqueIdentifier>{5ca78015-f867-251c-7448-a11b26803dc9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Share">
+      <UniqueIdentifier>{5a95a425-f743-14a9-6f13-a2f136992178}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Graphics">
+      <UniqueIdentifier>{21144ad0-019c-aa9c-59e5-178683f3dbea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Util">
+      <UniqueIdentifier>{619b9ea2-01a8-48eb-0989-f550bd74060f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Feature">
+      <UniqueIdentifier>{ebf6d2a7-c204-8f10-d2ff-ca297893a34c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Feature\P2P">
+      <UniqueIdentifier>{29df4b74-c4ba-4b8f-7332-984a6761ee17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{fadd1363-4aa9-d02c-f68a-ae2fcdbc5321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonChatWnd">
+      <UniqueIdentifier>{c34bbc7a-16e0-7941-60f8-4a546e03cbea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonMain">
+      <UniqueIdentifier>{8c406ee6-61e4-c2e3-aa2c-1a2d79bfd56f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\net">
+      <UniqueIdentifier>{586cf171-509c-ef9a-1318-b44b343ef18d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party">
+      <UniqueIdentifier>{9eab2112-6210-c38a-271b-d8cbe3106a1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\jsoncpp-1.9.0">
+      <UniqueIdentifier>{f4787265-9915-ba4f-0c42-241643d8f88f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\zlib1.2.11">
+      <UniqueIdentifier>{756e4991-ed32-307b-8b91-24926824bab9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Voice">
+      <UniqueIdentifier>{d7a3fdf1-351b-7224-9a47-454751549deb}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="Common\OsVersionPolicy.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\IULogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\LogFormat.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\MediaLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\MediaModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\MediaLockState.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FrameCodec.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FrameCrypto.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FramePayload.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\HandshakeRunner.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Util\ZlibUtil.cpp">
+      <Filter>Source\Common\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Util\Path.cpp">
+      <Filter>Source\Common\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\NotificationSound.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\NotificationSoundPlayer.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonChatWnd\ChatIcons.cpp">
+      <Filter>Source\UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonChatWnd\ChatMarkdownIcons.cpp">
+      <Filter>Source\UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Util\MD5Sum.cpp">
+      <Filter>Source\Common\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\CornerPopupPlacement.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\CornerPopupCountdown.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\P2P\P2PLinkBroker.cpp">
+      <Filter>Source\Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\P2PBadge.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\MediaAvatar.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelAvatar.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarGlyph.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelIcons.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\PresenceBadge.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarImageUtil.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarBitmapCache.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\WindowPin.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\IncomingCallLayout.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Graphics\CompositionLayer.cpp">
+      <Filter>Source\Common\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\MediaToast.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\compress.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\deflate.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzclose.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzlib.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzread.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzwrite.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\infback.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\trees.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\uncompr.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\AudioLoopback.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\AudioPcmUtils.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\AudioStreamMixer.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\BalloonCallDlg.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallAudioEngine.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallBarAutoHide.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallButtonArt.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallController.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallDebugEntries.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallDlgLayout.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallEchoReference.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallJitterBuffer.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallMediaFraming.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallMediaSession.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallNetQuality.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallNetStats.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallOverlayBar.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallP2PFraming.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallProtocolClient.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallRelayClient.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallRelaySelfTest.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallRelayTestFrame.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallSignalArt.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallSystemAudioSender.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallVideoCanvas.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallVideoEngine.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallVideoUiDebug.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CallingLayout.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CameraDisplayTest.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\CameraPreviewDebug.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\H264SelfTest.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\MfCameraCapture.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\MfH264Codec.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\OpusAudioCodec.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\SpeexAudioProcessor.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\SpeexResampler.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\SystemAudioExclusive.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\VideoFrameConvert.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\VideoLoopbackDebug.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="Call\WasapiAudioIo.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\BalloonRemoteDesktopDlg.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\CaptureFallbackPolicy.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\DxgiScreenCapturer.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\GdiScreenCapturer.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdControlledBar.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdControlledStreamer.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdController.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdDebugEntries.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdDialogLayout.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdInputEncoder.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdInputInjector.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdRelayClient.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdRelayFraming.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdRelaySelfTest.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdScreenCapturer.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdScreenDecoder.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdSelfTestWindow.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdTransport.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdViewerToolbar.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdViewerWindow.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RemoteDesktopProtocolClient.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\ScreenFrameEncoder.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\until.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\DxgiOutputCapturer.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotModePolicy.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotation.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationBar.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationGeometry.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationIcons.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationMenuIcons.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationMenus.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationObjects.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationOverlay.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationRender.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationSession.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAnnotationSessionSelect.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareAudioSession.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareBarButtonArt.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareBarPopupGuard.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareBitrateController.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareBorderWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCameraPanel.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCameraReceiver.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCameraSender.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCameraWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareConfirmDialog.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareControlBar.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareController.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareControllerBoard.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareControllerControl.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareControllerMulti.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCornerToast.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCursorSampler.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareDebugEntries.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareEndedSummary.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareEndedToast.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareFraming.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareHostStreamer.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareHwH264Encoder.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareImageExport.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareInfoEditDialog.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareInfoPopup.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareLinkInvite.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareLocalAnnotator.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareMouseEffectMenu.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareMouseEffects.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareP2PRoute.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\SharePickerDialog.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\SharePickerPolicy.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareProtocolClient.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareRecordMutex.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareRelayClient.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareRemoteControl.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareRoomPolicy.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareScreenDecoders.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareScreens.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareScreensWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareSharerBar.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareSourcePolicy.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareSources.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareSystemAudioCapture.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareTextInputDialog.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareTopBarCollapse.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareVideoEncoder.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareVideoPolicy.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareViewerListPanel.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareViewerReceiver.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareViewerWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareWhiteboard.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareWhiteboardWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\WgcWindowCapturer.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudExitDialog.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudRecordCenter.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudRecordCompose.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudRecordComposer.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudRecordManagerModel.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudRecordProtocolClient.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CloudRecordReader.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordAudioMixer.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordBar.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordCameraWindow.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordController.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordDoneToast.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordFrameComposer.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordManagerLayout.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordManagerList.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordManagerModel.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordManagerWindow.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordMouseEffects.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordMp4Writer.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordPolicy.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordRegionSelector.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordSession.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\RecordSources.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Voice\VoiceController.cpp">
+      <Filter>Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="Voice\VoiceOggFile.cpp">
+      <Filter>Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="Voice\VoicePlayer.cpp">
+      <Filter>Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="Voice\VoiceRecorder.cpp">
+      <Filter>Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCall\GroupCallController.cpp">
+      <Filter>GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCall\GroupCallIncomingDlg.cpp">
+      <Filter>GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCall\GroupCallLayout.cpp">
+      <Filter>GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCall\GroupCallMediaSession.cpp">
+      <Filter>GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCall\GroupCallProtocolClient.cpp">
+      <Filter>GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCall\GroupCallWindow.cpp">
+      <Filter>GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\MediaCaptionBridge.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\RecordCaptionLive.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\RecordCaptionLiveRules.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\RecordCaptionTap.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\ShareCaptionBoard.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\ShareCaptionController.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\ShareCaptionFrame.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="Caption\ShareCaptionOverlay.cpp">
+      <Filter>Caption</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="Api\FlamingoMediaApi.h">
+      <Filter>Api</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\OsVersionPolicy.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\LogFormat.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\MediaLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\MediaModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\MediaLockState.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\Protocol.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FrameCodec.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FrameCrypto.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FramePayload.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\HandshakeRunner.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Util\ZlibUtil.h">
+      <Filter>Source\Common\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Util\Path.h">
+      <Filter>Source\Common\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\NotificationSound.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonChatWnd\ChatIcons.h">
+      <Filter>Source\UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Util\MD5Core.h">
+      <Filter>Source\Common\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonChatWnd\ChatMarkdownIcons.h">
+      <Filter>Source\UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\CornerPopupPlacement.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\CornerPopupCountdown.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLang\FlamingoLangApi.h">
+      <Filter>FlamingoLang</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\P2P\P2PLinkBroker.h">
+      <Filter>Source\Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoP2P\FlamingoP2PApi.h">
+      <Filter>FlamingoP2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\P2PBadge.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\MediaAvatar.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelAvatar.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarGlyph.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelIcons.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\PresenceBadge.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarImageUtil.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarBitmapCache.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\WindowPin.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\IncomingCallLayout.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Graphics\CompositionLayer.h">
+      <Filter>Source\Common\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\MediaToast.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\AudioLoopback.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\AudioPcmUtils.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\AudioStreamMixer.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\AvSyncScheduler.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\BalloonCallDlg.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallActionBarModel.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallAudioEngine.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallBarAutoHide.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallButtonArt.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallController.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallDebugEntries.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallDialogActions.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallDlgLayout.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallEchoReference.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallJitterBuffer.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallMediaFraming.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallMediaSession.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallMessages.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallNetQuality.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallNetStats.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallOverlayBar.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallP2PFraming.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallProtocolClient.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallRelayClient.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallRelaySelfTest.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallRelayTestFrame.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallShareLink.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallSignalArt.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallSystemAudioSender.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallVideoCanvas.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallVideoDisplaySink.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallVideoEngine.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallVideoUiDebug.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CallingLayout.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CameraDisplayTest.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\CameraPreviewDebug.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\H264SelfTest.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\MfCameraCapture.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\MfH264Codec.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\OpusAudioCodec.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\SpeexAudioProcessor.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\SpeexResampler.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\SystemAudioExclusive.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\VideoFrameConvert.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\VideoLoopbackDebug.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="Call\WasapiAudioIo.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\BalloonRemoteDesktopDlg.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\CaptureFallbackPolicy.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\CursorInfo.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\DxgiScreenCapturer.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\GdiScreenCapturer.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\IScreenCapturer.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdCaptureTypes.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdControlledBar.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdControlledStreamer.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdController.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdDebugEntries.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdDialogLayout.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdEngineDef.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdInputDef.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdInputEncoder.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdInputInjector.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdMessages.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdRelayClient.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdRelayFraming.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdRelaySelfTest.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdScreenCapturer.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdScreenDecoder.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdSelfTestWindow.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdSessionActions.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdTransport.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdViewerToolbar.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdViewerWindow.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RemoteDesktopProtocolClient.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\ScreenFrameEncoder.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\until.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotModePolicy.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotation.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationBar.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationGeometry.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationIcons.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationMenuIcons.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationMenus.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationObjects.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationOverlay.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationRender.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAnnotationSession.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAudioSession.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareAudioTransport.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareBarButtonArt.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareBarPopupGuard.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareBitrateController.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareBorderWindow.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCallPolicy.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCameraPanel.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCameraReceiver.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCameraSender.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCameraWindow.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCapturer.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCompositionLayer.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareConfirmDialog.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareControlBar.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareController.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCornerToast.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareCursorSampler.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareDebugEntries.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareEndedSummary.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareEndedToast.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareFraming.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareHostStreamer.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareHwH264Encoder.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareImageExport.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareInfoEditDialog.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareInfoPopup.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareLinkInvite.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareLocalAnnotator.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareMessages.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareMouseEffectMenu.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareMouseEffects.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareP2PRoute.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\SharePickerDialog.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\SharePickerPolicy.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareProtocolClient.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareRecordMutex.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareRelayClient.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareRemoteControl.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareRoomPolicy.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareScreenDecoders.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareScreenFeed.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareScreens.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareScreensWindow.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareSharerBar.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareSourcePolicy.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareSources.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareSystemAudioCapture.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareTextInputDialog.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareTopBarCollapse.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareVideoEncoder.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareVideoPolicy.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareViewerListPanel.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareViewerReceiver.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareViewerWindow.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareWhiteboard.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareWhiteboardWindow.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudExitDialog.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudRecordCenter.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudRecordCompose.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudRecordComposer.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudRecordManagerModel.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudRecordProtocolClient.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CloudRecordReader.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordAudioMixer.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordBar.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordCameraWindow.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordController.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordDoneToast.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordFrameComposer.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordManagerLayout.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordManagerList.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordManagerModel.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordManagerWindow.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordMessages.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordMouseEffects.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordMp4Writer.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordPolicy.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordRegionSelector.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordSession.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\RecordSources.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Voice\VoiceController.h">
+      <Filter>Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="Voice\VoiceOggFile.h">
+      <Filter>Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="Voice\VoicePlayer.h">
+      <Filter>Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="Voice\VoiceRecorder.h">
+      <Filter>Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallController.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallIncomingDlg.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallLayout.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallMediaSession.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallMessages.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallProtocolClient.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="GroupCall\GroupCallWindow.h">
+      <Filter>GroupCall</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\MediaCaptionBridge.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\RecordCaptionLive.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\RecordCaptionLiveRules.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\RecordCaptionTap.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\ShareCaptionBoard.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\ShareCaptionController.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\ShareCaptionFrame.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+    <ClInclude Include="Caption\ShareCaptionOverlay.h">
+      <Filter>Caption</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoMediaVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoMedia.def" />
+  </ItemGroup>
+</Project>

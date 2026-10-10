@@ -11,6 +11,7 @@
 
 #include "HistoryDateRange.h"
 #include "HistoryModel.h"   // LocalDayBoundsMs：某一天的起止 Unix 毫秒，并判断这一天是否存在
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -26,11 +27,11 @@ std::wstring DateText(const HistoryDate& d, bool withYear)
     wchar_t buf[kDateTextChars] = { 0 };
     if (withYear)
     {
-        swprintf(buf, kDateTextChars, L"%d年%d月%d日", d.m_year, d.m_month, d.m_day);
+        swprintf(buf, kDateTextChars, TR(L"%d年%d月%d日"), d.m_year, d.m_month, d.m_day);
     }
     else
     {
-        swprintf(buf, kDateTextChars, L"%d月%d日", d.m_month, d.m_day);
+        swprintf(buf, kDateTextChars, TR(L"%d月%d日"), d.m_month, d.m_day);
     }
     return std::wstring(buf);
 }
@@ -89,7 +90,7 @@ std::wstring FormatHistoryDateRangeLabel(const HistoryDate& from, const HistoryD
     {
         return DateText(from, withYear);
     }
-    return DateText(from, withYear) + L" 至 " + DateText(to, withYear);
+    return TRF(L"{0} 至 {1}", DateText(from, withYear), DateText(to, withYear));
 }
 
 void ComputeHistoryDatePopupDefaults(bool hasCustomRange, int64_t customMinMs, int64_t customMaxMs,

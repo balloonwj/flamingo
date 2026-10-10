@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 21 章：文件共享（发起共享、成员与权限、共享卡片、共享浏览窗、传输、文件共享中心、右下角通知）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件共享 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c21">
+<article class="doc">
+  <h1>文件共享</h1>
+  <p class="lead">文件共享把你电脑上的一个磁盘、文件夹或文件共享到会话里，会话成员可以像浏览本机文件夹一样实时浏览、下载，有权限时还能上传、新建文件夹、重命名、删除和移动。文件始终保存在你自己的电脑上，不会上传到服务器。</p>
+  <ul class="facts">
+    <li>适用：全体员工，单聊和群聊都可以共享</li>
+    <li>需要：企业开启「文件共享」开关</li>
+    <li>分享者的客户端需要在线，成员才能访问</li>
+  </ul>
+
+  <h2 id="entry">入口</h2>
+  <ul>
+    <li>单聊窗或群聊窗头部的文件夹图标（鼠标停在上面提示 <span class="ui">文件共享</span>）：弹出「本会话的共享」面板，列出这个会话里的共享；底部有 <span class="ui">发起共享</span> 和 <span class="ui">管理全部共享</span>。图标上的红色数字是本会话里当前可用的共享个数。</li>
+    <li>在主面板右键会话或联系人，选 <span class="ui">共享文件给TA</span> 或 <span class="ui">共享文件到本群</span>。</li>
+    <li>主面板「会话」「联系人」页签底部的 <span class="ui">文件共享</span> 按钮，或系统菜单里的 <span class="ui">文件共享</span>：打开「文件共享」中心，见本章<a href="#center">「文件共享中心」</a>。</li>
+  </ul>
+  <figure class="shot">
+    <div class="annotated">
+      <img src="../img/w_fileshare_popup.png" width="880" alt="本会话的共享">
+      <span class="pin" style="left:57.3%;top:11.8%">1</span>
+    </div>
+    <figcaption>点头部的「文件共享」按钮（标注 1）弹出「本会话的共享」面板，这个会话还没有共享</figcaption>
+  </figure>
+
+  <h2 id="create">发起共享</h2>
+  <figure class="shot center">
+    <img src="../img/w_fileshare_create.png" width="755" alt="发起共享">
+    <figcaption>「发起共享」窗口：共享一个文件夹给赵卓轩，并允许他上传</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">共享内容</span> 一行，点右侧的 <span class="ui">磁盘</span>、<span class="ui">文件夹</span> 或 <span class="ui">文件</span>，选择要共享的位置。选好后左侧显示类型和完整路径。</li>
+    <li>按需修改 <span class="ui">共享名称</span>，成员看到的就是这个名字。</li>
+    <li>需要时勾选 <span class="ui">包含隐藏文件和系统文件</span>；不勾选时成员看不到这些文件。</li>
+    <li>在 <span class="ui">成员与权限</span> 里勾选可以访问的成员。所有成员都可以浏览和下载；上传、新建文件夹、重命名、删除、移动这几项写权限可以逐人勾选，勾选的写权限只对该成员生效。勾选表头的复选框可以一次勾选整列。</li>
+    <li>点 <span class="ui">发起共享</span>，会话里随即出现一张共享卡片。</li>
+  </ol>
+  <ul>
+    <li>共享单个文件时没有写权限可选，成员只能下载。</li>
+    <li>至少要勾选一名成员。</li>
+  </ul>
+  <div class="callout warn"><b>共享系统位置前请三思</b>要共享的位置是系统盘、Windows 目录、Program Files 或用户目录时，客户端会先提醒：成员可以浏览并下载其中的全部文件；如果授予了写权限，而客户端又是以管理员身份运行的，成员还可能改动系统文件。请只共享需要给同事看的文件夹。</div>
+
+  <h2 id="card">共享卡片</h2>
+  <p>发起共享后，聊天里会出现一张共享卡片，显示共享名称和状态。分享者一侧的卡片显示本机路径和「我的共享 · 可用」，按钮为 <span class="ui">在本机打开</span>，点它在资源管理器里打开这个位置；成员一侧显示「某某的共享 · 可用」，按钮为 <span class="ui">打开</span>，点它打开共享浏览窗（共享单个文件时按钮为 <span class="ui">下载</span>）。</p>
+  <div class="shot-row">
+    <figure class="shot">
+      <div class="annotated">
+        <img src="../img/w_fileshare_card.png" width="760" alt="分享者一侧的共享卡片">
+        <span class="pin" style="left:52%;top:59%">1</span>
+      </div>
+      <figcaption>分享者罗俊辉一侧（标注 1 为共享卡片）</figcaption>
+    </figure>
+    <figure class="shot"><img src="../img/w_fileshare_card_b.png" width="760" alt="成员一侧的共享卡片"><figcaption>成员赵卓轩一侧</figcaption></figure>
+  </div>
+  <p>共享暂时无法访问时，卡片显示「暂不可用」并写明原因，例如「分享者不在线」「共享的内容在分享者电脑上已不存在」；共享被取消后显示「已失效」，例如「分享者已取消共享」。分享者重新上线后，共享会恢复可用。</p>
+
+  <h2 id="browse">浏览与下载</h2>
+  <p>成员点卡片上的 <span class="ui">打开</span>，会打开以共享名称为标题的共享浏览窗：</p>
+  <figure class="shot center">
+    <img src="../img/w_fileshare_browser.png" width="760" alt="共享浏览窗">
+    <figcaption>成员赵卓轩打开的共享浏览窗（列表视图）</figcaption>
+  </figure>
+  <ul>
+    <li><span class="ui">上一级</span> 回到上一层文件夹，旁边显示当前所在的位置；双击文件夹进入下一层，双击图片打开预览。</li>
+    <li><span class="ui">搜索当前文件夹</span>：输入关键字后按 <kbd>Enter</kbd>，在当前文件夹之下按名称查找；按 <kbd>Esc</kbd> 或点 <span class="ui">上一级</span> 回到文件夹列表。</li>
+    <li><span class="ui">缩略图</span> / <span class="ui">列表</span>：在两种视图之间切换；缩略图视图里图片会显示预览。</li>
+    <li><span class="ui">刷新</span>：重新读取当前文件夹。</li>
+    <li><span class="ui">下载</span>：先选中文件或文件夹，再选择下载到本机的哪个文件夹。</li>
+    <li><span class="ui">上传文件</span>、<span class="ui">上传文件夹</span>：把本机的文件或文件夹上传到当前文件夹，需要上传权限。有新建文件夹权限时，这一行还有 <span class="ui">新建文件夹</span>。</li>
+    <li>列表视图有 <span class="ui">名称</span>、<span class="ui">大小</span>、<span class="ui">修改时间</span> 三列，点列名按该列排序，再点一次反向；文件夹始终排在文件前面。左下角显示当前文件夹的项目数。</li>
+  </ul>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/w_fileshare_thumbs.png" width="760" alt="缩略图视图"><figcaption>缩略图视图</figcaption></figure>
+    <figure class="shot"><img src="../img/w_fileshare_menu.png" width="760" alt="右键菜单"><figcaption>右键一张图片：只有上传权限时，菜单里只有预览、下载和刷新</figcaption></figure>
+  </div>
+  <p>右键文件或文件夹会弹出菜单，菜单项按你拥有的权限显示：<span class="ui">预览</span>（图片）、<span class="ui">下载…</span>、<span class="ui">重命名…</span>、<span class="ui">删除</span>、<span class="ui">移动到…</span>、<span class="ui">新建文件夹…</span>、<span class="ui">刷新</span>。</p>
+  <div class="callout tip"><b>拖放也可以</b>把本机的文件拖进共享浏览窗，松开鼠标即上传到当前文件夹（需要上传权限）；把共享浏览窗里的文件拖到资源管理器，会先下载、再由目标文件夹复制过去。</div>
+
+  <h3>传输列表</h3>
+  <p>开始下载或上传后，共享浏览窗下方会出现「传输列表」，每次传输一行，显示名称、方向、进度和状态（排队中、已完成、已取消或失败原因）。选中一行再点 <span class="ui">取消</span> 可以取消这次传输。关闭共享浏览窗不会中断进行中的传输，传输会在后台继续，重新打开时传输列表会恢复显示。</p>
+
+  <h2 id="center">文件共享中心</h2>
+  <p>从主面板底部的 <span class="ui">文件共享</span> 按钮、系统菜单的 <span class="ui">文件共享</span>，或「本会话的共享」面板里的 <span class="ui">管理全部共享</span>，可以打开「文件共享」中心，集中管理所有共享：</p>
+  <figure class="shot">
+    <img src="../img/w_fileshare_center.png" width="880" alt="文件共享中心">
+    <figcaption>「文件共享」中心：左侧是共享列表，右侧是选中共享的详情</figcaption>
+  </figure>
+  <ul>
+    <li>顶部两个页签：<span class="ui">我的共享</span> 列出你发起的共享，<span class="ui">共享给我的</span> 列出别人共享给你的，页签上的数字是数量。</li>
+    <li>右上角可以按名称、路径（或分享者）、会话搜索；<span class="ui">+ 发起共享</span> 先选择要共享给谁，再打开「发起共享」窗口；<span class="ui">刷新</span> 重新加载列表。</li>
+    <li>选中左侧的一个共享，右侧显示详情。对自己的共享，可以 <span class="ui">在本机打开</span>、<span class="ui">调整成员</span>（修改成员与权限）和 <span class="ui">取消共享</span>；对别人共享给你的，可以 <span class="ui">打开</span> 共享浏览窗。</li>
+    <li>详情里的 <b>基本信息</b> 显示类型、所在会话和状态，点 <span class="ui">定位到会话</span> 打开对应的聊天窗；<b>成员与权限</b> 列出每位成员拥有的权限；<b>正在访问</b> 显示谁正在浏览或传输；<b>最近操作</b> 记录成员的下载、上传等操作。</li>
+  </ul>
+  <p>取消共享前会再确认一次：取消后所有成员都无法再访问，正在进行的浏览与传输会立即结束。「本会话的共享」面板里的每个共享也有 <span class="ui">打开</span>、<span class="ui">调整成员</span>、<span class="ui">取消共享</span> 等操作。</p>
+
+  <h2 id="notice">右下角通知</h2>
+  <p>别人访问你的共享时，你的屏幕右下角会弹出「文件共享动态」通知，告诉你谁下载、上传、重命名、删除或移动了哪些文件；你作为成员下载或上传完成时，会弹出「文件共享传输」通知。点通知里的 <span class="ui">查看全部</span> 可以打开「文件共享」中心查看。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

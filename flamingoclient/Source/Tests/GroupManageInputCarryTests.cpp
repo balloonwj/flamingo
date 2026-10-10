@@ -64,14 +64,14 @@ TEST_CASE("GMIC2 用户没有改动时不填回，保留重建出来的内容", 
     InputDraftTable table;
     std::wstring draft;
     table.OnInputBuilt(kIdEditAnnounceTitle, kEmpty, &draft);
-    table.OnInputBuilt(kIdEditSensitiveNew, kEmpty, &draft);
+    table.OnInputBuilt(kIdEditAnnounceBody, kEmpty, &draft);
 
     std::wstring shown;
     CHECK_FALSE(Rebuild(table, kIdEditAnnounceTitle, kEmpty, kEmpty, &shown));
     CHECK(shown.empty());
-    CHECK_FALSE(Rebuild(table, kIdEditSensitiveNew, kEmpty, kEmpty, &shown));
+    CHECK_FALSE(Rebuild(table, kIdEditAnnounceBody, kEmpty, kEmpty, &shown));
     CHECK_FALSE(table.HasDraft(kIdEditAnnounceTitle));
-    CHECK_FALSE(table.HasDraft(kIdEditSensitiveNew));
+    CHECK_FALSE(table.HasDraft(kIdEditAnnounceBody));
 }
 
 TEST_CASE("GMIC3 群名称用户没改，服务端推来新群名后显示新群名", "[groupmanage][inputcarry]")
@@ -198,7 +198,7 @@ TEST_CASE("GMIC10 点「重置」时撤销草稿并取回建页时的文字，�
     CHECK(baseline == L"旧简介");
 
     //从未登记过的输入框无从取回
-    CHECK_FALSE(table.Revert(kIdEditSensitiveNew, &baseline));
+    CHECK_FALSE(table.Revert(kIdSearchMembers, &baseline));
 }
 
 TEST_CASE("GMIC9 重建后停在同一页时保持滚动位置，换了页时回到顶部", "[groupmanage][inputcarry]")

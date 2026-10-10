@@ -1049,3 +1049,116 @@ TEST_CASE("CPF12 长文字消息选区变化后重画的耗时随字数如何增
     }
     CHECK(true);
 }
+
+// =====================================================================
+// CPF13：一整段、不含换行、密集带链接的长文字消息（2026-10-04 用户反馈打开聊天窗后消息记录要等一两秒
+// 才出现，会话里有几条五千到一万字的这类消息）。量首次测量的各子步骤、首次绘制与缓存位图的大小，
+// 作为「超长气泡只缓存可见部分」「超长文字测量优化」两项改动前后的对比基线
+// =====================================================================
+
+namespace {
+
+//CPF13 依次量的消息字数（约数），与用户会话里那几条消息同一量级
+const int kCpf13Lengths[] = { 5400, 10800 };
+
+//拼一段约 chars 字、中英文混排、每一小节带一个链接、整段没有换行的文字。
+//链接的路径部分按序号变化，免得同一个链接重复出现
+CString BuildCpf13Text(int chars)
+{
+    std::wstring text;
+    wchar_t piece[160];
+    for (int i = 1; (int)text.size() < chars; ++i)
+    {
+        swprintf_s(piece, L"[第 %d 课　远程控制系统开发要点之%d：连接、传输与界面] (https://mp.weixin.qq.com/s/Ucc3wkw5zAHT%06dQ)",
+                   i, i, i);
+        text += piece;
+    }
+    return CString(text.c_str());
+}
+
+} // anonymous namespace
+
+TEST_CASE("CPF13 一整段密集带链接的长消息：首次测量的子步骤、首次绘制与缓存位图大小", "[.chatperf]")
+{
+    ScopedGdiplus gdip;
+    REQUIRE(gdip.Ok());
+    ChatTextExtentCache& cache = ChatTextExtentCache::Inst();
+
+    for (size_t li = 0; li < sizeof(kCpf13Lengths) / sizeof(kCpf13Lengths[0]); ++li)
+    {
+        const CString text = BuildCpf13Text(kCpf13Lengths[li]);
+        cache.Clear();
+
+        ScopedCanvas canvas(kViewW, kViewH);
+        REQUIRE(canvas.Dc() != NULL);
+        const RECT view = { 0, 0, kViewW, kViewH };
+        ChatMessageList list;
+        list.ForceLayout(view);
+
+        //追加（含首次测量）、排版、首次与第二次绘制，与打开聊天窗灌入历史的流程相同
+        PerfStopWatch sw;
+        list.AppendMessage(MakeTextMessage(false, text));
+        const double appendMs = sw.ElapsedMs();
+        sw.Restart();
+        list.ForceLayout(view);
+        const double layoutMs = sw.ElapsedMs();
+        sw.Restart();
+        list.OnPaint(canvas.Dc(), view);
+        const double firstPaintMs = sw.ElapsedMs();
+        sw.Restart();
+        list.OnPaint(canvas.Dc(), view);
+        const double secondPaintMs = sw.ElapsedMs();
+
+        ChatBubble* bubble = dynamic_cast<ChatBubble*>(list.Children().back().get());
+        REQUIRE(bubble != NULL);
+        const int rowH = bubble->GetRowHeight();
+
+        //首次测量的子步骤单独量。先清空文字测量缓存，与上面的首次测量处于相同的冷启动状态
+        cache.Clear();
+        HDC hdc = ::GetDC(NULL);
+        HFONT hFont = CreateBubbleFont(kCpf4FontPx);
+        HFONT hOld = (HFONT)::SelectObject(hdc, hFont);
+        sw.Restart();
+        std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(text);
+        const double parseMs = sw.ElapsedMs();
+        sw.Restart();
+        std::vector<InlinePlaced> placed;
+        LayoutInlineContent(hdc, segs, kCpf4WrapWidth, kCpf4FontPx, &placed);
+        const double inlineColdMs = sw.ElapsedMs();
+        sw.Restart();
+        placed.clear();
+        LayoutInlineContent(hdc, segs, kCpf4WrapWidth, kCpf4FontPx, &placed);
+        const double inlineWarmMs = sw.ElapsedMs();
+        //只测尺寸、不产出放置项：与上一项之差即为生成放置项（逐项建字符串、追加进数组）的开销，
+        //剩下的是切分词元与逐词元测宽
+        sw.Restart();
+        LayoutInlineContent(hdc, segs, kCpf4WrapWidth, kCpf4FontPx, NULL);
+        const double sizeOnlyMs = sw.ElapsedMs();
+        sw.Restart();
+        const std::wstring flat = BuildFlatText(segs);
+        const double flatMs = sw.ElapsedMs();
+        sw.Restart();
+        SelLayout sel;
+        BuildSelLayoutFromPlaced(hdc, placed, (int)flat.size(), sel);
+        const double selMs = sw.ElapsedMs();
+        sw.Restart();
+        const std::vector<LinkSpan> links = DetectLinks(flat);
+        const double linkMs = sw.ElapsedMs();
+        ::SelectObject(hdc, hOld);
+        ::DeleteObject(hFont);
+        ::ReleaseDC(NULL, hdc);
+
+        //缓存位图的大小按行宽 × 缓存高度、每像素 4 字节估算（与屏幕兼容的位图在 32 位色深下即如此）。
+        //超长气泡只缓存可见区附近的一段（2026-10-04 起），缓存高度小于行高
+        const int cacheH = bubble->GetRenderCacheHeight();
+        const double cacheMb = (double)kViewW * cacheH * 4 / (1024.0 * 1024.0);
+        printf("[chatperf] CPF13 %5d chars (%3u links, %5u placed, row %5d px, cache %5d px, about %.1f MB): append %8.2f ms, "
+               "layout %6.2f ms, first paint %8.2f ms, second paint %6.2f ms | parse %.2f, inline layout cold %.2f / "
+               "warm %.2f / size only %.2f, flat %.2f, sel layout %.2f, links %.2f ms\n",
+               text.GetLength(), (unsigned)links.size(), (unsigned)placed.size(), rowH, cacheH, cacheMb, appendMs, layoutMs,
+               firstPaintMs, secondPaintMs, parseMs, inlineColdMs, inlineWarmMs, sizeOnlyMs, flatMs, selMs, linkMs);
+        fflush(stdout);
+    }
+    cache.Clear();
+    CHECK(true);
+}

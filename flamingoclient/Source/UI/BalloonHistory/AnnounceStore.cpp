@@ -24,7 +24,7 @@ static const char* const kCreateTableSql =
 
 //一张表里的一个列，用于"存量库缺列自动补齐"。
 //建表语句是 CREATE TABLE IF NOT EXISTS：库文件已存在时它整条跳过，后加的列<u>永远不会</u>
-//出现在存量库里，随后所有带新列的 SQL 全部报 no such column，消息盒子直接空白。
+//出现在存量库里，随后所有带新列的 SQL 全部报 no such column，公告中心直接空白。
 //这套机制照搬 V2MsgStore —— 那边就是踩过这个坑才补上的，本库从第一版就带着。
 struct SchemaColumn
 {
@@ -47,7 +47,7 @@ static const SchemaColumn kSchemaColumns[] =
 };
 static const int kSchemaColumnCount = (int)(sizeof(kSchemaColumns) / sizeof(kSchemaColumns[0]));
 
-//按「置顶 + 发布时间」建索引，支撑消息盒子列表的默认排序。
+//按「置顶 + 发布时间」建索引，支撑公告中心列表的默认排序。
 static const char* const kCreateIndexSql =
     "CREATE INDEX IF NOT EXISTS idx_ann_order ON t_announce (recalled,pinned,senttime)";
 
@@ -83,7 +83,7 @@ static const char* const kMarkReadSql =
 static const char* const kMarkRecalledSql =
     "UPDATE t_announce SET recalled=1 WHERE announcementid=?";
 
-//取全部未撤回的公告，按消息盒子的展示顺序排好。
+//取全部未撤回的公告，按公告中心的展示顺序排好。
 //发布时间相同时再按公告ID倒序，保证顺序稳定，不会每次刷新都跳来跳去。
 static const char* const kQueryAllSql =
     "SELECT announcementid,title,body,severity,sendername,pinned,senttime,read,recalled "

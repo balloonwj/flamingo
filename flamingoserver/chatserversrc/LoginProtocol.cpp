@@ -73,7 +73,8 @@ bool LoginProtocol::parseLoginRequest(const std::string& jsonbody, LoginRequest&
 
 std::string LoginProtocol::buildLoginSuccessResponse(int64_t userid,
                                                      const LoginProfile& profile,
-                                                     int64_t servertime)
+                                                     int64_t servertime,
+                                                     const std::map<std::string, int>& features)
 {
     Json::Value root;
     root["code"]       = 0;
@@ -94,8 +95,21 @@ std::string LoginProtocol::buildLoginSuccessResponse(int64_t userid,
     p["address"]      = profile.address;
     p["phonenumber"]  = profile.phonenumber;
     p["mail"]         = profile.mail;
+    p["landline"]     = profile.landline;
+    p["post"]         = profile.post;
     p["enterpriseid"] = std::to_string(profile.enterpriseid);
+    p["phonevisible"]    = profile.phonevisible;
+    p["landlinevisible"] = profile.landlinevisible;
     root["profile"]   = p;
+
+    //功能开关：与 1013（cmd_features_notify）的包体同构
+    if (!features.empty())
+    {
+        Json::Value f(Json::objectValue);
+        for (std::map<std::string, int>::const_iterator it = features.begin(); it != features.end(); ++it)
+            f[it->first] = it->second;
+        root["features"] = f;
+    }
 
     return writeCompact(root);
 }

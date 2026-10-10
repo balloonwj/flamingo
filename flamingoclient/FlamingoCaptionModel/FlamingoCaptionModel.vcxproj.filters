@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="FlamingoCaption">
+      <UniqueIdentifier>{1815f813-db00-426f-d417-e9cd4c50a918}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Engine">
+      <UniqueIdentifier>{703296b1-6bef-fcfa-dc7a-c930bee8d74e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\FlamingoCaption\Engine\CaptionModelRes.h">
+      <Filter>FlamingoCaption\Engine</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoCaptionModel.rc" />
+    <ResourceCompile Include="FlamingoCaptionModelVersion.rc" />
+  </ItemGroup>
+</Project>

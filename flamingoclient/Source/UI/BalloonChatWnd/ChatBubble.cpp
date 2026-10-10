@@ -54,7 +54,19 @@ extern CAppModule _Module;
 #include "ChatTextSelection.h" // 选中文字的纯逻辑（命中测试 / 选区矩形 / 取文本）
 #include "GroupMentionMenu.h"  // @某人 片段的右键菜单模型与投递负载
 #include "ChatMessageMenu.h"   // 气泡自身右键菜单的行模型与投递负载（含图片两项）
+#include "../../Feature/Ocr/OcrLauncher.h"   // IsOcrEntryVisible：图片菜单里「图片文字识别」是否出现
 #include "ImagePlaceholder.h"  // 图片无法显示时的破图占位符（排版、失败判断与绘制）
+#include "ChatReedit.h"        // 「重新编辑」的可用判定与投递负载（docs/敏感词方案.md 8.4）
+#include "RecallEdit.h"        // 撤回提示行的「编辑」：快照解析与到期判断（docs/撤回后重新编辑方案.md）
+#include "ChatMemoPrefill.h"   // ChatAddToMemoRequest：「添加到备忘」投给宿主的负载（docs/备忘与提醒方案.md §8）
+#include "ChatCodeMessage.h"   // SaveCodeWithDialog：代码卡片右键「另存为」
+#include "ChatGroupInviteCard.h" // GroupInviteButtonText：入群邀请卡片的按钮文字（docs/邀请入群方案.md §3.3）
+#include "ChatSecretMode.h"      // SecretInviteButtonText / SecretInviteButtonAction：密聊邀请卡片的按钮（docs/密聊方案.md 4.8）
+#include "ChatVoiceBubble.h"     // 语音气泡的宽度、时长文字、红点条件与点击动作（docs/语音消息方案.md 第 3.2 节）
+#include "ChatVoicePaint.h"      // 语音条的绘制（与消息记录窗、合并记录查看窗的语音条控件共用，第 4 期）
+#include "ChatFileStateModel.h" // kFileFailed（发送失败时把文件行置为失败态）
+#include "ChatDirectFileModel.h" // FolderBubbleShowsP2PBadge：文件夹气泡的「P2P」徽章（2026-10-04 起）；DirectFileForwardBlocked：右键转发在线直传文件
+#include "../BalloonMain/P2PBadge.h"   // ShouldShowP2PBadge：链路是否直连
 #include "ChatClipboardIo.h"   // 复制时写入纯文字 + Flamingo 格式（粘回输入框能还原表情、图片）
 #include "ChatDragSource.h"    // 把选中的文字与表情、整张图片拖出去
 #include "../BalloonMain/PopupMenuPlacement.h"   // ClampPopupMenuToWorkArea（菜单不越屏）
@@ -62,6 +74,13 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/DuiTrace.h"   // BUI_TRACE：各行实际渲染耗时的时序跟踪
 #include "../../Common/Util/PerfStopWatch.h"                      // 渲染计时
 #include "ChatAvatarBitmapCache.h"   // 发送者真图头像的共享位图缓存（同一头像只解码、缩放一次）
+#include "ChatRelayCard.h"           // RelayCardButton、RelayCopyTextForMessage（接龙卡片的按钮与复制文字）
+#include "ChatFileShareCard.h"       // ShareCardButtonLabel（共享卡片的按钮文字）
+#include "ChatScreenShareCard.h"     // ScreenShareJoinRequest（屏幕共享卡片「加入」随消息投递的堆对象）
+#include "ChatMarkdown.h"            // Markdown 消息：由正文取源文本、图片转链接的前缀（卡片见 docs/Markdown消息方案.md 第 11.3 节）
+#include "ChatMarkdownCard.h"        // Markdown 卡片的宽度、标题与摘要、高度与内容绘制（与独立卡片控件共用）
+#include "../../net/Protocol.h"      // share_kind（共享卡片按类型选图标）
+#include "../../Common/Graphics/ShellTypeIcon.h"   // 文件共享卡片标题前的本机系统类型图标
 #include "../../App/CustomMsgDef.h"   // WM_VIEW_CHAT_IMAGE / WM_CHAT_FILE_ACTION / WM_CHAT_IMAGE_ACTION
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // ParseSendBody / ChatSegment（解析内联表情）
 #include "../../net/MessageProtocolClient.h"  // canRecallMessage（右键菜单里"撤回"项的时限判断）
@@ -71,6 +90,9 @@ extern CAppModule _Module;
 #include <map>
 #include <algorithm>   // std::min / std::max（选区变化区间）
 #include <utility>     // std::pair / std::make_pair
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../BalloonMain/AvatarGray.h"   // MakeGrayColor：离线头像的灰色底
+#include "../BalloonMain/AvatarGlyph.h"  // DrawCenteredGlyphGdi：头像字居中
 
 namespace balloonchatwnd {
 
@@ -84,6 +106,7 @@ namespace {
 // ---- 几何常量（逻辑像素）---------------------------------------------
 
 const int kTimeRowHeight  = 38;   // 时间分隔行高
+const int kTimeTextPx     = 11;   // 时间分隔行与系统提示行的字号
 const int kAvatarSize     = 34;   // 头像边长
 const int kEdgePad        = 16;   // 头像距窗口边
 const int kAvatarGap      = 10;   // 头像与气泡列的间距
@@ -118,6 +141,15 @@ const int    kTextPadV = 9;             // 文字气泡垂直内边距（每侧�
 const int    kMinTextWidth = 40;        // 折行测量时文字区最小宽度
 const double kBubbleMaxWidthRatio = 0.62;  // 气泡最大宽 = 内容区宽 × 此比例
 
+// 超长气泡分段缓存的默认阈值（像素）：行高超过它的文字气泡只缓存可见区附近的一段。取 2048：
+// 单聊窗消息区四五百像素高，加上下各一段余量（kTallSliceMarginPx）后的缓存段约一千五百像素，低于阈值；
+// 而普通消息远不到这个高度，行为与改动前完全相同。
+const int kDefaultTallSliceThresholdPx = 2048;
+
+// 超长气泡分段缓存时，缓存段在要画的部分上下各多画的余量（像素）。滚动不超过这段距离时直接用缓存，
+// 不必重画；取约一屏多一点，缓存段总高约为可视区高度加上两段余量
+const int kTallSliceMarginPx = 512;
+
 // 多选模式：行首勾选列。
 const int kCheckColW = 30;        // 勾选列宽（内容整体右移这么多）
 const int kCheckSize = 18;        // 勾选圈直径
@@ -136,8 +168,16 @@ const COLORREF kBubbleText  = RGB(0x2A, 0x2A, 0x2A);       // 气泡文字
 const COLORREF kQuoteName   = RGB(0xFF, 0x7A, 0x45);       // 引用人名
 const COLORREF kQuoteText   = RGB(0x8A, 0x8A, 0x8A);       // 引用内容
 const COLORREF kTimeColor   = RGB(0xA8, 0xA6, 0xA2);       // 时间分隔文字
+const int kRecallEditGapPx  = 6;    // 撤回提示行里提示文字与「编辑」之间的间距（像素）
 const COLORREF kReceiptText = RGB(0xA8, 0xA6, 0xA2);       // "已读"文字
 const COLORREF kReceiptUnreadText = RGB(0xFF, 0x7A, 0x45); // "未读"文字（主题橙，与灰色的"已读"区分）
+
+// ---- 发送失败（服务端拒绝，见 docs/敏感词方案.md 8.3）----
+const int kFailMarkSize   = 16;   // 气泡左侧红色圆形感叹号的直径
+const int kFailMarkGap    = 6;    // 感叹号与气泡左边之间的水平间距
+const int kFailMarkTextPx = 12;   // 感叹号里「!」的字号（像素）
+const int kFailReasonHeight = kReceiptHeight;   // 原因行高：与回执行同高，单聊里正好占用回执行的位置
+const COLORREF kFailMarkText = RGB(0xFF, 0xFF, 0xFF);   // 感叹号里「!」的颜色
 const COLORREF kAvatarText  = RGB(255, 255, 255);          // 头像字母
 
 // 气泡内文字 / emoji 字号。
@@ -149,7 +189,7 @@ const int kEmojiPx      = 30;
 // Win32 的 HMENU 在真正弹出之前拿不到精确尺寸，而落点夹取又必须在弹出<u>之前</u>
 // 算好，故这里按"每项一行"估一个够用的尺寸。估大不会误伤：夹取只在放不下时才
 // 改落点，估大顶多让菜单在靠近屏幕边缘时更早翻向左 / 上，不会让正常位置跑偏。
-const int kMentionMenuEstWidth      = 140;   // 菜单估计宽（最长项"复制 TA 的昵称"约 110px + 边距）
+const int kMentionMenuEstWidth      = 140;   // 菜单估计宽（最长项"取消特别关注"六个汉字约 100px + 边距）
 const int kMentionMenuEstItemHeight = 26;    // 每项估计高
 const int kMessageMenuEstWidth      = 130;   // 气泡自身右键菜单的估计宽（最长项"图片另存为"约 100px + 边距）
 
@@ -165,7 +205,7 @@ const Gdiplus::Color kPinIconColor(255, 0xE6, 0x8A, 0x2E);
 // 取值须小于 kPinIconGap，点击区域才不会伸进气泡、截走点在气泡边缘的操作。
 const int kPinHitPad = 4;
 // 鼠标悬停在图钉上时的提示文字：点击图钉就是取消 Pin。
-const wchar_t* const kPinTooltipText = L"取消 Pin";
+const wchar_t* const kPinTooltipText = TR_NOOP(L"取消 Pin");
 
 // 注：文件类型色块配色已挪到 ChatFileVisual.h / .cpp —— 「消息记录」窗的列表行
 // 也要画这个色块，同一个 .xlsx 在两处得是同一个绿，故抽出来共用。
@@ -298,6 +338,256 @@ int MergedBubbleHeight(size_t lineCount)
          + (int)lineCount * kMergedLineH + kMergedFooterGap + kMergedFooterH;
 }
 
+// ---- Markdown 消息卡片（kMsgText + isMarkdown）----------------------------
+//
+// 卡片的宽度、标题与摘要的取法、高度与内容绘制都在 ChatMarkdownCard（与消息记录窗、聊天记录查看窗的独立卡片控件
+// 共用，2026-10-07 从本文件抽出）；本文件只管把卡片放进气泡、记下命中区域、点击后请宿主打开预览窗口。
+
+// ---- 文件共享卡片（kMsgFileShare）几何 ----------------------------------
+//
+// 版式自上而下：标题一行（类型图标 + 粗体名称）、显示路径一行（灰，为空时不画）、「某某的共享 · 状态」一行（小号灰字）；
+// 有按钮时再画一条分隔线和一行居中的按钮文字（主题橙，不可点时为灰）。卡片要显示的文字由 ChatFileShareCard 算好放在
+// ChatMessage 里，本文件只管画。按钮可点时整张卡片都可点，点击打开共享。
+const int kShareBubbleW      = 280;  // 卡片固定宽，与合并卡片、接龙卡片相同
+const int kSharePadH         = 14;   // 水平内边距（每侧）
+const int kShareTitleTop     = 10;   // 标题距卡片顶
+const int kShareTitleH       = 22;   // 标题行高
+const int kShareTitlePx      = 14;   // 标题字号
+const int kShareIconSize     = 18;   // 标题前类型图标的边长
+const int kShareIconGap      = 6;    // 图标与名称之间的间距
+const int kShareTypeIconSize = 16;   // 文件共享卡片标题前系统类型图标的边长（系统小图标的原尺寸，不缩放）
+const Gdiplus::REAL kShareIconStroke = 1.8f;   // 图标描边宽度（viewBox 24 单位）
+const int kSharePathGap      = 2;    // 标题与路径之间的间距
+const int kSharePathH        = 18;   // 路径行高
+const int kSharePathPx       = 12;   // 路径字号
+const int kShareStatusGap    = 4;    // 路径（没有路径时为标题）与状态行之间的间距
+const int kShareStatusH      = 18;   // 状态行行高
+const int kShareStatusPx     = 11;   // 状态行字号
+const int kShareBottomPad    = 8;    // 没有按钮时状态行下方的留白
+const int kShareBtnGap       = 6;    // 状态行与按钮上方分隔线之间的间距
+const int kShareBtnH         = 34;   // 分隔线下方按钮行的高度，也是按钮的命中矩形高
+const int kShareBtnPx        = 13;   // 按钮文字字号
+const int kShareNoticeGap    = 2;    // 副标题与说明块之间的间距（第 14 期，屏幕共享卡片的强制模式说明）
+const int kShareNoticeLineH  = 16;   // 说明块每行高
+const int kShareNoticeLines  = 2;    // 说明块最多两行（卡片宽 280 时，说明约占一行半）
+const int kShareNoticePx     = 11;   // 说明文字字号
+const int kShareDescGap      = 2;    // 副标题与描述块之间的间距（第 15 期，屏幕共享卡片的共享描述）
+const int kShareDescLineH    = 16;   // 描述块每行高
+const size_t kShareDescLines = 2;    // 描述块最多两行，超出部分省略；只有一行时按一行留高度
+const int kShareDescPx       = 11;   // 描述文字字号
+const COLORREF kShareGrayText     = RGB(0x8A, 0x8A, 0x8A);   // 路径与状态行的灰色
+const COLORREF kShareBtnText      = RGB(0xFF, 0x7A, 0x45);   // 按钮文字（主题橙，与接龙卡片一致）
+const COLORREF kShareBtnHoverText = RGB(0xCC, 0x62, 0x37);   // 鼠标悬停时的按钮文字
+const COLORREF kShareBtnDisabledText = RGB(0xB8, 0xB8, 0xB8);   // 按钮不可点时的文字
+const Gdiplus::Color kShareIconColor(255, 0xFF, 0x7A, 0x45);   // 类型图标（主题橙）
+const Gdiplus::Color kShareDivider(255, 0xE2, 0xDE, 0xDA);     // 按钮上方分隔线，与合并卡片相同
+
+// ---- 语音气泡（kMsgVoice，docs/语音消息方案.md 第 3.2 节）----
+// 一行高的气泡：左侧喇叭图标，中间波形，右侧时长；宽度随时长变化（ChatVoiceBubble 的 VoiceBubbleWidth）。几何、配色与
+// 绘制在 ChatVoicePaint 里，与消息记录窗、合并记录查看窗的语音条共用（第 4 期起）。
+
+// ---- 屏幕共享卡片（kMsgScreenShare）----
+// 与文件共享卡片同一套几何与配色：标题行（屏幕共享图标 + 粗体「屏幕共享」）、副标题行（灰，「某某发起的共享」，占文件
+// 共享卡片的路径行）、状态行（小号灰字），别人发起的卡片再加一行「加入」按钮。按钮可点时整张卡片都可点，点击加入共享。
+const wchar_t* const kScreenShareCardTitle = TR_NOOP(L"屏幕共享");   // 标题行文字：第 15 期起写共享标题，没有标题的旧卡片写这一句
+const wchar_t* const kScreenShareCardButton = TR_NOOP(L"加入");      // 按钮文字
+const wchar_t* const kInfoCardButton = TR_NOOP(L"查看");             // 群公告卡片、群备忘卡片复用本版式时的按钮文字
+const wchar_t* const kCloudRecordCardButton = TR_NOOP(L"播放");      // 云端录像卡片复用本版式时的按钮文字
+const int kGroupCallCardVideo = 2;   // 群通话卡片的媒体类型取值：群视频（标题前画摄像机，其余画电话）
+
+// ---- 密聊邀请卡片（kMsgSecretInvite，docs/密聊方案.md 4.8）----
+// 与入群邀请卡片同一套几何与配色：标题行（挂锁 + 粗体标题）、说明行（灰）、剩余秒数（小号灰字），底部按钮行。
+// 发起方一侧只有「取消」一个按钮、占满整行；被邀请方一侧左半「同意」右半「忽略」，中间画一条竖向分隔线。
+const int kSecretBtnDividerInset = 8;   // 按钮行中间竖向分隔线上下各缩进的像素数，不与横向分隔线、卡片底边相接
+
+// 共享卡片的总高：随有无路径行、描述块的行数（屏幕共享卡片的共享描述，第 15 期，0 表示没有描述）、有无说明块
+// （屏幕共享卡片的强制模式说明，第 14 期）、有无按钮变化。
+int ShareBubbleHeight(bool hasPath, bool hasButton, bool hasNotice = false, size_t descLines = 0)
+{
+    int h = kShareTitleTop + kShareTitleH;
+    if (hasPath)
+    {
+        h += kSharePathGap + kSharePathH;
+    }
+    if (descLines > 0)
+    {
+        h += kShareDescGap + static_cast<int>(descLines) * kShareDescLineH;
+    }
+    if (hasNotice)
+    {
+        h += kShareNoticeGap + kShareNoticeLines * kShareNoticeLineH;
+    }
+    h += kShareStatusGap + kShareStatusH;
+    h += hasButton ? (kShareBtnGap + kShareBtnH) : kShareBottomPad;
+    return h;
+}
+
+// 文件共享卡片标题前的系统类型图标按哪一类取：磁盘与单个文件照原样，其余（文件夹，以及卡片内容不可用时）按文件夹。
+int ShareCardIconItemKind(int shareKind)
+{
+    if (shareKind == share_kind_disk || shareKind == share_kind_file)
+        return shareKind;
+    return shellicon::kItemFolder;
+}
+
+// ---- 群接龙卡片（kMsgRelay）几何 ----------------------------------------
+//
+// 版式自上而下：标题一行（接龙图标 + 粗体标题）、说明至多两行（灰）、至多 kRelayCardPreviewLines
+// 条接龙（深色；一条都没有时写「还没有人参与」）、状态行（小号灰字）；有按钮时再画一条分隔线和
+// 一行居中的按钮文字（主题橙）。卡片要显示的文字由 ChatRelayCard 算好放在 ChatMessage 里，
+// 本文件只管画。整张卡片可点（打开详情窗），按钮那一行单独命中（打开详情窗并聚焦输入框）。
+const int kRelayBubbleW      = 280;  // 卡片固定宽，与合并卡片相同
+const int kRelayPadH         = 14;   // 水平内边距（每侧）
+const int kRelayTitleTop     = 10;   // 标题距卡片顶
+const int kRelayTitleH       = 22;   // 标题行高
+const int kRelayTitlePx      = 14;   // 标题字号
+const int kRelayIconSize     = 16;   // 标题前接龙图标的边长
+const int kRelayIconGap      = 6;    // 图标与标题文字之间的间距
+const Gdiplus::REAL kRelayIconStroke = 2.0f;   // 图标描边宽度（viewBox 24 单位）
+const int kRelayNoteGap      = 2;    // 标题与说明之间的间距
+const int kRelayNoteLineH    = 18;   // 说明每行的行高
+const int kRelayNotePx       = 12;   // 说明字号
+const size_t kRelayNoteMaxLines = 2; // 说明最多显示几行，再多以省略号收尾（方案 §3.2）
+const int kRelayEntriesGap   = 6;    // 说明（没有说明时为标题）与第一条接龙之间的间距
+const int kRelayEntryH       = 20;   // 每条接龙的行高
+const int kRelayEntryPx      = 13;   // 接龙文字字号
+const int kRelayStatusGap    = 4;    // 最后一条接龙与状态行之间的间距
+const int kRelayStatusH      = 18;   // 状态行行高
+const int kRelayStatusPx     = 11;   // 状态行字号
+const int kRelayBottomPad    = 8;    // 没有按钮时状态行下方的留白
+const int kRelayBtnGap       = 6;    // 状态行与按钮上方分隔线之间的间距
+const int kRelayBtnH         = 34;   // 分隔线下方按钮行的高度，也是按钮的命中矩形高
+const int kRelayBtnPx        = 13;   // 按钮文字字号
+const COLORREF kRelayGrayText  = RGB(0x8A, 0x8A, 0x8A);   // 说明、状态行与「还没有人参与」的灰色
+const COLORREF kRelayBtnText   = RGB(0xFF, 0x7A, 0x45);   // 按钮文字（主题橙）
+const COLORREF kRelayBtnHoverText = RGB(0xCC, 0x62, 0x37);   // 鼠标悬停时的按钮文字（主题橙加深）
+const Gdiplus::Color kRelayIconColor(255, 0xFF, 0x7A, 0x45);   // 标题前图标（主题橙）
+const Gdiplus::Color kRelayDivider(255, 0xE2, 0xDE, 0xDA);     // 按钮上方分隔线，与合并卡片相同
+
+// 接龙卡片的总高：随说明行数（0 ~ kRelayNoteMaxLines）、接龙条数（0 ~ kRelayCardPreviewLines，
+// 0 条时仍占一行写「还没有人参与」）与有无按钮变化。
+int RelayBubbleHeight(size_t noteLines, size_t entryLines, bool hasButton)
+{
+    int h = kRelayTitleTop + kRelayTitleH;
+    if (noteLines > 0)
+    {
+        h += kRelayNoteGap + (int)noteLines * kRelayNoteLineH;
+    }
+    const size_t shownEntries = (entryLines > 0) ? entryLines : 1;
+    h += kRelayEntriesGap + (int)shownEntries * kRelayEntryH;
+    h += kRelayStatusGap + kRelayStatusH;
+    if (hasButton)
+    {
+        h += kRelayBtnGap + kRelayBtnH;
+    }
+    else
+    {
+        h += kRelayBottomPad;
+    }
+    return h;
+}
+
+// 接龙卡片底部按钮的文字；不显示按钮时返回 NULL。
+LPCWSTR RelayButtonLabel(int button)
+{
+    switch (button)
+    {
+    //本人还没参与、名额未满
+    case kRelayButtonJoin:
+        return TR(L"参与接龙");
+
+    //本人已参与，修改自己那一条
+    case kRelayButtonModify:
+        return TR(L"修改我的");
+
+    //已结束、已截止、被禁言，或名额已满且本人未参与
+    default:
+        return NULL;
+    }
+}
+
+// 把接龙说明按 width 像素折成至多 maxLines 行：说明里的换行照常分段（空行跳过），段内按字符
+// 折行；放不下的部分在最后一行末尾以省略号收尾。hdc 上须已选好说明所用的字体。
+void WrapRelayNote(HDC hdc, const CString& note, int width, size_t maxLines, std::vector<CString>& out)
+{
+    out.clear();
+    if (note.IsEmpty() || width <= 0 || maxLines == 0)
+    {
+        return;
+    }
+
+    CString normalized = note;
+    normalized.Remove(L'\r');
+
+    bool truncated = false;
+    int pos = 0;
+    const int total = normalized.GetLength();
+    while (pos < total)
+    {
+        int lineEnd = normalized.Find(L'\n', pos);
+        if (lineEnd < 0)
+        {
+            lineEnd = total;
+        }
+        CString para = normalized.Mid(pos, lineEnd - pos);
+        pos = lineEnd + 1;
+        if (para.IsEmpty())
+        {
+            continue;
+        }
+
+        // 段内折行：每次取能放进 width 的最多字符数；一个字符都放不下时也至少取一个，避免死循环
+        while (!para.IsEmpty())
+        {
+            if (out.size() >= maxLines)
+            {
+                truncated = true;
+                break;
+            }
+            int fit = 0;
+            SIZE sz = { 0, 0 };
+            ::GetTextExtentExPointW(hdc, (LPCWSTR)para, para.GetLength(), width, &fit, NULL, &sz);
+            if (fit <= 0)
+            {
+                fit = 1;
+            }
+            out.push_back(para.Left(fit));
+            para = para.Mid(fit);
+        }
+        if (truncated)
+        {
+            break;
+        }
+        if (out.size() >= maxLines && pos < total)
+        {
+            // 行数已满而后面还有内容：只要后面不全是空行就算被截断
+            CString rest = normalized.Mid(pos);
+            rest.Remove(L'\n');
+            truncated = !rest.IsEmpty();
+            break;
+        }
+    }
+
+    // 被截断时把最后一行缩短到能接上省略号
+    if (truncated && !out.empty())
+    {
+        const wchar_t* const kEllipsis = L"\x2026";
+        CString& last = out.back();
+        for (;;)
+        {
+            CString candidate = last + kEllipsis;
+            SIZE sz = { 0, 0 };
+            ::GetTextExtentPoint32W(hdc, (LPCWSTR)candidate, candidate.GetLength(), &sz);
+            if (sz.cx <= width || last.IsEmpty())
+            {
+                last = candidate;
+                break;
+            }
+            last = last.Left(last.GetLength() - 1);
+        }
+    }
+}
+
 //文件夹气泡状态行的一行文字及其配色。之所以把三样打包返回，是因为它们必须一起决定：
 //同一句话在不同状态下颜色与字重都不同（进行中用主题橙半粗、失败用红、已结束用灰）。
 struct FolderStatusLine
@@ -327,14 +617,14 @@ FolderStatusLine BuildFolderStatusLine(const ChatMessage& msg)
     {
     //邀请已发出、等待应答：发送端在等，接收端要当场决定收不收
     case kFolderInviting:
-        line.m_text  = msg.fromMe ? _T("等待对方接收…") : _T("对方想给你发送一个文件夹");
+        line.m_text  = msg.fromMe ? TR(L"等待对方接收…") : TR(L"对方想给你发送一个文件夹");
         line.m_color = RGB(0xFF, 0x7A, 0x45);
         line.m_bold  = true;
         break;
 
     //接收端正在逐级建目录，还没有字节传出去
     case kFolderPreparing:
-        line.m_text  = msg.fromMe ? _T("对方正在创建目录…") : _T("正在创建目录…");
+        line.m_text  = msg.fromMe ? TR(L"对方正在创建目录…") : TR(L"正在创建目录…");
         line.m_color = RGB(0xFF, 0x7A, 0x45);
         line.m_bold  = true;
         break;
@@ -343,16 +633,16 @@ FolderStatusLine BuildFolderStatusLine(const ChatMessage& msg)
     case kFolderTransferring:
         if (!msg.folderCurFile.IsEmpty())
         {
-            line.m_text.Format(_T("正在传输 %s"), (LPCTSTR)msg.folderCurFile);
+            line.m_text.Format(TR(L"正在传输 %s"), (LPCTSTR)msg.folderCurFile);
         }
         else
         {
-            line.m_text = _T("正在传输…");
+            line.m_text = TR(L"正在传输…");
         }
         if (msg.folderCurIndex > 0)
         {
             //序号没报上来时（刚开始传第一个文件）这一段留空，不硬凑一个"第 0 个"
-            line.m_counter.Format(_T("第 %d / 共 %d 个"),
+            line.m_counter.Format(TR(L"第 %d / 共 %d 个"),
                                   msg.folderCurIndex, msg.folderFileCount);
         }
         line.m_color = RGB(0xFF, 0x6A, 0x3D);
@@ -361,53 +651,53 @@ FolderStatusLine BuildFolderStatusLine(const ChatMessage& msg)
 
     //全部文件传完并通过校验
     case kFolderCompleted:
-        line.m_text  = msg.fromMe ? _T("全部发送完成") : _T("全部接收完成");
+        line.m_text  = msg.fromMe ? TR(L"全部发送完成") : TR(L"全部接收完成");
         line.m_color = RGB(0x3B, 0xA5, 0x5D);   // 绿：这次传输已经安全落地
         line.m_bold  = true;
         break;
 
     //接收端点了「拒绝」，一个字节都没传
     case kFolderRejected:
-        line.m_text = msg.fromMe ? _T("对方已拒绝接收") : _T("已拒绝接收");
+        line.m_text = msg.fromMe ? TR(L"对方已拒绝接收") : TR(L"已拒绝接收");
         break;
 
     //发送端在对方应答前撤回了邀请
     case kFolderInviteCanceled:
-        line.m_text = msg.fromMe ? _T("已撤回邀请") : _T("对方已撤回邀请");
+        line.m_text = msg.fromMe ? TR(L"已撤回邀请") : TR(L"对方已撤回邀请");
         break;
 
     //发起邀请时对方无在线连接，或响铃期间对方退出登录
     case kFolderPeerOffline:
-        line.m_text = _T("对方不在线，传输未开始");
+        line.m_text = TR(L"对方不在线，传输未开始");
         break;
 
     //限定时间内无人应答，服务端自动结束了会话
     case kFolderTimeout:
-        line.m_text = _T("邀请已超时");
+        line.m_text = TR(L"邀请已超时");
         break;
 
     //传到一半失败：具体原因由下面单独的一行给出，这里只给状态本身
     case kFolderFailed:
-        line.m_text  = _T("传输失败");
+        line.m_text  = TR(L"传输失败");
         line.m_color = RGB(0xE5, 0x39, 0x35);
         line.m_bold  = true;
         break;
 
     //失败且已超出保留期：续传位点作废，措辞要让用户明白"重试已经没用了"
     case kFolderExpired:
-        line.m_text  = _T("传输失败，已超过可续传的时限");
+        line.m_text  = TR(L"传输失败，已超过可续传的时限");
         line.m_color = RGB(0xE5, 0x39, 0x35);
         break;
 
     //任一端在传输过程中点了「取消」
     case kFolderUserCanceled:
-        line.m_text = _T("已取消");
+        line.m_text = TR(L"已取消");
         break;
 
     //未知状态：宿主漏填 folderState（留了 0），或今后新增状态而本表没跟上。
     //给一句中性文案，好过让这一行空着
     default:
-        line.m_text = _T("文件夹传输");
+        line.m_text = TR(L"文件夹传输");
         break;
     }
     return line;
@@ -424,13 +714,13 @@ CString BuildFolderSummaryText(const ChatMessage& msg)
     CString text;
     if (msg.folderDirCount > 0)
     {
-        text.Format(_T("%d 个文件 · %d 个目录 · 共 %s"),
+        text.Format(TR(L"%d 个文件 · %d 个目录 · 共 %s"),
                     msg.folderFileCount, msg.folderDirCount,
                     (LPCTSTR)msg.folderSize);
     }
     else
     {
-        text.Format(_T("%d 个文件 · 共 %s"),
+        text.Format(TR(L"%d 个文件 · 共 %s"),
                     msg.folderFileCount, (LPCTSTR)msg.folderSize);
     }
     return text;
@@ -688,6 +978,9 @@ BubbleTextStyle ResolveTextStyle(const ChatMessage& msg)
 // 剪贴板写入已抽到 ChatTextSelection（右键「复制」与消息区 Ctrl+C 共用同一份，
 // 见那边的 PutTextToClipboard 注释），本文件直接用它。
 
+// 秒换算成毫秒：复制接龙卡片时按当前时刻写末行，time() 给的是秒
+const int64_t kMsPerSecondForCopy = 1000;
+
 // 把一条消息的可复制文本取出来（不同 kind 取不同字段）。
 CString MessageCopyText(const ChatMessage& msg)
 {
@@ -703,7 +996,10 @@ CString MessageCopyText(const ChatMessage& msg)
         return msg.folderName;
     case kMsgImage:
         return msg.imageCaption.IsEmpty()
-                   ? CString(_T("[图片]")) : msg.imageCaption;
+                   ? CString(TR(L"[图片]")) : msg.imageCaption;
+    case kMsgRelay:
+        //与详情窗「复制为文本」同一份文字（方案 §3.7），末行按复制时刻现拼
+        return RelayCopyTextForMessage(msg, (int64_t)time(NULL) * kMsPerSecondForCopy);
     default:
         return msg.text;
     }
@@ -724,6 +1020,35 @@ void ChatBubble::ResetHeavyMeasureCount()
     s_heavyMeasureCount = 0;
 }
 
+// 渲染缓存重画次数的进程级计数器与超长气泡分段阈值（详见 ChatBubble.h 的声明）。
+unsigned long ChatBubble::s_renderPassCount = 0;
+int ChatBubble::s_tallSliceThresholdPx = kDefaultTallSliceThresholdPx;
+
+int ChatBubble::TallSliceThreshold()
+{
+    return s_tallSliceThresholdPx;
+}
+
+void ChatBubble::SetTallSliceThreshold(int px)
+{
+    s_tallSliceThresholdPx = px;
+}
+
+int ChatBubble::GetRenderCacheHeight() const
+{
+    return (m_renderDC != NULL) ? m_renderH : 0;
+}
+
+unsigned long ChatBubble::RenderPassCount()
+{
+    return s_renderPassCount;
+}
+
+void ChatBubble::ResetRenderPassCount()
+{
+    s_renderPassCount = 0;
+}
+
 ChatBubble::ChatBubble()
     : m_measuredWidth(-1)
     , m_measuredMultiSel(false)
@@ -736,6 +1061,7 @@ ChatBubble::ChatBubble()
     , m_dragArmed(false)
     , m_dragPressPt()
     , m_readReceiptEnabled(false)
+    , m_avatarGray(false)
     , m_fileBtnCount(0)
     , m_fileHoverIdx(-1)
     , m_folderBtnCount(0)
@@ -747,16 +1073,39 @@ ChatBubble::ChatBubble()
     , m_renderH(0)
     , m_renderMultiSel(false)
     , m_renderDirty(true)
+    , m_renderRowH(0)
+    , m_renderSliceTop(0)
     , m_selBandDirty(false)
     , m_selBandRect()
     , m_textPlacedValid(false)
     , m_textPlacedW(0)
+    , m_measuredLineW(-1)
+    , m_measuredMaxTextW(0)
+    , m_markdownActive(false)
+    , m_markdownFailed(false)
+    , m_mdCardSummaryH(0)
+    , m_mdCardRel()
+    , m_codeActive(false)
+    , m_codePrepared(false)
+    , m_codeCopied(false)
+    , m_codeHover(kCodePartNone)
+    , m_codeCardRel()
     , m_quoteRectRel()
     , m_quoteThumbLogged(false)
     , m_pinRectRel()
     , m_pinHover(false)
     , m_linkPressIdx(-1)
     , m_mergedPressed(false)
+    , m_relayPressed(false)
+    , m_relayBtnHover(false)
+    , m_recallEditPressed(false)
+    , m_recallEditHover(false)
+    , m_sharePressed(false)
+    , m_shareBtnHover(false)
+    , m_secretBtnHover(-1)
+    , m_secretBtnPressed(-1)
+    , m_voicePressed(false)
+    , m_voiceFailPressed(false)
 {
     m_msg.kind = kMsgText;
     m_msg.fromMe = false;
@@ -766,6 +1115,12 @@ ChatBubble::ChatBubble()
     m_msg.read = false;
     ::SetRectEmpty(&m_imageRect);
     ::SetRectEmpty(&m_mergedRect);
+    ::SetRectEmpty(&m_relayRect);
+    ::SetRectEmpty(&m_relayBtnRect);
+    ::SetRectEmpty(&m_shareRect);
+    ::SetRectEmpty(&m_shareBtnRect);
+    ::SetRectEmpty(&m_voiceRect);
+    ::SetRectEmpty(&m_voiceFailRect);
     for (int i = 0; i < 3; ++i)
     {
         ::SetRectEmpty(&m_fileBtnRect[i]);
@@ -804,8 +1159,8 @@ bool ChatBubble::IsRenderCacheable() const
     }
 
     // 文字 / emoji / 时间分隔行绘制时不记录任何宿主坐标系命中矩形，可安全缓存。
-    // 图片 / 文件 / 文件夹 / 合并卡片行绘制时要写 m_imageRect / m_fileBtnRect /
-    // m_folderBtnRect / m_mergedRect 供命中测试，不能缓存。
+    // 图片 / 文件 / 文件夹 / 合并卡片 / 接龙卡片行绘制时要写 m_imageRect / m_fileBtnRect /
+    // m_folderBtnRect / m_mergedRect / m_relayRect 供命中测试，不能缓存。
     return m_msg.kind == kMsgText
         || m_msg.kind == kMsgEmoji
         || m_msg.kind == kMsgTime;
@@ -874,8 +1229,240 @@ bool ChatBubble::IsTextSelectable() const
     // 所有文字气泡都支持选中 —— 含 @ 的已经和不含 @ 的走同一套手写折行排版，
     // 选区模型与画出来的文字同源，不会错位（早先含 @ 的走 GDI+，两套排版对不上，
     // 才不得不禁掉选中）。时间分隔 / 撤回提示 / 图片 / 文件行都没有可选文字。
+    // 代码卡片没有可选文字（第一版不支持拖选，见 docs/代码片段方案.md 第 8 节）
+    if (CodeActive())
+    {
+        return false;
+    }
+    // Markdown 卡片没有可选文字：点卡片打开预览窗口，在那里选中复制（docs/Markdown消息方案.md 第 11.3 节）
+    if (MarkdownActive())
+    {
+        return false;
+    }
     return m_msg.kind == kMsgText
         && !m_selLayout.m_lines.empty();
+}
+
+bool ChatBubble::MarkdownActive() const
+{
+    return m_markdownActive && m_msg.kind == kMsgText && m_markdown.IsParsed();
+}
+
+int ChatBubble::SelectableTextLength() const
+{
+    return (int)m_selFlatText.size();
+}
+
+std::wstring ChatBubble::LinkUrlByIndex(int index) const
+{
+    if (index < 0 || (std::size_t)index >= m_linksFlat.size())
+    {
+        return std::wstring();
+    }
+    return m_linksFlat[(std::size_t)index].m_url;
+}
+
+bool ChatBubble::PointInMarkdownCard(POINT pt) const
+{
+    if (!MarkdownActive() || ::IsRectEmpty(&m_mdCardRel))
+    {
+        return false;
+    }
+    RECT rc = m_mdCardRel;
+    ::OffsetRect(&rc, m_rcItem.left, m_rcItem.top);
+    return ::PtInRect(&rc, pt) != FALSE;
+}
+
+void ChatBubble::PostMarkdownPreviewOpen()
+{
+    if (!MarkdownActive())
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    MarkdownPreviewOpenRequest* pReq = new MarkdownPreviewOpenRequest();
+    pReq->m_sourceUtf8 = MarkdownSourceFromBody(m_msg.text);
+    pReq->m_title = m_mdCardTitle;
+    pReq->m_sender = std::wstring((LPCWSTR)m_msg.senderName);
+    pReq->m_fromMe = m_msg.fromMe;
+    pReq->m_timestampMs = m_msg.timestampMs;
+    pReq->m_key = (m_msg.msgid > 0) ? std::to_string(m_msg.msgid) : m_msg.clientMsgId;
+    const unsigned bytes = (unsigned)pReq->m_sourceUtf8.size();
+    if (!::PostMessage(hwnd, WM_CHAT_OPEN_MARKDOWN_PREVIEW, 0, (LPARAM)pReq))
+    {
+        delete pReq;
+        return;
+    }
+    LOG_INFO("chat bubble: open markdown preview requested, msgid=%lld, bytes=%u.", m_msg.msgid, bytes);
+}
+
+// ====================================================================
+// 代码片段（docs/代码片段方案.md 第 5.3 节）
+// ====================================================================
+
+namespace {
+
+// 代码卡片四周留出的气泡边宽度（像素），与图片气泡每侧的内边距相同
+const int kCodeBubblePad = kImageBubblePad / 2;
+
+// 代码卡片可用的整列宽度：内容区宽度减去两侧的头像列（边距、头像、间距），比文字气泡的 62% 宽
+int CodeColumnWidth(int contentW)
+{
+    const int w = contentW - 2 * (kEdgePad + kAvatarSize + kAvatarGap);
+    return (w > 0) ? w : 0;
+}
+
+} // 匿名 namespace（代码片段）
+
+bool ChatBubble::CodeActive() const
+{
+    return m_codeActive && m_msg.kind == kMsgText && m_msg.isCode;
+}
+
+bool ChatBubble::MeasureCode(HDC hdc, int contentW)
+{
+    m_codeActive = false;
+    if (m_msg.kind != kMsgText || !m_msg.isCode)
+    {
+        return false;
+    }
+    // 规范化与着色只在内容变化后做一次（SetMessage 会清空）
+    if (!m_codePrepared)
+    {
+        m_codeContent = PrepareCodeBlockContent(std::wstring((LPCWSTR)m_msg.text), m_msg.codeLang, m_msg.codeNotes);
+        m_codePrepared = true;
+    }
+    const int columnW = CodeColumnWidth(contentW);
+    CodeBlockOptions options;
+    options.m_footerOpensViewer = true;
+    options.m_copied = m_codeCopied;
+    LayoutCodeBlock(hdc, m_codeContent, options, columnW - kCodeBubblePad * 2, m_codeLayout);
+
+    // 普通文字的字符级模型一律清空：它们只属于普通文字路径，留着会让命中、菜单按旧内容判断
+    m_selLayout = SelLayout();
+    m_selFlatText.clear();
+    m_measuredPlaced.clear();
+    m_measuredLineW = -1;
+    m_linksFlat.clear();
+    m_atsFlat.clear();
+
+    m_codeActive = true;
+    m_textBubbleW = m_codeLayout.m_size.cx + kCodeBubblePad * 2;
+    m_textBubbleH = m_codeLayout.m_size.cy + kCodeBubblePad * 2;
+    if (m_msg.hasQuote)
+    {
+        // 引用块按文字气泡的内边距画在顶部，卡片接在它下面：引用块的高度与宽度下限照文字气泡计入，
+        // 顶部再补上文字气泡与卡片气泡边之间的差值
+        ApplyQuoteToTextBubble(columnW);
+        m_textBubbleH += kTextPadV - kCodeBubblePad;
+    }
+    if (m_textBubbleW > columnW)
+    {
+        m_textBubbleW = columnW;
+    }
+    return true;
+}
+
+int ChatBubble::CodePartAtPoint(POINT pt) const
+{
+    if (!CodeActive() || ::IsRectEmpty(&m_codeCardRel))
+    {
+        return kCodePartNone;
+    }
+    POINT local = { pt.x - (m_rcItem.left + m_codeCardRel.left), pt.y - (m_rcItem.top + m_codeCardRel.top) };
+    return HitTestCodeBlock(m_codeLayout, local);
+}
+
+bool ChatBubble::UpdateCodeHover(POINT pt, bool inside)
+{
+    int part = kCodePartNone;
+    if (inside && !ParentInMultiSelect())
+    {
+        part = CodePartAtPoint(pt);
+    }
+    // 只有「复制」与底栏加悬停效果（下划线），正文不加
+    if (part == kCodePartBody)
+    {
+        part = kCodePartNone;
+    }
+    bool changed = false;
+    if (part != m_codeHover)
+    {
+        m_codeHover = part;
+        changed = true;
+    }
+    // 鼠标离开本行：「已复制」恢复为「复制」
+    if (!inside && m_codeCopied)
+    {
+        m_codeCopied = false;
+        SetCodeBlockCopied(m_codeLayout, false);
+        changed = true;
+    }
+    if (changed)
+    {
+        Invalidate();
+    }
+    return changed;
+}
+
+void ChatBubble::CopyCodeToClipboard(HWND hwnd)
+{
+    if (!CodeActive() || !::IsWindow(hwnd))
+    {
+        return;
+    }
+    // 只写纯文字：Flamingo 自己的剪贴板格式会把正文里的 /f["N"] 当作表情还原，代码里恰好有这种写法时会被改掉
+    const std::wstring text = CodeTextForClipboard(m_codeContent.m_code);
+    PutTextToClipboard(hwnd, text.c_str());
+    m_codeCopied = true;
+    SetCodeBlockCopied(m_codeLayout, true);
+    Invalidate();
+    LOG_INFO("chat bubble: code snippet copied, msgid=%lld, %u chars.", m_msg.msgid, (unsigned)text.size());
+}
+
+void ChatBubble::PostCodeViewerOpen()
+{
+    PostCodeViewerOpen(kCodeViewerActionView);
+}
+
+void ChatBubble::PostCodeViewerOpen(int action)
+{
+    if (!CodeActive())
+    {
+        return;
+    }
+    //追加批注要有服务器 msgid（引用原消息时用到）
+    if (action == kCodeViewerActionAnnotate && !CanAnnotateCodeMessage(m_msg))
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    CodeViewerOpenRequest* pReq = new CodeViewerOpenRequest();
+    pReq->m_action = action;
+    pReq->m_code = m_codeContent.m_code;
+    pReq->m_lang = m_msg.codeLang;
+    pReq->m_key = (m_msg.msgid > 0) ? std::to_string(m_msg.msgid) : m_msg.clientMsgId;
+    pReq->m_notes = m_msg.codeNotes;
+    pReq->m_msgid = m_msg.msgid;
+    pReq->m_senderId = m_msg.senderUserId;
+    pReq->m_fromMe = m_msg.fromMe;
+    if (!::PostMessage(hwnd, WM_CHAT_OPEN_CODE_VIEWER, 0, (LPARAM)pReq))
+    {
+        delete pReq;
+        return;
+    }
+    LOG_INFO("chat bubble: code snippet request posted, action=%d, msgid=%lld, lines=%d, notes=%u.", action,
+             m_msg.msgid, m_codeContent.m_lineCount, (unsigned)m_msg.codeNotes.size());
 }
 
 bool ChatBubble::HasTextSelection() const
@@ -911,7 +1498,7 @@ void ChatBubble::SelectAllText()
     const int oldAnchor = m_selAnchor;
     const int oldCaret  = m_selCaret;
     m_selAnchor = 0;
-    m_selCaret  = (int)m_selFlatText.size();
+    m_selCaret  = SelectableTextLength();
     InvalidateSelectionChange(oldAnchor, oldCaret);
 }
 
@@ -925,7 +1512,7 @@ CString ChatBubble::GetSelectedText() const
     int e = 0;
     NormalizeSelRange(m_selAnchor, m_selCaret, s, e);
     // 表情替换成 [表情]，与会话列表预览同口径（BodyToDigest 也是这么做的）。
-    const std::wstring picked = ExtractSelectedText(m_selFlatText, s, e, L"[表情]");
+    const std::wstring picked = ExtractSelectedText(m_selFlatText, s, e, TR(L"[表情]"));
     return CString(picked.c_str());
 }
 
@@ -1201,6 +1788,7 @@ void ChatBubble::SetMessage(const ChatMessage& msg)
     m_selFlatText.clear();
     // 内容变了，折行测量缓存作废，须重新 Measure。
     m_measuredWidth = -1;
+    m_measuredLineW = -1;       // 测量阶段的排版结果随之作废，绘制时不再复用
     // @ 片段的扁平口径副本跟着作废。非文字消息的 Measure 会提前返回、不重建它，
     // 若不在这里清掉，一条"文字消息改成图片消息"的气泡会留着上一条的 @ 片段，
     // 右键时按早已不存在的区间做命中。
@@ -1211,6 +1799,22 @@ void ChatBubble::SetMessage(const ChatMessage& msg)
     ::SetRectEmpty(&m_pinRectRel);
     POINT noPoint = { 0, 0 };
     SetPinHover(false, noPoint);
+    // Markdown 文档按新消息重新解析（下次 Measure 时），解析失败的记录与卡片内容一并复位
+    m_markdown.Reset();
+    m_markdownActive = false;
+    m_markdownFailed = false;
+    m_mdCardTitle.clear();
+    m_mdCardSummary.clear();
+    m_mdCardSummaryH = 0;
+    ::SetRectEmpty(&m_mdCardRel);
+    // 代码卡片按新消息重新准备（下次 Measure 时），悬停与「已复制」状态一并复位
+    m_codeContent = CodeBlockContent();
+    m_codeLayout = CodeBlockLayout();
+    m_codeActive = false;
+    m_codePrepared = false;
+    m_codeCopied = false;
+    m_codeHover = kCodePartNone;
+    ::SetRectEmpty(&m_codeCardRel);
     // 换了消息（可能换了发送者头像）：头像位图由 ChatAvatarBitmapCache 按路径共用，
     // 下次绘制按新消息的路径去取即可，本行不持有需要释放的位图。
     Invalidate();
@@ -1242,6 +1846,27 @@ ChatReceiptKind DecideReadReceipt(const ChatMessage& msg, bool receiptEnabled)
         return kReceiptNone;
     }
     return msg.read ? kReceiptRead : kReceiptUnread;
+}
+
+void ChatBubble::SetSendFailed(const CString& reason)
+{
+    m_msg.sendFailed = true;
+    m_msg.failReason = reason;
+    //图片、文件行同时置为各自的失败态：气泡本体按原有的失败样式画（破图占位、文件失败状态与重试入口）
+    if (m_msg.kind == kMsgImage)
+    {
+        m_msg.imageState = kChatImageStateFailed;
+    }
+    else if (m_msg.kind == kMsgFile)
+    {
+        m_msg.fileState = kFileFailed;
+    }
+    else if (m_msg.kind == kMsgVoice)
+    {
+        //语音：不再画「发送中」的圆环，改画红色感叹号（点它重发）
+        m_msg.voiceState = kVoiceStateReady;
+    }
+    Invalidate();
 }
 
 bool ChatBubble::MarkPeerRead()
@@ -1281,6 +1906,13 @@ void ChatBubble::BackfillServerIds(long long msgid, long long timestampMs)
         m_msg.fileMsgid = msgid;
     }
 
+    // 语音：回执成功，左侧「发送中」的圆环消失
+    if (m_msg.kind == kMsgVoice && m_msg.voiceState == kVoiceStateSending)
+    {
+        m_msg.voiceState = kVoiceStateReady;
+        Invalidate();
+    }
+
     // 开启回执的行拿到 msgid 后，回执行从「不显示」变成「未读」，要重画一次。只重画、
     // 不重排：回执行的高度在拿到 msgid 之前就已经预留好了。
     if (m_readReceiptEnabled && m_msg.fromMe)
@@ -1303,6 +1935,17 @@ void ChatBubble::SetSenderAvatarImage(const CString& path)
     Invalidate();
 }
 
+void ChatBubble::SetAvatarGray(bool gray)
+{
+    if (m_avatarGray == gray)
+    {
+        return;
+    }
+    m_avatarGray = gray;
+    //本类的同名 Invalidate 会把渲染缓存置脏：文字气泡的头像画在渲染缓存里，不置脏就仍显示旧颜色
+    Invalidate();
+}
+
 bool ChatBubble::SetSenderInfo(const CString& name, const CString& glyph, COLORREF color,
                                const CString& imagePath)
 {
@@ -1316,6 +1959,18 @@ bool ChatBubble::SetSenderInfo(const CString& name, const CString& glyph, COLORR
     m_msg.senderAvatarColor     = color;
     m_msg.senderAvatarImagePath = imagePath;
     //本类的同名 Invalidate 会把渲染缓存置脏，文字气泡下一帧按新的名字与头像重画
+    Invalidate();
+    return true;
+}
+
+bool ChatBubble::SetSenderBot(bool isBot)
+{
+    if (m_msg.senderIsBot == isBot)
+    {
+        return false;
+    }
+    m_msg.senderIsBot = isBot;
+    //本类的同名 Invalidate 会把渲染缓存置脏，下一帧按新的标记重画名字行
     Invalidate();
     return true;
 }
@@ -1356,6 +2011,49 @@ void ChatBubble::SetImageDownloadFailed()
 {
     //与上传失败分开记：两者显示的说明文字不同（"图片加载失败" / "图片发送失败"）。
     m_msg.imageState = kChatImageStateDownloadFailed;
+    Invalidate();
+}
+
+void ChatBubble::SetVoiceDownloaded(const CString& localPath)
+{
+    m_msg.voiceLocalPath = localPath;
+    m_msg.voiceState = kVoiceStateReady;
+    Invalidate();
+}
+
+void ChatBubble::SetVoiceDownloadFailed()
+{
+    m_msg.voiceState = kVoiceStateDownloadFailed;
+    Invalidate();
+}
+
+void ChatBubble::SetVoiceDownloading()
+{
+    m_msg.voiceState = kVoiceStateDownloading;
+    Invalidate();
+}
+
+void ChatBubble::SetVoicePlaying(bool playing)
+{
+    m_msg.voicePlaying = playing;
+    m_msg.voicePlayFrame = 0;
+    //开始播放即算已听：对方发来的未听红点消失（本地库由宿主聊天窗另行标记）
+    if (playing)
+    {
+        m_msg.voicePlayed = true;
+    }
+    Invalidate();
+}
+
+void ChatBubble::SetVoicePlayFrame(int frame)
+{
+    m_msg.voicePlayFrame = frame;
+    Invalidate();
+}
+
+void ChatBubble::SetVoicePlayed()
+{
+    m_msg.voicePlayed = true;
     Invalidate();
 }
 
@@ -1468,6 +2166,10 @@ void ChatBubble::SetFileUploadStarted()
 {
     m_msg.fileState    = 1;   // 上传中
     m_msg.fileProgress = 0;   // 重发从头开始，清掉上一轮停在半截的进度
+    //重发时清掉上一次被服务端拒绝留下的失败标记与原因：否则这次发送成功后红色感叹号与原因仍在。
+    //群聊里原因行随之去掉、行高变矮，调用方（ChatMessageList::MarkFileUploadStartedByClientMsgId）会重排
+    m_msg.sendFailed = false;
+    m_msg.failReason.Empty();
     Invalidate();
 }
 
@@ -1518,6 +2220,7 @@ void ChatBubble::RecallToTip(const CString& tipText)
     m_msg.hasQuote = false;
     m_selected = false;
     m_measuredWidth = -1;
+    m_measuredLineW = -1;       // 测量阶段的排版结果随之作废，绘制时不再复用
     // 撤回后本行变成系统提示，原消息的 @ 片段随之作废（理由同 SetMessage）。
     m_msg.ats.clear();
     m_atsFlat.clear();
@@ -1577,8 +2280,83 @@ std::vector<RenderSpan> ConvertAtsToFlat(const CString& body,
 
 } // 匿名 namespace（@ 片段下标换算）
 
+namespace {
+
+// 按本条消息的字体量出单行文字气泡的高度（文字行高加上下内边距，不低于 kTextBubbleH）。语音气泡用它，
+// 与单行文字气泡同高：两者用同一个字体与同一个排版函数，字号、界面语言的字体变了也保持一致。
+// 量的是消息自身的文字（语音为占位文字「[语音]」，不含表情、不会折行）；取不到设备上下文或建不了字体时返回 kTextBubbleH
+int MeasureSingleLineBubbleHeight(const ChatMessage& msg)
+{
+    int height = kTextBubbleH;
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return height;
+    }
+    const BubbleTextStyle st = ResolveTextStyle(msg);
+    HFONT hFont = ::CreateFontW(
+        -st.sizePx, 0, 0, 0,
+        st.bold ? FW_SEMIBOLD : FW_NORMAL,
+        st.italic ? TRUE : FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
+    if (hFont != NULL)
+    {
+        HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+        const std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(msg.text);
+        //排版宽度给到语音气泡的最大宽度：占位文字很短，不会折成两行
+        const SIZE sz = LayoutInlineContent(hdc, segs, kVoiceBubbleMaxWidth, kFaceDisplayPx, NULL);
+        height = sz.cy + kTextPadV * 2;
+        ::SelectObject(hdc, hOldFont);
+        ::DeleteObject(hFont);
+    }
+    ::ReleaseDC(NULL, hdc);
+    if (height < kTextBubbleH)
+    {
+        height = kTextBubbleH;
+    }
+    return height;
+}
+
+} // namespace
+
 void ChatBubble::Measure(int availWidth)
 {
+    // 接龙卡片：宽度固定，说明的折行与可用宽度无关，只在消息内容变过之后（SetMessage 把
+    // m_measuredWidth 置为 -1）重算一次。说明的行数决定卡片高度，故必须在 GetRowHeight 之前算好。
+    if (m_msg.kind == kMsgRelay)
+    {
+        if (m_measuredWidth < 0)
+        {
+            MeasureRelayNote();
+        }
+        m_measuredWidth = availWidth;
+        return;
+    }
+
+    // 屏幕共享卡片（第 15 期）：宽度固定，描述的折行只在消息内容变过之后重算一次，行数决定卡片高度
+    if (m_msg.kind == kMsgScreenShare)
+    {
+        if (m_measuredWidth < 0)
+        {
+            MeasureScreenShareDesc();
+        }
+        m_measuredWidth = availWidth;
+        return;
+    }
+
+    // 语音气泡：一行高、与单行文字气泡同高。宽度随时长变化、与可用宽度无关，故只在消息内容变过之后
+    // （SetMessage 把 m_measuredWidth 置为 -1）按本条消息的字体量一次高度
+    if (m_msg.kind == kMsgVoice)
+    {
+        if (m_measuredWidth < 0)
+        {
+            m_textBubbleH = MeasureSingleLineBubbleHeight(m_msg);
+        }
+        m_measuredWidth = availWidth;
+        return;
+    }
+
     // 仅文字气泡需要折行测量；其余 kind 行高是定值，测量无副作用。仍记录
     // availWidth，便于 GetRowHeight 据 m_measuredWidth>=0 判定"已测量"。
     if (m_msg.kind != kMsgText)
@@ -1625,6 +2403,18 @@ void ChatBubble::Measure(int availWidth)
     {
         return;
     }
+    // 代码片段：画成代码卡片，尺寸取卡片的排版结果，不建普通文字与 Markdown 的模型
+    if (MeasureCode(hdc, availWidth - selW))
+    {
+        ::ReleaseDC(NULL, hdc);
+        return;
+    }
+    // Markdown 消息：DLL 可用且排版成功时，气泡尺寸取它的结果，不再建本类的字符级模型
+    if (MeasureMarkdown(hdc, maxTextW, maxBubbleW))
+    {
+        ::ReleaseDC(NULL, hdc);
+        return;
+    }
     // 折行测量须按本条消息的实际字体（字号 / 粗体 / 斜体影响文字宽高），否则
     // 自定义字号的气泡会被错误地按默认 14px 测量而裁切或留白。
     const BubbleTextStyle st = ResolveTextStyle(m_msg);
@@ -1633,7 +2423,7 @@ void ChatBubble::Measure(int availWidth)
         st.bold ? FW_SEMIBOLD : FW_NORMAL,
         st.italic ? TRUE : FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont != NULL)
     {
         HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
@@ -1666,38 +2456,20 @@ void ChatBubble::Measure(int availWidth)
         m_selFlatText = BuildFlatText(segs);
         BuildSelLayoutFromPlaced(hdc, placed, (int)m_selFlatText.size(), m_selLayout);
 
+        // 留下这次的放置项与折行参数，供 RenderContent 复用（见 m_measuredPlaced 的说明）
+        m_measuredPlaced.swap(placed);
+        m_measuredLineW = (int)sz.cx;
+        m_measuredMaxTextW = maxTextW;
+
         // 顺带识别正文里的超链接。口径与选区模型一致（扁平文本下标），故渲染时能直接
         // 拿去要矩形、命中时能直接拿去做区间命中。识别开关关掉时这里得到空表，
         // 后面渲染 / 命中 / 菜单三处自然什么都不做。
         m_linksFlat.clear();
-        if (ChatLinkOptionEnabled())
-        {
-            m_linksFlat = DetectLinks(m_selFlatText);
-        }
+        //屏幕共享的分享链接（第 25 期）是站内功能，不受「识别链接」开关影响；网址按开关识别
+        m_linksFlat = DetectLinks(m_selFlatText, ChatLinkOptionEnabled(), true);
 
-        // 带引用的消息：引用块占据气泡内部顶端一块固定高度，正文从它下方开始，
-        // 故气泡总高要把它算进去（早先引用画在气泡外，是加在行高上的）。
-        if (m_msg.hasQuote)
-        {
-            m_textBubbleH += kQuoteBlockH + kQuoteGap;
-
-            // 气泡宽度也要照顾引用块：正文很短时（比如只回一个字），按正文算出来的
-            // 气泡窄得放不下引用块里的缩略图与两行文字，内容会溢出到气泡外面去。
-            // 故给带引用的气泡定一个下限：竖线 + 间距 +（有图时的缩略图）+ 一段文字。
-            int quoteMinW = kTextPadH * 2 + kQuoteBarW + kQuoteBarGap + kQuoteMinTextW;
-            if (m_msg.quoteMsgType == kMsgImage)
-            {
-                quoteMinW += kQuoteThumbSize + kQuoteThumbGap;
-            }
-            if (quoteMinW > maxBubbleW)
-            {
-                quoteMinW = maxBubbleW;   // 再窄也不能超过气泡最大宽
-            }
-            if (m_textBubbleW < quoteMinW)
-            {
-                m_textBubbleW = quoteMinW;
-            }
-        }
+        // 带引用的消息：引用块的高度与宽度下限，与 Markdown 路径共用
+        ApplyQuoteToTextBubble(maxBubbleW);
 
         // @ 片段换算到扁平口径，与 m_selLayout 对齐，供画底色块与右键命中使用。
         m_atsFlat = ConvertAtsToFlat(m_msg.text, m_msg.ats, (int)m_selFlatText.size());
@@ -1714,6 +2486,458 @@ void ChatBubble::Measure(int availWidth)
     if (m_textBubbleW > maxBubbleW)
     {
         m_textBubbleW = maxBubbleW;
+    }
+}
+
+void ChatBubble::ApplyQuoteToTextBubble(int maxBubbleW)
+{
+    // 带引用的消息：引用块占据气泡内部顶端一块固定高度，正文从它下方开始，
+    // 故气泡总高要把它算进去（早先引用画在气泡外，是加在行高上的）。
+    if (!m_msg.hasQuote)
+    {
+        return;
+    }
+    m_textBubbleH += kQuoteBlockH + kQuoteGap;
+
+    // 气泡宽度也要照顾引用块：正文很短时（比如只回一个字），按正文算出来的
+    // 气泡窄得放不下引用块里的缩略图与两行文字，内容会溢出到气泡外面去。
+    // 故给带引用的气泡定一个下限：竖线 + 间距 +（有图时的缩略图）+ 一段文字。
+    int quoteMinW = kTextPadH * 2 + kQuoteBarW + kQuoteBarGap + kQuoteMinTextW;
+    if (m_msg.quoteMsgType == kMsgImage)
+    {
+        quoteMinW += kQuoteThumbSize + kQuoteThumbGap;
+    }
+    if (quoteMinW > maxBubbleW)
+    {
+        quoteMinW = maxBubbleW;   // 再窄也不能超过气泡最大宽
+    }
+    if (m_textBubbleW < quoteMinW)
+    {
+        m_textBubbleW = quoteMinW;
+    }
+}
+
+bool ChatBubble::MeasureMarkdown(HDC hdc, int maxTextW, int maxBubbleW)
+{
+    m_markdownActive = false;
+    if (m_msg.kind != kMsgText || !m_msg.isMarkdown || m_msg.isCode || m_markdownFailed)
+    {
+        return false;
+    }
+    // 解析只在内容变化后做一次（SetMessage 会释放文档）；DLL 尚未就绪时不记失败，下次测量再试
+    if (!m_markdown.IsParsed())
+    {
+        if (!markdown::IsMarkdownAvailable())
+        {
+            return false;
+        }
+        if (!m_markdown.Parse(MarkdownSourceFromBody(m_msg.text), MarkdownImageLinkPrefix()))
+        {
+            m_markdownFailed = true;
+            return false;
+        }
+    }
+
+    //卡片文字：标题优先取第一个标题块；旧版 DLL 没有这个接口时取渲染后文字的第一行作标题、其余作摘要（ChatMarkdownCard）
+    GetMarkdownCardText(m_markdown, m_mdCardTitle, m_mdCardSummary);
+
+    //卡片宽度与合并转发卡片相同，不超过本行允许的最大宽度
+    int cardW = kMarkdownCardWidth;
+    if (cardW > maxBubbleW)
+    {
+        cardW = maxBubbleW;
+    }
+    (void)maxTextW;
+    //摘要按卡片内宽折行，最多三行
+    m_mdCardSummaryH = MeasureMarkdownCardSummary(hdc, m_mdCardSummary, cardW);
+
+    // 普通文字的字符级模型一律清空：它们只属于普通文字路径，留着会让命中、菜单按旧内容判断
+    m_selLayout = SelLayout();
+    m_selFlatText.clear();
+    m_measuredPlaced.clear();
+    m_measuredLineW = -1;
+    m_linksFlat.clear();
+    m_atsFlat.clear();
+
+    m_markdownActive = true;
+    m_textBubbleW = cardW;
+    m_textBubbleH = MarkdownCardHeight(m_mdCardSummaryH);
+    return true;
+}
+
+void ChatBubble::MeasureRelayNote()
+{
+    m_relayNoteLines.clear();
+    if (m_msg.relayNote.IsEmpty())
+    {
+        return;
+    }
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return;
+    }
+    // 字体参数与绘制说明时 DrawGdiText 建的字体完全一致，量出来的宽度才与画出来的相符
+    HFONT hFont = ::CreateFontW(
+        -kRelayNotePx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
+    if (hFont != NULL)
+    {
+        HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+        WrapRelayNote(hdc, m_msg.relayNote, kRelayBubbleW - kRelayPadH * 2, kRelayNoteMaxLines,
+                      m_relayNoteLines);
+        ::SelectObject(hdc, hOldFont);
+        ::DeleteObject(hFont);
+    }
+    ::ReleaseDC(NULL, hdc);
+}
+
+void ChatBubble::MeasureScreenShareDesc()
+{
+    m_shareDescLines.clear();
+    if (m_msg.screenShareDesc.IsEmpty())
+    {
+        return;
+    }
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return;
+    }
+    // 字体参数与绘制描述时 DrawGdiText 建的字体完全一致，量出来的宽度才与画出来的相符
+    HFONT hFont = ::CreateFontW(
+        -kShareDescPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
+    if (hFont != NULL)
+    {
+        HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+        WrapRelayNote(hdc, m_msg.screenShareDesc, kShareBubbleW - kSharePadH * 2, kShareDescLines, m_shareDescLines);
+        ::SelectObject(hdc, hOldFont);
+        ::DeleteObject(hFont);
+    }
+    ::ReleaseDC(NULL, hdc);
+}
+
+bool ChatBubble::RelayTipAtPoint(POINT pt) const
+{
+    if (m_msg.kind != kMsgTime || m_msg.relayCardMsgid <= 0 || ParentInMultiSelect())
+    {
+        return false;
+    }
+    if (!::PtInRect(&m_rcItem, pt))
+    {
+        return false;
+    }
+    // 提示文字居中画在整行里，只有落在文字范围内才算点中，行两侧的空白不算
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return false;
+    }
+    const int textW = MeasureTextWidth(hdc, (LPCWSTR)m_msg.text, kTimeTextPx);
+    ::ReleaseDC(NULL, hdc);
+    const int center = (m_rcItem.left + m_rcItem.right) / 2;
+    return pt.x >= center - textW / 2 && pt.x <= center + textW / 2;
+}
+
+void ChatBubble::SetRecallEdit(const std::string& draftJson, long long deadlineMs)
+{
+    m_msg.recallDraftJson = draftJson;
+    m_msg.recallEditDeadlineMs = draftJson.empty() ? 0 : deadlineMs;
+    m_recallEditHover = false;
+    m_recallEditPressed = false;
+    Invalidate();
+}
+
+bool ChatBubble::HasRecallEdit(long long nowMs) const
+{
+    return m_msg.kind == kMsgTime && !m_msg.recallDraftJson.empty()
+        && IsRecallEditAlive(m_msg.recallEditDeadlineMs, nowMs);
+}
+
+bool ChatBubble::ExpireRecallEdit(long long nowMs)
+{
+    if (m_msg.recallDraftJson.empty() || IsRecallEditAlive(m_msg.recallEditDeadlineMs, nowMs))
+    {
+        return false;
+    }
+    SetRecallEdit(std::string(), 0);
+    return true;
+}
+
+void ChatBubble::RecallEditLayout(HDC hdc, int& tipLeft, int& linkLeft, int& linkWidth) const
+{
+    const int tipW = MeasureTextWidth(hdc, (LPCWSTR)m_msg.text, kTimeTextPx);
+    linkWidth = MeasureTextWidth(hdc, TR(L"编辑"), kTimeTextPx);
+    const int total = tipW + kRecallEditGapPx + linkWidth;
+    const int center = (m_rcItem.left + m_rcItem.right) / 2;
+    tipLeft = center - total / 2;
+    linkLeft = tipLeft + tipW + kRecallEditGapPx;
+}
+
+bool ChatBubble::RecallEditAtPoint(POINT pt) const
+{
+    if (ParentInMultiSelect() || !HasRecallEdit(RecallEditNowMs()))
+    {
+        return false;
+    }
+    if (!::PtInRect(&m_rcItem, pt))
+    {
+        return false;
+    }
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return false;
+    }
+    int tipLeft = 0;
+    int linkLeft = 0;
+    int linkWidth = 0;
+    RecallEditLayout(hdc, tipLeft, linkLeft, linkWidth);
+    ::ReleaseDC(NULL, hdc);
+    //只有「编辑」两个字可点，前面的提示文字与行两侧的空白都不算
+    return pt.x >= linkLeft && pt.x <= linkLeft + linkWidth;
+}
+
+void ChatBubble::PostRecallEditRequest()
+{
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    // 异步 PostMessage，故堆分配传递；宿主处理完 delete，投递失败自行释放。
+    ChatReeditData* d = new ChatReeditData();
+    if (!ParseRecallDraft(m_msg.recallDraftJson, *d))
+    {
+        LOG_WARNING("chat bubble: recall draft of msgid=%lld cannot be parsed, edit ignored.", m_msg.msgid);
+        delete d;
+        return;
+    }
+    LOG_INFO("chat bubble: recall edit requested, msgid=%lld, segments=%u, markdown=%d, code=%d.", m_msg.msgid,
+             (unsigned)d->m_segments.size(), d->m_isMarkdown ? 1 : 0, d->m_isCode ? 1 : 0);
+    if (!::PostMessage(hwnd, WM_CHAT_REEDIT_REQUEST, 0, (LPARAM)d))
+    {
+        delete d;
+    }
+}
+
+void ChatBubble::PostRelayAction(long long cardMsgid, int action)
+{
+    if (cardMsgid <= 0)
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    long long* pMsgid = new long long(cardMsgid);
+    if (!::PostMessage(hwnd, WM_CHAT_RELAY_ACTION, (WPARAM)action, (LPARAM)pMsgid))
+    {
+        delete pMsgid;
+    }
+}
+
+void ChatBubble::PostShareOpen()
+{
+    if (m_msg.shareId <= 0 || !m_msg.shareButtonEnabled)
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    long long* pShareId = new long long(m_msg.shareId);
+    //本人发起的共享带上标记，宿主据此在本机打开，而不是打开浏览窗口
+    const WPARAM own = m_msg.shareIsOwner ? kChatOpenShareOwn : 0;
+    if (!::PostMessage(hwnd, WM_CHAT_OPEN_SHARE, own, (LPARAM)pShareId))
+    {
+        delete pShareId;
+    }
+}
+
+bool ChatBubble::GroupInviteButtonClickable() const
+{
+    return m_msg.kind == kMsgGroupInvite && m_msg.inviteHasButton && !m_msg.inviteJoining && m_msg.inviteId > 0;
+}
+
+void ChatBubble::PostGroupInviteJoin()
+{
+    if (!GroupInviteButtonClickable())
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    GroupInviteJoinRequest* pReq = new GroupInviteJoinRequest();
+    pReq->m_msgid = m_msg.msgid;
+    pReq->m_inviteId = m_msg.inviteId;
+    if (!::PostMessage(hwnd, WM_CHAT_JOIN_GROUP_INVITE, 0, (LPARAM)pReq))
+    {
+        delete pReq;
+    }
+}
+
+int ChatBubble::SecretInviteButtonAt(POINT pt) const
+{
+    if (m_msg.kind != kMsgSecretInvite || m_msg.secretInviteButtons <= 0 || m_msg.secretSessionId == 0
+        || ParentInMultiSelect() || !::PtInRect(&m_shareBtnRect, pt))
+    {
+        return -1;
+    }
+    //两个按钮时以按钮行正中为界，与绘制时的竖向分隔线同一口径；分界点归右侧的「忽略」
+    if (m_msg.secretInviteButtons > 1)
+    {
+        const int midX = m_shareBtnRect.left + (m_shareBtnRect.right - m_shareBtnRect.left) / 2;
+        return (pt.x < midX) ? 0 : 1;
+    }
+    return 0;
+}
+
+void ChatBubble::PostSecretInviteAction(int index)
+{
+    const int action = SecretInviteButtonAction(m_msg.secretInviteButtons, index);
+    if (action == 0 || m_msg.secretSessionId == 0)
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    unsigned long long* pSessionId = new unsigned long long(m_msg.secretSessionId);
+    if (!::PostMessage(hwnd, WM_CHAT_SECRET_INVITE_ACTION, (WPARAM)action, (LPARAM)pSessionId))
+    {
+        delete pSessionId;
+    }
+}
+
+bool ChatBubble::IsSecretRow() const
+{
+    return m_msg.isSecret || m_msg.kind == kMsgSecretInvite;
+}
+
+bool ChatBubble::IsSecretLocked() const
+{
+    if (IsSecretRow())
+    {
+        return true;
+    }
+    const ChatMessageList* list = dynamic_cast<const ChatMessageList*>(GetParent());
+    return list != NULL && list->IsSecretRestricted();
+}
+
+void ChatBubble::WipeSecretText()
+{
+    const int len = m_msg.text.GetLength();
+    if (len > 0)
+    {
+        ::SecureZeroMemory(m_msg.text.GetBuffer(), static_cast<size_t>(len) * sizeof(wchar_t));
+        m_msg.text.ReleaseBuffer(0);
+    }
+    if (!m_selFlatText.empty())
+    {
+        ::SecureZeroMemory(&m_selFlatText[0], m_selFlatText.size() * sizeof(wchar_t));
+        m_selFlatText.clear();
+    }
+}
+
+void ChatBubble::PostVoiceAction(int action)
+{
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    VoiceActionRequest* pReq = new VoiceActionRequest();
+    pReq->m_msgid = m_msg.msgid;
+    pReq->m_clientMsgId = m_msg.clientMsgId;
+    if (!::PostMessage(hwnd, WM_CHAT_VOICE_ACTION, (WPARAM)action, (LPARAM)pReq))
+    {
+        delete pReq;
+    }
+}
+
+void ChatBubble::PostScreenShareJoin()
+{
+    if (m_msg.screenShareRoomId.empty() || !m_msg.screenShareButtonEnabled)
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    ScreenShareJoinRequest* pReq = new ScreenShareJoinRequest();
+    pReq->m_roomId = m_msg.screenShareRoomId;
+    pReq->m_hostName = m_msg.screenShareHostName;
+    pReq->m_forced = m_msg.screenShareForced;
+    pReq->m_groupCall = m_msg.screenShareIsGroupCall;
+    if (!::PostMessage(hwnd, WM_CHAT_JOIN_SCREENSHARE, 0, (LPARAM)pReq))
+    {
+        delete pReq;
+    }
+}
+
+void ChatBubble::PostInfoCardOpen()
+{
+    if (m_msg.infoCardRefId <= 0 || !m_msg.screenShareButtonEnabled
+        || (!m_msg.screenShareIsAnnouncement && !m_msg.screenShareIsMemo))
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    InfoCardOpenRequest* pReq = new InfoCardOpenRequest();
+    pReq->m_msgid = m_msg.msgid;
+    pReq->m_refId = m_msg.infoCardRefId;
+    const UINT msgId = m_msg.screenShareIsAnnouncement ? WM_CHAT_OPEN_ANNOUNCEMENT_CARD : WM_CHAT_OPEN_MEMO_CARD;
+    if (!::PostMessage(hwnd, msgId, 0, (LPARAM)pReq))
+    {
+        delete pReq;
+    }
+}
+
+void ChatBubble::PostCloudRecordOpen()
+{
+    if (m_msg.infoCardRefId <= 0 || !m_msg.screenShareButtonEnabled || !m_msg.screenShareIsCloudRecord)
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    CloudRecordOpenRequest* pReq = new CloudRecordOpenRequest();
+    pReq->m_recordId = m_msg.infoCardRefId;
+    pReq->m_title = m_msg.screenShareTitle;
+    if (!::PostMessage(hwnd, WM_CHAT_OPEN_CLOUD_RECORD_CARD, 0, (LPARAM)pReq))
+    {
+        delete pReq;
     }
 }
 
@@ -1748,6 +2972,32 @@ int ChatBubble::GetRowHeight() const
         // 合并卡片高随预览行数变化。
         bubbleH = MergedBubbleHeight(m_msg.mergedLines.size());
         break;
+    case kMsgRelay:
+        // 接龙卡片高随说明行数、接龙条数与有无按钮变化。说明行数由 Measure 算好。
+        bubbleH = RelayBubbleHeight(m_relayNoteLines.size(), m_msg.relayLines.size(),
+                                    RelayButtonLabel(m_msg.relayButton) != NULL);
+        break;
+    case kMsgFileShare:
+        // 共享卡片高随有无路径行、有无按钮变化。
+        bubbleH = ShareBubbleHeight(!m_msg.sharePath.IsEmpty(), ShareCardButtonLabel(m_msg.shareButton) != NULL);
+        break;
+    case kMsgScreenShare:
+        // 屏幕共享卡片：副标题行始终有，高随有无按钮变化。
+        bubbleH = ShareBubbleHeight(true, m_msg.screenShareHasButton, !m_msg.screenShareNotice.IsEmpty(),
+                                    m_shareDescLines.size());
+        break;
+    case kMsgGroupInvite:
+        // 入群邀请卡片：与屏幕共享卡片同一套几何，副标题行（群名与成员数）始终有，高随有无按钮变化。
+        bubbleH = ShareBubbleHeight(true, m_msg.inviteHasButton);
+        break;
+    case kMsgSecretInvite:
+        // 密聊邀请卡片：与入群邀请卡片同一套几何，说明行始终有，高随有无按钮变化。
+        bubbleH = ShareBubbleHeight(true, m_msg.secretInviteButtons > 0);
+        break;
+    case kMsgVoice:
+        // 语音气泡：一行高，与单行文字气泡相同（高度由 Measure 按字体量出；还没测量时用回退值）
+        bubbleH = (m_measuredWidth >= 0) ? m_textBubbleH : kTextBubbleH;
+        break;
     default:
         bubbleH = kTextBubbleH;
         break;
@@ -1767,6 +3017,12 @@ int ChatBubble::GetRowHeight() const
     if (m_msg.fromMe && m_readReceiptEnabled)
     {
         stackH += kReceiptHeight;
+    }
+    // 发送失败的原因行：单聊已为回执预留了一行，失败的消息没有回执，原因就画在那里；
+    // 群聊不预留回执行，另加一行。
+    if (m_msg.fromMe && m_msg.sendFailed && !m_readReceiptEnabled)
+    {
+        stackH += kFailReasonHeight;
     }
     if (stackH < kAvatarSize)
     {
@@ -1819,13 +3075,37 @@ bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
         }
     }
 
+    // 代码卡片：点「复制」复制原文；点底栏「查看全部」或卡片的其它位置打开代码查看窗。多选模式下整行是勾选目标
+    if (!ParentInMultiSelect() && CodeActive())
+    {
+        const int part = CodePartAtPoint(pt);
+        if (part == kCodePartCopy)
+        {
+            balloonwjui::DuiHost* host = GetHost();
+            CopyCodeToClipboard((host != NULL) ? host->m_hWnd : NULL);
+            return true;
+        }
+        if (part != kCodePartNone)
+        {
+            PostCodeViewerOpen();
+            return true;
+        }
+    }
+
+    // Markdown 卡片：点卡片任意位置打开 Markdown 预览窗口（docs/Markdown消息方案.md 第 11.3 节）。多选模式下整行是勾选目标
+    if (!ParentInMultiSelect() && PointInMarkdownCard(pt))
+    {
+        PostMarkdownPreviewOpen();
+        return true;
+    }
+
     // 文字气泡：非多选模式下，左键按下即开始拖拽选择文字。
     // 放在最前 —— 多选模式下整行是勾选目标，不做文字选择（下面那支会先返回）。
     if (!ParentInMultiSelect() && IsTextSelectable())
     {
         // 按在已选中的文字上：先不动选区，准备把这段内容拖出去（见 ChatDragSource.h）。
         // 移动超过系统拖动阈值才真正开始拖；没拖就松手，按普通单击处理（见 OnLButtonUp）。
-        if (PointInTextSelection(pt) && IsChatDragOrigin(m_msg.kind, true, false, false))
+        if (PointInTextSelection(pt) && IsChatDragOrigin(m_msg.kind, true, false, false) && !IsSecretLocked())
         {
             m_dragArmed    = true;
             m_dragPressPt  = pt;
@@ -1862,7 +3142,8 @@ bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
     // 多选模式下、且本行是真实消息时，左键点击切换选中态（此模式下文件按钮不响应）。
     if (ParentInMultiSelect())
     {
-        if (!IsRealMessage())
+        //密聊消息与密聊邀请卡片不能多选（docs/密聊方案.md 4.5）
+        if (!IsRealMessage() || IsSecretRow())
         {
             return false;
         }
@@ -1881,6 +3162,69 @@ bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
     if (m_msg.kind == kMsgMerged && ::PtInRect(&m_mergedRect, pt))
     {
         m_mergedPressed = true;
+        Capture();
+        return true;
+    }
+
+    // 非多选：按在语音气泡上播放 / 停止，按在发送失败的红色感叹号上重发；抬起时仍在原处才算（见 OnLButtonUp）
+    if (m_msg.kind == kMsgVoice)
+    {
+        if (::PtInRect(&m_voiceFailRect, pt))
+        {
+            m_voiceFailPressed = true;
+            Capture();
+            return true;
+        }
+        if (::PtInRect(&m_voiceRect, pt))
+        {
+            m_voicePressed = true;
+            Capture();
+            return true;
+        }
+    }
+
+    // 非多选：按在可点的共享卡片上，抬起时仍在卡片内才打开共享（见 OnLButtonUp），理由同合并卡片
+    if (((m_msg.kind == kMsgFileShare && m_msg.shareButtonEnabled)
+         || (m_msg.kind == kMsgScreenShare && m_msg.screenShareButtonEnabled))
+        && ::PtInRect(&m_shareRect, pt))
+    {
+        m_sharePressed = true;
+        Capture();
+        return true;
+    }
+
+    // 非多选：入群邀请卡片只有按钮那一行可点（整张卡片可点容易误点就入了群），抬起时仍在按钮行内才加入
+    if (m_msg.kind == kMsgGroupInvite && GroupInviteButtonClickable() && ::PtInRect(&m_shareBtnRect, pt))
+    {
+        m_sharePressed = true;
+        Capture();
+        return true;
+    }
+
+    // 非多选：密聊邀请卡片同样只有按钮行可点，记下按在第几个按钮上，抬起时仍在同一个按钮上才执行（见 OnLButtonUp）
+    {
+        const int secretBtn = SecretInviteButtonAt(pt);
+        if (secretBtn >= 0)
+        {
+            m_secretBtnPressed = secretBtn;
+            Capture();
+            return true;
+        }
+    }
+
+    // 非多选：按在接龙卡片上（或带 cardmsgid 的接龙提示行的文字上），抬起时仍在原处才打开
+    // 详情窗（见 OnLButtonUp），理由同合并卡片
+    if ((m_msg.kind == kMsgRelay && ::PtInRect(&m_relayRect, pt)) || RelayTipAtPoint(pt))
+    {
+        m_relayPressed = true;
+        Capture();
+        return true;
+    }
+
+    // 非多选：按在撤回提示行的「编辑」上，抬起时仍在「编辑」上才把原文放回输入框（见 OnLButtonUp）
+    if (RecallEditAtPoint(pt))
+    {
+        m_recallEditPressed = true;
         Capture();
         return true;
     }
@@ -1912,7 +3256,8 @@ bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
 
     // 非多选：按在本地原图可用的图片上，准备把图片拖出去。不消费这一下 —— 单击、双击
     // 放大都照旧；只有移动超过系统拖动阈值才真正开始拖。
-    if (m_msg.kind == kMsgImage && ::PtInRect(&m_imageRect, pt)
+    // 密聊图片不能拖出（docs/密聊方案.md 4.5）
+    if (m_msg.kind == kMsgImage && ::PtInRect(&m_imageRect, pt) && !IsSecretLocked()
         && IsChatDragOrigin(m_msg.kind, false, true, IsLocalImageAvailable()))
     {
         m_dragArmed   = true;
@@ -1942,6 +3287,8 @@ void ChatBubble::HandleFileButton(int action)
     d->fileId      = m_msg.fileFileId;
     d->md5         = m_msg.fileMd5;
     d->sizeBytes   = m_msg.fileSizeBytes;
+    d->direct      = m_msg.fileDirect;
+    d->directSessionId = m_msg.fileDirectSessionId;
     ::PostMessage(hwnd, WM_CHAT_FILE_ACTION, 0, (LPARAM)d);
 }
 
@@ -2043,7 +3390,7 @@ void ChatBubble::SetPinHover(bool hover, POINT ptHost)
         return;
     }
 
-    tips.Register(this, kPinTooltipText);
+    tips.Register(this, TR(kPinTooltipText));
     POINT screen = ptHost;
     balloonwjui::DuiHost* host = GetHost();
     if (host != NULL && ::IsWindow(host->m_hWnd))
@@ -2083,6 +3430,9 @@ bool ChatBubble::OnMouseMove(POINT pt, UINT /*mkFlags*/)
     // 什么都不做）。
     SetPinHover(PinIconAtPoint(pt), pt);
 
+    // 代码卡片：「复制」与底栏的悬停效果
+    UpdateCodeHover(pt, true);
+
     // 文件行：据落点更新底部操作链接的悬停高亮；悬停目标变化时才重绘（变深色 + 下划线）。
     if (m_msg.kind == kMsgFile)
     {
@@ -2101,6 +3451,60 @@ bool ChatBubble::OnMouseMove(POINT pt, UINT /*mkFlags*/)
         if (idx != m_folderHoverIdx)
         {
             m_folderHoverIdx = idx;
+            Invalidate();
+        }
+    }
+
+    // 共享卡片：鼠标进出底部按钮行时重绘，按钮文字随之加深 / 恢复；按钮不可点、多选模式下不给悬停效果
+    if (m_msg.kind == kMsgFileShare || m_msg.kind == kMsgScreenShare || m_msg.kind == kMsgGroupInvite)
+    {
+        bool enabled = false;
+        if (m_msg.kind == kMsgFileShare)
+            enabled = m_msg.shareButtonEnabled;
+        else if (m_msg.kind == kMsgScreenShare)
+            enabled = m_msg.screenShareButtonEnabled;
+        else
+            enabled = GroupInviteButtonClickable();
+        const bool hover = enabled && !ParentInMultiSelect()
+                           && ::PtInRect(&m_shareBtnRect, pt) != FALSE;
+        if (hover != m_shareBtnHover)
+        {
+            m_shareBtnHover = hover;
+            Invalidate();
+        }
+    }
+
+    // 密聊邀请卡片：鼠标在两个按钮之间移动或移出按钮行时重绘，悬停的那个按钮加深并加下划线
+    if (m_msg.kind == kMsgSecretInvite)
+    {
+        const int hoverIdx = SecretInviteButtonAt(pt);
+        if (hoverIdx != m_secretBtnHover)
+        {
+            m_secretBtnHover = hoverIdx;
+            Invalidate();
+        }
+    }
+
+    // 撤回提示行：鼠标进出「编辑」时重绘，「编辑」随之加上 / 去掉下划线
+    if (m_msg.kind == kMsgTime && !m_msg.recallDraftJson.empty())
+    {
+        const bool hover = RecallEditAtPoint(pt);
+        if (hover != m_recallEditHover)
+        {
+            m_recallEditHover = hover;
+            Invalidate();
+        }
+    }
+
+    // 接龙卡片：鼠标进出底部按钮行时重绘，按钮文字随之加深 / 恢复。多选模式下按钮不可点，不给悬停效果
+    if (m_msg.kind == kMsgRelay || m_msg.relayCardMsgid > 0)
+    {
+        const bool hover = (m_msg.kind == kMsgRelay)
+                           ? (!ParentInMultiSelect() && ::PtInRect(&m_relayBtnRect, pt) != FALSE)
+                           : RelayTipAtPoint(pt);
+        if (hover != m_relayBtnHover)
+        {
+            m_relayBtnHover = hover;
             Invalidate();
         }
     }
@@ -2127,6 +3531,107 @@ bool ChatBubble::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
                     delete pContent;
                 }
             }
+        }
+        return true;
+    }
+
+    // 按在语音气泡 / 红色感叹号上后松手：仍在原处才请宿主聊天窗播放 / 停止或重发
+    if (m_voicePressed || m_voiceFailPressed)
+    {
+        const bool resend = m_voiceFailPressed;
+        m_voicePressed = false;
+        m_voiceFailPressed = false;
+        ReleaseCapture();
+        if (resend && ::PtInRect(&m_voiceFailRect, pt))
+        {
+            PostVoiceAction(kVoiceActionResend);
+        }
+        else if (!resend && ::PtInRect(&m_voiceRect, pt))
+        {
+            PostVoiceAction(kVoiceActionToggle);
+        }
+        return true;
+    }
+
+    // 按在密聊邀请卡片的按钮上后松手：仍在同一个按钮上才请宿主单聊窗执行（同意、忽略或取消）
+    if (m_secretBtnPressed >= 0)
+    {
+        const int pressed = m_secretBtnPressed;
+        m_secretBtnPressed = -1;
+        ReleaseCapture();
+        if (SecretInviteButtonAt(pt) == pressed)
+        {
+            PostSecretInviteAction(pressed);
+        }
+        return true;
+    }
+
+    // 按在共享卡片上后松手：仍在卡片内就请宿主聊天窗打开这个共享（宿主经文件共享宿主交给 DLL）
+    if (m_sharePressed)
+    {
+        m_sharePressed = false;
+        ReleaseCapture();
+        //入群邀请卡片：只认按钮那一行（见 OnLButtonDown），抬起时仍在按钮行内才请宿主加入
+        if (m_msg.kind == kMsgGroupInvite)
+        {
+            if (::PtInRect(&m_shareBtnRect, pt))
+            {
+                PostGroupInviteJoin();
+            }
+            return true;
+        }
+        if (::PtInRect(&m_shareRect, pt))
+        {
+            //同一组矩形也用于屏幕共享卡片：按种类决定是打开文件共享还是加入屏幕共享；
+            //复用屏幕共享版式的群公告卡片、群备忘卡片改为请宿主打开那条公告或备忘
+            if (m_msg.kind == kMsgScreenShare && (m_msg.screenShareIsAnnouncement || m_msg.screenShareIsMemo))
+            {
+                PostInfoCardOpen();
+            }
+            //云端录像卡片（2026-10-06 起同样复用这套版式）：请宿主播放那条录像
+            else if (m_msg.kind == kMsgScreenShare && m_msg.screenShareIsCloudRecord)
+            {
+                PostCloudRecordOpen();
+            }
+            else if (m_msg.kind == kMsgScreenShare)
+            {
+                PostScreenShareJoin();
+            }
+            else
+            {
+                PostShareOpen();
+            }
+        }
+        return true;
+    }
+
+    // 按在撤回提示行的「编辑」上后松手：仍在「编辑」上才算一次单击，把撤回的内容投给宿主放回输入框
+    if (m_recallEditPressed)
+    {
+        m_recallEditPressed = false;
+        ReleaseCapture();
+        if (RecallEditAtPoint(pt))
+        {
+            PostRecallEditRequest();
+        }
+        return true;
+    }
+
+    // 按在接龙卡片上后松手：仍在卡片内才算一次单击。落在按钮行上是「参与接龙 / 修改我的」，
+    // 打开详情窗并聚焦输入框；落在卡片其它位置只打开详情窗。详情窗由主面板持有，宿主转交
+    if (m_relayPressed)
+    {
+        m_relayPressed = false;
+        ReleaseCapture();
+        if (m_msg.kind == kMsgRelay && ::PtInRect(&m_relayRect, pt))
+        {
+            const bool onButton = ::PtInRect(&m_relayBtnRect, pt) != FALSE;
+            PostRelayAction(m_msg.msgid, onButton ? kChatRelayActionJoin : kChatRelayActionOpen);
+        }
+        else if (RelayTipAtPoint(pt))
+        {
+            //提示行：打开它所属那张卡片的详情窗
+            PostRelayAction(m_msg.relayCardMsgid, kChatRelayActionOpen);
         }
         return true;
     }
@@ -2182,7 +3687,8 @@ bool ChatBubble::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
 
 void ChatBubble::OpenLinkByIndex(int index)
 {
-    if (index < 0 || (std::size_t)index >= m_linksFlat.size())
+    const std::wstring url = LinkUrlByIndex(index);
+    if (url.empty())
     {
         return;
     }
@@ -2195,7 +3701,7 @@ void ChatBubble::OpenLinkByIndex(int index)
 
     // 气泡自己不拉起外部程序：URL 经宿主聊天窗统一过一遍协议白名单再打开，
     // 安全判断只留一处（见 CustomMsgDef.h 里 WM_CHAT_OPEN_LINK 的说明）。
-    std::wstring* pUrl = new std::wstring(m_linksFlat[(std::size_t)index].m_url);
+    std::wstring* pUrl = new std::wstring(url);
     if (!::PostMessage(hwnd, WM_CHAT_OPEN_LINK, 0, (LPARAM)pUrl))
     {
         delete pUrl;
@@ -2215,9 +3721,31 @@ bool ChatBubble::OnMouseLeave()
         m_folderHoverIdx = -1;
         Invalidate();
     }
+    if (m_relayBtnHover)
+    {
+        m_relayBtnHover = false;
+        Invalidate();
+    }
+    if (m_recallEditHover)
+    {
+        m_recallEditHover = false;
+        Invalidate();
+    }
+    if (m_secretBtnHover != -1)
+    {
+        m_secretBtnHover = -1;
+        Invalidate();
+    }
+    if (m_shareBtnHover)
+    {
+        m_shareBtnHover = false;
+        Invalidate();
+    }
     // 从图钉上直接移出本行：撤销「取消 Pin」悬停提示的登记。
     POINT noPoint = { 0, 0 };
     SetPinHover(false, noPoint);
+    // 代码卡片：撤掉悬停效果，「已复制」恢复为「复制」
+    UpdateCodeHover(noPoint, false);
     return false;
 }
 
@@ -2232,6 +3760,48 @@ bool ChatBubble::OnSetCursor(POINT pt)
     // 光标落在合并卡片上：显示手型，提示单击可以打开聊天记录。多选模式下整行是勾选目标，
     // 不给手型
     if (!ParentInMultiSelect() && m_msg.kind == kMsgMerged && ::PtInRect(&m_mergedRect, pt))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在语音气泡或发送失败的红色感叹号上：显示手型，单击播放 / 停止或重发
+    if (!ParentInMultiSelect() && m_msg.kind == kMsgVoice
+        && (::PtInRect(&m_voiceRect, pt) || ::PtInRect(&m_voiceFailRect, pt)))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在可点的共享卡片上：显示手型，单击打开共享
+    if (!ParentInMultiSelect()
+        && ((m_msg.kind == kMsgFileShare && m_msg.shareButtonEnabled)
+            || (m_msg.kind == kMsgScreenShare && m_msg.screenShareButtonEnabled))
+        && ::PtInRect(&m_shareRect, pt))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在密聊邀请卡片的按钮上：显示手型
+    if (SecretInviteButtonAt(pt) >= 0)
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在入群邀请卡片可点的「加入群聊」按钮行上：显示手型
+    if (!ParentInMultiSelect() && m_msg.kind == kMsgGroupInvite && GroupInviteButtonClickable()
+        && ::PtInRect(&m_shareBtnRect, pt))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在撤回提示行的「编辑」上：显示手型，单击把撤回的内容放回输入框
+    if (RecallEditAtPoint(pt))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在接龙卡片、或可点击的接龙提示行文字上：同样显示手型，单击打开详情窗
+    if ((!ParentInMultiSelect() && m_msg.kind == kMsgRelay && ::PtInRect(&m_relayRect, pt))
+        || RelayTipAtPoint(pt))
     {
         ::SetCursor(::LoadCursor(NULL, IDC_HAND));
         return true;
@@ -2255,6 +3825,18 @@ bool ChatBubble::OnSetCursor(POINT pt)
         ::SetCursor(::LoadCursor(NULL, IDC_HAND));
         return true;
     }
+    // 光标落在 Markdown 卡片上：显示手型，提示单击可以打开预览窗口
+    if (!ParentInMultiSelect() && PointInMarkdownCard(pt))
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 光标落在代码卡片上（「复制」、底栏与正文都可以点）：显示手型
+    if (!ParentInMultiSelect() && CodePartAtPoint(pt) != kCodePartNone)
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
     return false;
 }
 
@@ -2273,7 +3855,7 @@ bool ChatBubble::OnLButtonDblClk(POINT pt, UINT /*mkFlags*/)
         const int oldAnchor = m_selAnchor;
         const int oldCaret  = m_selCaret;
         m_selAnchor   = 0;
-        m_selCaret    = (int)m_selFlatText.size();
+        m_selCaret    = SelectableTextLength();
         m_selDragging = false;
         m_linkPressIdx = -1;
 
@@ -2325,12 +3907,18 @@ bool ChatBubble::OnLButtonDblClk(POINT pt, UINT /*mkFlags*/)
 void ChatBubble::InvalidateMeasureCache()
 {
     m_measuredWidth = -1;     // 下次 Measure 不再命中缓存，会重新排版并重算链接片段
+    m_measuredLineW = -1;       // 测量阶段的排版结果随之作废，绘制时不再复用
     m_renderDirty   = true;   // 渲染缓存里那张位图也作废
     Invalidate();
 }
 
 int ChatBubble::LinkAtPoint(POINT pt) const
 {
+    // Markdown 卡片上没有可点的链接（链接在预览窗口里点）
+    if (MarkdownActive())
+    {
+        return -1;
+    }
     if (m_linksFlat.empty() || m_selLayout.m_lines.empty())
     {
         return -1;   // 本条没有链接，或还没测量过
@@ -2437,7 +4025,7 @@ RECT ChatBubble::AvatarRectInHost() const
 
 bool ChatBubble::TryPopupAvatarMenu(const POINT& pt, HWND hwnd)
 {
-    // 只在群聊里生效：单聊窗上下就两个人，对着头像弹"与 TA 聊天 / @TA"没有意义。
+    // 只在群聊里生效：单聊窗上下就两个人，对着头像弹"发消息 / @TA"没有意义。
     // senderName 只有群聊才填（与 RenderContent 里 showSender 同一口径）。
     if (m_msg.fromMe || m_msg.senderName.IsEmpty())
     {
@@ -2473,12 +4061,14 @@ bool ChatBubble::PopupMemberMenu(long long uid, const std::wstring& displayName,
     // 「特别关注」那一项的文案同样由消息列表代问宿主群聊窗 —— 关注名单只有主面板
     // 那一份。单聊窗没装这个钩子，恒返回 false（按"未关注"显示）。
     const bool isStarred = (list != NULL) ? list->IsStarred(uid) : false;
+    // 「关注 TA 在本群的发言」同理，名单在主面板（docs/消息提醒模式与消息盒子方案.md §12）
+    const bool isGroupFollowed = (list != NULL) ? list->IsGroupFollowed(uid) : false;
 
     // selfUid 传法：BuildMentionMenuModel 只用它和第一个参数比对判本人，这里已经
     // 有现成的 isSelf，故把两者传成"相等 / 不等"即可，不必真去取本人 uid。
     const std::vector<MentionMenuEntry> model =
         BuildMentionMenuModel(uid, isSelf ? uid : 0, stillInGroup,
-                              myNetRole, targetNetRole, isStarred);
+                              myNetRole, targetNetRole, isStarred, isGroupFollowed);
     if (model.empty())
     {
         return false;
@@ -2541,6 +4131,12 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     {
         return false;
     }
+    // 密聊消息、密聊邀请卡片与密聊状态下的整张列表都没有右键菜单：不能复制、转发、引用、Pin、另存
+    // （docs/密聊方案.md 4.5）。返回 true 表示已处理，消息列表不再替它弹出任何菜单
+    if (IsSecretLocked())
+    {
+        return true;
+    }
     ChatMessageList* list = dynamic_cast<ChatMessageList*>(GetParent());
     if (list == NULL)
     {
@@ -2598,10 +4194,17 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
 
     // 菜单该有哪几行交给纯模型算（图片行会多出「图片另存为」「再次发送」两项），
     // 这里只负责照着它建真菜单。
+    // 发送失败的行：服务端不认识这条消息，只留「复制」「删除」「多选」，文字消息多一项「重新编辑」。
+    // 图片文字识别模块（FlamingoOcr.dll）可用时，图片行在「图片另存为」之后多一项「图片文字识别」。
+    // 「添加到备忘」的出现方式由宿主聊天窗设在消息列表上（单聊一项、群聊一到两项，其它窗口不出现）
+    const ChatMessageList* memoList = dynamic_cast<const ChatMessageList*>(GetParent());
+    const int memoMenu = (memoList != NULL) ? memoList->MemoMenuMode() : kChatMemoMenuNone;
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(m_msg.kind, EffectiveImageState(),
                                   !m_msg.imagePath.IsEmpty(), canRecall,
-                                  canPin, m_msg.pinned, canForward);
+                                  canPin, m_msg.pinned, canForward,
+                                  m_msg.sendFailed, CanReeditMessage(m_msg),
+                                  ocr::IsOcrEntryVisible(), memoMenu);
 
     HMENU menu = ::CreatePopupMenu();
     if (menu == NULL)
@@ -2613,8 +4216,8 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     // 顺序是"点哪儿就先给哪儿的操作"，与浏览器 / 各家 IM 的习惯一致。
     if (linkIdx >= 0)
     {
-        ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuOpenLink, L"在浏览器中打开");
-        ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuCopyLink, L"复制链接地址");
+        ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuOpenLink, TR(L"在浏览器中打开"));
+        ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuCopyLink, TR(L"复制链接地址"));
         ::AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
     }
 
@@ -2623,6 +4226,26 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
         if (model[mi].isSeparator)
         {
             ::AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+            continue;
+        }
+        // 代码卡片：「复制」写成「复制代码」，之后多两项「在窗口中查看」「另存为…」
+        if (model[mi].id == kChatMsgMenuCopy && CodeActive())
+        {
+            ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuCopy, TR(L"复制代码"));
+            ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuViewCode, TR(L"在窗口中查看"));
+            ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuSaveCodeAs, TR(L"另存为…"));
+            //已发出的代码片段可以追加批注（docs/代码片段方案.md 第 11.3 节）
+            if (CanAnnotateCodeMessage(m_msg))
+            {
+                ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuAnnotateCode, TR(L"添加批注…"));
+            }
+            continue;
+        }
+        // Markdown 卡片：「复制」写成「复制 Markdown 源文本」，之后多一项「在窗口中查看」（docs/Markdown消息方案.md 第 11.3 节）
+        if (model[mi].id == kChatMsgMenuCopy && MarkdownActive())
+        {
+            ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuCopyMarkdownSource, TR(L"复制 Markdown 源文本"));
+            ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuViewMarkdown, TR(L"在窗口中查看"));
             continue;
         }
         ::AppendMenuW(menu, MF_STRING, (UINT_PTR)model[mi].id, model[mi].label);
@@ -2655,12 +4278,64 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     case kChatMsgMenuCopyLink:
         // 复制的是规范化之后的 URL（www. 开头的那种已经补上了 https://），
         // 粘到浏览器地址栏里直接能用。
-        if (linkIdx >= 0 && (std::size_t)linkIdx < m_linksFlat.size())
         {
-            PutTextToClipboard(hwnd, m_linksFlat[(std::size_t)linkIdx].m_url.c_str());
+            const std::wstring url = LinkUrlByIndex(linkIdx);
+            if (!url.empty())
+            {
+                PutTextToClipboard(hwnd, url.c_str());
+            }
         }
         return true;
+    // 在窗口中查看：代码卡片请宿主打开代码查看窗
+    case kChatMsgMenuViewCode:
+        PostCodeViewerOpen();
+        return true;
+    // 添加批注…：请宿主打开发送代码窗口的批注模式（docs/代码片段方案.md 第 11.3 节）
+    case kChatMsgMenuAnnotateCode:
+        PostCodeViewerOpen(kCodeViewerActionAnnotate);
+        return true;
+    // 另存为：把代码卡片的代码写进用户选的文件
+    case kChatMsgMenuSaveCodeAs:
+        if (CodeActive())
+        {
+            SaveCodeWithDialog(hwnd, m_codeContent.m_code, m_msg.codeLang);
+        }
+        return true;
+    // 复制 Markdown 源文本：只写纯文字（正文转义已还原），粘到编辑器或别的应用里都是可用的 Markdown
+    case kChatMsgMenuCopyMarkdownSource:
+        {
+            const std::string source = MarkdownSourceFromBody(m_msg.text);
+            const int len = ::MultiByteToWideChar(CP_UTF8, 0, source.data(), (int)source.size(), NULL, 0);
+            std::wstring wide((size_t)(len > 0 ? len : 0), L'\0');
+            if (len > 0)
+            {
+                ::MultiByteToWideChar(CP_UTF8, 0, source.data(), (int)source.size(), &wide[0], len);
+            }
+            //剪贴板里的换行写成 \r\n，粘到记事本等程序里才是分行的
+            std::wstring crlf;
+            crlf.reserve(wide.size() + wide.size() / 16);
+            for (size_t i = 0; i < wide.size(); ++i)
+            {
+                if (wide[i] == L'\n')
+                {
+                    crlf += L'\r';
+                }
+                crlf += wide[i];
+            }
+            PutTextToClipboard(hwnd, crlf.c_str());
+        }
+        return true;
+    // 在窗口中查看：Markdown 卡片请宿主打开预览窗口
+    case kChatMsgMenuViewMarkdown:
+        PostMarkdownPreviewOpen();
+        return true;
     case kChatMsgMenuCopy:
+        // 代码卡片：复制代码原文（纯文字），不走下面的片段拆分
+        if (CodeActive())
+        {
+            CopyCodeToClipboard(hwnd);
+            return true;
+        }
         // 有选区就只复制选中的那一段，没有选区才复制整条 —— 不新增菜单项，
         // "复制"这一项按当前是否有选区自动切换含义，与浏览器 / 各家 IM 一致。
         //
@@ -2687,6 +4362,10 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     case kChatMsgMenuSaveImageAs:
         PostImageMenuAction(hwnd, kChatMsgMenuSaveImageAs);
         return true;
+    // 图片文字识别：与「图片另存为」同一条通路投给宿主聊天窗，由它打开识别结果窗口
+    case kChatMsgMenuOcr:
+        PostImageMenuAction(hwnd, kChatMsgMenuOcr);
+        return true;
     case kChatMsgMenuResendImage:
         PostImageMenuAction(hwnd, kChatMsgMenuResendImage);
         return true;
@@ -2694,6 +4373,15 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
         list->RequestReplyBubble(this);
         return true;
     case kChatMsgMenuForward:
+        // 本机已没有文件的在线直传文件无法转发：不进入多选，请宿主直接提示「在线直传的文件无法转发」
+        // （2026-10-05 起，docs/单聊文件P2P直传与P2P徽章方案.md 第 7 节）
+        if (DirectFileForwardBlocked(m_msg.kind == kMsgFile, m_msg.fileDirect,
+                                     DirectFileHasLocalCopy(std::wstring((LPCWSTR)m_msg.fileLocalPath),
+                                                            m_msg.fileSizeBytes)))
+        {
+            list->PostDirectForwardUnavailable();
+            return true;
+        }
         // 不直接打开目标选择窗：进入多选模式并预先勾选本条，由用户在多选操作条上
         // 选择逐条转发还是合并转发（与用户确认的交互，见 docs/聊天消息转发方案.md §3.1）
         list->EnterMultiSelectWith(this);
@@ -2709,6 +4397,22 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     case kChatMsgMenuMultiSelect:
         list->EnterMultiSelectWith(this);
         return true;
+    case kChatMsgMenuReedit:
+        // 原文放回输入框由宿主聊天窗做（输入框、待发 @ 候选都在它那里）
+        PostReeditRequest(hwnd);
+        return true;
+    // 添加到备忘 / 添加到我的备忘：宿主补上来源信息后打开新建本人备忘的窗口（docs/备忘与提醒方案.md §8）
+    case kChatMsgMenuAddMemo:
+        PostAddToMemo(hwnd, kMemoPrefillPersonal);
+        return true;
+    // 添加到群备忘：宿主打开新建群备忘的窗口，权限与边栏「新建」相同
+    case kChatMsgMenuAddGroupMemo:
+        PostAddToMemo(hwnd, kMemoPrefillGroup);
+        return true;
+    case kChatMsgMenuResendVoice:
+        // 与点红色感叹号同一条路：请宿主聊天窗用原 clientmsgid 重发
+        PostVoiceAction(kVoiceActionResend);
+        return true;
     case kChatMsgMenuDelete:
         // 本行没有服务器 msgid 时此调用会销毁 this；有 msgid 时只转交宿主发删除请求，
         // 气泡等删除推送到达后再移除
@@ -2716,6 +4420,31 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
         return true;
     default:
         return true;
+    }
+}
+
+void ChatBubble::PostAddToMemo(HWND hwnd, int target)
+{
+    // 异步 PostMessage，故堆分配传递；宿主处理完 delete，投递失败自行释放。
+    ChatAddToMemoRequest* req = new ChatAddToMemoRequest();
+    req->m_target = target;
+    req->m_msg = m_msg;
+    LOG_INFO("chat bubble: add to memo requested, msgid=%lld, target=%d.", m_msg.msgid, target);
+    if (!::PostMessage(hwnd, WM_CHAT_ADD_TO_MEMO, 0, (LPARAM)req))
+    {
+        delete req;
+    }
+}
+
+void ChatBubble::PostReeditRequest(HWND hwnd)
+{
+    // 异步 PostMessage，故堆分配传递；宿主处理完 delete，投递失败自行释放。
+    ChatReeditData* d = new ChatReeditData(BuildReeditData(m_msg));
+    LOG_INFO("chat bubble: reedit requested, clientmsgid=%s, segments=%u.", m_msg.clientMsgId.c_str(),
+             (unsigned)d->m_segments.size());
+    if (!::PostMessage(hwnd, WM_CHAT_REEDIT_REQUEST, 0, (LPARAM)d))
+    {
+        delete d;
     }
 }
 
@@ -2759,31 +4488,93 @@ void ChatBubble::OnPaint(HDC hdc, const RECT& rcInter)
     // 文字 / emoji / 时间分隔行：内容 / 行宽高 / 多选态都不变就复用缓存位图，省掉每帧
     // 用 GDI+ 重画整条气泡 —— 拖动分隔条 / 滚动时这是主要的每帧开销。
     const bool multi = ParentInMultiSelect();
-    if (m_renderDirty || m_renderDC == NULL
-        || m_renderW != w || m_renderH != h || m_renderMultiSel != multi)
+
+    // 这一次要画的是本行与脏区相交的那一段；不相交就什么都不用画
+    RECT inter;
+    if (!::IntersectRect(&inter, &m_rcItem, &rcInter))
     {
-        EnsureRenderCache(hdc, w, h);
+        return;
+    }
+    const int needTop = inter.top - m_rcItem.top;         // 要画的那一段的上沿（行内纵坐标）
+    const int needBottom = inter.bottom - m_rcItem.top;   // 要画的那一段的下沿（行内纵坐标）
+
+    // 内容、行宽、行高或多选态变了：缓存整张作废，正文也要重新排版
+    const bool contentChanged = m_renderDirty || m_renderDC == NULL || m_renderW != w
+                                || m_renderRowH != h || m_renderMultiSel != multi;
+
+    // 决定缓存覆盖行内的哪一段（2026-10-04 起）。普通行整条缓存；行高超过分段阈值的超长行只缓存要画的
+    // 那一段及其上下各 kTallSliceMarginPx 的余量 —— 上万像素高的气泡整条画进缓存要几百毫秒，屏幕上却
+    // 只露出几百像素。已有的缓存段覆盖得住这次要画的部分就直接使用，滚出这一段时再按新位置重画一段。
+    int sliceTop = 0;
+    int sliceH = h;
+    bool needRender = contentChanged;
+    if (h > s_tallSliceThresholdPx)
+    {
+        const bool covered = !contentChanged
+                             && m_renderSliceTop <= needTop
+                             && needBottom <= m_renderSliceTop + m_renderH;
+        if (covered)
+        {
+            sliceTop = m_renderSliceTop;
+            sliceH = m_renderH;
+        }
+        else
+        {
+            sliceTop = needTop - kTallSliceMarginPx;
+            if (sliceTop < 0)
+            {
+                sliceTop = 0;
+            }
+            int sliceBottom = needBottom + kTallSliceMarginPx;
+            if (sliceBottom > h)
+            {
+                sliceBottom = h;
+            }
+            sliceH = sliceBottom - sliceTop;
+            needRender = true;
+        }
+    }
+    else if (m_renderSliceTop != 0 || m_renderH != h)
+    {
+        // 缓存还是分段时建的（如分段阈值刚被调大）：改回整条缓存
+        needRender = true;
+    }
+
+    if (needRender)
+    {
+        EnsureRenderCache(hdc, w, sliceH);
         if (m_renderDC != NULL)
         {
             // 缓存位图先铺消息行底色（与 ChatMessageList 行底一致），气泡抗锯齿边据此
-            // 混色；再把本行按"矩形平移到原点"画进缓存（复用 RenderContent 的相对坐标）。
+            // 混色；再把本行画进缓存。行矩形临时摆成「缓存段上沿对齐位图的 0」，整条缓存时即
+            // 平移到原点（复用 RenderContent 的相对坐标）；缓存段以外的部分落在位图外面，画不出来，
+            // 正文那一层也会按位图边界跳过段外的文字，耗时只与缓存段的大小有关。
             HBRUSH bg = ::CreateSolidBrush(RGB(0xFA, 0xF9, 0xF6));
-            RECT lr = { 0, 0, w, h };
+            RECT lr = { 0, 0, w, sliceH };
             ::FillRect(m_renderDC, &lr, bg);
             ::DeleteObject(bg);
 
             const RECT saved = m_rcItem;
-            ::OffsetRect(&m_rcItem, -saved.left, -saved.top);   // 行矩形临时移到 (0,0)
+            m_rcItem.left   = 0;
+            m_rcItem.top    = -sliceTop;
+            m_rcItem.right  = w;
+            m_rcItem.bottom = h - sliceTop;
             PerfStopWatch sw;
-            m_textPlacedValid = false;   //整张重画：内容、宽度或样式可能都变了，正文重新排版
+            if (contentChanged)
+            {
+                m_textPlacedValid = false;   //内容、宽度或样式可能都变了，正文重新排版；只是换段时沿用已有的排版
+            }
             RenderContent(m_renderDC);
-            BUI_TRACE("CHATBUBBLE-RENDER kind=%d h=%d cached=1 cost=%.3fms",
-                      (int)m_msg.kind, h, sw.ElapsedMs());
+            ++s_renderPassCount;
+            BUI_TRACE("CHATBUBBLE-RENDER kind=%d h=%d cached=1 slice=%d..%d cost=%.3fms",
+                      (int)m_msg.kind, h, sliceTop, sliceTop + sliceH, sw.ElapsedMs());
             m_rcItem = saved;
 
             m_renderDirty    = false;
             m_renderMultiSel = multi;
-            m_selBandDirty   = false;   //整张都重画过了，待重画的横条自然作废
+            m_renderRowH     = h;
+            m_renderSliceTop = sliceTop;
+            m_selBandDirty   = false;   //整张（整段）都重画过了，待重画的横条自然作废
         }
     }
     else if (m_selBandDirty)
@@ -2792,11 +4583,13 @@ void ChatBubble::OnPaint(HDC hdc, const RECT& rcInter)
         // 的对应位置。不用"在缓存位图上设裁剪区再重画"：GDI+ 在与屏幕兼容的位图（DDB）上绘制时
         // 会改动设备上下文的裁剪区，后面的文字层就不再受横条限制，横条外的文字被重新叠画一遍，
         // 既慢又会让字形变深（2026-10-01 实测）。临时位图的物理边界不受这类改动影响；正文那一层
-        // 按位图边界跳过横条之外的文字段，耗时只与横条大小有关
+        // 按位图边界跳过横条之外的文字段，耗时只与横条大小有关。
+        // 分段缓存时只更新横条落在缓存段里的部分；段以外的部分不在缓存里，以后换段整段重画时
+        // 自然按最新的选区画出来。
         m_selBandDirty = false;
-        const RECT whole = { 0, 0, w, h };
+        const RECT cached = { 0, m_renderSliceTop, w, m_renderSliceTop + m_renderH };
         RECT band;
-        if (::IntersectRect(&band, &m_selBandRect, &whole))
+        if (::IntersectRect(&band, &m_selBandRect, &cached))
         {
             const int bandH = band.bottom - band.top;
             HDC tmpDC = ::CreateCompatibleDC(m_renderDC);
@@ -2819,7 +4612,7 @@ void ChatBubble::OnPaint(HDC hdc, const RECT& rcInter)
                 PerfStopWatch sw;
                 RenderContent(tmpDC);
                 m_rcItem = saved;
-                ::BitBlt(m_renderDC, 0, band.top, w, bandH, tmpDC, 0, 0, SRCCOPY);
+                ::BitBlt(m_renderDC, 0, band.top - m_renderSliceTop, w, bandH, tmpDC, 0, 0, SRCCOPY);
                 BUI_TRACE("CHATBUBBLE-RENDER-BAND kind=%d h=%d band=%d..%d cost=%.3fms",
                           (int)m_msg.kind, h, band.top, band.bottom, sw.ElapsedMs());
                 ::SelectObject(tmpDC, oldBmp);
@@ -2840,16 +4633,12 @@ void ChatBubble::OnPaint(HDC hdc, const RECT& rcInter)
 
     if (m_renderDC != NULL)
     {
-        // 只把本行与脏区相交的那块从缓存位图搬回 hdc。
-        RECT inter;
-        if (::IntersectRect(&inter, &m_rcItem, &rcInter))
-        {
-            ::BitBlt(hdc, inter.left, inter.top,
-                     inter.right - inter.left, inter.bottom - inter.top,
-                     m_renderDC,
-                     inter.left - m_rcItem.left, inter.top - m_rcItem.top,
-                     SRCCOPY);
-        }
+        // 只把本行与脏区相交的那块从缓存位图搬回 hdc。缓存位图的第 0 行对应行内的 m_renderSliceTop。
+        ::BitBlt(hdc, inter.left, inter.top,
+                 inter.right - inter.left, inter.bottom - inter.top,
+                 m_renderDC,
+                 inter.left - m_rcItem.left, inter.top - m_rcItem.top - m_renderSliceTop,
+                 SRCCOPY);
     }
     else
     {
@@ -2876,8 +4665,30 @@ void ChatBubble::RenderContent(HDC hdc)
     // ---- 时间分隔 / 撤回提示 ----
     if (m_msg.kind == kMsgTime)
     {
-        DrawGdiText(hdc, (LPCWSTR)m_msg.text, m_rcItem, 11, false, kTimeColor,
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        // 本人撤回的文字类消息在 5 分钟内带「编辑」：提示文字照旧是灰色，后面隔一小段画链接色的「编辑」，
+        // 鼠标停在「编辑」上时加下划线；两段合起来居中（docs/撤回后重新编辑方案.md §3.2）
+        if (HasRecallEdit(RecallEditNowMs()))
+        {
+            int tipLeft = 0;
+            int linkLeft = 0;
+            int linkWidth = 0;
+            RecallEditLayout(hdc, tipLeft, linkLeft, linkWidth);
+            RECT tipRc = m_rcItem;
+            tipRc.left = tipLeft;
+            DrawGdiText(hdc, (LPCWSTR)m_msg.text, tipRc, kTimeTextPx, false, kTimeColor,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+            RECT linkRc = m_rcItem;
+            linkRc.left = linkLeft;
+            DrawGdiText(hdc, TR(L"编辑"), linkRc, kTimeTextPx, false, kLinkFg,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
+                        false /*italic*/, m_recallEditHover /*underline*/, false /*strike*/);
+            return;
+        }
+        // 带 cardmsgid 的接龙提示行可以点击：鼠标停在文字上时加下划线
+        const bool tipHover = (m_msg.relayCardMsgid > 0 && m_relayBtnHover);
+        DrawGdiText(hdc, (LPCWSTR)m_msg.text, m_rcItem, kTimeTextPx, false, kTimeColor,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
+                    false /*italic*/, tipHover /*underline*/, false /*strike*/);
         return;
     }
 
@@ -2910,6 +4721,11 @@ void ChatBubble::RenderContent(HDC hdc)
         avatarText  = ChatPartner().avatarText;
         avatarColor = ChatPartner().avatarColor;
     }
+    // 发送者离线（本人的气泡则是本端掉线）时，字形头像的底色换成等亮度的灰色
+    if (m_avatarGray)
+    {
+        avatarColor = balloonmain::MakeGrayColor(avatarColor);
+    }
 
     // ---- 头像位置 ----
     const int avX = isMe ? (cx + cw - kEdgePad - kAvatarSize) : (cx + kEdgePad);
@@ -2935,7 +4751,16 @@ void ChatBubble::RenderContent(HDC hdc)
                       + kTextPadH * 2;
             bubbleH = kTextBubbleH;
         }
-        if (bubbleW > maxBubbleW)
+        // 代码卡片可以用满两侧头像之间的整列宽度，其余文字气泡最宽为内容区的 62%
+        if (CodeActive())
+        {
+            const int codeMaxW = CodeColumnWidth(cw);
+            if (bubbleW > codeMaxW)
+            {
+                bubbleW = codeMaxW;
+            }
+        }
+        else if (bubbleW > maxBubbleW)
         {
             bubbleW = maxBubbleW;
         }
@@ -2959,6 +4784,38 @@ void ChatBubble::RenderContent(HDC hdc)
     case kMsgMerged:
         bubbleW = kMergedBubbleW;
         bubbleH = MergedBubbleHeight(m_msg.mergedLines.size());
+        break;
+    case kMsgRelay:
+        bubbleW = kRelayBubbleW;
+        bubbleH = RelayBubbleHeight(m_relayNoteLines.size(), m_msg.relayLines.size(),
+                                    RelayButtonLabel(m_msg.relayButton) != NULL);
+        break;
+    case kMsgFileShare:
+        bubbleW = kShareBubbleW;
+        bubbleH = ShareBubbleHeight(!m_msg.sharePath.IsEmpty(), ShareCardButtonLabel(m_msg.shareButton) != NULL);
+        break;
+    case kMsgScreenShare:
+        bubbleW = kShareBubbleW;
+        bubbleH = ShareBubbleHeight(true, m_msg.screenShareHasButton, !m_msg.screenShareNotice.IsEmpty(),
+                                    m_shareDescLines.size());
+        break;
+    case kMsgGroupInvite:
+        bubbleW = kShareBubbleW;
+        bubbleH = ShareBubbleHeight(true, m_msg.inviteHasButton);
+        break;
+    case kMsgSecretInvite:
+        bubbleW = kShareBubbleW;
+        bubbleH = ShareBubbleHeight(true, m_msg.secretInviteButtons > 0);
+        break;
+    case kMsgVoice:
+        //宽度随时长变化，不超过本行气泡的最大宽度
+        bubbleW = VoiceBubbleWidth(m_msg.voiceDuration);
+        if (bubbleW > maxBubbleW)
+        {
+            bubbleW = maxBubbleW;
+        }
+        //高度与 GetRowHeight 同一口径
+        bubbleH = (m_measuredWidth >= 0) ? m_textBubbleH : kTextBubbleH;
         break;
     default:
         break;
@@ -2995,9 +4852,16 @@ void ChatBubble::RenderContent(HDC hdc)
         HBITMAP avatarBmp = NULL;
         if (!m_msg.senderAvatarImagePath.IsEmpty())
         {
-            avatarBmp = ChatAvatarBitmapCache::Inst().Get(
-                std::wstring((LPCWSTR)m_msg.senderAvatarImagePath),
-                kAvatarSize, (int)kAvatarRadius);
+            const std::wstring avatarPath((LPCWSTR)m_msg.senderAvatarImagePath);
+            // 发送者离线时取灰度副本；副本取不到时退回彩色原图，不画成字形
+            if (m_avatarGray)
+            {
+                avatarBmp = ChatAvatarBitmapCache::Inst().GetGray(avatarPath, kAvatarSize, (int)kAvatarRadius);
+            }
+            if (avatarBmp == NULL)
+            {
+                avatarBmp = ChatAvatarBitmapCache::Inst().Get(avatarPath, kAvatarSize, (int)kAvatarRadius);
+            }
         }
         const double avatarFetchMs = avatarStopWatch.ElapsedMs();
 
@@ -3019,11 +4883,11 @@ void ChatBubble::RenderContent(HDC hdc)
         }
         else
         {
-            // 无真图 / 解码失败：填底色，字形稍后在文字层绘制。
+            // 无真图 / 解码失败：填底色，字形稍后在文字层绘制。底色按像素格对齐地填充，与头像字、照片头像对齐（见 AvatarGlyph.h）
             Gdiplus::SolidBrush avBrush(Gdiplus::Color(255,
                 GetRValue(avatarColor), GetGValue(avatarColor),
                 GetBValue(avatarColor)));
-            g.FillPath(&avBrush, &av);
+            balloonmain::FillAvatarBackground(g, avBrush, av);
         }
     }
 
@@ -3216,6 +5080,174 @@ void ChatBubble::RenderContent(HDC hdc)
         g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kMergedPadH), lineY,
                    (Gdiplus::REAL)(bubbleX + bubbleW - kMergedPadH), lineY);
     }
+    else if (m_msg.kind == kMsgRelay)
+    {
+        // 接龙卡片：标题前画接龙图标；有按钮时在按钮行上方画一条分隔线。文字在下面的 GDI
+        // 文字层画。记下整张卡片与按钮行的矩形，供点击命中。
+        m_relayRect.left   = bubbleX;
+        m_relayRect.top    = bubbleY;
+        m_relayRect.right  = bubbleX + bubbleW;
+        m_relayRect.bottom = bubbleY + bubbleH;
+        DrawChatIcon(g, kChatIconRelay, (Gdiplus::REAL)(bubbleX + kRelayPadH),
+                     (Gdiplus::REAL)(bubbleY + kRelayTitleTop + (kRelayTitleH - kRelayIconSize) / 2),
+                     (Gdiplus::REAL)kRelayIconSize, kRelayIconColor, kRelayIconStroke);
+        if (RelayButtonLabel(m_msg.relayButton) != NULL)
+        {
+            const int btnTop = bubbleY + bubbleH - kRelayBtnH;
+            Gdiplus::Pen divider(kRelayDivider, 1.0f);
+            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kRelayPadH), (Gdiplus::REAL)btnTop,
+                       (Gdiplus::REAL)(bubbleX + bubbleW - kRelayPadH), (Gdiplus::REAL)btnTop);
+            m_relayBtnRect.left   = bubbleX;
+            m_relayBtnRect.top    = btnTop;
+            m_relayBtnRect.right  = bubbleX + bubbleW;
+            m_relayBtnRect.bottom = bubbleY + bubbleH;
+        }
+        else
+        {
+            ::SetRectEmpty(&m_relayBtnRect);
+        }
+    }
+    else if (m_msg.kind == kMsgVoice)
+    {
+        // 语音气泡：左侧喇叭图标（播放中按帧轮换声波道数），中间波形，右侧时长在下面的 GDI 文字层画。
+        // 记下气泡矩形供点击命中；本人发的「发送中」在左侧画静态圆环，对方发来且未听过的在右侧画红点
+        m_voiceRect.left   = bubbleX;
+        m_voiceRect.top    = bubbleY;
+        m_voiceRect.right  = bubbleX + bubbleW;
+        m_voiceRect.bottom = bubbleY + bubbleH;
+        ::SetRectEmpty(&m_voiceFailRect);
+        //喇叭图标、波形与对方发来未听的红点：与语音条控件共用 ChatVoicePaint 的画法
+        PaintVoiceBarShapes(g, m_voiceRect, m_msg, true);
+        //发送中：左侧静态圆环（位置与发送失败的红色感叹号相同，2026-10-04 用户确认）
+        if (m_msg.fromMe && !m_msg.sendFailed && m_msg.voiceState == kVoiceStateSending)
+        {
+            DrawDownloadingBadge(g, (float)(bubbleX - kFailMarkGap - kFailMarkSize / 2),
+                                 (float)(bubbleY + bubbleH / 2), (float)kFailMarkSize);
+        }
+    }
+    else if (m_msg.kind == kMsgScreenShare)
+    {
+        // 屏幕共享卡片：标题前画屏幕共享图标；有按钮时在按钮行上方画一条分隔线，几何与文件共享卡片相同。
+        // 文字在下面的 GDI 文字层画。记下整张卡片与按钮行的矩形（与文件共享卡片共用这两个成员），供点击命中。
+        m_shareRect.left   = bubbleX;
+        m_shareRect.top    = bubbleY;
+        m_shareRect.right  = bubbleX + bubbleW;
+        m_shareRect.bottom = bubbleY + bubbleH;
+        //群通话卡片与一对一通话卡片复用这套版式，标题前按媒体类型画摄像机或电话
+        //群公告卡片画喇叭、群备忘卡片画日历（2026-10-05 起同样复用这套版式）
+        const bool callCard = m_msg.screenShareIsGroupCall || m_msg.screenShareIsCallCard;
+        int cardIcon = !callCard ? kChatIconScreenShare
+                       : (m_msg.groupCallMedia == kGroupCallCardVideo ? kChatIconVideo : kChatIconPhone);
+        if (m_msg.screenShareIsAnnouncement)
+            cardIcon = kChatIconAnnounce;
+        else if (m_msg.screenShareIsMemo)
+            cardIcon = kChatIconMemo;
+        else if (m_msg.screenShareIsCloudRecord)
+            cardIcon = m_msg.cloudRecordAudioOnly ? kChatIconMic : kChatIconRecord;
+        DrawChatIcon(g, cardIcon, (Gdiplus::REAL)(bubbleX + kSharePadH),
+                     (Gdiplus::REAL)(bubbleY + kShareTitleTop + (kShareTitleH - kShareIconSize) / 2),
+                     (Gdiplus::REAL)kShareIconSize, kShareIconColor, kShareIconStroke);
+        if (m_msg.screenShareHasButton)
+        {
+            const int btnTop = bubbleY + bubbleH - kShareBtnH;
+            Gdiplus::Pen divider(kShareDivider, 1.0f);
+            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
+                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
+            m_shareBtnRect.left   = bubbleX;
+            m_shareBtnRect.top    = btnTop;
+            m_shareBtnRect.right  = bubbleX + bubbleW;
+            m_shareBtnRect.bottom = bubbleY + bubbleH;
+        }
+        else
+        {
+            ::SetRectEmpty(&m_shareBtnRect);
+        }
+    }
+    else if (m_msg.kind == kMsgGroupInvite)
+    {
+        // 入群邀请卡片：与屏幕共享卡片同一套几何。标题前画入群邀请图标；有按钮时在按钮行上方画一条分隔线。
+        // 文字在下面的 GDI 文字层画。记下整张卡片与按钮行的矩形（与共享卡片共用这两个成员），供点击命中。
+        m_shareRect.left   = bubbleX;
+        m_shareRect.top    = bubbleY;
+        m_shareRect.right  = bubbleX + bubbleW;
+        m_shareRect.bottom = bubbleY + bubbleH;
+        DrawChatIcon(g, kChatIconGroupInvite, (Gdiplus::REAL)(bubbleX + kSharePadH),
+                     (Gdiplus::REAL)(bubbleY + kShareTitleTop + (kShareTitleH - kShareIconSize) / 2),
+                     (Gdiplus::REAL)kShareIconSize, kShareIconColor, kShareIconStroke);
+        if (m_msg.inviteHasButton)
+        {
+            const int btnTop = bubbleY + bubbleH - kShareBtnH;
+            Gdiplus::Pen divider(kShareDivider, 1.0f);
+            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
+                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
+            m_shareBtnRect.left   = bubbleX;
+            m_shareBtnRect.top    = btnTop;
+            m_shareBtnRect.right  = bubbleX + bubbleW;
+            m_shareBtnRect.bottom = bubbleY + bubbleH;
+        }
+        else
+        {
+            ::SetRectEmpty(&m_shareBtnRect);
+        }
+    }
+    else if (m_msg.kind == kMsgSecretInvite)
+    {
+        // 密聊邀请卡片：与入群邀请卡片同一套几何。标题前画挂锁；有按钮时在按钮行上方画一条横向分隔线，两个按钮时
+        // 再在按钮行正中画一条竖向分隔线（左「同意」右「忽略」）。文字在下面的 GDI 文字层画。记下整张卡片与按钮行的
+        // 矩形（与共享卡片共用这两个成员），按钮的左右分界由 SecretInviteButtonAt 按同一口径计算。
+        m_shareRect.left   = bubbleX;
+        m_shareRect.top    = bubbleY;
+        m_shareRect.right  = bubbleX + bubbleW;
+        m_shareRect.bottom = bubbleY + bubbleH;
+        DrawChatIcon(g, kChatIconLock, (Gdiplus::REAL)(bubbleX + kSharePadH),
+                     (Gdiplus::REAL)(bubbleY + kShareTitleTop + (kShareTitleH - kShareIconSize) / 2),
+                     (Gdiplus::REAL)kShareIconSize, kShareIconColor, kShareIconStroke);
+        if (m_msg.secretInviteButtons > 0)
+        {
+            const int btnTop = bubbleY + bubbleH - kShareBtnH;
+            Gdiplus::Pen divider(kShareDivider, 1.0f);
+            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
+                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
+            if (m_msg.secretInviteButtons > 1)
+            {
+                const int midX = bubbleX + bubbleW / 2;
+                g.DrawLine(&divider, (Gdiplus::REAL)midX, (Gdiplus::REAL)(btnTop + kSecretBtnDividerInset),
+                           (Gdiplus::REAL)midX, (Gdiplus::REAL)(bubbleY + bubbleH - kSecretBtnDividerInset));
+            }
+            m_shareBtnRect.left   = bubbleX;
+            m_shareBtnRect.top    = btnTop;
+            m_shareBtnRect.right  = bubbleX + bubbleW;
+            m_shareBtnRect.bottom = bubbleY + bubbleH;
+        }
+        else
+        {
+            ::SetRectEmpty(&m_shareBtnRect);
+        }
+    }
+    else if (m_msg.kind == kMsgFileShare)
+    {
+        // 共享卡片：有按钮时在按钮行上方画一条分隔线。标题前的系统类型图标与文字在下面的 GDI 文字层画。
+        // 记下整张卡片与按钮行的矩形，供点击命中。
+        m_shareRect.left   = bubbleX;
+        m_shareRect.top    = bubbleY;
+        m_shareRect.right  = bubbleX + bubbleW;
+        m_shareRect.bottom = bubbleY + bubbleH;
+        if (ShareCardButtonLabel(m_msg.shareButton) != NULL)
+        {
+            const int btnTop = bubbleY + bubbleH - kShareBtnH;
+            Gdiplus::Pen divider(kShareDivider, 1.0f);
+            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
+                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
+            m_shareBtnRect.left   = bubbleX;
+            m_shareBtnRect.top    = btnTop;
+            m_shareBtnRect.right  = bubbleX + bubbleW;
+            m_shareBtnRect.bottom = bubbleY + bubbleH;
+        }
+        else
+        {
+            ::SetRectEmpty(&m_shareBtnRect);
+        }
+    }
 
     // ---- 文字层（GDI）----
 
@@ -3223,8 +5255,8 @@ void ChatBubble::RenderContent(HDC hdc)
     if (!drewAvatarImage && !avatarText.IsEmpty())
     {
         RECT avRc = { avX, avY, avX + kAvatarSize, avY + kAvatarSize };
-        DrawGdiText(hdc, (LPCWSTR)avatarText, avRc, 16, true, kAvatarText,
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        // 按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低
+        balloonmain::DrawCenteredGlyphGdi(hdc, (LPCWSTR)avatarText, avRc, 16, true, kAvatarText);
     }
 
     // 群聊发送者名（对方气泡上方）。
@@ -3235,6 +5267,14 @@ void ChatBubble::RenderContent(HDC hdc)
         DrawGdiText(hdc, (LPCWSTR)m_msg.senderName, snRc, 11, false,
                     RGB(0x8A, 0x8A, 0x8A),
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        //机器人发送者：名字后面画「机器人」徽章（docs/机器人方案.md §4.2）
+        if (m_msg.senderIsBot)
+        {
+            const int nameW = chatpaint::MeasureTextWidth(hdc, (LPCWSTR)m_msg.senderName, 11, false);
+            chatpaint::DrawTextBadgeInRow(hdc, TR(L"机器人"), chatpaint::kBotBadgeBgColor, chatpaint::kBotBadgeTextColor,
+                                          snRc.left + nameW + chatpaint::kBotBadgeGapPx, snRc.top, snRc.bottom,
+                                          snRc.right);
+        }
     }
 
     // 引用块（气泡内部顶端）：左侧一条竖线 + 两行文字（人名 / 被引用内容）。
@@ -3265,10 +5305,11 @@ void ChatBubble::RenderContent(HDC hdc)
 
             // 与图片气泡同一套缓存：命中就画，未命中先入队后台解码 + 缩放，
             // 完成后 ChatImageCache 会 PostMessage(WM_CHAT_IMAGE_READY) 让聊天窗重绘。
+            // 方框是固定的正方形，按居中裁切缩放，非方形的图不会被压扁；Get 与 Request 须传同一个方式。
             std::wstring thumbPath((LPCWSTR)m_msg.quoteImagePath);
             Gdiplus::Bitmap* thumb = thumbPath.empty()
                 ? NULL
-                : ChatImageCache::Inst().Get(thumbPath, kQuoteThumbSize, kQuoteThumbSize);
+                : ChatImageCache::Inst().Get(thumbPath, kQuoteThumbSize, kQuoteThumbSize, kImageFitCover);
             if (thumb != NULL)
             {
                 // 显式裁到目标方框内再画。缓存返回的位图未必正好是这个尺寸，
@@ -3281,7 +5322,7 @@ void ChatBubble::RenderContent(HDC hdc)
             {
                 if (!thumbPath.empty())
                 {
-                    ChatImageCache::Inst().Request(thumbPath, kQuoteThumbSize, kQuoteThumbSize);
+                    ChatImageCache::Inst().Request(thumbPath, kQuoteThumbSize, kQuoteThumbSize, kImageFitCover);
                     // 每帧都会走到这里，故只在第一次入队时记一条，避免刷屏。
                     // 若这条只出现一两次之后缩略图仍不出现，说明解码没回来或失败；
                     // 若反复出现，说明每次重绘都当成新请求 —— 那是 key 对不上。
@@ -3317,7 +5358,27 @@ void ChatBubble::RenderContent(HDC hdc)
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
     // 气泡内容文字。
-    if (m_msg.kind == kMsgText)
+    if (m_msg.kind == kMsgText && CodeActive())
+    {
+        // 代码卡片：画在气泡里，四周留出 kCodeBubblePad 的气泡边；带引用时接在引用块下面（与 MeasureCode 同一口径）。
+        // 卡片位置记成行内相对坐标（理由同 m_quoteRectRel），供命中测试
+        const int cardLeft = bubbleX + kCodeBubblePad;
+        const int cardTop = bubbleY + (m_msg.hasQuote ? kTextPadV + kQuoteBlockH + kQuoteGap : kCodeBubblePad);
+        PaintCodeBlock(hdc, m_codeLayout, cardLeft, cardTop, m_codeHover);
+        ::SetRect(&m_codeCardRel, cardLeft - m_rcItem.left, cardTop - m_rcItem.top,
+                  cardLeft - m_rcItem.left + m_codeLayout.m_size.cx, cardTop - m_rcItem.top + m_codeLayout.m_size.cy);
+    }
+    else if (m_msg.kind == kMsgText && MarkdownActive())
+    {
+        // Markdown 卡片（docs/Markdown消息方案.md 第 11.3 节）：标题、最多三行摘要、分隔线、底部「M↓ Markdown 文档」。
+        // 卡片矩形记成行内相对坐标（理由同 m_quoteRectRel），供点击命中
+        ::SetRect(&m_mdCardRel, bubbleX - m_rcItem.left, bubbleY - m_rcItem.top,
+                  bubbleX + bubbleW - m_rcItem.left, bubbleY + bubbleH - m_rcItem.top);
+        // 卡片内容的绘制与消息记录窗的独立卡片控件共用（ChatMarkdownCard），底色就是气泡
+        const RECT cardRc = { bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH };
+        PaintMarkdownCardContent(hdc, cardRc, m_mdCardTitle, m_mdCardSummary, m_mdCardSummaryH);
+    }
+    else if (m_msg.kind == kMsgText)
     {
         RECT txRc = { bubbleX + kTextPadH, bubbleY + kTextPadV,
                       bubbleX + bubbleW - kTextPadH, bubbleY + bubbleH - kTextPadV };
@@ -3346,9 +5407,19 @@ void ChatBubble::RenderContent(HDC hdc)
         const int txW = txRc.right - txRc.left;
         if (!m_textPlacedValid || m_textPlacedW != txW)
         {
-            const std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(m_msg.text);
-            m_textPlaced.clear();
-            LayoutInlineContentForStyle(hdc, segs, txW, kFaceDisplayPx, st, &m_textPlaced);
+            if (m_measuredLineW >= 0 && txW >= m_measuredLineW && txW <= m_measuredMaxTextW)
+            {
+                // 文字区宽度落在测量那次排版的最大行宽与可用宽度之间：重新排版的结果与测量时的完全相同
+                // （贪心折行在这个宽度范围内的断行位置不变，字体也只差下划线、删除线这两个不影响字宽的
+                // 标志），直接复用，省掉一次整段排版
+                m_textPlaced = m_measuredPlaced;
+            }
+            else
+            {
+                const std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(m_msg.text);
+                m_textPlaced.clear();
+                LayoutInlineContentForStyle(hdc, segs, txW, kFaceDisplayPx, st, &m_textPlaced);
+            }
             m_textPlacedValid = true;
             m_textPlacedW = txW;
         }
@@ -3386,11 +5457,13 @@ void ChatBubble::RenderContent(HDC hdc)
         CString overlay;
         if (m_msg.imageState == kChatImageStateUploading)
         {
-            overlay.Format(_T("上传中 %d%%"), m_msg.imageProgress);
+            overlay.Format(TR(L"上传中 %d%%"), m_msg.imageProgress);
         }
         else if (m_msg.imageState == kChatImageStateDownloading)
         {
-            overlay = _T("下载中…");
+            //密聊图片经服务端分块中转，收到首块之后就有进度（docs/密聊方案.md 4.10）
+            overlay = (m_msg.isSecret && m_msg.imageProgress > 0) ? SecretImageReceivingText(m_msg.imageProgress)
+                                                                  : CString(TR(L"下载中…"));
         }
         else
         {
@@ -3444,6 +5517,14 @@ void ChatBubble::RenderContent(HDC hdc)
                        textR, bubbleY + kFolderSummaryTop + kFolderSummaryH };
         DrawGdiText(hdc, (LPCWSTR)summary, sumRc, 11, false, RGB(0x8A, 0x8A, 0x8A),
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+        // ---- 「P2P」徽章：数据经直连链路传输时画在摘要行文字之后（2026-10-04 起）----
+        if (FolderBubbleShowsP2PBadge(st, balloonmain::ShouldShowP2PBadge(m_msg.folderLinkPath)))
+        {
+            const int summaryW = MeasureTextWidth(hdc, (LPCWSTR)summary, 11);
+            chatpaint::DrawP2PBadgeInRow(hdc, textX + summaryW + chatpaint::kP2PBadgeGapPx, sumRc.top, sumRc.bottom,
+                                         textR);
+        }
 
         // ---- 状态行：眼下进行到哪一步（传输中还带右端的百分比）----
         // 有没有进度条一律问 FolderStateHasProgress，与上面 GDI+ 层画进度条、以及
@@ -3529,46 +5610,46 @@ void ChatBubble::RenderContent(HDC hdc)
                 //接收：接收端同意接收，直接落到本机默认的文件夹接收目录，不再打断用户
                 //选位置。主动作，用主题橙
                 case kChatFolderAccept:
-                    label = _T("接收");
+                    label = TR(L"接收");
                     break;
 
                 //另存为：同样是同意接收，但先由宿主弹出「选择保存位置」。它与「接收」
                 //只差落地目录从哪来，属于同一类动作的次要入口，故用灰色链接，把主题橙
                 //留给「接收」
                 case kChatFolderSaveAs:
-                    label    = _T("另存为");
+                    label    = TR(L"另存为");
                     lblColor = RGB(0x8A, 0x8A, 0x8A);
                     break;
 
                 //拒绝：次要动作，灰色链接，免得与「接收」抢注意力
                 case kChatFolderReject:
-                    label    = _T("拒绝");
+                    label    = TR(L"拒绝");
                     lblColor = RGB(0x8A, 0x8A, 0x8A);
                     break;
 
                 //取消：邀请态是撤回邀请、传输中是中止传输，两端都可能出现。同为次要动作
                 case kChatFolderCancel:
-                    label    = _T("取消");
+                    label    = TR(L"取消");
                     lblColor = RGB(0x8A, 0x8A, 0x8A);
                     break;
 
                 //打开文件夹：完成后两端都有。接收端开落地目录、发送端开源目录，
                 //开哪个由宿主按 fromMe 决定，气泡这一层不区分
                 case kChatFolderOpenFolder:
-                    label = _T("打开文件夹");
+                    label = TR(L"打开文件夹");
                     break;
 
                 //重新发送：会话已不可续传（保留期过 / 被取消），从零发起一次完整传输。
                 //\x21BB = ↻ 循环箭头，与文件气泡的重试用同一枚字符
                 case kChatFolderResend:
-                    label = _T("\x21BB 重新发送");
+                    label = TR(L"\x21BB 重新发送");
                     break;
 
                 //重试续传：仅失败态的发送端有。可用性问 FolderRetryEnabled ——
                 //保留期已过时按钮仍画出来（让用户知道有这条路），但置灰且点不动
                 case kChatFolderRetry:
                 default:
-                    label   = _T("\x21BB 重试");
+                    label   = TR(L"\x21BB 重试");
                     enabled = FolderRetryEnabled(st, m_msg.fromMe, m_msg.folderWithinRetry);
                     lblColor = enabled ? RGB(0xE5, 0x39, 0x35) : RGB(0xB8, 0xB5, 0xB1);
                     break;
@@ -3620,15 +5701,290 @@ void ChatBubble::RenderContent(HDC hdc)
         CString footer;
         if (m_msg.mergedCount > 0)
         {
-            footer.Format(_T("聊天记录（共 %d 条）"), m_msg.mergedCount);
+            footer.Format(TR(L"聊天记录（共 %d 条）"), m_msg.mergedCount);
         }
         else
         {
-            footer = _T("聊天记录");
+            footer = TR(L"聊天记录");
         }
         RECT footRc = { textL, bubbleY + bubbleH - kMergedFooterH, textR, bubbleY + bubbleH };
         DrawGdiText(hdc, (LPCWSTR)footer, footRc, kMergedFooterPx, false, kMergedLineColor,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+    else if (m_msg.kind == kMsgRelay)
+    {
+        const int textL = bubbleX + kRelayPadH;
+        const int textR = bubbleX + bubbleW - kRelayPadH;
+        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+
+        // 标题：画在图标右侧，一行，过长以省略号收尾
+        int lineTop = bubbleY + kRelayTitleTop;
+        RECT titleRc = { textL + kRelayIconSize + kRelayIconGap, lineTop, textR, lineTop + kRelayTitleH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.relayTitle, titleRc, kRelayTitlePx, true, kBubbleText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kRelayTitleH;
+
+        // 说明：Measure 已按卡片内宽折好行、截断处带了省略号，这里逐行画
+        if (!m_relayNoteLines.empty())
+        {
+            lineTop += kRelayNoteGap;
+            for (size_t li = 0; li < m_relayNoteLines.size(); ++li)
+            {
+                RECT noteRc = { textL, lineTop, textR, lineTop + kRelayNoteLineH };
+                DrawGdiText(hdc, (LPCWSTR)m_relayNoteLines[li], noteRc, kRelayNotePx, false,
+                            kRelayGrayText, kOneLine);
+                lineTop += kRelayNoteLineH;
+            }
+        }
+
+        // 接龙：每行一条「序号. 名字　内容」，过长以省略号收尾；一条都没有时写一行灰字
+        lineTop += kRelayEntriesGap;
+        if (m_msg.relayLines.empty())
+        {
+            RECT emptyRc = { textL, lineTop, textR, lineTop + kRelayEntryH };
+            DrawGdiText(hdc, TR(L"还没有人参与"), emptyRc, kRelayEntryPx, false, kRelayGrayText, kOneLine);
+            lineTop += kRelayEntryH;
+        }
+        else
+        {
+            for (size_t li = 0; li < m_msg.relayLines.size(); ++li)
+            {
+                RECT entryRc = { textL, lineTop, textR, lineTop + kRelayEntryH };
+                DrawGdiText(hdc, (LPCWSTR)m_msg.relayLines[li], entryRc, kRelayEntryPx, false,
+                            kBubbleText, kOneLine | DT_END_ELLIPSIS);
+                lineTop += kRelayEntryH;
+            }
+        }
+
+        // 状态行：「共 N 人参与 · 截止 10-03 18:00」之类，ChatRelayCard 已拼好
+        lineTop += kRelayStatusGap;
+        RECT statusRc = { textL, lineTop, textR, lineTop + kRelayStatusH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.relayStatus, statusRc, kRelayStatusPx, false, kRelayGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+
+        // 按钮：分隔线下方一整行居中写按钮文字，悬停时颜色加深并加下划线
+        LPCWSTR label = RelayButtonLabel(m_msg.relayButton);
+        if (label != NULL)
+        {
+            RECT btnRc = { bubbleX, bubbleY + bubbleH - kRelayBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
+            DrawGdiText(hdc, label, btnRc, kRelayBtnPx, true,
+                        m_relayBtnHover ? kRelayBtnHoverText : kRelayBtnText,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                        false /*italic*/, m_relayBtnHover /*underline*/, false /*strike*/);
+        }
+    }
+
+    if (m_msg.kind == kMsgFileShare)
+    {
+        const int textL = bubbleX + kSharePadH;
+        const int textR = bubbleX + bubbleW - kSharePadH;
+        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+
+        // 标题前的类型图标：本机的系统图标，单个文件按显示路径（没有时按名称）的扩展名取
+        int lineTop = bubbleY + kShareTitleTop;
+        const int iconTop = lineTop + (kShareTitleH - kShareTypeIconSize) / 2;
+        const RECT iconRc = { textL, iconTop, textL + kShareTypeIconSize, iconTop + kShareTypeIconSize };
+        const CString& iconName = m_msg.sharePath.IsEmpty() ? m_msg.shareName : m_msg.sharePath;
+        shellicon::DrawItemIcon(hdc, ShareCardIconItemKind(m_msg.shareKind), std::wstring((LPCWSTR)iconName), iconRc);
+
+        // 名称：画在图标右侧，一行，过长以省略号收尾
+        RECT titleRc = { textL + kShareTypeIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.shareName, titleRc, kShareTitlePx, true, kBubbleText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kShareTitleH;
+
+        // 显示路径：路径过长时省略中间部分
+        if (!m_msg.sharePath.IsEmpty())
+        {
+            lineTop += kSharePathGap;
+            RECT pathRc = { textL, lineTop, textR, lineTop + kSharePathH };
+            DrawGdiText(hdc, (LPCWSTR)m_msg.sharePath, pathRc, kSharePathPx, false, kShareGrayText,
+                        kOneLine | DT_PATH_ELLIPSIS);
+            lineTop += kSharePathH;
+        }
+
+        // 「某某的共享 · 状态」
+        lineTop += kShareStatusGap;
+        CString statusLine = m_msg.shareOwnerLine;
+        if (!m_msg.shareStatus.IsEmpty())
+        {
+            statusLine += L" · ";
+            statusLine += m_msg.shareStatus;
+        }
+        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
+        DrawGdiText(hdc, (LPCWSTR)statusLine, statusRc, kShareStatusPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+
+        // 按钮：分隔线下方一整行居中写按钮文字；可点时悬停加深并加下划线，不可点时为灰
+        LPCWSTR label = ShareCardButtonLabel(m_msg.shareButton);
+        if (label != NULL)
+        {
+            RECT btnRc = { bubbleX, bubbleY + bubbleH - kShareBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
+            const bool hover = m_shareBtnHover && m_msg.shareButtonEnabled;
+            const COLORREF color = !m_msg.shareButtonEnabled ? kShareBtnDisabledText
+                                                              : (hover ? kShareBtnHoverText : kShareBtnText);
+            DrawGdiText(hdc, label, btnRc, kShareBtnPx, true, color,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                        false /*italic*/, hover /*underline*/, false /*strike*/);
+        }
+    }
+
+    // 语音气泡：右侧的时长文字（与语音条控件共用 ChatVoicePaint 的画法）
+    if (m_msg.kind == kMsgVoice)
+    {
+        const RECT voiceBar = { bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH };
+        PaintVoiceBarText(hdc, voiceBar, m_msg);
+    }
+
+    if (m_msg.kind == kMsgScreenShare)
+    {
+        const int textL = bubbleX + kSharePadH;
+        const int textR = bubbleX + bubbleW - kSharePadH;
+        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+
+        // 标题：画在图标右侧
+        int lineTop = bubbleY + kShareTitleTop;
+        RECT titleRc = { textL + kShareIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
+        //第 15 期起写共享标题；没有标题的旧卡片照旧写「屏幕共享」
+        const wchar_t* titleText =
+            m_msg.screenShareTitle.IsEmpty() ? TR(kScreenShareCardTitle) : (LPCWSTR)m_msg.screenShareTitle;
+        DrawGdiText(hdc, titleText, titleRc, kShareTitlePx, true, kBubbleText, kOneLine | DT_END_ELLIPSIS);
+        lineTop += kShareTitleH;
+
+        // 副标题：「某某发起的共享」，发起人名过长时省略
+        lineTop += kSharePathGap;
+        RECT subRc = { textL, lineTop, textR, lineTop + kSharePathH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.screenShareSubtitle, subRc, kSharePathPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kSharePathH;
+
+        // 描述块（第 15 期）：灰字，Measure 已按卡片内宽折成至多两行，超出部分以省略号收尾
+        if (!m_shareDescLines.empty())
+        {
+            lineTop += kShareDescGap;
+            for (size_t li = 0; li < m_shareDescLines.size(); ++li)
+            {
+                RECT descRc = { textL, lineTop, textR, lineTop + kShareDescLineH };
+                DrawGdiText(hdc, (LPCWSTR)m_shareDescLines[li], descRc, kShareDescPx, false, kShareGrayText,
+                            kOneLine | DT_END_ELLIPSIS);
+                lineTop += kShareDescLineH;
+            }
+        }
+
+        // 说明块（第 14 期）：强制模式时写明效果，最多两行、主题橙色提醒，自动换行
+        if (!m_msg.screenShareNotice.IsEmpty())
+        {
+            lineTop += kShareNoticeGap;
+            RECT noticeRc = { textL, lineTop, textR, lineTop + kShareNoticeLines * kShareNoticeLineH };
+            DrawGdiText(hdc, (LPCWSTR)m_msg.screenShareNotice, noticeRc, kShareNoticePx, false, kShareBtnText,
+                        DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
+            lineTop += kShareNoticeLines * kShareNoticeLineH;
+        }
+
+        // 状态
+        lineTop += kShareStatusGap;
+        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.screenShareStatus, statusRc, kShareStatusPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+
+        // 按钮：与文件共享卡片相同，可点时悬停加深并加下划线，共享已结束时为灰
+        if (m_msg.screenShareHasButton)
+        {
+            RECT btnRc = { bubbleX, bubbleY + bubbleH - kShareBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
+            const bool hover = m_shareBtnHover && m_msg.screenShareButtonEnabled;
+            const COLORREF color = !m_msg.screenShareButtonEnabled ? kShareBtnDisabledText
+                                                                    : (hover ? kShareBtnHoverText : kShareBtnText);
+            const bool infoCard = m_msg.screenShareIsAnnouncement || m_msg.screenShareIsMemo;
+            const wchar_t* btnText = infoCard ? TR(kInfoCardButton) : TR(kScreenShareCardButton);
+            if (m_msg.screenShareIsCloudRecord)
+                btnText = TR(kCloudRecordCardButton);
+            DrawGdiText(hdc, btnText, btnRc, kShareBtnPx, true, color,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                        false /*italic*/, hover /*underline*/, false /*strike*/);
+        }
+    }
+
+    if (m_msg.kind == kMsgGroupInvite)
+    {
+        const int textL = bubbleX + kSharePadH;
+        const int textR = bubbleX + bubbleW - kSharePadH;
+        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+
+        // 标题：画在图标右侧，名字过长时以省略号收尾
+        int lineTop = bubbleY + kShareTitleTop;
+        RECT titleRc = { textL + kShareIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.inviteTitle, titleRc, kShareTitlePx, true, kBubbleText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kShareTitleH;
+
+        // 副标题：「群名 · N 名成员」，群名过长时省略
+        lineTop += kSharePathGap;
+        RECT subRc = { textL, lineTop, textR, lineTop + kSharePathH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.inviteSubtitle, subRc, kSharePathPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kSharePathH;
+
+        // 状态
+        lineTop += kShareStatusGap;
+        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.inviteStatus, statusRc, kShareStatusPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+
+        // 按钮：「加入群聊」，点过之后等服务端应答期间写「正在加入…」且为灰；可点时悬停加深并加下划线
+        if (m_msg.inviteHasButton)
+        {
+            RECT btnRc = { bubbleX, bubbleY + bubbleH - kShareBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
+            const bool clickable = GroupInviteButtonClickable();
+            const bool hover = m_shareBtnHover && clickable;
+            const COLORREF color = !clickable ? kShareBtnDisabledText : (hover ? kShareBtnHoverText : kShareBtnText);
+            const CString label = GroupInviteButtonText(m_msg.inviteJoining);
+            DrawGdiText(hdc, (LPCWSTR)label, btnRc, kShareBtnPx, true, color,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                        false /*italic*/, hover /*underline*/, false /*strike*/);
+        }
+    }
+
+    if (m_msg.kind == kMsgSecretInvite)
+    {
+        const int textL = bubbleX + kSharePadH;
+        const int textR = bubbleX + bubbleW - kSharePadH;
+        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+
+        // 标题：画在挂锁右侧，名字过长时以省略号收尾
+        int lineTop = bubbleY + kShareTitleTop;
+        RECT titleRc = { textL + kShareIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.secretInviteTitle, titleRc, kShareTitlePx, true, kBubbleText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kShareTitleH;
+
+        // 说明：「密聊消息不会被记录，退出后全部清除」，对方无法防截图时写明
+        lineTop += kSharePathGap;
+        RECT subRc = { textL, lineTop, textR, lineTop + kSharePathH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.secretInviteSubtitle, subRc, kSharePathPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+        lineTop += kSharePathH;
+
+        // 剩余秒数
+        lineTop += kShareStatusGap;
+        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.secretInviteStatus, statusRc, kShareStatusPx, false, kShareGrayText,
+                    kOneLine | DT_END_ELLIPSIS);
+
+        // 按钮：一个时占满整行，两个时左右各占一半；悬停的那个加深并加下划线（多选模式下不给悬停效果）
+        const int buttons = m_msg.secretInviteButtons;
+        for (int bi = 0; bi < buttons; ++bi)
+        {
+            const int btnTop = bubbleY + bubbleH - kShareBtnH;
+            const int btnL = (buttons > 1 && bi == 1) ? (bubbleX + bubbleW / 2) : bubbleX;
+            const int btnR = (buttons > 1 && bi == 0) ? (bubbleX + bubbleW / 2) : (bubbleX + bubbleW);
+            RECT btnRc = { btnL, btnTop, btnR, bubbleY + bubbleH };
+            const bool hover = (m_secretBtnHover == bi);
+            const COLORREF color = hover ? kShareBtnHoverText : kShareBtnText;
+            const CString label = SecretInviteButtonText(buttons, bi);
+            DrawGdiText(hdc, (LPCWSTR)label, btnRc, kShareBtnPx, true, color,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                        false /*italic*/, hover /*underline*/, false /*strike*/);
+        }
     }
 
     // ---- 已读回执（单聊里自己发出的消息）----
@@ -3640,7 +5996,7 @@ void ChatBubble::RenderContent(HDC hdc)
     if (receipt == kReceiptRead)
     {
         const int rcY = bubbleY + bubbleH + kReceiptTopGap;
-        const int txtW = MeasureTextWidth(hdc, L"已读", kReceiptTextPx);
+        const int txtW = MeasureTextWidth(hdc, TR(L"已读"), kReceiptTextPx);
         const int receiptW = kReceiptCheckSize + kReceiptCheckGap + txtW;
         const int receiptX = bubbleX + bubbleW - receiptW;
         DrawChatIcon(g, kChatIconCheck, (Gdiplus::REAL)receiptX,
@@ -3649,18 +6005,49 @@ void ChatBubble::RenderContent(HDC hdc)
                          GetGValue(kReceiptText), GetBValue(kReceiptText)), kReceiptCheckStroke);
         RECT rcRc = { receiptX + kReceiptCheckSize + kReceiptCheckGap, rcY,
                       bubbleX + bubbleW, rcY + kReceiptHeight };
-        DrawGdiText(hdc, L"已读", rcRc, kReceiptTextPx, false, kReceiptText,
+        DrawGdiText(hdc, TR(L"已读"), rcRc, kReceiptTextPx, false, kReceiptText,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
     }
     else if (receipt == kReceiptUnread)
     {
         // 「未读」不带勾，用主题橙与灰色的「已读」区分开 —— 发送方一眼能看出对方还没看。
         const int rcY = bubbleY + bubbleH + kReceiptTopGap;
-        const int txtW = MeasureTextWidth(hdc, L"未读", kReceiptTextPx);
+        const int txtW = MeasureTextWidth(hdc, TR(L"未读"), kReceiptTextPx);
         RECT rcRc = { bubbleX + bubbleW - txtW, rcY,
                       bubbleX + bubbleW, rcY + kReceiptHeight };
-        DrawGdiText(hdc, L"未读", rcRc, kReceiptTextPx, false, kReceiptUnreadText,
+        DrawGdiText(hdc, TR(L"未读"), rcRc, kReceiptTextPx, false, kReceiptUnreadText,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    }
+
+    // ---- 发送失败（自己发出、被服务端拒绝的消息）----
+    // 气泡左侧垂直居中画一个红色圆形感叹号，气泡下方右对齐一行灰色小字写原因。失败的行没有 msgid，
+    // 不会有回执，也不会有图钉，两者不会与这里画的东西重叠。
+    if (m_msg.fromMe && m_msg.sendFailed)
+    {
+        const int markX = bubbleX - kFailMarkGap - kFailMarkSize;
+        const int markY = bubbleY + (bubbleH - kFailMarkSize) / 2;
+        Gdiplus::SolidBrush markBrush(Gdiplus::Color(255, GetRValue(kImagePlaceholderCaptionRed),
+                                                     GetGValue(kImagePlaceholderCaptionRed),
+                                                     GetBValue(kImagePlaceholderCaptionRed)));
+        g.FillEllipse(&markBrush, (Gdiplus::REAL)markX, (Gdiplus::REAL)markY,
+                      (Gdiplus::REAL)kFailMarkSize, (Gdiplus::REAL)kFailMarkSize);
+        RECT markRc = { markX, markY, markX + kFailMarkSize, markY + kFailMarkSize };
+        //语音：记下感叹号的矩形，点它重发（2026-10-04 用户确认）
+        if (m_msg.kind == kMsgVoice)
+        {
+            m_voiceFailRect = markRc;
+        }
+        DrawGdiText(hdc, L"!", markRc, kFailMarkTextPx, true, kFailMarkText,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+
+        if (!m_msg.failReason.IsEmpty())
+        {
+            const int rcY = bubbleY + bubbleH + kReceiptTopGap;
+            //原因可能比气泡宽：右边与气泡对齐，向左可以一直延伸到本行左边
+            RECT reasonRc = { x, rcY, bubbleX + bubbleW, rcY + kFailReasonHeight };
+            DrawGdiText(hdc, (LPCWSTR)m_msg.failReason, reasonRc, kReceiptTextPx, false, kReceiptText,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        }
     }
 
     // ---- Pin 标记（气泡外侧上角的一枚小图钉）----
@@ -3682,8 +6069,8 @@ void ChatBubble::RenderContent(HDC hdc)
         m_pinRectRel.bottom = contentTop + kPinIconSize + kPinHitPad - y;
     }
 
-    // ---- 多选勾选圈（行首勾选列内，垂直居中）----
-    if (multi && IsRealMessage())
+    // ---- 多选勾选圈（行首勾选列内，垂直居中）。密聊内容不能多选，不画勾选圈 ----
+    if (multi && IsRealMessage() && !IsSecretRow())
     {
         const Gdiplus::REAL chkX = (Gdiplus::REAL)(x + (kCheckColW - kCheckSize) / 2);
         const Gdiplus::REAL chkY = (Gdiplus::REAL)(y + (h - kCheckSize) / 2);

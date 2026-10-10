@@ -102,6 +102,9 @@ struct Enterprise
     // "公司本身"的那个真实部门，员工可以直接挂在它下面。空串表示服务端尚未为
     // 该企业建立根部门（存量数据迁移之前），此时组织树退回旧的合成根显示。
     CString          m_rootDeptId;
+    // 新建账号的前缀（= 服务端 t_enterprise.f_account_prefix，大写；2026-10-06 起）。空串表示没设，
+    // 新账号按默认的 EMP 生成。在企业设置窗口里修改，只影响之后新建的账号
+    CString          m_accountPrefix;
 };
 
 // 组织树节点。部门与员工共用一个结构，由 m_kind 区分：
@@ -128,7 +131,8 @@ struct OrgNode
     CString    m_phone;                            // 手机号
     CString    m_joined;                           // 入职日期，"YYYY-MM-DD"
     UserStatus m_userStatus = UserStatus::Active;   // 在职状态
-    CString    m_gender;                           // 性别
+    CString    m_gender;                           // 性别的显示文字（保密 / 男 / 女）
+    int        m_genderCode = 0;                   // 性别编码：0 保密 / 1 男 / 2 女（与服务端 enum profile_gender 一致），编辑员工时预选下拉框用
     CString    m_workstation;                      // 工位
     CString    m_landline;                         // 座机
     CString    m_signature;                        // 个性签名（可空）
@@ -157,6 +161,10 @@ struct Service
     CString                     m_owner;                           // 负责人姓名
     CString                     m_createdAt;                       // 创建日期，"YYYY-MM-DD"
     std::vector<ServiceBinding> m_bindings;                        // 绑定列表
+    // m_bindings 是否已从服务端读到。列表接口（service/list.do）不带绑定，要另调
+    // service/detail.do；读到之前 m_bindings 为空不代表「没有绑定」，界面据此区分
+    // 「正在读取」与「尚未绑定」。
+    bool                        m_bindingsLoaded = false;
     int                         m_msgCount = 0;                    // 累计推送消息数
     int                         m_subs     = 0;                    // 订阅人数
 };

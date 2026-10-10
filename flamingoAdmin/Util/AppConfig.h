@@ -79,6 +79,14 @@ public:
     //   cfg：新的登录信息。
     void SetLogin(const LoginConfig& cfg) { m_login = cfg; }
 
+    // 修改登录密码成功后，算出应保存的登录配置：保存的账号与本次登录的账号相同（不区分
+    // 大小写）且勾了「记住密码」时，把口令换成新密码；其余情况原样返回。纯函数，不读写 ini。
+    //   saved：当前保存的登录配置；loginAccount：本次登录时输入的账号；
+    //   newPassword：刚修改成功的新口令明文。
+    //   返回：应保存的登录配置（调用方据此 SetLogin + Save）。
+    static LoginConfig ApplyPasswordChange(const LoginConfig& saved, const CString& loginAccount,
+                                           const CString& newPassword);
+
 private:
     AppConfig() {}
     AppConfig(const AppConfig&) = delete;

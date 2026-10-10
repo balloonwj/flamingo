@@ -56,6 +56,9 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // 引用卡片的灰底圆角
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 引用条取消按钮设 ModeLink
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：翻译内嵌 XML 里的界面文字
+#include "../../Common/I18n/I18nLayout.h"   // GrowFixedWidthToText：粘贴识别提示条的链接按译文加宽
 
 namespace balloonchatwnd {
 
@@ -88,7 +91,7 @@ int s_rememberedChatInputHeightPx = kChatInputBlockDefaultPx;
 //       pane1 = 输入区块 vbox（工具栏 + 输入框 + 底部提示/发送行）。
 //     拖这根细线即可在消息区与输入区之间重新分配高度；两侧都是 DUI 控件
 //     （消息列表非 HWND 寄宿），故分隔条上下都能正常收到鼠标、可直接拖动，
-//     无须改 balloonui。默认 split-fraction=0.66 让输入区块首帧 ≈172px；窗口
+//     无须改 balloonui。默认 split-fraction=0.62 让输入区块首帧 ≈212px；窗口
 //     布局时由聊天窗（OnRelayout）按 GetRememberedChatInputHeightPx 把输入区
 //     固定在用户选定（默认 kChatInputBlockDefaultPx）的高度，缩放时消息区吃掉
 //     高度变化 —— 与改造前"输入区固定、消息区撑满"的手感一致。
@@ -106,12 +109,25 @@ const char* const kChatWindowBodyXml = u8R"xml(
     <chat-iconbtn id="410" kind="phone"   fixedWidth="38"/>
     <chat-iconbtn id="411" kind="video"   fixedWidth="38"/>
     <chat-iconbtn id="412" kind="remotedesktop" fixedWidth="38"/>
+    <chat-iconbtn id="417" kind="screenshare" fixedWidth="38"/>
+    <chat-iconbtn id="431" kind="share"   fixedWidth="38"/>
+    <chat-iconbtn id="441" kind="subtitle" fixedWidth="38"/>
     <chat-iconbtn id="414" kind="history" fixedWidth="38"/>
+    <chat-iconbtn id="466" kind="lock"    fixedWidth="38"/>
     <chat-iconbtn id="413" kind="more"    fixedWidth="38"/>
   </hbox>
+  <vbox id="467" fixedHeight="34" gap="0" padding="14,0,14,0">
+    <hbox weight="1" gap="14">
+      <label id="468" text="" weight="1"/>
+      <label id="470" text="安全码" fixedWidth="52"/>
+      <label id="471" text="重新邀请" fixedWidth="64"/>
+      <label id="472" text="退出密聊" fixedWidth="64"/>
+    </hbox>
+    <label id="469" text="" fixedHeight="20"/>
+  </vbox>
   <chat-banner id="415" fixedHeight="28" padding="14,0,14,0" text=""/>
   <splitter id="430" orientation="horizontal" bar-thickness="1" weight="1"
-            split-fraction="0.66" min-size-0="140" min-size-1="120">
+            split-fraction="0.62" min-size-0="140" min-size-1="120">
     <hbox padding="0,0,12,0" gap="0">
       <chat-msglist id="400" weight="1"/>
     </hbox>
@@ -122,8 +138,12 @@ const char* const kChatWindowBodyXml = u8R"xml(
         <chat-iconbtn id="422" kind="file"  fixedWidth="32"/>
         <chat-iconbtn id="428" kind="folder" fixedWidth="32"/>
         <chat-iconbtn id="423" kind="cut"   fixedWidth="32"/>
+        <chat-iconbtn id="442" kind="caret" fixedWidth="14"/>
+        <chat-iconbtn id="429" kind="record" fixedWidth="32"/>
         <chat-iconbtn id="424" kind="mic"   fixedWidth="32"/>
         <chat-iconbtn id="427" kind="font"  fixedWidth="32"/>
+        <chat-iconbtn id="443" kind="markdown" fixedWidth="32"/>
+        <chat-iconbtn id="448" kind="code" fixedWidth="32"/>
         <chat-iconbtn id="426" kind="shake" fixedWidth="32"/>
         <chat-iconbtn id="425" kind="plus"  fixedWidth="32"/>
         <control weight="1"/>
@@ -137,8 +157,16 @@ const char* const kChatWindowBodyXml = u8R"xml(
           <label id="409" text="⊗" fixedWidth="22"/>
         </hbox>
       </vbox>
+      <vbox id="462" fixedHeight="30" gap="0" padding="10,0,10,0">
+        <hbox weight="1" gap="12">
+          <label id="463" text="看起来是一段代码" weight="1"/>
+          <label id="464" text="以代码片段发送" fixedWidth="110"/>
+          <label id="465" text="不用了" fixedWidth="50"/>
+        </hbox>
+      </vbox>
       <chat-input id="401" placeholder="输入消息，Enter 发送，Ctrl+Enter 换行" multi-line="true" word-wrap="true" weight="1"/>
-      <hbox fixedHeight="34" gap="8">
+      <hbox id="432" weight="1"/>
+      <hbox id="435" fixedHeight="34" gap="8">
         <label id="404" text="提示：按 Ctrl+Enter 换行" weight="1"/>
         <chat-sendbtn id="402" fixedWidth="104"/>
       </hbox>
@@ -161,17 +189,42 @@ int ChatIconKindFromAttr(const std::string& kind)
     if (kind == "phone")   { return kChatIconPhone; }
     if (kind == "video")   { return kChatIconVideo; }
     if (kind == "remotedesktop") { return kChatIconRemoteDesktop; }
+    if (kind == "screenshare") { return kChatIconScreenShare; }   // 共享屏幕（头部 id=417，紧挨在远程桌面右边）
     if (kind == "more")    { return kChatIconMore; }
     if (kind == "emoji")   { return kChatIconEmoji; }
     if (kind == "image")   { return kChatIconImage; }
     if (kind == "file")    { return kChatIconFile; }
     if (kind == "folder")  { return kChatIconFolder; }   // 发送文件夹（工具栏 id=428，排在文件按钮之后）
+    if (kind == "share")   { return kChatIconShare; }    // 文件共享（头部 id=431，紧挨在共享屏幕右边）
     if (kind == "cut")     { return kChatIconCut; }
+    if (kind == "record")  { return kChatIconRecord; }   // 屏幕录制（工具栏 id=429，紧挨在截图右边）
+    // 截图选项下拉按钮（工具栏 id=442，紧挨在截图右边）
+    if (kind == "caret")
+    {
+        return kChatIconCaret;
+    }
     if (kind == "mic")     { return kChatIconMic; }
     if (kind == "plus")    { return kChatIconPlus; }
     if (kind == "shake")   { return kChatIconShake; }
     if (kind == "font")    { return kChatIconFont; }
+    // Markdown 编辑器按钮（工具栏 id=443，紧挨在字体设置右边，点了打开独立的 Markdown 编辑器；docs/Markdown消息方案.md 第 11.3 节）
+    if (kind == "markdown")
+    {
+        return kChatIconMarkdown;
+    }
+    // 发送代码（工具栏 id=448，紧挨在 Markdown 开关右边；docs/代码片段方案.md 第 3.1 节）
+    if (kind == "code")
+    {
+        return kChatIconCode;
+    }
     if (kind == "history") { return kChatIconHistory; }   // 与群聊一致：消息记录用时钟图标（此前缺本分支被画成“更多”⋯）
+    if (kind == "subtitle") { return kChatIconSubtitle; } // 字幕模式（头部 id=441，紧挨在消息记录左边）
+    // 密聊（头部 id=466，紧挨在「更多」左边；docs/密聊方案.md 6.2）
+    if (kind == "lock")
+    {
+        return kChatIconLock;
+    }
+    if (kind == "clear")   { return kChatIconClear; }     // 清空聊天记录（扫帚）
     return kChatIconMore;
 }
 
@@ -314,7 +367,7 @@ std::wstring MakePinBannerText(int count)
     // 末尾那个"›"是"点进去还有内容"的通用暗示（与主面板各处的展开箭头同一符号），
     // 配合 ModeLink 的下划线一起告诉用户这条是可以点的。
     wchar_t buf[64] = { 0 };
-    ::swprintf_s(buf, L"已 Pin %d 条 ›", count);
+    ::swprintf_s(buf, TR(L"已 Pin %d 条 ›"), count);
     return std::wstring(buf);
 }
 
@@ -337,6 +390,112 @@ void ApplyPinBannerStyle(DuiControl* banner)
     // 访问过之后仍用同一颜色：这条不是"链接看过就变灰"的语义，它每次都指向
     // 同一个地方（消息记录窗的 Pin 分类），变色只会让人以为状态变了。
     label->SetVisitedColor(kPinBannerText);
+}
+
+// 粘贴识别提示条的配色与尺寸（docs/代码片段方案.md 第 3.1 节）
+static const COLORREF kCodePasteBarBg   = RGB(0xEA, 0xF2, 0xFD);   // 浅蓝底，与灰底的引用条区分开
+static const COLORREF kCodePasteBarText = RGB(0x55, 0x55, 0x55);   // 说明文字
+static const int      kCodePasteBarRadius = 6;                     // 圆角半径（像素），与引用条相同
+static const int      kCodePasteLinkPadPx = 8;                     // 链接文字左右留白合计（像素），译文加宽时计入
+
+void ApplyCodePasteBarStyle(DuiControl* root, UINT barId, UINT textId, UINT sendId, UINT dismissId)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    // XML 没有 visible 属性，只能建好之后收起来；只在往空输入框里粘贴了像代码的文字时才出现
+    // 底色与圆角只有 DuiVBox 支持：提示条与引用条一样是 vbox 套一行 hbox
+    balloonwjui::DuiVBox* bar = dynamic_cast<balloonwjui::DuiVBox*>(root->FindCtrlById(barId));
+    if (bar != NULL)
+    {
+        bar->SetVisible(false);
+        bar->SetBgColor(kCodePasteBarBg);
+        bar->SetCornerRadius(kCodePasteBarRadius);
+    }
+    balloonwjui::DuiLabel* text = dynamic_cast<balloonwjui::DuiLabel*>(root->FindCtrlById(textId));
+    if (text != NULL)
+    {
+        text->SetTextColor(kCodePasteBarText);
+        text->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    // 两个链接：ModeLink 才会悬停变手型、点击发 DUIN_CLICK（与引用条上的取消按钮同一处理）
+    const UINT links[] = { sendId, dismissId };
+    for (size_t i = 0; i < sizeof(links) / sizeof(links[0]); ++i)
+    {
+        balloonwjui::DuiLabel* link = dynamic_cast<balloonwjui::DuiLabel*>(root->FindCtrlById(links[i]));
+        if (link == NULL)
+        {
+            continue;
+        }
+        link->SetMode(balloonwjui::DuiLabel::ModeLink);
+        link->SetAutoNavigate(false);   // 不打开浏览器，点击交给窗口处理
+        link->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        // 译文比中文长时按文字宽度加宽（简体中文界面不变）
+        const CString linkText = link->GetText();
+        i18n::GrowFixedWidthToText(link, (LPCWSTR)linkText, i18n::DefaultFontPixelHeight(), false,
+                                   kCodePasteLinkPadPx);
+    }
+}
+
+// 密聊头部条的配色（docs/密聊方案.md 4.7：窗口顶部出现深色的密聊头部条）
+static const COLORREF kSecretBannerBg       = RGB(0x2B, 0x2F, 0x36);   // 深灰底，与白色的聊天区明显区分
+static const COLORREF kSecretBannerText     = RGB(0xF2, 0xF2, 0xF2);   // 状态文字
+static const COLORREF kSecretBannerWarnText = RGB(0xFF, 0xB0, 0x3B);   // 防截图提示：醒目的橙色
+static const COLORREF kSecretLinkText       = RGB(0x8C, 0xC8, 0xFF);   // 链接文字：深底上的浅蓝
+static const COLORREF kSecretLinkHover      = RGB(0xFF, 0xFF, 0xFF);   // 链接悬停时变白
+static const int      kSecretLinkPadPx      = 8;                       // 链接文字左右留白合计（像素），译文加宽时计入
+
+void ApplySecretBannerStyle(DuiControl* root)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    // XML 没有 visible 属性，只能建好之后收起来；底色只有 DuiVBox 支持
+    balloonwjui::DuiVBox* banner = dynamic_cast<balloonwjui::DuiVBox*>(root->FindCtrlById(kIdSecretBanner));
+    if (banner != NULL)
+    {
+        banner->SetVisible(false);
+        banner->SetBgColor(kSecretBannerBg);
+    }
+    DuiControl* secretBtn = root->FindCtrlById(kIdHdrSecret);
+    if (secretBtn != NULL)
+    {
+        secretBtn->SetVisible(false);
+    }
+    balloonwjui::DuiLabel* text = dynamic_cast<balloonwjui::DuiLabel*>(root->FindCtrlById(kIdSecretBannerText));
+    if (text != NULL)
+    {
+        text->SetTextColor(kSecretBannerText);
+        text->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    balloonwjui::DuiLabel* warn = dynamic_cast<balloonwjui::DuiLabel*>(root->FindCtrlById(kIdSecretBannerWarn));
+    if (warn != NULL)
+    {
+        warn->SetVisible(false);
+        warn->SetTextColor(kSecretBannerWarnText);
+        warn->SetTextAlign(DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    // 三个链接：ModeLink 才会悬停变手型、点击发 DUIN_CLICK
+    const UINT links[] = { kIdSecretSafety, kIdSecretReinvite, kIdSecretExit };
+    for (size_t i = 0; i < sizeof(links) / sizeof(links[0]); ++i)
+    {
+        balloonwjui::DuiLabel* link = dynamic_cast<balloonwjui::DuiLabel*>(root->FindCtrlById(links[i]));
+        if (link == NULL)
+        {
+            continue;
+        }
+        link->SetMode(balloonwjui::DuiLabel::ModeLink);
+        link->SetAutoNavigate(false);   // 不打开浏览器，点击交给窗口处理
+        link->SetLinkColor(kSecretLinkText);
+        link->SetHoverColor(kSecretLinkHover);
+        link->SetVisitedColor(kSecretLinkText);
+        link->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        // 译文比中文长时按文字宽度加宽（简体中文界面不变）
+        const CString linkText = link->GetText();
+        i18n::GrowFixedWidthToText(link, (LPCWSTR)linkText, i18n::DefaultFontPixelHeight(), false, kSecretLinkPadPx);
+    }
 }
 
 bool UpdatePinBanner(DuiControl* root, UINT bannerId, int count)
@@ -370,8 +529,9 @@ bool UpdatePinBanner(DuiControl* root, UINT bannerId, int count)
 
 std::unique_ptr<DuiControl> BuildChatWindowBody(bool loadMockMessages)
 {
+    // 内嵌 XML 里的界面文字先经 TranslateXml 换成当前语言的译文；FromString 在调用内解析完毕，临时串的生命周期足够
     std::unique_ptr<DuiControl> root =
-        DuiXmlBuilder::FromString(kChatWindowBodyXml, &CreateChatCustomControl);
+        DuiXmlBuilder::FromString(i18n::TranslateXml(kChatWindowBodyXml).c_str(), &CreateChatCustomControl);
 
     // 顶部离线提示条建好就先收起来。它的契约是"平时不占位，离线 / 正在连接时才显示"
     // （见 ChatWindowLayout.h 的 kIdOfflineBanner 注释），但 DuiXmlBuilder 没有
@@ -390,6 +550,13 @@ std::unique_ptr<DuiControl> BuildChatWindowBody(bool loadMockMessages)
         // 它只在本会话确有被 Pin 的消息时才出现（见 UpdatePinBanner）。
         ApplyPinBannerStyle(root->FindCtrlById(kIdPinBanner));
 
+        // 密聊头部条与头部「密聊」按钮：建好之后先收起来，进入密聊状态、入口可用时才显示（docs/密聊方案.md 4.7）
+        ApplySecretBannerStyle(root.get());
+
+        // 粘贴识别提示条：样式与群聊窗共用一份实现，初始隐藏（docs/代码片段方案.md 第 3.1 节）
+        ApplyCodePasteBarStyle(root.get(), kIdCodePasteBar, kIdCodePasteText, kIdCodePasteSend,
+                               kIdCodePasteDismiss);
+
         // 引用条同理：XML 没有 visible 属性，只能建好之后收起来。它只在用户点了
         // 气泡右键「引用回复」时才出现，不收的话输入框上方会一直杵着一条空白。
         // 与群聊窗 BuildGroupChatWindowBody 同一处理。
@@ -401,6 +568,13 @@ std::unique_ptr<DuiControl> BuildChatWindowBody(bool loadMockMessages)
             // （开发约定文档：新增控件优先直接用 balloonui 现成能力）。
             replyBar->SetBgColor(RGB(0xF0, 0xF0, 0xF0));
             replyBar->SetCornerRadius(6);
+        }
+
+        // 录音条占位同理：只在录音时代替输入框显示（语音消息第 3b 步，见 VoiceRecordBar.h）
+        DuiControl* voiceBar = root->FindCtrlById(kIdVoiceBar);
+        if (voiceBar != NULL)
+        {
+            voiceBar->SetVisible(false);
         }
 
         // 取消按钮做成链接样式：DuiLabel 的 ModeText 是纯绘制控件、不发通知也不变

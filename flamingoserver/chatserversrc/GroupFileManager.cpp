@@ -8,6 +8,7 @@
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
 #include "../dbapi/DbConfig.h"
+#include "../dbapi/SqlDialect.h"   //dbapi::EscapeString（搜索关键字拼进 SQL 前转义）
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 
@@ -135,6 +136,94 @@ bool GroupFileManager::getGroupFiles(int64_t groupid, int filetype, int offset, 
         e.md5        = pRow[8].getCppString();
         //uploadername 由会话层从 UserManager 补全，此处留空
         out.push_back(e);
+
+        if (!pResult->nextRow())
+            break;
+    }
+    pResult->endQuery();
+    delete pResult;
+    return true;
+}
+
+std::string GroupFileManager::buildNameLikePattern(const std::string& keyword)
+{
+    std::string pattern = "%";
+    for (size_t i = 0; i < keyword.size(); ++i)
+    {
+        const char ch = keyword[i];
+        //UTF-8 多字节字符的每个字节都不小于 0x80，不会与这三个 ASCII 字符混淆，逐字节处理即可
+        if (ch == '!' || ch == '%' || ch == '_')
+            pattern.push_back('!');
+        pattern.push_back(ch);
+    }
+    pattern += "%";
+    return pattern;
+}
+
+bool GroupFileManager::searchGroupFilesByName(int64_t userid, const std::string& keyword, int limit,
+                                              std::vector<SearchedGroupFile>& out, bool& hasMore)
+{
+    out.clear();
+    hasMore = false;
+    if (limit <= 0)
+        return false;
+
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupFileManager::searchGroupFilesByName db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //先按 LIKE 规则转义 ! % _，再按 SQL 字符串字面量规则转义引号等，顺序不能颠倒
+    const std::string likeEsc = dbapi::EscapeString(buildNameLikePattern(keyword));
+
+    //t_group_file JOIN t_file 取文件元数据；再 JOIN 搜索者的成员行，只留他所在的群。
+    //多取 1 行用于判断是否还有更多命中
+    std::ostringstream osSql;
+    osSql << "SELECT gf.f_id, gf.f_fileid, gf.f_filetype, gf.f_uploaderid, gf.f_uploadtime, "
+             "f.f_name, f.f_ext, f.f_size, f.f_md5, gf.f_groupid "
+             "FROM t_group_file gf JOIN t_file f ON gf.f_fileid = f.f_id "
+             "JOIN t_group_member gm ON gm.f_groupid = gf.f_groupid AND gm.f_userid = "
+          << static_cast<long long>(userid)
+          << " WHERE f.f_name LIKE '" << likeEsc << "' ESCAPE '!'"
+          << " ORDER BY gf.f_uploadtime DESC, gf.f_id DESC LIMIT " << (limit + 1);
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    if (pResult == NULL)
+    {
+        //零条命中时 query() 仍返回结果集（fetch() 取到 NULL），返回 NULL 说明查询出错，失败原因
+        //已由数据库实现写入日志
+        LOGE("GroupFileManager::searchGroupFilesByName query failed, userid: %lld",
+             static_cast<long long>(userid));
+        return false;
+    }
+
+    //游标约定同 getGroupFiles：query() 返回时已停在第 1 行，先 fetch() 再 nextRow()
+    while (true)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow == NULL)
+            break;
+
+        if (static_cast<int>(out.size()) >= limit)
+        {
+            hasMore = true;
+            break;
+        }
+
+        SearchedGroupFile sf;
+        sf.entry.entryid    = static_cast<int64_t>(pRow[0].getUInt64());
+        sf.entry.fileid     = static_cast<int64_t>(pRow[1].getUInt64());
+        sf.entry.filetype   = pRow[2].getInt32();
+        sf.entry.uploaderid = static_cast<int64_t>(pRow[3].getUInt64());
+        sf.entry.uploadtime = static_cast<int64_t>(pRow[4].getUInt64());
+        sf.entry.name       = pRow[5].getCppString();
+        sf.entry.ext        = pRow[6].getCppString();
+        sf.entry.size       = static_cast<int64_t>(pRow[7].getUInt64());
+        sf.entry.md5        = pRow[8].getCppString();
+        sf.groupid          = static_cast<int64_t>(pRow[9].getUInt64());
+        out.push_back(sf);
 
         if (!pResult->nextRow())
             break;

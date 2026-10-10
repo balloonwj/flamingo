@@ -23,14 +23,18 @@
 #include "GroupManageInputCarry.h"   // InputDraftTable：整页重建 / 切页时保留输入框草稿
 
 #include <string>
+#include <vector>
+#include "../BalloonMain/TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
+#include "../../net/BotProtocolClient.h"    // net::GroupBotInfo：SetGroupBots 收到的本群机器人列表（2801 结果）
 
 class CFlamingoClient;
 
 //v2 群组应答 / 推送的解析层结构体（定义在 net/GroupProtocolClient.h）
 namespace net { struct GroupInfoResult; struct GroupMembersResult;
-                struct GroupJoinRequestsResult; struct SensitiveWordsResult;
+                struct GroupJoinRequestsResult;
                 struct GroupMemberChangedNotify; struct GroupInfoChangedNotify;
-                struct GroupAnnouncementsResult; struct GroupAnnouncementNotify; }
+                struct GroupAnnouncementsResult; struct GroupAnnouncementNotify;
+                struct GroupLinksResult; }
 
 namespace balloonwjui {
 class DuiScrollView;
@@ -79,6 +83,13 @@ public:
      *    myRole： 本人在群内角色（0成员 1管理员 2群主，见 group_member_role）。
      */
     void SetGroupContext(int64_t groupId, LPCTSTR name, int myRole);
+
+    /**
+     *  告知本群是不是帖子群（docs/帖子群方案.md §15.1 第 3 条）：帖子群的导航里没有「群公告」页，基本信息页没有
+     *  「群公告」一行，其余各页与普通群相同。须在 CreateAndShow 之前调用（导航栏建窗时按它生成）。
+     *    isThreadGroup：true 为帖子群。
+     */
+    void SetThreadGroup(bool isThreadGroup);
 
     // ================================================================
     // 真实数据接入（应答与推送的落点）
@@ -144,12 +155,6 @@ public:
     void OnJoinRequestsArrived(const net::GroupJoinRequestsResult& requests);
 
     /**
-     *  群敏感词库应答到达（1321）：填群权限页的词库管理。
-     *    words：敏感词库应答解析结果。
-     */
-    void OnSensitiveWordsArrived(const net::SensitiveWordsResult& words);
-
-    /**
      *  按页号向服务端拉一页公告，并记下本次的分页参数供应答认领。
      *    page：页号（0 起）。
      */
@@ -179,6 +184,21 @@ public:
      *    msgUtf8：服务端给的诊断信息（UTF-8），仅在没有对应文案时兜底显示。
      */
     void OnGroupOpResult(int cmd, int code, const std::string& msgUtf8);
+
+    /**
+     *  加群链接列表应答到达（1341，docs/邀请入群方案.md §12）：填「加群链接」页；当前停在这一页时重建页面。
+     *    result：链接列表应答解析结果。
+     */
+    void OnGroupLinksArrived(const net::GroupLinksResult& result);
+
+    /**
+     *  本群的机器人与「群机器人」页的可用性（docs/机器人方案.md §14.9）。主面板在打开本窗口后、本群的 2801 到达时、
+     *  机器人有变化（2820）时、企业开关变化时调用。可用性变化（导航项出现或消失）或当前停在「群机器人」页时重建导航与页面。
+     *    available：企业打开了机器人（features.bot）且 FlamingoBot.dll 已加载；为 false 时导航里没有「群机器人」。
+     *    loadState：本群机器人列表的加载状态，取值见 balloongroupmanage::LoadState（还没拉到、已到、拉取失败）。
+     *    bots：     本群的机器人（loadState 为已到时有效），只读。
+     */
+    void SetGroupBots(bool available, int loadState, const std::vector<net::GroupBotInfo>& bots);
 
     /**
      *  群成员变动推送到达（1317）：重新拉一次成员列表并刷新相关页。
@@ -230,7 +250,11 @@ private:
 
     // 切换右侧内容到指定页（重建内容、刷新导航选中态）。
     //   pageId：目标页 id，取值见 balloongroupmanage::GmPageId。
-    void SwitchToPage(int pageId);
+    //   reloadPageData：是否向服务端重拉这一页的数据（目前只有「加群链接」页会重拉）。
+    //     用户点导航、从别的页跳过来时传 true；整体重建后切回原来那一页（RefreshNavAndPage）
+    //     时必须传 false：链接应答到达后正是经 RefreshNavAndPage 重建的，若此时再请求，
+    //     应答、重建、请求三者会无限循环（2026-10-07 实测每 18 毫秒重建一次界面，导航点不动）。
+    void SwitchToPage(int pageId, bool reloadPageData);
 
     // 按当前页刷新左侧各导航项的选中态。
     //   pageId：当前页 id。
@@ -255,8 +279,8 @@ private:
     // 群资料未加载时基本信息页不建表单，找不到的输入框直接跳过、草稿留到下次。
     void RestoreInputDrafts();
 
-    // 某个控件编号是不是需要在重建时保留内容的输入框（公告标题 / 正文、新增敏感词、
-    // 群名称、群简介）。
+    // 某个控件编号是不是需要在重建时保留内容的输入框（公告标题 / 正文、群名称、
+    // 群简介、成员页搜索框）。
     //   ctrlId：控件编号，取值见 GroupManageLayout.h。
     //   返回：是返回 true。
     static bool IsDraftInput(int ctrlId);
@@ -342,12 +366,6 @@ private:
     void CopyGroupNumberToClipboard();
 
     /**
-     *  读管理词库页的输入框，把里面的词发出去（"添加"按钮）。
-     *  词为空、或本地词库里已有同一个词时不发，直接给提示。
-     */
-    void AddSensitiveWordFromInput();
-
-    /**
      *  读「群公告」页的表单，发布一条新公告（"发布公告"按钮）。
      *  标题去掉首尾空白后为空时不发，直接给提示 —— 服务端也会拒，但提前挡掉
      *  能立刻给反馈，而不是点了半天没动静。
@@ -372,6 +390,21 @@ private:
      *  返回：已处理返回 true；不是本页的 id 返回 false。
      */
     bool HandleAnnouncementButton(UINT ctrlId);
+
+    /**
+     *  处理群公告页逐条「设为入群必读 / 取消入群必读」（docs/群公告接入方案.md §14）与加群链接页逐条「作废」
+     *  （docs/邀请入群方案.md §12）。两者都先确认再发请求，界面等推送或重拉刷新。
+     *    ctrlId：控件的 ctrl id，取值见 GroupManageLayout.h 的 GmCtrlId。
+     *  返回：已处理返回 true；不是这两类按钮返回 false。
+     */
+    bool HandleMustReadAndLinkButton(UINT ctrlId);
+
+    // 「群机器人」页的「添加与管理机器人」或某一行被点：打开 FlamingoBot.dll 的群机器人管理窗（所有者为本窗口）。
+    // 返回是否认领了这个控件 id
+    bool HandleBotsButton(UINT ctrlId);
+
+    // 发 1341 拉一次本群的加群链接（切到「加群链接」页、作废成功后调用）
+    void RequestGroupLinks();
 
     /**
      *  请主面板打开"选人"对话框（邀请成员 / 添加禁言成员 / 转让群主共用）。
@@ -410,4 +443,6 @@ private:
     int64_t                     m_groupId;          // 绑定的真实群 id；0=未绑定（调试入口走假数据）
 
     HBITMAP                     m_hTitleIcon;       // 标题栏左侧图标位图（程序图标合成到白底，本类持有，析构释放）
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 };

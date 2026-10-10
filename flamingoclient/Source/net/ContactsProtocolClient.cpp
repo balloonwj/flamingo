@@ -113,6 +113,12 @@ bool ContactsProtocolClient::parseContactsResponse(const std::string& jsonbody, 
             item.m_customface = c["customface"].isString() ? c["customface"].asString() : std::string();
             item.m_signature = c["signature"].isString() ? c["signature"].asString() : std::string();
             item.m_address   = c["address"].isString()   ? c["address"].asString()   : std::string();
+            item.m_gender      = c["gender"].isInt()         ? c["gender"].asInt()         : 0;
+            item.m_birthday    = c["birthday"].isInt()       ? c["birthday"].asInt()       : 0;
+            item.m_phonenumber = c["phonenumber"].isString() ? c["phonenumber"].asString() : std::string();
+            item.m_mail        = c["mail"].isString()        ? c["mail"].asString()        : std::string();
+            item.m_landline    = c["landline"].isString()    ? c["landline"].asString()    : std::string();
+            item.m_post        = c["post"].isString()        ? c["post"].asString()        : std::string();
             item.m_presence  = c["presence"].isInt()     ? c["presence"].asInt()     : 0;
             //备注名：字段整体缺失是合法情形（旧服务端不带它），此时按"未设备注"
             //处理，显示时自然回落到昵称。
@@ -162,24 +168,6 @@ bool ContactsProtocolClient::parseContactsResponse(const std::string& jsonbody, 
         }
     }
 
-    //「特别关注」：扁平的 userid 字符串数组（只装人，不像 favorites 那样带 ctype），
-    //服务端已按标记时间倒序排好，本端保持原序。
-    //字段整体缺失是合法情形（老服务端不带这个字段），此时名单为空、不会弹任何上下线提示。
-    const Json::Value& starred = root["starred"];
-    if (starred.isArray())
-    {
-        for (Json::ArrayIndex i = 0; i < starred.size(); ++i)
-        {
-            const int64_t uid = jsonToInt64(starred[i]);
-            //非法项跳过而不是整条应答判失败 —— 名单里混进一条脏数据，
-            //不该连整个通讯录都收不到。
-            if (uid <= 0)
-                continue;
-
-            out.m_starred.push_back(uid);
-        }
-    }
-
     return true;
 }
 
@@ -224,16 +212,44 @@ bool ContactsProtocolClient::parseUserInfoChangedNotify(const std::string& jsonb
     if (out.m_userid <= 0)
         return false;   //无法定位联系人
 
-    //profile 子对象里取头像与昵称（缺字段取默认；服务端 makeProfileJson 产出）。
+    //profile 子对象里取全部资料字段（缺字段取默认；服务端 makeProfileJson 产出）。
     const Json::Value& p = root["profile"];
-    if (p.isObject())
+    out.m_hasProfile = p.isObject();
+    if (out.m_hasProfile)
     {
-        out.m_facetype   = p["facetype"].isInt()      ? p["facetype"].asInt()      : 0;
-        out.m_customface = p["customface"].isString() ? p["customface"].asString() : std::string();
-        out.m_nickname   = p["nickname"].isString()   ? p["nickname"].asString()   : std::string();
-        out.m_signature  = p["signature"].isString()  ? p["signature"].asString()  : std::string();
+        out.m_facetype    = p["facetype"].isInt()       ? p["facetype"].asInt()       : 0;
+        out.m_customface  = p["customface"].isString()  ? p["customface"].asString()  : std::string();
+        out.m_nickname    = p["nickname"].isString()    ? p["nickname"].asString()    : std::string();
+        out.m_signature   = p["signature"].isString()   ? p["signature"].asString()   : std::string();
+        out.m_gender      = p["gender"].isInt()         ? p["gender"].asInt()         : 0;
+        out.m_birthday    = p["birthday"].isInt()       ? p["birthday"].asInt()       : 0;
+        out.m_address     = p["address"].isString()     ? p["address"].asString()     : std::string();
+        out.m_phonenumber = p["phonenumber"].isString() ? p["phonenumber"].asString() : std::string();
+        out.m_mail        = p["mail"].isString()        ? p["mail"].asString()        : std::string();
+        out.m_landline    = p["landline"].isString()    ? p["landline"].asString()    : std::string();
+        out.m_post        = p["post"].isString()        ? p["post"].asString()        : std::string();
     }
     return true;
+}
+
+void ContactsProtocolClient::applyUserInfoChanged(const UserInfoChangedNotify& notify, ContactItem& contact)
+{
+    if (!notify.m_hasProfile)
+        return;
+
+    contact.m_facetype   = notify.m_facetype;
+    contact.m_customface = notify.m_customface;
+    //昵称为空时保留原值：显示名不能变成空白
+    if (!notify.m_nickname.empty())
+        contact.m_nickname = notify.m_nickname;
+    contact.m_signature   = notify.m_signature;
+    contact.m_gender      = notify.m_gender;
+    contact.m_birthday    = notify.m_birthday;
+    contact.m_address     = notify.m_address;
+    contact.m_phonenumber = notify.m_phonenumber;
+    contact.m_mail        = notify.m_mail;
+    contact.m_landline    = notify.m_landline;
+    contact.m_post        = notify.m_post;
 }
 
 bool ContactsProtocolClient::parseOrgStructureChangedNotify(const std::string& jsonbody,

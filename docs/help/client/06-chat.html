@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 6 章：单聊窗口的布局、收发文字消息、表情、快捷回复、字体设置与窗口抖动。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>单聊：收发消息 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c06">
+<article class="doc">
+  <h1>单聊：收发消息</h1>
+  <p class="lead">本章介绍和一位同事一对一聊天时用到的单聊窗口：窗口上每个按钮的作用、怎样发送和接收文字消息、插入表情、使用快捷回复、调整字体，以及发送窗口抖动提醒对方。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：已登录</li>
+    <li>窗口抖动仅单聊可用</li>
+  </ul>
+
+  <h2 id="open">打开单聊窗口</h2>
+  <p>在主面板的通讯录里双击一位联系人，或在会话列表里双击一个单聊会话，就会打开与对方的单聊窗口。同一位同事只会有一个单聊窗口，再次双击会把已打开的窗口调到前面。通讯录与会话列表的用法见<a href="04-contacts.html">「通讯录与联系人」</a>和<a href="05-conversations.html">「会话列表与消息提醒」</a>。</p>
+
+  <h2 id="layout">认识单聊窗口</h2>
+  <p>单聊窗口从上到下分为头部、消息区、输入工具栏和输入框。对方的头像和名字显示在标题栏上，头部左侧是对方的在线状态与个性签名，右侧是一排功能按钮；输入框上方的工具栏放着发送各类内容的按钮。</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/d_chat.png" width="760" alt="单聊窗口，头部与输入工具栏的按钮带编号标注">
+      <span class="pin" style="left:12.6%;top:2.2%">1</span>
+      <span class="pin" style="left:27.4%;top:8.8%">2</span>
+      <span class="pin" style="left:53.9%;top:5.3%">3</span>
+      <span class="pin" style="left:59.3%;top:5.3%">4</span>
+      <span class="pin" style="left:64.6%;top:5.3%">5</span>
+      <span class="pin" style="left:69.9%;top:5.3%">6</span>
+      <span class="pin" style="left:75.1%;top:5.3%">7</span>
+      <span class="pin" style="left:80.4%;top:5.3%">8</span>
+      <span class="pin" style="left:85.7%;top:5.3%">9</span>
+      <span class="pin" style="left:90.9%;top:5.3%">10</span>
+      <span class="pin" style="left:96.2%;top:5.3%">11</span>
+      <span class="pin" style="left:3.7%;top:69.4%">12</span>
+      <span class="pin" style="left:8.2%;top:69.4%">13</span>
+      <span class="pin" style="left:12.7%;top:69.4%">14</span>
+      <span class="pin" style="left:17.1%;top:69.4%">15</span>
+      <span class="pin" style="left:21.6%;top:69.4%">16</span>
+      <span class="pin" style="left:24.9%;top:69.4%">17</span>
+      <span class="pin" style="left:28.2%;top:69.4%">18</span>
+      <span class="pin" style="left:32.7%;top:69.4%">19</span>
+      <span class="pin" style="left:37.1%;top:69.4%">20</span>
+      <span class="pin" style="left:41.6%;top:69.4%">21</span>
+      <span class="pin" style="left:46.1%;top:69.4%">22</span>
+      <span class="pin" style="left:50.5%;top:69.4%">23</span>
+      <span class="pin" style="left:55%;top:69.4%">24</span>
+      <span class="pin" style="left:81.3%;top:96%">25</span>
+      <span class="pin" style="left:96.8%;top:92.2%">26</span>
+    </div>
+    <figcaption>与赵卓轩的单聊窗口：1~11 位于标题栏与头部，12~24 是输入工具栏，25、26 是发送按钮</figcaption>
+  </figure>
+  <h3>标题栏与头部</h3>
+  <ol class="legend">
+    <li><b>对方的头像与名字</b>：显示在标题栏上</li>
+    <li><b>在线状态与签名</b>：对方正在输入时，状态会变成「正在输入…」；点击这一块打开对方的资料</li>
+    <li><b>语音通话</b>：见<a href="16-calls.html">语音与视频通话</a></li>
+    <li><b>视频通话</b>：见<a href="16-calls.html">语音与视频通话</a></li>
+    <li><b>远程桌面</b>：向对方发起远程桌面，见<a href="17-remote-desktop.html">远程桌面</a></li>
+    <li><b>共享屏幕</b>：见<a href="18-screen-share.html">屏幕共享</a></li>
+    <li><b>文件共享</b>：查看和发起本会话的共享，见<a href="21-file-share.html">文件共享</a></li>
+    <li><b>字幕模式</b>：再点一次退出，见<a href="20-captions.html">字幕模式与字幕编辑</a></li>
+    <li><b>消息记录</b>：打开与对方的历史消息，见<a href="24-history.html">聊天记录管理</a></li>
+    <li><b>密聊</b>（挂锁图标）：见<a href="22-secret-chat.html">密聊</a></li>
+    <li><b>更多</b>：暂未开放</li>
+  </ol>
+  <h3>输入工具栏与发送按钮</h3>
+  <ol class="legend" start="12" style="counter-reset: lg 11">
+    <li><b>表情</b>：插入图片表情，见本章<a href="#emoji">「表情」</a></li>
+    <li><b>图片</b>：选一张图片发送，见<a href="08-files.html">图片、文件与文件夹</a></li>
+    <li><b>发送文件</b>：见<a href="08-files.html#file">发送文件</a></li>
+    <li><b>发送文件夹</b>：见<a href="08-files.html#folder">发送文件夹</a></li>
+    <li><b>截图</b>（剪刀，<kbd>Alt</kbd>+<kbd>Z</kbd>）：见<a href="09-screenshot.html">截图与图片文字识别</a></li>
+    <li><b>截图选项</b>（剪刀旁的 ▾）：截取全屏、截图时隐藏当前窗口</li>
+    <li><b>屏幕录制</b>：见<a href="19-recording.html">屏幕录制</a></li>
+    <li><b>语音消息</b>：见<a href="10-voice.html">语音消息</a></li>
+    <li><b>字体设置</b>：见本章<a href="#font">「字体设置」</a></li>
+    <li><b>Markdown 编辑器</b>：见<a href="12-markdown.html">Markdown 文档</a></li>
+    <li><b>发送代码</b>：见<a href="11-code.html">代码片段</a></li>
+    <li><b>窗口抖动</b>：见本章<a href="#shake">「窗口抖动」</a></li>
+    <li><b>更多功能</b>：暂未开放</li>
+    <li><b>发送</b>：发出输入框里的内容</li>
+    <li><b>发送选项</b>（▼）：快捷回复与发送键设置，见本章<a href="#send-menu">「快捷回复与发送键」</a></li>
+  </ol>
+  <p>鼠标停在任意一个图标按钮上，都会显示它的名称。</p>
+  <div class="callout note"><b>看不到某个按钮？</b>共享屏幕、屏幕录制、文件共享、语音消息、截图、Markdown 编辑器和密聊等按钮依赖客户端的可选组件或企业开启的功能，相应组件没有加载或企业没有开启该功能时，按钮不会显示。进入密聊后，窗口也会隐藏大部分按钮，详见<a href="22-secret-chat.html">「密聊」</a>。</div>
+
+  <h2 id="send">发送文字消息</h2>
+  <ol class="steps">
+    <li>点一下输入框。输入框为空时显示提示文字「输入消息，Enter 发送，Ctrl+Enter 换行」。</li>
+    <li>输入要说的话。需要换行时按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>，窗口左下角也会提示「按 Ctrl+Enter 换行」。</li>
+    <li>按 <kbd>Enter</kbd> 或点右下角的 <span class="ui">发送</span>，消息就会出现在消息区右侧。</li>
+  </ol>
+  <figure class="shot center"><img src="../img/d_chat_typing.png" width="760" alt="在输入框中输入消息"><figcaption>在输入框中输入消息</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_chat_sent.png" width="760" alt="消息已发出，下方显示未读"><figcaption>消息发出后，气泡下方显示「未读」</figcaption></figure>
+  <p>你发出的每条消息下方都会显示对方是否已经看过：对方还没看时显示橙色的 <b>未读</b>，看过之后变成灰色的 <b>已读</b>。</p>
+  <p>对方发来的消息显示在消息区左侧，带有对方的头像。对方在输入框里打字时，你这边头部的在线状态会暂时变成「正在输入…」，对方停止输入后恢复。</p>
+  <figure class="shot center">
+    <img src="../img/d_chat_reply.png" width="760" alt="收到对方的回复">
+    <figcaption>你发出的消息都显示「已读」，对方的回复出现在左侧</figcaption>
+  </figure>
+
+  <h3 id="send-menu">快捷回复与发送键</h3>
+  <p>点 <span class="ui">发送</span> 按钮右侧的 ▼，会弹出发送选项菜单：</p>
+  <figure class="shot center">
+    <img src="../img/d_chat_sendmenu.png" width="872" alt="发送按钮的下拉菜单">
+    <figcaption>发送选项菜单</figcaption>
+  </figure>
+  <ul>
+    <li><b>快捷回复</b>：默认有 <span class="ui">收到</span>、<span class="ui">好的，稍后回复</span>、<span class="ui">正在开会，稍后联系</span> 三条。点其中一条就会立即发给对方，输入框里正在写的内容不受影响。</li>
+    <li><b>发送键</b>：在 <span class="ui">按 Enter 发送消息</span> 和 <span class="ui">按 Ctrl+Enter 发送消息</span> 之间选择，当前使用的一项前面带勾。</li>
+    <li><b>设置快捷回复…</b>：打开系统设置的「聊天」页，修改三条快捷回复的文字，见<a href="28-settings.html">「系统设置」</a>。</li>
+  </ul>
+
+  <h2 id="emoji">表情</h2>
+  <p>点工具栏的 <span class="ui">表情</span> 按钮，会弹出一个包含 143 个图片表情的面板。鼠标停在某个表情上可以看到它的名称，点一下就会把它插入输入框光标处。</p>
+  <figure class="shot center">
+    <img src="../img/d_chat_emoji.png" width="760" alt="表情面板">
+    <figcaption>表情面板</figcaption>
+  </figure>
+  <figure class="shot center"><img src="../img/d_chat_sent2.png" width="760" alt="插入一个表情后面板仍然打开"><figcaption>点选一个表情后面板不会关闭，可以接着点选</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_chat_emoji_input.png" width="760" alt="文字与表情混排"><figcaption>表情可以和文字放在同一条消息里</figcaption></figure>
+  <p>表情面板在点选后保持打开，方便一次插入多个表情。选完后按 <kbd>Esc</kbd> 或点面板以外的地方即可关闭。</p>
+
+  <h2 id="font">字体设置</h2>
+  <p>点工具栏的 <span class="ui">字体设置</span> 按钮（「A」形图标），在弹出的面板里调整你发出的文字的样式：</p>
+  <figure class="shot center">
+    <img src="../img/d_font.png" width="760" alt="字体设置面板">
+    <figcaption>字体设置面板</figcaption>
+  </figure>
+  <table>
+    <tr><th>项目</th><th>说明</th></tr>
+    <tr><td>样式</td><td>加粗、斜体、下划线、删除线，可以同时选多个；<span class="ui">清除</span> 取消全部样式</td></tr>
+    <tr><td>字号</td><td>用 − / + 逐级调整，或直接点 12、14、16、20</td></tr>
+    <tr><td>颜色</td><td>九种文字颜色</td></tr>
+    <tr><td>预览</td><td>「样式预览文字 Preview」按当前设置显示效果</td></tr>
+    <tr><td>使用默认字体</td><td>放弃本会话的设置，改回默认字体</td></tr>
+  </table>
+  <p>修改立即生效：输入框里的文字马上按新样式显示，之后发出的文字消息也带着这些样式，对方看到的效果相同。这里的设置只对当前这个会话有效，关闭窗口、重启客户端后仍然保留。想让所有会话都使用同一种字体，可以在系统设置的「聊天」页设置「默认聊天字体」，见<a href="28-settings.html">「系统设置」</a>。</p>
+
+  <h2 id="shake">窗口抖动</h2>
+  <p>对方迟迟没有回复时，可以点工具栏的 <span class="ui">窗口抖动</span> 按钮提醒对方。对方的单聊窗口会弹到屏幕最前面并抖动几下；你这边的窗口也会抖动一下，双方的消息区都会出现一行系统提示。</p>
+  <figure class="shot center"><img src="../img/d_shake.png" width="760" alt="发送方的系统提示"><figcaption>发送方（罗俊辉）一侧：「你向对方发送了窗口抖动」</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_shake_recv_b.png" width="760" alt="接收方的系统提示"><figcaption>接收方（赵卓轩）一侧：「对方向你发送了窗口抖动」</figcaption></figure>
+  <div class="callout note"><b>频率限制</b>两次窗口抖动之间至少要间隔 5 秒。点得太快时不会发出，窗口里会提示「发送窗口抖动过于频繁，请 5 秒后再试」。窗口抖动只能在单聊中使用，群聊没有这个按钮。</div>
+
+  <h2 id="drop-paste">拖入文件与粘贴代码</h2>
+  <ul>
+    <li><b>拖入文件或文件夹</b>：把文件或文件夹从资源管理器直接拖到输入框里松开，就会发给对方，效果与点 <span class="ui">发送文件</span>、<span class="ui">发送文件夹</span> 相同，详见<a href="08-files.html">「图片、文件与文件夹」</a>。注意要拖到输入框上，拖到消息区不会发送。</li>
+    <li><b>粘贴一段代码</b>：往空的输入框里粘贴一段看起来像代码的文字时，输入框上方会出现提示条「看起来是一段代码」，点 <span class="ui">以代码片段发送</span> 会把内容移到「发送代码」窗口，按代码片段发送；点 <span class="ui">不用了</span> 或继续输入，提示条就会消失，照常按文字发送。代码片段的用法见<a href="11-code.html">「代码片段」</a>。</li>
+  </ul>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

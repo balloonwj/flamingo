@@ -7,17 +7,21 @@
  *       mark_read / recall_message 请求解析，已读/撤回通知构造；
  *       typing/set_conversation/search/forward/delete/mass_send 报文编解码；
  *       转发的单次条数上限与合并标题的截断、缺省值（FWD-S1、FWD-S2），逐条转发
- *       去掉 at 与 quote、合并转发保留原样（FWD-S4、FWD-S5），转发到群时需要过
- *       敏感词的文字（FWD-S7），转发应答的完整消息体（FWD-S8），合并子消息的发送者
+ *       去掉 at 与 quote、合并转发保留原样（FWD-S4、FWD-S5），
+ *       转发应答的完整消息体（FWD-S8），合并子消息的发送者
  *       名字（FWD-S9），合并记录与各类应答的体积上限（FWD-S10a～c），
  *       见 docs/聊天消息转发方案.md；
- *       普通消息 content 与 quote 合计的体积上限（MSG-S1～S5，bugs.md 的 BUG-32）：
+ *       普通消息 content 与 quote 合计的体积上限（MSG-S1～S5）：
  *       边界、合计口径、中文按重新序列化后的字节数计量、最大消息组成推送帧后仍小于
  *       单帧上限、逐条转发复制出的内容同样受限；
  *       消息 Pin 的请求解析、应答与推送构造，以及被 Pin 消息列表应答里
  *       total 与 pin 子对象的正确性（S23-S28，见 docs/消息Pin接入方案.md）；
  *       从消息 content 中取所引用文件的 fileid（CF1-CF5，服务端据此把上传者
- *       本人的文件记录标记为已完成，使同内容再次上传能命中秒传）。
+ *       本人的文件记录标记为已完成，使同内容再次上传能命中秒传）；
+ *       发送被拒的回执带回 clientmsgid、从一条消息里取出需要做敏感词检查的文字
+ *       （SW-P1～SW-P7，见 docs/敏感词方案.md 第 6.3.1 节；SW-P7 是代码片段的批注；原先的 FWD-S7 测的是
+ *       已被 collectSensitiveTexts 取代的 collectForwardTexts，2026-10-02 删除）；
+ *       语音消息 content 的校验（VMS1～VMS6，见 docs/语音消息方案.md 第 5、9 节）。
  *  balloonwj@qq.com   2026-05-21
  */
 #include <map>
@@ -25,6 +29,8 @@
 #include "doctest.h"
 #include "../chatserversrc/MessageProtocol.h"
 #include "../chatserversrc/Protocol.h"   //enum file_ack_state / message_type_file
+#include "../chatserversrc/GroupProtocol.h"      //TIP2~TIP4：群系统提示的 content
+#include "../chatserversrc/ScreenShareRules.h"   //TIP5：屏幕共享结束提示的 content
 #include "../jsoncpp1.9.0/json.h"
 
 //把 JSON 文本解析成 Json::Value，供断言检查
@@ -335,6 +341,17 @@ TEST_CASE("S10 buildMessageDigest 各消息类型")
     CHECK(MessageProtocol::buildMessageDigest(99, "{}") == u8"[消息]");
     //文本消息但 content 无 text 字段，同样回落到通用占位
     CHECK(MessageProtocol::buildMessageDigest(1, "{}") == u8"[消息]");
+
+    //接龙卡片带上标题；没有标题、标题为空串或内容不是 JSON 时只显示类型（docs/群接龙方案.md §3.7）
+    CHECK(MessageProtocol::buildMessageDigest(11,
+              u8"{\"title\":\"周五团建报名\",\"note\":\"\",\"deadline\":0}") == u8"[接龙] 周五团建报名");
+    CHECK(MessageProtocol::buildMessageDigest(11, "{}") == u8"[接龙]");
+    CHECK(MessageProtocol::buildMessageDigest(11, "{\"title\":\"\"}") == u8"[接龙]");
+    CHECK(MessageProtocol::buildMessageDigest(11, "not json") == u8"[接龙]");
+
+    //接龙系统提示的 content 多带一个 cardmsgid，摘要仍取正文
+    CHECK(MessageProtocol::buildMessageDigest(17,
+              "{\"text\":\"system notice\",\"cardmsgid\":\"9007199254741011\"}") == "system notice");
 }
 
 TEST_CASE("S11 buildSyncConversationsResponse")
@@ -344,7 +361,7 @@ TEST_CASE("S11 buildSyncConversationsResponse")
     c1.cid           = 100001;
     c1.unread        = 3;
     c1.pinned        = true;
-    c1.mute          = false;
+    c1.notifymode    = notify_mode_silent;
     c1.lastmsgid     = 9007199254740993LL;
     c1.lastfrom      = 100001;
     c1.lastmsgtype   = 1;
@@ -374,6 +391,8 @@ TEST_CASE("S11 buildSyncConversationsResponse")
     CHECK(root["conversations"][0]["cid"].asString() == "100001");
     CHECK(root["conversations"][0]["unread"].asInt() == 3);
     CHECK(root["conversations"][0]["pinned"].asBool() == true);
+    CHECK(root["conversations"][0]["notifymode"].asInt() == notify_mode_silent);
+    CHECK_FALSE(root["conversations"][0].isMember("mute"));
     CHECK(root["conversations"][0]["lastmsgid"].asString() == "9007199254740993");
     CHECK(root["conversations"][0]["lastmsg"]["digest"].asString() == "good night");
     CHECK(root["conversations"][0]["lastmsg"]["from"].asString() == "100001");
@@ -526,14 +545,14 @@ TEST_CASE("S17 set_conversation 解析(可选字段) 与 changed_notify 构造")
         "{\"ctype\":1,\"cid\":\"100001\",\"pinned\":true}", req));
     CHECK(req.has_pinned == true);
     CHECK(req.pinned == true);
-    CHECK(req.has_mute == false);
+    CHECK(req.has_notifymode == false);
     CHECK(req.has_deleted == false);
-    //给 mute + deleted
+    //给 notifymode + deleted
     SetConversationRequest req2;
     REQUIRE(MessageProtocol::parseSetConversationRequest(
-        "{\"cid\":\"100001\",\"mute\":true,\"deleted\":false}", req2));
-    CHECK(req2.has_mute == true);
-    CHECK(req2.mute == true);
+        "{\"cid\":\"100001\",\"notifymode\":1,\"deleted\":false}", req2));
+    CHECK(req2.has_notifymode == true);
+    CHECK(req2.notifymode == notify_mode_silent);
     CHECK(req2.has_deleted == true);
     CHECK(req2.deleted == false);
     CHECK(req2.has_pinned == false);
@@ -542,10 +561,10 @@ TEST_CASE("S17 set_conversation 解析(可选字段) 与 changed_notify 构造")
 
     Json::Value root;
     REQUIRE(parseJson(
-        MessageProtocol::buildConversationChangedNotify(1, 100001, true, false, false), root));
+        MessageProtocol::buildConversationChangedNotify(1, 100001, true, notify_mode_allow, false, false), root));
     CHECK(root["cid"].asString() == "100001");
     CHECK(root["pinned"].asBool() == true);
-    CHECK(root["mute"].asBool() == false);
+    CHECK(root["notifymode"].asInt() == notify_mode_allow);
     CHECK(root["deleted"].asBool() == false);
 }
 
@@ -722,48 +741,6 @@ TEST_CASE("FWD-S4 逐条转发去掉文字消息 content 里的 at 与 quote")
     //文字消息的 content 解析失败时原样返回，不丢内容
     const std::string broken = "{\"text\":";
     CHECK(MessageProtocol::buildForwardedContent(1, broken) == broken);
-}
-
-//构造一条转发源消息，只填 collectForwardTexts 用得到的两个字段
-static MessageRecord makeForwardSource(int msgtype, const std::string& content)
-{
-    MessageRecord rec;
-    rec.msgtype = msgtype;
-    rec.content = content;
-    return rec;
-}
-
-TEST_CASE("FWD-S7 转发内容里需要过敏感词的文字")
-{
-    std::vector<MessageRecord> sources;
-    //文字消息：取 text
-    sources.push_back(makeForwardSource(1, "{\"text\":\"甲\"}"));
-    //图片消息：content 是结构化字段，不参与匹配
-    sources.push_back(makeForwardSource(2, "{\"fileid\":\"1\",\"md5\":\"m\",\"width\":1,\"height\":1,\"size\":1}"));
-    //带 @ 的文字消息：同样只取 text
-    sources.push_back(makeForwardSource(1,
-        "{\"text\":\"乙\",\"at\":{\"all\":true,\"users\":[]}}"));
-    //合并记录：逐条取其中文字子消息的 text，嵌套的合并记录继续向里取，非文字子消息跳过
-    sources.push_back(makeForwardSource(15,
-        "{\"title\":\"t\",\"messages\":["
-        "{\"msgtype\":1,\"content\":{\"text\":\"丙\"}},"
-        "{\"msgtype\":2,\"content\":{\"fileid\":\"2\"}},"
-        "{\"msgtype\":15,\"content\":{\"title\":\"inner\",\"messages\":["
-        "{\"msgtype\":1,\"content\":{\"text\":\"丁\"}}]}}]}"));
-    //文字消息但 text 为空：没有可匹配的内容，不收集
-    sources.push_back(makeForwardSource(1, "{\"text\":\"\"}"));
-
-    std::vector<std::string> texts = MessageProtocol::collectForwardTexts(sources);
-    REQUIRE(texts.size() == 4);
-    CHECK(texts[0] == std::string(u8"甲"));
-    CHECK(texts[1] == std::string(u8"乙"));
-    CHECK(texts[2] == std::string(u8"丙"));
-    CHECK(texts[3] == std::string(u8"丁"));
-
-    //没有任何文字的转发：结果为空，调用方据此跳过敏感词匹配
-    std::vector<MessageRecord> images;
-    images.push_back(makeForwardSource(2, "{\"fileid\":\"3\"}"));
-    CHECK(MessageProtocol::collectForwardTexts(images).empty());
 }
 
 //构造一条转发后新建的消息记录，字段取值带上序号 i，便于断言顺序
@@ -954,7 +931,224 @@ TEST_CASE("FWD-S10c 同步类应答按体积截断")
     CHECK(MessageProtocol::trimMessagesToBudget(none, 100002, true, budget) == 0);
 }
 
-// ---- MSG-S：普通消息的内容体积上限（bugs.md 的 BUG-32）----
+// ---- SB：按体积预算组装同步类应答（先整页组装，超过预算才截断后重新组装）----
+
+//原先的做法：先 trimMessagesToBudget，截断了就把 hasmore 置真，再组装。
+//messages 与 hasMore 都按值传入，不影响调用方手里的那一份；结果与留下的消息经出参带回
+static std::string buildSyncReference(std::vector<MessageRecord> messages, bool hasMore, int64_t cid,
+                                      int64_t peerReadMsgid, const SyncMessagesRequest* anchorReq,
+                                      bool keepTail, size_t budget, std::vector<int64_t>& keptIds,
+                                      bool& hasMoreOut)
+{
+    if (MessageProtocol::trimMessagesToBudget(messages, cid, keepTail, budget) > 0)
+        hasMore = true;
+    keptIds = msgidsOf(messages);
+    hasMoreOut = hasMore;
+    return MessageProtocol::buildSyncMessagesResponse(0, "ok", 1, cid, hasMore, messages,
+                                                      peerReadMsgid, anchorReq);
+}
+
+//Pin 列表原先的做法：保留开头截断，pins 截到不比 messages 长，再组装
+static std::string buildPinnedReference(std::vector<MessageRecord> messages, std::vector<PinRecord> pins,
+                                        int64_t cid, int64_t total, size_t budget,
+                                        std::vector<int64_t>& keptIds, size_t& pinCount)
+{
+    MessageProtocol::trimMessagesToBudget(messages, cid, false, budget);
+    if (pins.size() > messages.size())
+        pins.resize(messages.size());
+    keptIds = msgidsOf(messages);
+    pinCount = pins.size();
+    return MessageProtocol::buildGetPinnedMessagesResponse(0, "ok", 2, cid, total, messages, pins);
+}
+
+//构造 count 条正文各 textBytes 字节的文字消息，msgid 从 1 起
+static std::vector<MessageRecord> makeSizedRecords(int count, size_t textBytes)
+{
+    std::vector<MessageRecord> records;
+    for (int64_t i = 1; i <= count; ++i)
+        records.push_back(makeSizedRecord(i, textBytes));
+    return records;
+}
+
+//构造与 messages 一一对应的 Pin 元信息，另外多出 extra 条（模拟 pins 比 messages 长）
+static std::vector<PinRecord> makePinsFor(const std::vector<MessageRecord>& messages, size_t extra)
+{
+    std::vector<PinRecord> pins;
+    for (size_t i = 0; i < messages.size() + extra; ++i)
+    {
+        PinRecord pin;
+        pin.msgid = static_cast<int64_t>(i + 1);
+        pin.operatorId = 100001;
+        pin.pinTime = 1716268800000LL + static_cast<int64_t>(i);
+        pins.push_back(pin);
+    }
+    return pins;
+}
+
+TEST_CASE("SB1 整页没超过预算：一次组装，结果与原做法相同，不截断")
+{
+    const int64_t cid = 100002;
+    const std::vector<MessageRecord> base = makeSizedRecords(10, 1000);
+    SyncMessagesRequest anchor;
+    anchor.cid = cid;
+    anchor.beforemsgid = 11;
+
+    std::vector<int64_t> refIds;
+    bool refHasMore = false;
+    const std::string expected = buildSyncReference(base, false, cid, 5, &anchor, true,
+                                                    RESPONSE_MESSAGES_BUDGET_BYTES, refIds, refHasMore);
+
+    std::vector<MessageRecord> messages = base;
+    bool hasMore = false;
+    size_t trimmed = 99;
+    const std::string actual = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+        0, "ok", 1, cid, hasMore, messages, 5, &anchor, true, RESPONSE_MESSAGES_BUDGET_BYTES, trimmed);
+
+    CHECK(actual == expected);
+    CHECK(trimmed == 0);
+    CHECK(hasMore == false);
+    CHECK(msgidsOf(messages) == refIds);
+    CHECK(messages.size() == 10);
+}
+
+TEST_CASE("SB2 整页超过预算：两种保留方向的结果都与原做法相同，hasmore 置真")
+{
+    const int64_t cid = 100002;
+    const std::vector<MessageRecord> base = makeSizedRecords(10, 1000);
+    //与 FWD-S10c 相同的取法：预算为单条消息体的 3.5 倍，恰好装下 3 条
+    const size_t one = MessageProtocol::buildMessageNotify(base[0], cid).size();
+    const size_t budget = one * 3 + one / 2;
+    SyncMessagesRequest anchor;
+    anchor.cid = cid;
+    anchor.isAfterMode = true;
+    anchor.aftermsgid = 0;
+
+    const bool directions[] = { true, false };
+    for (size_t d = 0; d < sizeof(directions) / sizeof(directions[0]); ++d)
+    {
+        const bool keepTail = directions[d];
+        CAPTURE(keepTail);
+
+        std::vector<int64_t> refIds;
+        bool refHasMore = false;
+        const std::string expected = buildSyncReference(base, false, cid, 7, &anchor, keepTail, budget,
+                                                        refIds, refHasMore);
+
+        std::vector<MessageRecord> messages = base;
+        bool hasMore = false;
+        size_t trimmed = 0;
+        const std::string actual = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+            0, "ok", 1, cid, hasMore, messages, 7, &anchor, keepTail, budget, trimmed);
+
+        CHECK(actual == expected);
+        CHECK(trimmed == 7);
+        CHECK(hasMore == true);
+        CHECK(refHasMore == true);
+        CHECK(msgidsOf(messages) == refIds);
+        REQUIRE(messages.size() == 3);
+        CHECK(messages.front().msgid == (keepTail ? 8 : 1));
+    }
+
+    //搜索消息的调用方式：不带已读位点与锚点（取头文件里的默认值）
+    std::vector<int64_t> refIds;
+    bool refHasMore = false;
+    const std::string expected = buildSyncReference(base, false, cid, MessageProtocol::kPeerReadMsgidOmitted,
+                                                    NULL, true, budget, refIds, refHasMore);
+    std::vector<MessageRecord> messages = base;
+    bool hasMore = false;
+    size_t trimmed = 0;
+    const std::string actual = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+        0, "ok", 1, cid, hasMore, messages, MessageProtocol::kPeerReadMsgidOmitted, NULL, true, budget,
+        trimmed);
+    CHECK(actual == expected);
+    CHECK(msgidsOf(messages) == refIds);
+}
+
+TEST_CASE("SB3 整个应答超过预算、消息体之和没超过：不截断，返回第一次组装的结果")
+{
+    const int64_t cid = 100002;
+    const std::vector<MessageRecord> base = makeSizedRecords(10, 1000);
+    const std::string full = MessageProtocol::buildSyncMessagesResponse(0, "ok", 1, cid, false, base);
+
+    //恰好等于整个应答的长度：走「没超过预算」那条路径
+    {
+        std::vector<MessageRecord> messages = base;
+        bool hasMore = false;
+        size_t trimmed = 99;
+        const std::string actual = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+            0, "ok", 1, cid, hasMore, messages, MessageProtocol::kPeerReadMsgidOmitted, NULL, true,
+            full.size(), trimmed);
+        CHECK(actual == full);
+        CHECK(trimmed == 0);
+        CHECK(hasMore == false);
+    }
+
+    //比整个应答少一个字节：应答超过了预算，但外层字段与分隔逗号不计入，逐条累计仍在预算之内。
+    //先用原截断函数确认这个前提成立，再看新函数是否同样不截断、不改 hasmore
+    const size_t budget = full.size() - 1;
+    std::vector<MessageRecord> probe = base;
+    REQUIRE(MessageProtocol::trimMessagesToBudget(probe, cid, true, budget) == 0);
+
+    std::vector<MessageRecord> messages = base;
+    bool hasMore = false;
+    size_t trimmed = 99;
+    const std::string actual = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+        0, "ok", 1, cid, hasMore, messages, MessageProtocol::kPeerReadMsgidOmitted, NULL, true, budget,
+        trimmed);
+    CHECK(actual == full);
+    CHECK(trimmed == 0);
+    CHECK(hasMore == false);
+    CHECK(messages.size() == 10);
+
+    //只有一条且单条就超预算：原做法保留这一条、不置 hasmore，新函数相同
+    std::vector<MessageRecord> single = makeSizedRecords(1, 1000);
+    std::vector<int64_t> refIds;
+    bool refHasMore = false;
+    const std::string expected = buildSyncReference(single, false, cid, MessageProtocol::kPeerReadMsgidOmitted,
+                                                    NULL, true, 100, refIds, refHasMore);
+    hasMore = false;
+    const std::string singleActual = MessageProtocol::buildSyncMessagesResponseWithinBudget(
+        0, "ok", 1, cid, hasMore, single, MessageProtocol::kPeerReadMsgidOmitted, NULL, true, 100, trimmed);
+    CHECK(singleActual == expected);
+    CHECK(trimmed == 0);
+    CHECK(hasMore == refHasMore);
+    CHECK(single.size() == 1);
+}
+
+TEST_CASE("SB4 Pin 列表：没超过与超过预算两种情况都与原做法相同，pins 同步截短")
+{
+    const int64_t cid = 900001;
+    const int64_t total = 12;
+    const std::vector<MessageRecord> base = makeSizedRecords(10, 1000);
+    const size_t one = MessageProtocol::buildMessageNotify(base[0], cid).size();
+    const size_t budgets[] = { RESPONSE_MESSAGES_BUDGET_BYTES, one * 3 + one / 2 };
+    const size_t expectedKept[] = { 10, 3 };
+
+    for (size_t b = 0; b < sizeof(budgets) / sizeof(budgets[0]); ++b)
+    {
+        CAPTURE(budgets[b]);
+        //pins 比 messages 多两条：原做法在组装前截到与 messages 一样长
+        const std::vector<PinRecord> basePins = makePinsFor(base, 2);
+
+        std::vector<int64_t> refIds;
+        size_t refPinCount = 0;
+        const std::string expected = buildPinnedReference(base, basePins, cid, total, budgets[b], refIds,
+                                                          refPinCount);
+
+        std::vector<MessageRecord> messages = base;
+        std::vector<PinRecord> pins = basePins;
+        const std::string actual = MessageProtocol::buildGetPinnedMessagesResponseWithinBudget(
+            0, "ok", 2, cid, total, messages, pins, budgets[b]);
+
+        CHECK(actual == expected);
+        CHECK(msgidsOf(messages) == refIds);
+        CHECK(messages.size() == expectedKept[b]);
+        CHECK(pins.size() == refPinCount);
+        CHECK(pins.size() == messages.size());
+    }
+}
+
+// ---- MSG-S：普通消息的内容体积上限 ----
 
 //把 count 个"张"（U+5F20）拼成 UTF-8 串
 static std::string repeatZhang(size_t count)
@@ -1573,4 +1767,640 @@ TEST_CASE("CF5 content 不是合法 JSON 时返回未取到")
     CHECK_FALSE(MessageProtocol::extractContentFileId(message_type_image, "{\"fileid\":", fileid));
     CHECK_FALSE(MessageProtocol::extractContentFileId(message_type_image, "", fileid));
     CHECK_FALSE(MessageProtocol::extractContentFileId(message_type_image, "[\"117\"]", fileid));
+}
+
+// =====================================================================
+// S36-S39：cmd_clear_conversation（1523）按会话本人视角清空聊天记录（2026-10-02）
+// =====================================================================
+
+TEST_CASE("S36 parseClearConversationRequest 取出会话类型与会话ID")
+{
+    ClearConversationRequest req;
+    REQUIRE(MessageProtocol::parseClearConversationRequest("{\"ctype\":2,\"cid\":\"268435456\"}", req));
+    CHECK(req.ctype == 2);
+    CHECK(req.cid == 268435456LL);
+
+    REQUIRE(MessageProtocol::parseClearConversationRequest("{\"ctype\":1,\"cid\":\"100002\"}", req));
+    CHECK(req.ctype == 1);
+    CHECK(req.cid == 100002LL);
+}
+
+TEST_CASE("S37 parseClearConversationRequest 格式不合法一律拒绝")
+{
+    ClearConversationRequest req;
+    //会话类型只能是 1 单聊、2 群聊；缺了也不行（不默认成单聊，免得清错会话）
+    CHECK_FALSE(MessageProtocol::parseClearConversationRequest("{\"ctype\":3,\"cid\":\"100002\"}", req));
+    CHECK_FALSE(MessageProtocol::parseClearConversationRequest("{\"cid\":\"100002\"}", req));
+    //会话ID须为正
+    CHECK_FALSE(MessageProtocol::parseClearConversationRequest("{\"ctype\":1,\"cid\":\"0\"}", req));
+    CHECK_FALSE(MessageProtocol::parseClearConversationRequest("{\"ctype\":1}", req));
+    CHECK_FALSE(MessageProtocol::parseClearConversationRequest("not json", req));
+    CHECK_FALSE(MessageProtocol::parseClearConversationRequest("[1,2]", req));
+}
+
+TEST_CASE("S38 buildClearConversationResponse 带回会话与生效的锚点，ID 按字符串输出")
+{
+    Json::Value root;
+    REQUIRE(parseJson(MessageProtocol::buildClearConversationResponse(
+        0, "ok", 2, 268435456, 9007199254741001LL), root));
+    CHECK(root["code"].asInt() == 0);
+    CHECK(root["msg"].asString() == "ok");
+    CHECK(root["ctype"].asInt() == 2);
+    CHECK(root["cid"].asString() == "268435456");
+    //msgid 可能超过 2^53，与其它 ID 一样按字符串输出
+    CHECK(root["clearedmsgid"].asString() == "9007199254741001");
+}
+
+TEST_CASE("S39 buildMessagesClearedNotify 清空形式：ctype、cid、clearedmsgid，不带 msgids 与时间")
+{
+    Json::Value root;
+    REQUIRE(parseJson(MessageProtocol::buildMessagesClearedNotify(1, 100002, 1234), root));
+    CHECK(root["ctype"].asInt() == 1);
+    CHECK(root["cid"].asString() == "100002");
+    CHECK(root["clearedmsgid"].asString() == "1234");
+    //客户端以字段区分三种形式：msgids 为单条形式，begintime / endtime 为区间形式，clearedmsgid 为清空形式
+    CHECK_FALSE(root.isMember("msgids"));
+    CHECK_FALSE(root.isMember("begintime"));
+    CHECK_FALSE(root.isMember("endtime"));
+}
+
+// ============================================================================
+// 企业级敏感词：发送被拒的回执与取文字规则（SW-P1～SW-P6，docs/敏感词方案.md 第 6.3.1、6.4 节）
+// ============================================================================
+
+TEST_CASE("SW-P1 发送被拒的回执带回 clientmsgid，msgid 为 \"0\"")
+{
+    Json::Value root;
+    REQUIRE(parseJson(MessageProtocol::buildSendMessageResponse(error_code_sensitive_word,
+                                                                "message contains sensitive word",
+                                                                "c-507", 0, 0), root));
+    CHECK(root["code"].asInt() == error_code_sensitive_word);
+    //客户端据 clientmsgid 找到被拒的那一条气泡并标为失败
+    CHECK(root["clientmsgid"].asString() == "c-507");
+    CHECK(root["msgid"].asString() == "0");
+    CHECK(root["timestamp"].asInt64() == 0);
+}
+
+TEST_CASE("SW-P2 文字消息：取正文与两处引用的 digest，不取引用人名字，空串不取")
+{
+    std::vector<std::string> out;
+    //调用前已有的内容保留，本函数只追加
+    out.push_back(u8"既有");
+    MessageProtocol::collectSensitiveTexts(1,
+        u8"{\"text\":\"正文\",\"quote\":{\"msgid\":\"1\",\"name\":\"引用人甲\",\"digest\":\"内嵌引用\"}}",
+        u8"{\"msgid\":\"1\",\"from\":\"100001\",\"name\":\"引用人乙\",\"digest\":\"顶层引用\"}",
+        out);
+    REQUIRE(out.size() == 4);
+    CHECK(out[0] == std::string(u8"既有"));
+    CHECK(out[1] == std::string(u8"正文"));
+    CHECK(out[2] == std::string(u8"内嵌引用"));
+    CHECK(out[3] == std::string(u8"顶层引用"));
+
+    //正文为空、引用的 digest 为空、没有顶层引用：一段都不取
+    std::vector<std::string> none;
+    MessageProtocol::collectSensitiveTexts(1, "{\"text\":\"\",\"quote\":{\"msgid\":\"1\",\"digest\":\"\"}}",
+                                           "", none);
+    CHECK(none.empty());
+}
+
+TEST_CASE("SW-P3 文件消息只取文件名；图片、语音、表情、位置、名片、抖一抖什么都不取")
+{
+    std::vector<std::string> out;
+    MessageProtocol::collectSensitiveTexts(3,
+        u8"{\"fileid\":\"f1\",\"md5\":\"m\",\"name\":\"季度报表.xlsx\",\"size\":1,\"ext\":\"xlsx\"}", "", out);
+    REQUIRE(out.size() == 1);
+    CHECK(out[0] == std::string(u8"季度报表.xlsx"));
+
+    std::vector<std::string> none;
+    MessageProtocol::collectSensitiveTexts(2, "{\"fileid\":\"1\",\"md5\":\"m\",\"width\":1,\"height\":1,\"size\":1}",
+                                           "", none);
+    MessageProtocol::collectSensitiveTexts(4, "{\"fileid\":\"v\",\"md5\":\"m\",\"duration\":3,\"size\":1}", "", none);
+    MessageProtocol::collectSensitiveTexts(6, u8"{\"emoji\":\"表情\"}", "", none);
+    MessageProtocol::collectSensitiveTexts(7,
+        u8"{\"lat\":31.2,\"lng\":121.4,\"title\":\"地点名\",\"address\":\"详细地址\"}", "", none);
+    MessageProtocol::collectSensitiveTexts(8, u8"{\"cardtype\":1,\"targetid\":\"100002\",\"name\":\"联系人\"}",
+                                           "", none);
+    MessageProtocol::collectSensitiveTexts(13, "{}", "", none);
+    CHECK(none.empty());
+}
+
+TEST_CASE("SW-P4 卡片：投票取标题与字符串选项，接龙取标题与说明，待办取标题")
+{
+    std::vector<std::string> poll;
+    //第二个选项不是字符串：跳过，其余选项照常取
+    MessageProtocol::collectSensitiveTexts(10,
+        u8"{\"title\":\"投票标题\",\"options\":[\"选项一\",2,\"选项二\"],\"multi\":false,"
+        u8"\"anonymous\":true,\"expiretime\":0}", "", poll);
+    REQUIRE(poll.size() == 3);
+    CHECK(poll[0] == std::string(u8"投票标题"));
+    CHECK(poll[1] == std::string(u8"选项一"));
+    CHECK(poll[2] == std::string(u8"选项二"));
+
+    std::vector<std::string> relay;
+    MessageProtocol::collectSensitiveTexts(11,
+        u8"{\"title\":\"接龙标题\",\"note\":\"接龙说明\",\"deadline\":0}", "", relay);
+    REQUIRE(relay.size() == 2);
+    CHECK(relay[0] == std::string(u8"接龙标题"));
+    CHECK(relay[1] == std::string(u8"接龙说明"));
+
+    std::vector<std::string> todo;
+    MessageProtocol::collectSensitiveTexts(12,
+        u8"{\"title\":\"待办标题\",\"assignees\":[\"100000\",\"100002\"],\"duetime\":0,\"done\":false}", "", todo);
+    REQUIRE(todo.size() == 1);
+    CHECK(todo[0] == std::string(u8"待办标题"));
+}
+
+TEST_CASE("SW-P5 合并记录：标题与各子消息逐条按规则取，嵌套记录向里取，不取 fromname")
+{
+    std::vector<std::string> out;
+    MessageProtocol::collectSensitiveTexts(15,
+        u8"{\"title\":\"外层标题\",\"messages\":["
+        u8"{\"msgtype\":1,\"content\":{\"text\":\"子一\",\"quote\":{\"digest\":\"子一内嵌引用\"}},"
+        u8"\"quote\":{\"msgid\":\"9\",\"digest\":\"子一引用\"},\"fromname\":\"发送人甲\"},"
+        u8"{\"msgtype\":3,\"content\":{\"fileid\":\"f\",\"name\":\"子二文件.pdf\"},\"fromname\":\"发送人乙\"},"
+        u8"{\"msgtype\":2,\"content\":{\"fileid\":\"i\"}},"
+        u8"{\"msgtype\":15,\"content\":{\"title\":\"内层标题\",\"messages\":["
+        u8"{\"msgtype\":1,\"content\":{\"text\":\"子三\"}}]}}]}",
+        "", out);
+    REQUIRE(out.size() == 7);
+    CHECK(out[0] == std::string(u8"外层标题"));
+    CHECK(out[1] == std::string(u8"子一"));
+    CHECK(out[2] == std::string(u8"子一内嵌引用"));
+    CHECK(out[3] == std::string(u8"子一引用"));
+    CHECK(out[4] == std::string(u8"子二文件.pdf"));
+    CHECK(out[5] == std::string(u8"内层标题"));
+    CHECK(out[6] == std::string(u8"子三"));
+}
+
+TEST_CASE("SW-P7 代码片段的批注说明一并取；notes 或条目格式不对时跳过；合并记录里的批注同样取")
+{
+    //正文之后依次取各条批注的说明；from / to 不影响
+    std::vector<std::string> out;
+    MessageProtocol::collectSensitiveTexts(1,
+        u8"{\"text\":\"int a;\",\"format\":\"code\",\"lang\":\"cpp\","
+        u8"\"notes\":[{\"from\":1,\"to\":1,\"text\":\"批注一\"},{\"from\":3,\"to\":4,\"text\":\"批注二\"}]}",
+        "", out);
+    REQUIRE(out.size() == 3);
+    CHECK(out[0] == std::string(u8"int a;"));
+    CHECK(out[1] == std::string(u8"批注一"));
+    CHECK(out[2] == std::string(u8"批注二"));
+
+    //notes 不是数组、条目不是对象、text 不是字符串或为空：跳过，正文照常取
+    std::vector<std::string> textOnly;
+    MessageProtocol::collectSensitiveTexts(1, u8"{\"text\":\"x\",\"notes\":{\"text\":\"不是数组\"}}", "", textOnly);
+    MessageProtocol::collectSensitiveTexts(1,
+        u8"{\"text\":\"y\",\"notes\":[\"字符串条目\",{\"text\":5},{\"text\":\"\"}]}", "", textOnly);
+    REQUIRE(textOnly.size() == 2);
+    CHECK(textOnly[0] == std::string(u8"x"));
+    CHECK(textOnly[1] == std::string(u8"y"));
+
+    //合并转发记录里的代码片段：批注同样取
+    std::vector<std::string> merged;
+    MessageProtocol::collectSensitiveTexts(15,
+        u8"{\"title\":\"标题\",\"messages\":[{\"msgtype\":1,\"content\":{\"text\":\"代码\",\"format\":\"code\","
+        u8"\"notes\":[{\"from\":1,\"to\":1,\"text\":\"子消息批注\"}]}}]}",
+        "", merged);
+    REQUIRE(merged.size() == 3);
+    CHECK(merged[0] == std::string(u8"标题"));
+    CHECK(merged[1] == std::string(u8"代码"));
+    CHECK(merged[2] == std::string(u8"子消息批注"));
+}
+
+TEST_CASE("SW-P6 内容不合法、类型未知、子消息残缺：不崩溃，能取的照常取")
+{
+    std::vector<std::string> none;
+    //content 不是合法 JSON、不是对象
+    MessageProtocol::collectSensitiveTexts(1, "{\"text\":", "", none);
+    MessageProtocol::collectSensitiveTexts(1, "[\"a\",\"b\"]", "", none);
+    MessageProtocol::collectSensitiveTexts(1, "\"text\"", "", none);
+    //未知的消息类型
+    MessageProtocol::collectSensitiveTexts(99, "{\"text\":\"x\",\"title\":\"y\",\"name\":\"z\"}", "", none);
+    //字段类型不对：text 是数字、options 不是数组
+    MessageProtocol::collectSensitiveTexts(1, "{\"text\":123}", "", none);
+    MessageProtocol::collectSensitiveTexts(10, "{\"title\":7,\"options\":\"a\"}", "", none);
+    CHECK(none.empty());
+
+    //quote 不是合法 JSON：忽略 quote，正文照常取
+    std::vector<std::string> textOnly;
+    MessageProtocol::collectSensitiveTexts(1, u8"{\"text\":\"正文\"}", "{\"digest\":", textOnly);
+    REQUIRE(textOnly.size() == 1);
+    CHECK(textOnly[0] == std::string(u8"正文"));
+
+    //合并记录里缺 msgtype、msgtype 不是整数、content 不是对象的子消息跳过，其余照常取
+    std::vector<std::string> merged;
+    MessageProtocol::collectSensitiveTexts(15,
+        u8"{\"title\":\"\",\"messages\":["
+        u8"{\"content\":{\"text\":\"缺类型\"}},"
+        u8"{\"msgtype\":\"1\",\"content\":{\"text\":\"类型是字符串\"}},"
+        u8"{\"msgtype\":1,\"content\":\"不是对象\"},"
+        u8"5,"
+        u8"{\"msgtype\":1,\"content\":{\"text\":\"正常子消息\"}}]}",
+        "", merged);
+    REQUIRE(merged.size() == 1);
+    CHECK(merged[0] == std::string(u8"正常子消息"));
+}
+
+TEST_CASE("CVR1 会话列表应答：已撤回的最后一条带 recalled、摘要不含原文，其余会话照旧")
+{
+    std::vector<ConversationBrief> items;
+    ConversationBrief recalled;
+    recalled.ctype         = 2;
+    recalled.cid           = 900001;
+    recalled.lastmsgid     = 12;
+    recalled.lastfrom      = 100001;
+    recalled.lastmsgtype   = 1;
+    recalled.lastcontent   = "{\"text\":\"secret text\"}";
+    recalled.lasttimestamp = 1700000000000LL;
+    recalled.lastrecalled  = true;
+    items.push_back(recalled);
+
+    ConversationBrief normal = recalled;
+    normal.cid          = 900002;
+    normal.lastcontent  = "{\"text\":\"hello\"}";
+    normal.lastrecalled = false;
+    items.push_back(normal);
+
+    const std::string body = MessageProtocol::buildSyncConversationsResponse(0, "ok", 0, items);
+    //原文一个字都不能出现在应答里
+    CHECK(body.find("secret text") == std::string::npos);
+
+    Json::Value root;
+    REQUIRE(parseJson(body, root));
+    REQUIRE(root["conversations"].isArray());
+    REQUIRE(root["conversations"].size() == 2);
+    const Json::Value& lastRecalled = root["conversations"][0]["lastmsg"];
+    CHECK(lastRecalled["recalled"].isBool());
+    CHECK(lastRecalled["recalled"].asBool());
+    CHECK(lastRecalled["digest"].asString() == std::string(MessageProtocol::kRecalledDigest));
+    //发送方、类型、时间照旧，客户端据发送方拼「你 / 某某撤回了一条消息」
+    CHECK(lastRecalled["from"].asString() == "100001");
+    CHECK(lastRecalled["msgtype"].asInt() == 1);
+    CHECK(lastRecalled["timestamp"].asInt64() == 1700000000000LL);
+
+    const Json::Value& lastNormal = root["conversations"][1]["lastmsg"];
+    CHECK_FALSE(lastNormal.isMember("recalled"));
+    CHECK(lastNormal["digest"].asString() == "hello");
+}
+
+TEST_CASE("RBY2 消息体：已撤回且撤回者已知时带 recalledby，未撤回或撤回者未知时不带")
+{
+    MessageRecord rec;
+    rec.msgid      = 12;
+    rec.ctype      = 2;
+    rec.from       = 100001;
+    rec.to         = 900001;
+    rec.msgtype    = 1;
+    rec.content    = "{\"text\":\"x\"}";
+    rec.timestamp  = 1700000000000LL;
+    rec.recalled   = true;
+    rec.recalledby = 100007;
+
+    //群主 100007 撤回了 100001 发的消息：撤回者与发送方各自照实输出，id 以字符串编码
+    Json::Value root;
+    REQUIRE(parseJson(MessageProtocol::buildMessageNotify(rec, 900001), root));
+    CHECK(root["recalled"].asBool());
+    CHECK(root["recalledby"].isString());
+    CHECK(root["recalledby"].asString() == "100007");
+    CHECK(root["from"].asString() == "100001");
+
+    //2026-10-03 之前撤回的存量数据：撤回者未知（0）时不输出，客户端按发送方处理
+    rec.recalledby = 0;
+    Json::Value unknown;
+    REQUIRE(parseJson(MessageProtocol::buildMessageNotify(rec, 900001), unknown));
+    CHECK(unknown["recalled"].asBool());
+    CHECK_FALSE(unknown.isMember("recalledby"));
+
+    //没撤回的消息不输出
+    rec.recalled = false;
+    Json::Value normal;
+    REQUIRE(parseJson(MessageProtocol::buildMessageNotify(rec, 900001), normal));
+    CHECK_FALSE(normal.isMember("recalledby"));
+}
+
+TEST_CASE("CVR2 会话列表应答：已撤回的最后一条带撤回者，撤回者未知时不带该字段")
+{
+    std::vector<ConversationBrief> items;
+    ConversationBrief byAdmin;
+    byAdmin.ctype          = 2;
+    byAdmin.cid            = 900001;
+    byAdmin.lastmsgid      = 12;
+    byAdmin.lastfrom       = 100001;
+    byAdmin.lastmsgtype    = 1;
+    byAdmin.lastcontent    = "{\"text\":\"secret\"}";
+    byAdmin.lasttimestamp  = 1700000000000LL;
+    byAdmin.lastrecalled   = true;
+    byAdmin.lastrecalledby = 100007;
+    items.push_back(byAdmin);
+
+    ConversationBrief unknown = byAdmin;
+    unknown.cid            = 900002;
+    unknown.lastrecalledby = 0;
+    items.push_back(unknown);
+
+    Json::Value root;
+    REQUIRE(parseJson(MessageProtocol::buildSyncConversationsResponse(0, "ok", 0, items), root));
+    REQUIRE(root["conversations"].size() == 2);
+    const Json::Value& lastAdmin = root["conversations"][0]["lastmsg"];
+    CHECK(lastAdmin["recalled"].asBool());
+    CHECK(lastAdmin["recalledby"].asString() == "100007");
+    CHECK(lastAdmin["from"].asString() == "100001");
+
+    const Json::Value& lastUnknown = root["conversations"][1]["lastmsg"];
+    CHECK(lastUnknown["recalled"].asBool());
+    CHECK_FALSE(lastUnknown.isMember("recalledby"));
+}
+
+// ---- 多语言第 5 期：系统提示的结构化字段（tipkind / tipargs）与会话列表摘要参数 ----
+
+TEST_CASE("TIP2 转让群主提示的 content：两端昵称按有无分别写进 tipargs")
+{
+    Json::Value both;
+    REQUIRE(parseJson(GroupProtocol::buildOwnerTransferTipContent(u8"甲", u8"乙"), both));
+    CHECK(both["text"].asString() == u8"「甲」已将群主转让给「乙」");
+    CHECK(both["tipkind"].asString() == "owner_transfer");
+    CHECK(both["tipargs"]["from"].asString() == u8"甲");
+    CHECK(both["tipargs"]["to"].asString() == u8"乙");
+
+    Json::Value toOnly;
+    REQUIRE(parseJson(GroupProtocol::buildOwnerTransferTipContent("", u8"乙"), toOnly));
+    CHECK(toOnly["text"].asString() == u8"群主已转让给「乙」");
+    CHECK_FALSE(toOnly["tipargs"].isMember("from"));
+    CHECK(toOnly["tipargs"]["to"].asString() == u8"乙");
+
+    Json::Value none;
+    REQUIRE(parseJson(GroupProtocol::buildOwnerTransferTipContent("", ""), none));
+    CHECK(none["text"].asString() == u8"群主已变更");
+    CHECK(none["tipargs"].size() == 0);
+}
+
+//TIP3（发布群公告提示的 content）随 buildAnnouncementTip / buildAnnouncementTipContent 于 2026-10-05 删除：
+//发布群公告改为在群里发群公告卡片，用例见 test_announcecard.cpp（AC-S*）
+
+TEST_CASE("TIP4 入群欢迎语：昵称用顿号连接、跳过空昵称，content 带名单与欢迎词")
+{
+    std::vector<std::string> names;
+    names.push_back(u8"张三");
+    names.push_back("");
+    names.push_back(u8"李四");
+    CHECK(GroupProtocol::buildWelcomeTip(names, u8"欢迎加入本群") == std::string(u8"张三、李四 欢迎加入本群"));
+    //没有可用的昵称时只有欢迎词
+    std::vector<std::string> empty;
+    CHECK(GroupProtocol::buildWelcomeTip(empty, u8"欢迎加入本群") == std::string(u8"欢迎加入本群"));
+
+    Json::Value root;
+    REQUIRE(parseJson(GroupProtocol::buildWelcomeTipContent(names, u8"欢迎加入本群"), root));
+    CHECK(root["text"].asString() == u8"张三、李四 欢迎加入本群");
+    CHECK(root["tipkind"].asString() == "group_welcome");
+    REQUIRE(root["tipargs"]["names"].isArray());
+    REQUIRE(root["tipargs"]["names"].size() == 2);
+    CHECK(root["tipargs"]["names"][0].asString() == u8"张三");
+    CHECK(root["tipargs"]["names"][1].asString() == u8"李四");
+    CHECK(root["tipargs"]["welcome"].asString() == u8"欢迎加入本群");
+}
+
+TEST_CASE("TIP5 屏幕共享结束提示的 content：中文与 formatEndTip 相同，另带时长秒数")
+{
+    const int64_t kDurationSeconds = 3725;
+    Json::Value root;
+    REQUIRE(parseJson(ScreenShareRules::buildEndTipContent(kDurationSeconds), root));
+    CHECK(root["text"].asString() == ScreenShareRules::formatEndTip(kDurationSeconds));
+    CHECK(root["tipkind"].asString() == "screenshare_end");
+    CHECK(root["tipargs"]["duration"].asInt64() == kDurationSeconds);
+
+    //负数按 0 处理，与 formatEndTip 一致
+    Json::Value negative;
+    REQUIRE(parseJson(ScreenShareRules::buildEndTipContent(-5), negative));
+    CHECK(negative["tipargs"]["duration"].asInt64() == 0);
+    CHECK(negative["text"].asString() == ScreenShareRules::formatEndTip(0));
+}
+
+TEST_CASE("TIP6 会话列表 lastmsg：系统提示带 tipkind / tipargs，接龙与文件共享带 digestarg")
+{
+    std::vector<ConversationBrief> items;
+    ConversationBrief tip;
+    tip.ctype         = 2;
+    tip.cid           = 900001;
+    tip.lastmsgid     = 1;
+    tip.lastmsgtype   = message_type_system;
+    //库里已有的退群提示（2026-10-04 之前落库，此后服务端不再产生）：会话列表照样带 tipkind / tipargs
+    tip.lastcontent   = u8"{\"text\":\"「乙」退出了群聊\",\"tipkind\":\"member_leave\",\"tipargs\":{\"nickname\":\"乙\"}}";
+    tip.lasttimestamp = 1700000000000LL;
+    items.push_back(tip);
+
+    //老服务端落库的系统提示只有 text：不带 tipkind
+    ConversationBrief legacy = tip;
+    legacy.cid         = 900002;
+    legacy.lastcontent = u8"{\"text\":\"「乙」退出了群聊\"}";
+    items.push_back(legacy);
+
+    ConversationBrief relay = tip;
+    relay.cid         = 900003;
+    relay.lastmsgtype = message_type_relay;
+    relay.lastcontent = u8"{\"title\":\"周五团建报名\",\"note\":\"\",\"deadline\":0}";
+    items.push_back(relay);
+
+    ConversationBrief share = tip;
+    share.cid         = 900004;
+    share.lastmsgtype = message_type_fileshare;
+    share.lastcontent = "{\"shareid\":\"s1\",\"name\":\"Projects\"}";
+    items.push_back(share);
+
+    ConversationBrief image = tip;
+    image.cid         = 900005;
+    image.lastmsgtype = message_type_image;
+    image.lastcontent = "{\"url\":\"x\"}";
+    items.push_back(image);
+
+    //已撤回的系统提示：不下发原文，也不带 tipkind
+    ConversationBrief recalled = tip;
+    recalled.cid          = 900006;
+    recalled.lastrecalled = true;
+    items.push_back(recalled);
+
+    Json::Value root;
+    REQUIRE(parseJson(MessageProtocol::buildSyncConversationsResponse(0, "ok", 0, items), root));
+    REQUIRE(root["conversations"].size() == 6);
+
+    const Json::Value& lastTip = root["conversations"][0]["lastmsg"];
+    CHECK(lastTip["digest"].asString() == u8"「乙」退出了群聊");
+    CHECK(lastTip["tipkind"].asString() == "member_leave");
+    CHECK(lastTip["tipargs"]["nickname"].asString() == u8"乙");
+    CHECK_FALSE(lastTip.isMember("digestarg"));
+
+    const Json::Value& lastLegacy = root["conversations"][1]["lastmsg"];
+    CHECK(lastLegacy["digest"].asString() == u8"「乙」退出了群聊");
+    CHECK_FALSE(lastLegacy.isMember("tipkind"));
+    CHECK_FALSE(lastLegacy.isMember("tipargs"));
+
+    const Json::Value& lastRelay = root["conversations"][2]["lastmsg"];
+    CHECK(lastRelay["digest"].asString() == u8"[接龙] 周五团建报名");
+    CHECK(lastRelay["digestarg"].asString() == u8"周五团建报名");
+
+    const Json::Value& lastShare = root["conversations"][3]["lastmsg"];
+    CHECK(lastShare["digest"].asString() == u8"[共享] Projects");
+    CHECK(lastShare["digestarg"].asString() == "Projects");
+
+    const Json::Value& lastImage = root["conversations"][4]["lastmsg"];
+    CHECK(lastImage["digest"].asString() == u8"[图片]");
+    CHECK_FALSE(lastImage.isMember("digestarg"));
+    CHECK_FALSE(lastImage.isMember("tipkind"));
+
+    const Json::Value& lastRecalled = root["conversations"][5]["lastmsg"];
+    CHECK(lastRecalled["recalled"].asBool());
+    CHECK_FALSE(lastRecalled.isMember("tipkind"));
+}
+
+//语音消息测试用的 content：fileid、md5、duration、size 都合格；wave 为空串时不带该字段
+static std::string makeVoiceContent(const std::string& fileid, const std::string& md5, const std::string& duration,
+                                    const std::string& size, const std::string& wave)
+{
+    std::string json = "{\"fileid\":" + fileid + ",\"md5\":" + md5 + ",\"duration\":" + duration
+        + ",\"size\":" + size;
+    if (!wave.empty())
+        json += ",\"wave\":" + wave;
+    return json + "}";
+}
+
+//n 个 0 字节的标准 Base64（带填充），用来构造指定解码长度的 wave
+static std::string zeroBytesBase64(size_t n)
+{
+    const size_t kGroupBytes = 3;
+    const size_t kGroupChars = 4;
+    std::string out((n / kGroupBytes) * kGroupChars, 'A');
+    const size_t rest = n % kGroupBytes;
+    if (rest == 1)
+        out += "AA==";
+    else if (rest == 2)
+        out += "AAA=";
+    return out;
+}
+
+TEST_CASE("VMS1 语音 content：字段齐全且取值合格时通过，带不带 wave 都可以")
+{
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"1234567\"", "\"d41d8cd98f00b204e9800998ecf8427e\"",
+                                                                "8", "25600", "")));
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"1234567\"", "\"d41d8cd98f00b204e9800998ecf8427e\"",
+                                                                "8", "25600", "\"" + zeroBytesBase64(40) + "\"")));
+}
+
+TEST_CASE("VMS2 语音 content：fileid、md5、duration、size 缺任何一个或类型不对都拒绝")
+{
+    const std::string md5 = "\"d41d8cd98f00b204e9800998ecf8427e\"";
+    //逐个去掉一个字段
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent("{\"md5\":" + md5 + ",\"duration\":8,\"size\":25600}"));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent("{\"fileid\":\"1234567\",\"duration\":8,\"size\":25600}"));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent("{\"fileid\":\"1234567\",\"md5\":" + md5 + ",\"size\":25600}"));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent("{\"fileid\":\"1234567\",\"md5\":" + md5 + ",\"duration\":8}"));
+    //类型或取值不对：fileid 不是正整数的十进制字符串、md5 为空、duration 与 size 写成字符串
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent("1234567", md5, "8", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"0\"", md5, "8", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"voice_1\"", md5, "8", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"1234567\"", "\"\"", "8", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"1234567\"", md5, "\"8\"", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent("\"1234567\"", md5, "8", "\"25600\"", "")));
+    //不是 JSON 对象
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent("[]"));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent("not json"));
+}
+
+TEST_CASE("VMS3 语音 content：时长 1~120 秒通过，0 秒、121 秒、负数拒绝")
+{
+    const std::string fileid = "\"1234567\"";
+    const std::string md5 = "\"d41d8cd98f00b204e9800998ecf8427e\"";
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "1", "25600", "")));
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "120", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "0", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "121", "25600", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "-5", "25600", "")));
+}
+
+TEST_CASE("VMS4 语音 content：大小 1~1048576 字节通过，0 与 1048577 拒绝")
+{
+    const std::string fileid = "\"1234567\"";
+    const std::string md5 = "\"d41d8cd98f00b204e9800998ecf8427e\"";
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "1", "")));
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "1048576", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "0", "")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "1048577", "")));
+}
+
+TEST_CASE("VMS5 语音 content：wave 解码后不超过 64 字节通过；非法 Base64、超长、不是字符串都拒绝")
+{
+    const std::string fileid = "\"1234567\"";
+    const std::string md5 = "\"d41d8cd98f00b204e9800998ecf8427e\"";
+    CHECK(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "25600",
+                                                                "\"" + zeroBytesBase64(64) + "\"")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "25600",
+                                                                      "\"" + zeroBytesBase64(65) + "\"")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "25600", "\"@@@@\"")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "25600", "\"AAA\"")));
+    CHECK_FALSE(MessageProtocol::isValidVoiceContent(makeVoiceContent(fileid, md5, "8", "25600", "123")));
+}
+
+TEST_CASE("VMS6 发送前检查：不合格的语音回请求格式错误，合格的语音与其它类型放行")
+{
+    const std::string good = makeVoiceContent("\"1234567\"", "\"d41d8cd98f00b204e9800998ecf8427e\"", "8", "25600", "");
+    const std::string bad = makeVoiceContent("\"1234567\"", "\"d41d8cd98f00b204e9800998ecf8427e\"", "0", "25600", "");
+    CHECK(MessageProtocol::checkSendContent(message_type_voice, good) == error_code_ok);
+    CHECK(MessageProtocol::checkSendContent(message_type_voice, bad) == error_code_bad_request);
+    //其它类型不在这里检查，即使 content 不像语音也放行
+    CHECK(MessageProtocol::checkSendContent(message_type_text, "{\"text\":\"hi\"}") == error_code_ok);
+    CHECK(MessageProtocol::checkSendContent(message_type_image, bad) == error_code_ok);
+    //被拒时的回执带回 clientmsgid，客户端据此知道是哪一条没有发出去
+    const std::string resp = MessageProtocol::buildSendMessageResponse(error_code_bad_request, "bad voice content",
+                                                                       "c-voice-1", 0, 0);
+    CHECK(resp.find("\"c-voice-1\"") != std::string::npos);
+    CHECK(resp.find("\"code\":3") != std::string::npos);
+}
+
+
+TEST_CASE("S40 buildMessageDigest：一对一通话卡片按媒体类型显示「[语音通话]」「[视频通话]」，群通话卡片不受影响")
+{
+    CHECK(MessageProtocol::buildMessageDigest(16, "{\"kind\":\"call\",\"media\":1}") == u8"[语音通话]");
+    CHECK(MessageProtocol::buildMessageDigest(16, "{\"kind\":\"call\",\"media\":2,\"result\":7,\"duration\":12}") == u8"[视频通话]");
+    CHECK(MessageProtocol::buildMessageDigest(16, "{\"kind\":\"groupcall\",\"media\":2}") == u8"[群视频通话]");
+    CHECK(MessageProtocol::buildMessageDigest(16, "{\"kind\":\"call\",\"media\":5}") == u8"[通话]");
+    CHECK(MessageProtocol::buildMessageDigest(16, "not json") == u8"[通话]");
+}
+
+TEST_CASE("MA1 contentMentionsAll：content.at.all 为 1 或 true 时算 @所有人，其余都不算")
+{
+    //PC 客户端的写法：整数 1，带 users
+    CHECK(MessageProtocol::contentMentionsAll("{\"text\":\"@所有人 开会\",\"at\":{\"all\":1,\"users\":[]}}"));
+    //布尔值同样认
+    CHECK(MessageProtocol::contentMentionsAll("{\"text\":\"x\",\"at\":{\"all\":true}}"));
+    //all 为 0 / false、只 @ 了具体的人
+    CHECK_FALSE(MessageProtocol::contentMentionsAll(
+        "{\"text\":\"@张三 \",\"at\":{\"all\":0,\"users\":[{\"uid\":\"5\",\"off\":0,\"len\":7}]}}"));
+    CHECK_FALSE(MessageProtocol::contentMentionsAll("{\"text\":\"x\",\"at\":{\"all\":false}}"));
+    //没有 at、at 不是对象、all 是字符串
+    CHECK_FALSE(MessageProtocol::contentMentionsAll("{\"text\":\"x\"}"));
+    CHECK_FALSE(MessageProtocol::contentMentionsAll("{\"text\":\"x\",\"at\":1}"));
+    CHECK_FALSE(MessageProtocol::contentMentionsAll("{\"text\":\"x\",\"at\":{\"all\":\"1\"}}"));
+    //content 不是 JSON 对象
+    CHECK_FALSE(MessageProtocol::contentMentionsAll("not json"));
+    CHECK_FALSE(MessageProtocol::contentMentionsAll("[1,2]"));
+    CHECK_FALSE(MessageProtocol::contentMentionsAll(""));
+}
+
+TEST_CASE("MA2 stripContentMentions：群发投递前去掉 content 里的 at，其余字段不变")
+{
+    std::string content = "{\"text\":\"@所有人 开会\",\"at\":{\"all\":1,\"users\":[]},\"font\":{\"size\":10}}";
+    CHECK(MessageProtocol::stripContentMentions(content));
+    Json::Value out;
+    REQUIRE(parseJson(content, out));
+    CHECK_FALSE(out.isMember("at"));
+    CHECK(out["text"].asString() == u8"@所有人 开会");
+    CHECK(out["font"]["size"].asInt() == 10);
+    CHECK_FALSE(MessageProtocol::contentMentionsAll(content));
+
+    //本来没有 at：不改动、不重新序列化（字段顺序与写法保持原样）
+    const std::string plain = "{ \"text\" : \"hi\" , \"font\":{\"size\":10}}";
+    std::string copy = plain;
+    CHECK_FALSE(MessageProtocol::stripContentMentions(copy));
+    CHECK(copy == plain);
+    //content 不是 JSON 对象：不改动
+    std::string broken = "not json";
+    CHECK_FALSE(MessageProtocol::stripContentMentions(broken));
+    CHECK(broken == "not json");
 }

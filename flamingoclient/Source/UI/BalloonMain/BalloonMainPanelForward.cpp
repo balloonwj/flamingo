@@ -11,6 +11,7 @@
 
 #include "stdafx.h"
 #include "BalloonMainPanel.h"
+#include "../../Feature/ThreadGroup/ThreadGroupGate.h"   // IsThreadGroupType：帖子群不进转发对象
 
 #include <memory>
 #include <vector>
@@ -27,6 +28,8 @@
 #include "ForwardDispatcher.h"              // balloonmain::ForwardDispatcher / BuildForwardFailureText
 #include "ForwardRequest.h"                 // balloonmain::ForwardRequest
 #include "ForwardTargetModel.h"             // balloonmain::ForwardTarget / BuildRecentForwardTargets
+#include "../../../FlamingoMedia/Api/FlamingoMediaApi.h"   // IMediaModule::OnConversationsPicked（云端录制第 27 期）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace {
 
@@ -35,6 +38,9 @@ const int kForwardAvatarSizePx = 32;
 
 //转发应答缺消息体时补拉的条数：拉该会话最新的一页，与聊天窗首屏一页的条数同一量级
 const int kForwardResyncLimit = 20;
+
+//图片消息的大小上限（字节，2026-10-07）：与 net/ImageTransfer.cpp 的 kMaxImageBytes 相同（20 MB），超过时那边会拒绝上传
+const int64_t kMaxImageMessageBytes = 20LL * 1024 * 1024;
 
 //生成 clientmsgid 用的缓冲区长度：32 位十六进制 GUID 加结尾零，留有余量
 const size_t kClientMsgIdBufLen = 40;
@@ -93,12 +99,11 @@ LRESULT CBalloonMainPanel::OnOpenForwardPickerMsg(UINT /*uMsg*/, WPARAM /*wParam
 {
     //lParam 为聊天窗堆分配的 balloonmain::ForwardRequest，处理后须 delete
     std::unique_ptr<balloonmain::ForwardRequest> pReq((balloonmain::ForwardRequest*)lParam);
-    if (!pReq || pReq->m_msgids.empty())
+    //逐条转发选中的只有在线直传文件时 m_msgids 为空，要重新发送的文件在 m_reuploadFiles 里（2026-10-05 起）
+    if (!pReq || (pReq->m_msgids.empty() && pReq->m_reuploadFiles.empty()))
     {
         return 0;
     }
-    const int64_t selfId = (int64_t)SelfUserId();
-
     //合并转发的标题在这里生成，不用聊天窗的会话显示名：单聊的显示名是「真名（备注）」，
     //备注是本人给对方起的私人称呼，写进标题就随聊天记录发给了别人。这里一律用真名
     //（昵称，没有昵称时用账号）；群聊用群名
@@ -125,11 +130,23 @@ LRESULT CBalloonMainPanel::OnOpenForwardPickerMsg(UINT /*uMsg*/, WPARAM /*wParam
         pReq->m_title = balloonmain::BuildMergedForwardTitle(pReq->m_srcCtype, selfName, otherName);
     }
 
-    //「最近会话」：会话列表已按置顶在前、时间倒序排好，名字与头像与会话列表同一口径
+    OpenForwardPicker(*pReq);
+    return 0;
+}
+
+void CBalloonMainPanel::OpenForwardPicker(const balloonmain::ForwardRequest& request)
+{
+    const int64_t selfId = (int64_t)SelfUserId();
+    //「最近会话」：会话列表已按置顶在前、时间倒序排好，名字与头像与会话列表同一口径。
+    //帖子群不进转发对象：帖子群不能收普通消息（转发、发文件、群发都被服务端以 1305 拒绝，docs/帖子群方案.md 4.1），
+    //功能可用与否都一样
     std::vector<balloonmain::ForwardTarget> convs;
     convs.reserve(m_conversations.size());
     for (size_t i = 0; i < m_conversations.size(); ++i)
     {
+        if (m_conversations[i].m_ctype == conversation_group
+            && balloonthread::IsThreadGroupType(GroupTypeOf(m_conversations[i].m_cid)))
+            continue;
         convs.push_back(MakeForwardTargetForConversation(m_conversations[i].m_ctype,
                                                          m_conversations[i].m_cid));
     }
@@ -142,6 +159,9 @@ LRESULT CBalloonMainPanel::OnOpenForwardPickerMsg(UINT /*uMsg*/, WPARAM /*wParam
     for (size_t i = 0; i < m_myGroups.size(); ++i)
     {
         const net::UserGroupItem& g = m_myGroups[i];
+        //帖子群不进转发对象（同上）；群信息缓存里还没有类型时以群列表里带的为准
+        if (balloonthread::IsThreadGroupType(g.m_grouptype) || balloonthread::IsThreadGroupType(GroupTypeOf(g.m_groupid)))
+            continue;
         balloonmain::ForwardTarget t;
         t.m_ctype = conversation_group;
         t.m_cid = g.m_groupid;
@@ -151,14 +171,239 @@ LRESULT CBalloonMainPanel::OnOpenForwardPickerMsg(UINT /*uMsg*/, WPARAM /*wParam
         groups.push_back(t);
     }
 
-    LOG_INFO("Forward picker requested, src ctype=%d, cid=%lld, merge=%d, count=%u, skipped=%u, "
-             "recent=%u, groups=%u, contacts=%u.",
-             pReq->m_srcCtype, (long long)pReq->m_srcCid, pReq->m_merge ? 1 : 0,
-             (unsigned)pReq->m_msgids.size(), (unsigned)pReq->m_skipped,
+    LOG_INFO("Forward picker requested, src ctype=%d, cid=%lld, merge=%d, count=%u, skipped=%u, file=%d, "
+             "reupload=%u, skippeddirect=%u, directplaceholders=%u, recent=%u, groups=%u, contacts=%u.",
+             request.m_srcCtype, (long long)request.m_srcCid, request.m_merge ? 1 : 0,
+             (unsigned)request.m_msgids.size(), (unsigned)request.m_skipped, request.m_filePath.empty() ? 0 : 1,
+             (unsigned)request.m_reuploadFiles.size(), (unsigned)request.m_skippedDirect,
+             (unsigned)request.m_directPlaceholders,
              (unsigned)recent.size(), (unsigned)groups.size(), (unsigned)m_contacts.size());
 
-    m_forwardDlg.Open(this, selfId, *pReq, recent, groups, m_contacts, m_departments);
-    return 0;
+    m_forwardDlg.Open(this, selfId, request, recent, groups, m_contacts, m_departments);
+}
+
+bool CBalloonMainPanel::OpenSendFilePicker(const std::wstring& path)
+{
+    if (path.empty() || ::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+    {
+        LOG_WARNING("send file picker: file not found.");
+        return false;
+    }
+    balloonmain::ForwardRequest request;
+    request.m_filePath = path;
+    OpenForwardPicker(request);
+    return true;
+}
+
+bool CBalloonMainPanel::OpenSendTextPicker(const std::wstring& text)
+{
+    if (text.empty() || !balloonmain::IsActionAllowedInState(m_connUiState, balloonmain::kActionSendMessage))
+    {
+        LOG_INFO("send text picker not opened: empty=%d.", text.empty() ? 1 : 0);
+        return false;
+    }
+    balloonmain::ForwardRequest request;
+    request.m_text = text;
+    OpenForwardPicker(request);
+    return true;
+}
+
+bool CBalloonMainPanel::OpenMediaConversationPicker(const std::wstring& title, uint32_t token)
+{
+    if (!balloonmain::IsActionAllowedInState(m_connUiState, balloonmain::kActionSendMessage))
+    {
+        LOG_INFO("media conversation picker not opened, token=%u.", token);
+        return false;
+    }
+    balloonmain::ForwardRequest request;
+    request.m_mediaPick = true;
+    request.m_mediaPickToken = token;
+    request.m_mediaPickTitle = title;
+    OpenForwardPicker(request);
+    return true;
+}
+
+bool CBalloonMainPanel::SendTextToConversation(int ctype, int64_t cid, const std::wstring& text)
+{
+    if (cid <= 0 || text.empty())
+    {
+        LOG_WARNING("send text rejected: ctype=%d, cid=%lld.", ctype, (long long)cid);
+        return false;
+    }
+    //与发送本地文件一样先打开（或复用）聊天窗，由聊天窗发出：乐观气泡、回执与会话冒泡都沿用聊天窗的逻辑
+    if (ctype == conversation_single)
+    {
+        OpenSingleChat((UINT)cid);
+        CBalloonChatWindow* wnd = EnsureChatWindow((UINT)cid);
+        if (wnd == NULL)
+        {
+            return false;
+        }
+        wnd->SendPlainText(text);
+        return true;
+    }
+    if (ctype == conversation_group)
+    {
+        OpenGroupChat(cid);
+        CBalloonGroupChatWindow* wnd = EnsureGroupWindow(cid);
+        if (wnd == NULL)
+        {
+            return false;
+        }
+        wnd->SendPlainText(text);
+        return true;
+    }
+    return false;
+}
+
+bool CBalloonMainPanel::SendLocalFileToConversation(int ctype, int64_t cid, const std::wstring& path, bool forceOffline)
+{
+    if (cid <= 0 || path.empty() || ::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+    {
+        LOG_WARNING("send local file rejected: ctype=%d, cid=%lld, file missing or bad target.", ctype, (long long)cid);
+        return false;
+    }
+    if (ctype == conversation_single)
+    {
+        OpenSingleChat((UINT)cid);
+        CBalloonChatWindow* wnd = EnsureChatWindow((UINT)cid);
+        if (wnd == NULL)
+        {
+            return false;
+        }
+        wnd->SendLocalFile(path, forceOffline);
+        return true;
+    }
+    if (ctype == conversation_group)
+    {
+        OpenGroupChat(cid);
+        CBalloonGroupChatWindow* wnd = EnsureGroupWindow(cid);
+        if (wnd == NULL)
+        {
+            return false;
+        }
+        wnd->SendLocalFile(path);
+        return true;
+    }
+    return false;
+}
+
+bool CBalloonMainPanel::SendLocalImageToConversation(int ctype, int64_t cid, const std::wstring& path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA attr;
+    if (cid <= 0 || path.empty() || !::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attr))
+    {
+        LOG_WARNING("send local image rejected: ctype=%d, cid=%lld, file missing or bad target.", ctype, (long long)cid);
+        return false;
+    }
+    //超过图片消息的大小上限（与 net::ImageTransfer 的限制相同）：交回调用方改以文件消息发送
+    const int64_t size = (static_cast<int64_t>(attr.nFileSizeHigh) << 32) | attr.nFileSizeLow;
+    if (size <= 0 || size > kMaxImageMessageBytes)
+    {
+        LOG_INFO("send local image: %lld bytes exceeds the image message limit, caller falls back to a file.",
+                 (long long)size);
+        return false;
+    }
+    if (ctype == conversation_single)
+    {
+        OpenSingleChat((UINT)cid);
+        CBalloonChatWindow* wnd = EnsureChatWindow((UINT)cid);
+        if (wnd == NULL)
+        {
+            return false;
+        }
+        wnd->SendLocalImage(path);
+        return true;
+    }
+    if (ctype == conversation_group)
+    {
+        OpenGroupChat(cid);
+        CBalloonGroupChatWindow* wnd = EnsureGroupWindow(cid);
+        if (wnd == NULL)
+        {
+            return false;
+        }
+        wnd->SendLocalImage(path);
+        return true;
+    }
+    return false;
+}
+
+bool CBalloonMainPanel::IsMarkdownSendReady() const
+{
+    return balloonmain::IsActionAllowedInState(m_connUiState, balloonmain::kActionSendMessage);
+}
+
+bool CBalloonMainPanel::OpenMarkdownTargetPicker(const std::wstring& title, const std::wstring& digest,
+                                                 balloonmd::IMarkdownTargetSink* sink)
+{
+    if (sink == NULL || !IsMarkdownSendReady())
+    {
+        LOG_INFO("markdown target picker not opened: sink=%d, ready=%d.", sink != NULL ? 1 : 0,
+                 IsMarkdownSendReady() ? 1 : 0);
+        return false;
+    }
+    balloonmain::ForwardRequest request;
+    request.m_markdownPick = true;
+    request.m_title = title;
+    request.m_markdownDigest = digest;
+    m_mdTargetSink = sink;
+    LOG_INFO("markdown target picker opened, title chars=%u.", (unsigned)title.size());
+    OpenForwardPicker(request);
+    return true;
+}
+
+void CBalloonMainPanel::CancelMarkdownTargetPicker(balloonmd::IMarkdownTargetSink* sink)
+{
+    if (sink == NULL || m_mdTargetSink != sink)
+    {
+        return;
+    }
+    m_mdTargetSink = NULL;
+    //选会话窗口还开着且正为这个编辑器选对象：一并关掉（用户若已改用它转发别的消息，m_mdTargetSink 早已清空，走不到这里）
+    if (m_forwardDlg.IsWindow() && m_forwardDlg.IsWindowVisible())
+    {
+        m_forwardDlg.PostMessage(WM_CLOSE);
+    }
+    LOG_INFO("markdown target picker cancelled because its editor closed.");
+}
+
+int CBalloonMainPanel::SendMarkdownDocument(const std::string& sourceUtf8,
+                                            const std::vector<balloonmd::MarkdownSendTarget>& targets)
+{
+    if (sourceUtf8.empty() || !IsMarkdownSendReady())
+    {
+        return 0;
+    }
+    int sent = 0;
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
+        const balloonmd::MarkdownSendTarget& t = targets[i];
+        if (t.m_id <= 0)
+        {
+            continue;
+        }
+        //与「发送到会话」发本地文件同一条路：打开（或复用）会话的聊天窗，交给它发送
+        bool ok = false;
+        if (!t.m_isGroup)
+        {
+            OpenSingleChat((UINT)t.m_id);
+            CBalloonChatWindow* wnd = EnsureChatWindow((UINT)t.m_id);
+            ok = (wnd != NULL) && wnd->SendMarkdownDocument(sourceUtf8);
+        }
+        else
+        {
+            OpenGroupChat(t.m_id);
+            CBalloonGroupChatWindow* wnd = EnsureGroupWindow(t.m_id);
+            ok = (wnd != NULL) && wnd->SendMarkdownDocument(sourceUtf8);
+        }
+        if (ok)
+        {
+            ++sent;
+        }
+        LOG_INFO("markdown document to %s %lld: ok=%d.", t.m_isGroup ? "group" : "user", (long long)t.m_id, ok ? 1 : 0);
+    }
+    return sent;
 }
 
 balloonmain::ForwardTarget CBalloonMainPanel::MakeForwardTargetForConversation(int ctype, int64_t cid)
@@ -203,9 +448,96 @@ balloonmain::ForwardTarget CBalloonMainPanel::MakeForwardTargetForConversation(i
 void CBalloonMainPanel::OnForwardTargetsConfirmed(const balloonmain::ForwardRequest& request,
                                                   const std::vector<balloonmain::ForwardTarget>& targets)
 {
-    LOG_INFO("Forward targets confirmed, src ctype=%d, cid=%lld, merge=%d, messages=%u, targets=%u.",
+    LOG_INFO("Forward targets confirmed, src ctype=%d, cid=%lld, merge=%d, messages=%u, reupload=%u, targets=%u.",
              request.m_srcCtype, (long long)request.m_srcCid, request.m_merge ? 1 : 0,
-             (unsigned)request.m_msgids.size(), (unsigned)targets.size());
+             (unsigned)request.m_msgids.size(), (unsigned)request.m_reuploadFiles.size(), (unsigned)targets.size());
+    //主菜单「发起语音 / 视频通话」：只能选一个，选了谁就呼叫谁（docs/音视频通话优化方案.md 第 4 项）
+    if (request.m_callMedia > 0)
+    {
+        if (!targets.empty())
+        {
+            StartCallToConversation(targets[0].m_ctype, targets[0].m_cid, request.m_callMedia);
+        }
+        return;
+    }
+    //Markdown 编辑器选发送对象：把选定的对象交回编辑器，由编辑器的「发送」发出（docs/Markdown消息方案.md 第 11.3 节）
+    if (request.m_markdownPick)
+    {
+        balloonmd::IMarkdownTargetSink* sink = m_mdTargetSink;
+        m_mdTargetSink = NULL;
+        if (sink == NULL || targets.empty())
+        {
+            return;
+        }
+        std::vector<balloonmd::MarkdownSendTarget> picked;
+        for (size_t i = 0; i < targets.size(); ++i)
+        {
+            balloonmd::MarkdownSendTarget t;
+            t.m_isGroup = (targets[i].m_ctype == conversation_group);
+            t.m_id = targets[i].m_cid;
+            t.m_name = targets[i].m_name;
+            picked.push_back(t);
+        }
+        sink->OnMarkdownTargetsPicked(picked);
+        return;
+    }
+    //主菜单「发起屏幕共享」：只能选一个，打开它的聊天窗并弹出共享内容选择窗（docs/屏幕共享与录制方案.md 第 2 节第 42 条）
+    if (request.m_screenShare)
+    {
+        if (!targets.empty())
+        {
+            ShareScreenWith(targets[0].m_ctype, targets[0].m_cid);
+        }
+        return;
+    }
+    //FlamingoMedia 请用户选会话（云端录制第 27 期）：把选定的会话交回 DLL，由它去发
+    if (request.m_mediaPick)
+    {
+        if (m_pMediaModule == NULL || targets.empty())
+        {
+            return;
+        }
+        std::vector<flamingomedia::MediaConversationRef> refs(targets.size());
+        for (size_t i = 0; i < targets.size(); ++i)
+        {
+            refs[i].m_ctype = targets[i].m_ctype;
+            refs[i].m_cid = targets[i].m_cid;
+        }
+        m_pMediaModule->OnConversationsPicked(request.m_mediaPickToken, &refs[0], static_cast<uint32_t>(refs.size()));
+        return;
+    }
+    //发送一段文字（屏幕共享第 25 期：分享链接的邀请）：逐个会话发出
+    if (!request.m_text.empty())
+    {
+        for (size_t i = 0; i < targets.size(); ++i)
+        {
+            const bool sent = SendTextToConversation(targets[i].m_ctype, targets[i].m_cid, request.m_text);
+            LOG_INFO("Share invite text sent, target ctype=%d, cid=%lld, ok=%d.", targets[i].m_ctype,
+                     (long long)targets[i].m_cid, sent ? 1 : 0);
+        }
+        return;
+    }
+    //发送本地文件（录屏完成后选会话）：逐个会话发出
+    if (!request.m_filePath.empty())
+    {
+        for (size_t i = 0; i < targets.size(); ++i)
+        {
+            SendLocalFileToConversation(targets[i].m_ctype, targets[i].m_cid, request.m_filePath);
+        }
+        return;
+    }
+    //逐条转发里本机还有文件的在线直传文件（2026-10-05 起）：服务器上没有副本，改为把本机文件以离线文件发给每个
+    //目标；不试在线直传，转发出去的文件要留在服务器上。其余消息照常经下面的转发请求发出
+    for (size_t f = 0; f < request.m_reuploadFiles.size(); ++f)
+    {
+        for (size_t i = 0; i < targets.size(); ++i)
+        {
+            const bool sent = SendLocalFileToConversation(targets[i].m_ctype, targets[i].m_cid,
+                                                          request.m_reuploadFiles[f], true);
+            LOG_INFO("Forward re-uploads direct file as offline file, target ctype=%d, cid=%lld, ok=%d.",
+                     targets[i].m_ctype, (long long)targets[i].m_cid, sent ? 1 : 0);
+        }
+    }
     if (targets.empty() || request.m_msgids.empty())
     {
         return;
@@ -311,7 +643,7 @@ void CBalloonMainPanel::ShowForwardOutcome(const balloonmain::ForwardBatchOutcom
         {
             if (it->second != NULL && it->second->m_hWnd == outcome.m_srcWnd)
             {
-                it->second->ShowToast(_T("已转发"));
+                it->second->ShowToast(TR(L"已转发"));
                 return;
             }
         }
@@ -320,21 +652,21 @@ void CBalloonMainPanel::ShowForwardOutcome(const balloonmain::ForwardBatchOutcom
         {
             if (it->second != NULL && it->second->m_hWnd == outcome.m_srcWnd)
             {
-                it->second->ShowToast(_T("已转发"));
+                it->second->ShowToast(TR(L"已转发"));
                 return;
             }
         }
         //从消息记录窗的行右键菜单「转发」发起
         if (m_historyWindow.IsWindow() && m_historyWindow.m_hWnd == outcome.m_srcWnd)
         {
-            m_historyWindow.ShowToast(_T("已转发"));
+            m_historyWindow.ShowToast(TR(L"已转发"));
         }
         return;
     }
 
     //有失败：弹框列出失败的目标与原因。发起转发的窗口还开着就以它为父窗口，否则以主面板为父窗口
     const std::wstring text = balloonmain::BuildForwardFailureText(outcome);
-    ::MessageBox(srcAlive ? outcome.m_srcWnd : m_hWnd, text.c_str(), _T("转发"),
+    ::MessageBox(srcAlive ? outcome.m_srcWnd : m_hWnd, text.c_str(), TR(L"转发"),
                  MB_OK | MB_ICONWARNING);
 }
 

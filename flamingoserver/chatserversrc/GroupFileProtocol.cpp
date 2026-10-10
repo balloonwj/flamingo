@@ -111,6 +111,43 @@ bool GroupFileProtocol::parseDeleteGroupFileRequest(const std::string& json, Del
     return req.groupid > 0 && req.entryid > 0;
 }
 
+//去掉字符串首尾的空格与制表符（搜索关键字用；中间的空白保留，文件名里可能就有空格）
+static std::string trimBlank(const std::string& s)
+{
+    size_t begin = 0;
+    size_t end = s.size();
+    while (begin < end && (s[begin] == ' ' || s[begin] == '\t'))
+        ++begin;
+    while (end > begin && (s[end - 1] == ' ' || s[end - 1] == '\t'))
+        --end;
+    return s.substr(begin, end - begin);
+}
+
+bool GroupFileProtocol::parseSearchGroupFilesRequest(const std::string& json, SearchGroupFilesRequest& req)
+{
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    //关键字必填：去掉首尾空白后不能为空，也不能长到不可能命中任何文件名
+    if (!root["keyword"].isString())
+        return false;
+    req.keyword = trimBlank(root["keyword"].asString());
+    if (req.keyword.empty() || req.keyword.size() > static_cast<size_t>(GROUP_FILE_SEARCH_KEYWORD_MAX_BYTES))
+        return false;
+
+    //limit 可缺省：未给或非正取缺省值；超过上限钳到上限
+    int limit = 0;
+    if (root["limit"].isInt())
+        limit = root["limit"].asInt();
+    if (limit <= 0)
+        limit = GROUP_FILE_SEARCH_LIMIT_DEFAULT;
+    if (limit > GROUP_FILE_SEARCH_LIMIT_MAX)
+        limit = GROUP_FILE_SEARCH_LIMIT_MAX;
+    req.limit = limit;
+    return true;
+}
+
 std::string GroupFileProtocol::buildAddGroupFileResponse(const GroupFileEntry& entry)
 {
     Json::Value root;
@@ -157,6 +194,29 @@ std::string GroupFileProtocol::buildDeleteGroupFileResponse(int64_t groupid, int
     root["msg"]     = "ok";
     root["groupid"] = std::to_string(groupid);
     root["entryid"] = std::to_string(entryid);
+    return writeCompact(root);
+}
+
+std::string GroupFileProtocol::buildSearchGroupFilesResponse(const std::string& keyword, bool hasMore,
+                                                             const std::vector<SearchedGroupFile>& files)
+{
+    Json::Value root;
+    root["code"]    = error_code_ok;
+    root["msg"]     = "ok";
+    root["keyword"] = keyword;
+    root["hasmore"] = hasMore;
+
+    //没有命中时也给一个空数组，客户端不必区分「缺字段」与「零条」
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        Json::Value jo;
+        fillEntryValue(jo, files[i].entry);
+        jo["groupid"] = std::to_string(files[i].groupid);
+        arr.append(jo);
+    }
+    root["files"] = arr;
+
     return writeCompact(root);
 }
 

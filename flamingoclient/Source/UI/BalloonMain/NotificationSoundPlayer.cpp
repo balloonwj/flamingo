@@ -75,13 +75,27 @@ unsigned int WavDurationMs(LPCTSTR path)
     return (unsigned int)((double)dataLen * 1000.0 / (double)byteRate);
 }
 
+// 提示音的全局拦截判定（锁屏期间不响），由 SetNotifySoundSuppressor 登记；NULL 表示没有登记
+NotifySoundSuppressorFn g_soundSuppressor = NULL;
+
+// 是否被全局拦截判定挡下
+bool IsSoundSuppressed()
+{
+    return g_soundSuppressor != NULL && g_soundSuppressor();
+}
+
 } // anonymous namespace
+
+void SetNotifySoundSuppressor(NotifySoundSuppressorFn fn)
+{
+    g_soundSuppressor = fn;
+}
 
 void PlayNotifySound(NotifySoundKind kind, bool muted)
 {
     // 已"关闭所有声音"：直接静默返回，不出声。托盘菜单与系统设置写同一个静音位，
-    // 两处任一关闭都会让 muted 为 true。
-    if (muted)
+    // 两处任一关闭都会让 muted 为 true。锁屏期间同样不响（全局拦截判定）。
+    if (muted || IsSoundSuppressed())
         return;
 
     const wchar_t* rel = NotifySoundRelativePath(kind);
@@ -102,7 +116,7 @@ void StartLoopSound(NotifySoundKind kind, bool muted)
     // 无论如何先停掉上一路：同一时刻只允许一路循环。
     StopLoopSound();
 
-    if (muted)
+    if (muted || IsSoundSuppressed())
         return;
 
     // 非循环类（接通 / 结束 / 忙音等一次性音效）走 PlayNotifySound，不该进这里；

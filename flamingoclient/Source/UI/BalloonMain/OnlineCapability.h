@@ -258,11 +258,41 @@ const wchar_t* GetConnectionMenuLabel(int presence, int connUiState);
  *  与"头像是彩色"才永远等价（OnlineCapabilityTests 里有一条专门断言这件事的用例）。
  *
  *  说明：只管我自己的头像。会话列表、联系人列表里<u>别人</u>的头像反映的是别人的在线
- *  状态，与我这边掉没掉线是两回事，不走本函数。
+ *  状态，与我这边掉没掉线是两回事，不走本函数，走下面的 ShouldGrayUserAvatar。
  *
  *  本函数无副作用。
  */
 bool ShouldGrayAvatar(int connUiState);
+
+/**
+ *  在线状态未知时传给 ShouldGrayUserAvatar 的取值：调用方手里没有某人的在线状态（例如群成员
+ *  不在通讯录里、或者状态还没取到）。未知按彩色画，不当作离线 —— 宁可少标一个离线的人，也不要
+ *  把在线的人画成离线。取值与 balloonchatwnd::kMemberPresenceUnknown 相同；任何负数都按未知处理。
+ */
+const int kPresenceUnknown = -1;
+
+/**
+ *  判定某个用户的头像是否该画成灰度（离线用户头像置灰，2026-10-03 新增）。主面板通讯录与
+ *  消息列表、群聊窗成员列表、联系人资料窗、单聊窗标题栏图标、聊天气泡等所有画用户头像的地方
+ *  都用本函数，保证同一个人在各处的灰彩一致。
+ *
+ *    isSelf：         该头像是否属于当前登录用户自己。
+ *    presence：       该用户的在线状态，取值见 net/Protocol.h 的 presence_type；负数表示未知
+ *                     （见 kPresenceUnknown）。isSelf 为 true 时不使用。
+ *    selfConnUiState：本端的界面连接态，取值见 ConnectionUiState；只在 isSelf 为 true 时使用。
+ *
+ *  @return true 表示画灰度，false 表示画彩色原图。规则：
+ *            · 自己：与 ShouldGrayAvatar 相同，连接态不是在线（正在连接、离线、越界值）就置灰。
+ *              用户在状态菜单里选了离线与网络断开两种情形都会置灰。
+ *            · 别人：只有离线（presence_offline）与越界值才置灰。越界值包括已作废的 4，按
+ *              net/Protocol.h 的约定归为离线。在线、离开、忙碌都画彩色，离开与忙碌靠头像角上的
+ *              状态点区分；负数（未知）画彩色。
+ *            · 别人的结果不看本端连接态：本端掉线期间沿用掉线前最后一次得知的状态，避免网络
+ *              短暂中断时整张列表先变灰、重连后再恢复彩色（2026-10-03 用户确定的口径）。
+ *
+ *  本函数无副作用。
+ */
+bool ShouldGrayUserAvatar(bool isSelf, int presence, int selfConnUiState);
 
 /**
  *  判定掉线后是否应当启动 / 继续自动重连。
@@ -272,11 +302,36 @@ bool ShouldGrayAvatar(int connUiState);
  *  用户是否主动离线，后者没判</u>，导致"正在断线重连时用户选离线"这条路上客户端会
  *  自己又连回去。两处共用本函数即可杜绝这类遗漏。
  *
+ *  2026-10-03 起另判是否已登录：登出时连接被关闭，掉线事件随后异步到达，此时会话状态是「登录中」
+ *  而不是「主动离线」，只判后者会在登录窗阶段自己发起重连。
+ *
+ *    alreadyLogin：    是否已登录（会话控制器的 m_bAlreadyLogin；登出、被踢下线回到登录窗后为 false）。
  *    userWentOffline： 用户是否主动选择了离线（对应 balloonmain::kSessionUserGoOffline）。
  *    enableReconnect： 配置里是否允许自动重连。
  *
- *  返回：true 表示应当重连。用户主动离线时恒为 false —— 主动离线的语义就是"别再连了"。
+ *  返回：true 表示应当重连。没有登录、或用户主动离线时恒为 false —— 前者无处可连回，
+ *  后者的语义就是"别再连了"。
  */
-bool ShouldAutoReconnect(bool userWentOffline, bool enableReconnect);
+bool ShouldAutoReconnect(bool alreadyLogin, bool userWentOffline, bool enableReconnect);
+
+/**
+ *  会话控制器对外报告的「本人当前在线状态」：托盘图标与悬停提示、托盘菜单当前项、连接态的推导
+ *  都用它。
+ *
+ *  判断顺序（2026-10-03 起）：没有登录时一律是离线 —— 登出后主面板只是隐藏、窗口还在，胶囊上仍是
+ *  登出前的状态，先看主面板会在登录窗阶段报告在线，连接态随之被算成「正在连接」；已登录且主面板在时
+ *  以胶囊为准（托盘与主面板看到的必然是同一个值，从离线恢复在线时胶囊会先乐观地显示成在线）；
+ *  主面板不在时，用户主动离线是离线，其余退回期望在线状态。
+ *
+ *    alreadyLogin：   是否已登录。
+ *    userWentOffline：用户是否主动选择了离线（含被踢下线）。
+ *    hasPanel：       主面板窗口是否存在。
+ *    panelPresence：  主面板状态胶囊上的状态，取值见 net/Protocol.h 的 presence_type；hasPanel 为 false 时不用。
+ *    recordPresence： 期望在线状态（登录、重连时用的那个），取值同上；主面板不在时使用。
+ *
+ *  返回：presence_type 取值。本函数无副作用。
+ */
+int ResolveSessionPresence(bool alreadyLogin, bool userWentOffline, bool hasPanel,
+                           int panelPresence, int recordPresence);
 
 } // namespace balloonmain

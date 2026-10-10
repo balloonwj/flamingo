@@ -27,14 +27,17 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
 namespace {
 
 // ---- 窗口尺寸（逻辑像素）----
-const int kDlgWidth     = 720;   // 初始客户区宽
-const int kDlgHeight    = 560;   // 初始客户区高
+// 含标题栏的整窗初始尺寸（逻辑像素）。2026-10-02 修复 ResizeClient 多叠加系统边框的问题时由 720×560 加上
+// 修复前多叠加的 18×47（120 DPI 实测），保持修复前的窗口大小。
+const int kDlgWidth     = 738;   // 初始宽
+const int kDlgHeight    = 607;   // 初始高
 const int kDlgMinWidth  = 600;   // 最小宽：再窄左右两列就放不下候选名字
 const int kDlgMinHeight = 460;   // 最小高
 const int kDlgTitleBarH = 36;    // 标题栏高，与其它对话框一致
@@ -46,18 +49,21 @@ const int kDlgTitleIconSize = 16;
 const COLORREF kDlgTitleBarBg = RGB(245, 246, 250);
 
 // ---- 控件 id（窗口内唯一）----
-const UINT kIdSearch      = 1;    // 搜索框
-const UINT kIdTabRecent   = 2;    // 「最近会话」页签
-const UINT kIdTabContacts = 3;    // 「联系人」页签
-const UINT kIdTabGroups   = 4;    // 「群组」页签
-const UINT kIdListScroll  = 5;    // 「最近会话」「群组」页的候选滚动区
-const UINT kIdTreeScroll  = 6;    // 「联系人」页的滚动区
-const UINT kIdTree        = 7;    // 组织架构树
-const UINT kIdChipScroll  = 8;    // 已选区
-const UINT kIdPreview     = 9;    // 转发内容预览
-const UINT kIdCount       = 10;   // 底部计数
-const UINT kIdCancel      = 11;   // 「取消」
-const UINT kIdSend        = 12;   // 「发送」
+// 从 20 起编：1 / 2 / 3 是 DuiFrameWindow 标题栏最小化、最大化、关闭按钮的控件号，点击通知同样先到本窗口的
+// OnDuiNotify。2026-10-05 之前从 1 起编，「联系人」页签为 3，点标题栏关闭按钮被当成点了页签，窗口关不掉
+// （开发约定文档「UI 约定」第 4 条）
+const UINT kIdSearch      = 20;   // 搜索框
+const UINT kIdTabRecent   = 21;   // 「最近会话」页签
+const UINT kIdTabContacts = 22;   // 「联系人」页签
+const UINT kIdTabGroups   = 23;   // 「群组」页签
+const UINT kIdListScroll  = 24;   // 「最近会话」「群组」页的候选滚动区
+const UINT kIdTreeScroll  = 25;   // 「联系人」页的滚动区
+const UINT kIdTree        = 26;   // 组织架构树
+const UINT kIdChipScroll  = 27;   // 已选区
+const UINT kIdPreview     = 28;   // 转发内容预览
+const UINT kIdCount       = 29;   // 底部计数
+const UINT kIdCancel      = 30;   // 「取消」
+const UINT kIdSend        = 31;   // 「发送」
 // 候选行复选框 id 基址（+ 行序号）与已选区 ✕ 按钮 id 基址，两段互不重叠
 const UINT kRowCheckBase   = 1000;
 const UINT kChipRemoveBase = 2000;
@@ -136,6 +142,8 @@ std::unique_ptr<balloonwjui::DuiAvatar> MakeAvatar(const ForwardTarget& t)
 
 CForwardTargetDlg::CForwardTargetDlg()
     : m_sink(NULL)
+    , m_targetTitle(NULL)
+    , m_contentTitle(NULL)
     , m_selfUserId(0)
     , m_selection(0)
     , m_tab(kTabRecent)
@@ -184,12 +192,13 @@ void CForwardTargetDlg::Open(IForwardTargetSink* sink, int64_t selfUserId,
     {
         // 父窗口传 NULL：DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，有父窗口时
         // 控件通知会发到主面板而不是本窗口（与 CreateGroupDlg 同一处理）
-        if (Create(NULL, CWindow::rcDefault, _T("转发"), WS_OVERLAPPEDWINDOW, 0) == NULL)
+        //可以最小化（2026-10-05 起）：没有属主的工具性窗口默认也有任务栏按钮，这里显式加上，最小化后从任务栏找回
+        if (Create(NULL, CWindow::rcDefault, TR(L"转发"), WS_OVERLAPPEDWINDOW, WS_EX_APPWINDOW) == NULL)
         {
             LOG_ERROR("Forward picker: Create failed.");
             return;
         }
-        SetTitle(_T("转发"));
+        SetTitle(TR(L"转发"));
         SetTitleBarHeight(kDlgTitleBarH);
         if (m_hTitleIcon == NULL)
         {
@@ -199,8 +208,11 @@ void CForwardTargetDlg::Open(IForwardTargetSink* sink, int64_t selfUserId,
         {
             SetIcon(m_hTitleIcon);
         }
-        SetButtons(false, false, true);   // 只留关闭按钮
+        //最小化、最大化、关闭三个按钮，可拖拽改大小（2026-10-05 用户要求），最小为 kDlgMinWidth × kDlgMinHeight
+        SetButtons(true, true, true);
+        SetResizable(true);
         SetMinSize(kDlgMinWidth, kDlgMinHeight);
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         BuildUi();
         ResizeClient(kDlgWidth, kDlgHeight);
@@ -214,6 +226,20 @@ void CForwardTargetDlg::Open(IForwardTargetSink* sink, int64_t selfUserId,
     if (m_previewLabel != NULL)
     {
         m_previewLabel->SetText(PreviewText());
+    }
+    //同一个窗口也用来发送本地文件（录屏完成后的「发送到会话…」）与主菜单发起通话：标题、按钮、说明按用途区分
+    SetTitle(ForwardPickerTitle(m_request).c_str());
+    if (m_sendButton != NULL)
+    {
+        m_sendButton->SetText(ForwardPickerConfirmText(m_request).c_str());
+    }
+    if (m_targetTitle != NULL)
+    {
+        m_targetTitle->SetText(ForwardPickerTargetTitle(m_request).c_str());
+    }
+    if (m_contentTitle != NULL)
+    {
+        m_contentTitle->SetText(ForwardPickerContentTitle(m_request).c_str());
     }
     SwitchTab(kTabRecent);
     RebuildSelected();
@@ -259,7 +285,7 @@ void CForwardTargetDlg::BuildUi()
 
         std::unique_ptr<balloonwjui::DuiEdit> search(new balloonwjui::DuiEdit());
         search->SetCtrlId(kIdSearch);
-        search->SetPlaceholder(_T("搜索"));
+        search->SetPlaceholder(TR(L"搜索"));
         search->SetBgColor(kWhite);
         m_searchInput = search.get();
         left->AddChild(std::move(search), balloonwjui::DuiLayout::Hint().Fixed(kEditRowH));
@@ -267,7 +293,7 @@ void CForwardTargetDlg::BuildUi()
         std::unique_ptr<balloonwjui::DuiHBox> tabs(new balloonwjui::DuiHBox());
         tabs->SetGap(kTabGap);
         const UINT tabIds[] = { kIdTabRecent, kIdTabContacts, kIdTabGroups };
-        const LPCTSTR tabLabels[] = { _T("最近会话"), _T("联系人"), _T("群组") };
+        const LPCTSTR tabLabels[] = { TR(L"最近会话"), TR(L"联系人"), TR(L"群组") };
         for (int i = 0; i < 3; ++i)
         {
             std::unique_ptr<balloonsearch::SearchFilterTab> tab(new balloonsearch::SearchFilterTab());
@@ -310,9 +336,10 @@ void CForwardTargetDlg::BuildUi()
         right->SetGap(kInnerGap);
 
         std::unique_ptr<balloonwjui::DuiLabel> toTitle(new balloonwjui::DuiLabel());
-        toTitle->SetText(_T("发送给"));
+        toTitle->SetText(TR(L"发送给"));
         toTitle->SetTextColor(kSectionColor);
         toTitle->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        m_targetTitle = toTitle.get();
         right->AddChild(std::move(toTitle), balloonwjui::DuiLayout::Hint().Fixed(kSectionH));
 
         std::unique_ptr<balloonwjui::DuiScrollView> chip(new balloonwjui::DuiScrollView());
@@ -323,7 +350,8 @@ void CForwardTargetDlg::BuildUi()
         right->AddChild(std::move(chip), balloonwjui::DuiLayout::Hint().Weight(1));
 
         std::unique_ptr<balloonwjui::DuiLabel> contentTitle(new balloonwjui::DuiLabel());
-        contentTitle->SetText(_T("转发内容"));
+        contentTitle->SetText(TR(L"转发内容"));
+        m_contentTitle = contentTitle.get();
         contentTitle->SetTextColor(kSectionColor);
         contentTitle->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         right->AddChild(std::move(contentTitle), balloonwjui::DuiLayout::Hint().Fixed(kSectionH));
@@ -356,14 +384,14 @@ void CForwardTargetDlg::BuildUi()
         cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         cancel->SetVariant(balloonwjui::DuiButton::Variant::Default);
         cancel->SetCtrlId(kIdCancel);
-        cancel->SetText(_T("取消"));
+        cancel->SetText(TR(L"取消"));
         bottom->AddChild(std::move(cancel), balloonwjui::DuiLayout::Hint().Fixed(kCancelW));
 
         std::unique_ptr<balloonwjui::DuiButton> send(new balloonwjui::DuiButton());
         send->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         send->SetVariant(balloonwjui::DuiButton::Variant::Primary);
         send->SetCtrlId(kIdSend);
-        send->SetText(_T("发送"));
+        send->SetText(TR(L"发送"));
         m_sendButton = send.get();
         bottom->AddChild(std::move(send), balloonwjui::DuiLayout::Hint().Fixed(kSendW));
 
@@ -453,11 +481,11 @@ void CForwardTargetDlg::RebuildListRows()
         const bool filtering = (FilterForwardTargets(source, std::wstring()).size() != 0);
         if (filtering)
         {
-            empty->SetText(_T("无匹配结果"));
+            empty->SetText(TR(L"无匹配结果"));
         }
         else
         {
-            empty->SetText((m_tab == kTabGroups) ? _T("暂无群组") : _T("暂无最近会话"));
+            empty->SetText((m_tab == kTabGroups) ? TR(L"暂无群组") : TR(L"暂无最近会话"));
         }
         empty->SetTextColor(kSectionColor);
         empty->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -524,7 +552,7 @@ void CForwardTargetDlg::RebuildContactTree()
     if (m_treeNodes.empty())
     {
         const int hintId = m_tree->AddRoot(
-            CurrentQuery().empty() ? CString(_T("暂无联系人")) : CString(_T("无匹配结果")));
+            CurrentQuery().empty() ? CString(TR(L"暂无联系人")) : CString(TR(L"无匹配结果")));
         m_tree->SetItemSelectable(hintId, false);
         SyncTreeHeight();
         return;
@@ -602,12 +630,17 @@ void CForwardTargetDlg::SyncTreeHeight()
 
 void CForwardTargetDlg::ToggleTarget(const ForwardTarget& target)
 {
+    //发起通话只能选一个：勾选新的目标时先清掉原先选的那个
+    if (ForwardPickerSingleSelect(m_request) && !m_selection.IsSelected(target.m_ctype, target.m_cid))
+    {
+        m_selection.Clear();
+    }
     const ForwardToggleResult result = m_selection.Toggle(target);
     if (result == kForwardToggleFull)
     {
         CString tip;
-        tip.Format(_T("最多只能选择 %u 个聊天。"), (unsigned)kForwardMaxTargets);
-        ::MessageBox(m_hWnd, tip, _T("转发"), MB_OK | MB_ICONINFORMATION);
+        tip.Format(TR(L"最多只能选择 %u 个聊天。"), (unsigned)kForwardMaxTargets);
+        ::MessageBox(m_hWnd, tip, TR(L"转发"), MB_OK | MB_ICONINFORMATION);
     }
     // 复选框点击时已经自行翻转了勾选态；选满或不能选时要恢复，统一按已选集合重设
     RefreshCheckStates();
@@ -730,8 +763,15 @@ void CForwardTargetDlg::RebuildSelected()
     if (m_countLabel != NULL)
     {
         CString text;
-        text.Format(_T("已选 %u 个（最多 %u 个）"), (unsigned)selected.size(),
-                    (unsigned)kForwardMaxTargets);
+        if (ForwardPickerSingleSelect(m_request))
+        {
+            text = selected.empty() ? CString(TR(L"请选择一个联系人或群")) : CString(TR(L"已选 1 个"));
+        }
+        else
+        {
+            text.Format(TR(L"已选 %u 个（最多 %u 个）"), (unsigned)selected.size(),
+                        (unsigned)kForwardMaxTargets);
+        }
         m_countLabel->SetText(text);
     }
     if (m_sendButton != NULL)
@@ -918,22 +958,8 @@ std::wstring CForwardTargetDlg::CurrentQuery() const
 
 CString CForwardTargetDlg::PreviewText() const
 {
-    CString text;
-    if (m_request.m_merge)
-    {
-        text.Format(_T("[聊天记录] %s"), m_request.m_title.c_str());
-    }
-    else
-    {
-        text.Format(_T("逐条转发 %u 条消息"), (unsigned)m_request.m_msgids.size());
-    }
-    if (m_request.m_skipped > 0)
-    {
-        CString skipped;
-        skipped.Format(_T("\n已跳过 %u 条不能转发的消息"), (unsigned)m_request.m_skipped);
-        text += skipped;
-    }
-    return text;
+    //组装规则在 ForwardTargetModel 里（纯函数，有单测 FWDD4）
+    return CString(BuildForwardPreviewText(m_request).c_str());
 }
 
 ForwardTarget CForwardTargetDlg::TargetFromContact(const net::ContactItem& c) const

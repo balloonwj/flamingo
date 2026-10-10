@@ -38,6 +38,7 @@
 #include "../../net/Protocol.h"      // cmd_folder_* / error_code_folder_* / folder_transfer_state
 #include "../../net/IUSocket.h"      // 信令发送（SendFolder*）
 #include "../../Common/Log/IULog.h"             // LOG_INFO / LOG_WARNING / LOG_ERROR
+#include "../P2P/FolderP2PTransport.h"   // FolderP2PLinkBroker：1816 带 p2psessionid 时建 P2P 通道工厂
 
 namespace foldertransfer {
 
@@ -355,11 +356,15 @@ bool FolderTransferManager::DetachRuntimeLocked(FolderSessionRecord& record,
     out.m_recvSession = record.m_recvSession;
     out.m_sendCallback = record.m_sendCallback;
     out.m_recvCallback = record.m_recvCallback;
+    out.m_transportFactory = record.m_transportFactory;
 
     record.m_sendSession.reset();
     record.m_recvSession.reset();
     record.m_sendCallback.reset();
     record.m_recvCallback.reset();
+    record.m_transportFactory.reset();
+    //具体类型的那份指向同一个工厂，一并清掉，工厂随运行期对象整组销毁
+    record.m_p2pFactory.reset();
 
     return !out.Empty();
 }
@@ -372,11 +377,13 @@ void FolderTransferManager::StopAndDestroyRuntime(FolderRuntimeHandles& handles)
     if (handles.m_recvSession)
         handles.m_recvSession->Stop();
 
-    //销毁顺序固定：先状态机、后回调适配器。反过来会让尚未退出的线程调到已析构的适配器上。
+    //销毁顺序固定：先状态机、后回调适配器，最后通道工厂。反过来会让尚未退出的线程调到已析构的对象上。
+    //工厂销毁时（P2P）释放链路槽，链路随之关闭
     handles.m_sendSession.reset();
     handles.m_recvSession.reset();
     handles.m_sendCallback.reset();
     handles.m_recvCallback.reset();
+    handles.m_transportFactory.reset();
 }
 
 void FolderTransferManager::StopSessionById(const std::string& sessionId)
@@ -412,7 +419,8 @@ void FolderTransferManager::StopAllSessions()
 }
 
 void FolderTransferManager::SendClose(const std::string& sessionId, bool success,
-                                      int errCode, const std::string& errMsg)
+                                      int errCode, const std::string& errMsg,
+                                      int linkPath, const std::string& md5)
 {
     if (sessionId.empty())
     {
@@ -420,7 +428,36 @@ void FolderTransferManager::SendClose(const std::string& sessionId, bool success
         //根本没有会话可关，直接跳过即可。
         return;
     }
-    CIUSocket::GetInstance().SendFolderClose(sessionId, success, errCode, errMsg);
+    CIUSocket::GetInstance().SendFolderClose(sessionId, success, errCode, errMsg, linkPath, md5);
+}
+
+void FolderTransferManager::QueryLinkState(const std::string& sessionId, int& outKind, int& outLinkPath,
+                                           bool& outDecidedP2P)
+{
+    outKind = net::folder_kind_folder;
+    outLinkPath = net::kFolderLinkPathNone;
+    outDecidedP2P = false;
+    std::shared_ptr<balloonp2p::FolderP2PTransportFactory> factory;
+    {
+        std::lock_guard<std::mutex> guard(m_mtx);
+        const FolderSessionRecord* record = m_registry.FindBySessionId(sessionId);
+        if (record == NULL)
+            return;
+        outKind = record->m_kind;
+        factory = record->m_p2pFactory;
+    }
+    if (!factory)
+        return;
+    outLinkPath = factory->LinkPath();
+    outDecidedP2P = factory->DecidedP2P();
+}
+
+bool FolderTransferManager::IsDirectFile(const std::string& sessionId) const
+{
+    std::lock_guard<std::mutex> guard(m_mtx);
+    FolderSessionRegistry& registry = const_cast<FolderSessionRegistry&>(m_registry);
+    const FolderSessionRecord* record = registry.FindByAnyId(sessionId);
+    return record != NULL && record->m_kind == net::folder_kind_file;
 }
 
 void FolderTransferManager::Reset()
@@ -514,6 +551,70 @@ int FolderTransferManager::StartSend(int64_t peerUserId, const std::wstring& roo
     outLocalId = localId;
     LOG_INFO("Folder send: start scanning, peer=%lld, localid=%s.",
              (long long)peerUserId, localId.c_str());
+    return kFolderStartOk;
+}
+
+int FolderTransferManager::StartSendFile(int64_t peerUserId, const std::wstring& filePath,
+                                         const std::string& localId)
+{
+    if (peerUserId <= 0 || filePath.empty() || localId.empty())
+    {
+        LOG_ERROR("Direct file send: bad argument, peer=%lld, path empty=%d, localid empty=%d.",
+                  (long long)peerUserId, filePath.empty() ? 1 : 0, localId.empty() ? 1 : 0);
+        return kFolderStartBadArgument;
+    }
+
+    //一个文件不用扫描：就地构造清单（只取文件属性，不读内容、不算 MD5）
+    std::wstring rootPath;
+    FolderManifest manifest;
+    if (!BuildSingleFileManifest(filePath, rootPath, manifest) || manifest.m_files.empty())
+    {
+        LOG_ERROR("Direct file send: cannot build the manifest, the file may be missing, localid=%s.",
+                  localId.c_str());
+        return kFolderStartBadArgument;
+    }
+    const int64_t fileSize = manifest.m_files[0].m_sizeBytes;
+
+    uint32_t inviteSeq = 0;
+    {
+        std::lock_guard<std::mutex> guard(m_mtx);
+        m_registry.PurgeExpired((int64_t)::GetTickCount64());
+        if (m_registry.FindByAnyId(localId) != NULL)
+        {
+            LOG_ERROR("Direct file send: local id %s is already in use.", localId.c_str());
+            return kFolderStartBadArgument;
+        }
+
+        FolderSessionRecord record;
+        record.m_role = kFolderRoleSender;
+        record.m_kind = net::folder_kind_file;
+        record.m_peerUserId = peerUserId;
+        record.m_localId = localId;
+        record.m_active = true;
+        record.m_rootPath = rootPath;
+        record.m_folderName = filePath.substr(filePath.find_last_of(L"\\/") + 1);
+        record.m_manifest = manifest;
+        record.m_manifestReady = true;
+        record.m_totalFiles = 1;
+        record.m_totalBytes = fileSize;
+        record.m_directSendHooks.reset(new DirectFileSendHooks());
+        m_registry.Insert(record);
+
+        //发邀请与按帧 seq 登记在同一个临界区里，理由同 ScanProcBody 的同名步骤
+        inviteSeq = CIUSocket::GetInstance().SendFolderFileInvite(peerUserId, manifest.m_folderName, fileSize);
+        if (inviteSeq != 0)
+            m_registry.RegisterInviteSeq(inviteSeq, localId);
+        else
+            m_registry.Erase(localId);
+    }
+
+    if (inviteSeq == 0)
+    {
+        LOG_ERROR("Direct file send: invite was not sent, localid=%s.", localId.c_str());
+        return kFolderStartBadArgument;
+    }
+    LOG_INFO("Direct file send: invite sent, peer=%lld, localid=%s, bytes=%lld, seq=%u.", (long long)peerUserId,
+             localId.c_str(), (long long)fileSize, inviteSeq);
     return kFolderStartOk;
 }
 
@@ -703,10 +804,12 @@ bool FolderTransferManager::OnInviteNotify(const net::FolderInviteNotify& notify
             return false;
         }
 
-        if (!m_registry.IsFull())
+        //单文件直传不占文件夹传输的并发名额（服务端也是分开限额的），文件夹名额满了照样接下
+        if (notify.m_kind == net::folder_kind_file || !m_registry.IsFull())
         {
             FolderSessionRecord record;
             record.m_role = kFolderRoleRecv;
+            record.m_kind = notify.m_kind;
             record.m_peerUserId = notify.m_fromId;
             record.m_sessionId = notify.m_sessionId;
             record.m_active = true;
@@ -726,6 +829,7 @@ bool FolderTransferManager::OnInviteNotify(const net::FolderInviteNotify& notify
             record.m_invite.m_fileCount = notify.m_totalFiles;
             record.m_invite.m_totalBytes = notify.m_totalSize;
             record.m_invite.m_receivedAtMs = (int64_t)::GetTickCount64();
+            record.m_invite.m_kind = notify.m_kind;
 
             m_registry.Insert(record);
 
@@ -772,6 +876,9 @@ int FolderTransferManager::AcceptInvite(const std::string& sessionId,
         }
 
         record->m_saveParentDir = saveParentDir;
+        //单文件直传：文件直接落在 saveParentDir（direct-<会话号> 目录）下，扩展点整笔传输（含重试）共用一个
+        if (record->m_kind == net::folder_kind_file)
+            record->m_directRecvHooks.reset(new DirectFileRecvHooks(saveParentDir));
         //用户已经应答，这条邀请不再"待应答"：此后再点开聊天窗看到的应当是传输中 / 结果
         //气泡（由状态推送与进度回投维护），而不是又一个「接收 / 拒绝」。
         record->m_invite = FolderPendingInvite();
@@ -808,6 +915,11 @@ void FolderTransferManager::RejectInvite(const std::string& sessionId)
 // ======================== 取消与重试 ========================
 
 void FolderTransferManager::CancelTransfer(const std::string& sessionId)
+{
+    CancelTransfer(sessionId, false);
+}
+
+void FolderTransferManager::CancelTransfer(const std::string& sessionId, bool toOffline)
 {
     if (sessionId.empty())
     {
@@ -867,13 +979,14 @@ void FolderTransferManager::CancelTransfer(const std::string& sessionId)
 
     if (role == kFolderRoleSender)
     {
-        //还在等对方应答：撤回邀请。
-        CIUSocket::GetInstance().SendFolderCancel(serverSessionId);
+        //还在等对方应答：撤回邀请（单文件直传改为离线发送时带 tooffline）。
+        CIUSocket::GetInstance().SendFolderCancel(serverSessionId, toOffline);
         return;
     }
 
     //接收端已同意、通道还没建起来时点了取消：按失败结束，让对端也立刻知道结果。
-    SendClose(serverSessionId, false, error_code_folder_canceled, "canceled by receiver");
+    SendClose(serverSessionId, false, error_code_folder_canceled, "canceled by receiver", net::kFolderLinkPathNone,
+              std::string());
 }
 
 int FolderTransferManager::RetryTransfer(const std::string& sessionId)
@@ -989,6 +1102,7 @@ void FolderTransferManager::OnStateNotify(const net::FolderStateNotify& notify)
     case folder_state_canceled:
     case folder_state_peer_offline:
     case folder_state_timeout:
+    case folder_state_to_offline:
         StopSessionById(notify.m_sessionId);
         {
             std::lock_guard<std::mutex> guard(m_mtx);
@@ -1003,7 +1117,11 @@ void FolderTransferManager::OnStateNotify(const net::FolderStateNotify& notify)
         {
             std::lock_guard<std::mutex> guard(m_mtx);
             FolderSessionRecord* record = m_registry.FindBySessionId(notify.m_sessionId);
-            if (record != NULL)
+            //单文件直传建不起 P2P 链路（622）：服务端已销毁会话，发送端改为离线文件，不留续传记录
+            if (record != NULL && record->m_kind == net::folder_kind_file
+                && notify.m_errCode == error_code_folder_direct_unavailable)
+                m_registry.Erase(notify.m_sessionId);
+            else if (record != NULL)
                 m_registry.MarkFailed(*record, (int64_t)::GetTickCount64());
         }
         break;
@@ -1025,11 +1143,41 @@ void FolderTransferManager::OnStateNotify(const net::FolderStateNotify& notify)
     }
 }
 
+namespace {
+
+//1816 带 p2psessionid、且本进程的 P2P 模块已登记文件夹传输的业务方时，为这一轮建 P2P 通道工厂：
+//各条通道先等 P2P 链路，建链失败再退回 1816 给的中转。否则返回空，各条通道照旧走中转
+//单文件直传（kind 为 net::folder_kind_file）用用途 file 的业务方，且不允许退回 fileserver 中转：P2P 链路建不起来时各条
+//通道连接失败，由发送端改为离线文件。1816 没带 p2psessionid 或本进程没登记直传的业务方时返回空，调用方按 622 收尾
+std::shared_ptr<balloonp2p::FolderP2PTransportFactory> CreateLaneTransportFactory(const net::FolderRelayInfo& info,
+                                                                                 int kind)
+{
+    if (info.m_p2pSessionId.empty())
+        return std::shared_ptr<balloonp2p::FolderP2PTransportFactory>();
+    const bool directFile = (kind == net::folder_kind_file);
+    balloonp2p::FolderP2PLinkBroker& broker =
+        directFile ? balloonp2p::DirectFileLinkBroker() : balloonp2p::FolderP2PLinkBroker::GetInstance();
+    if (!broker.IsRegistered())
+    {
+        LOG_INFO("Folder transfer: p2p session %s offered but p2p module is not available, kind=%d.",
+                 info.m_p2pSessionId.c_str(), kind);
+        return std::shared_ptr<balloonp2p::FolderP2PTransportFactory>();
+    }
+    //服务器公钥：CIUSocket 从 flamingo.ini 读入并常驻进程，退回中转时用
+    std::shared_ptr<balloonp2p::FolderP2PTransportFactory> factory = broker.CreateFactory(
+        info.m_sessionId, info.m_relayIp, info.m_relayPort, info.m_token, CIUSocket::GetInstance().GetServerPublicKey());
+    if (directFile)
+        factory->SetRelayFallback(false);
+    return factory;
+}
+
+} // namespace
+
 void FolderTransferManager::OnRelayInfo(const net::FolderRelayInfo& info)
 {
-    LOG_INFO("Folder transfer: relay info, session=%s, role=%d, %s:%d, lanes=%d.",
+    LOG_INFO("Folder transfer: relay info, session=%s, role=%d, %s:%d, lanes=%d, p2p=%s.",
              info.m_sessionId.c_str(), info.m_role, info.m_relayIp.c_str(),
-             info.m_relayPort, info.m_lanes);
+             info.m_relayPort, info.m_lanes, info.m_p2pSessionId.empty() ? "none" : info.m_p2pSessionId.c_str());
 
     //重试时这一笔上一轮的状态机可能还挂着（失败路径已停过，这里是兜底），先收干净再建新的。
     StopSessionById(info.m_sessionId);
@@ -1039,6 +1187,7 @@ void FolderTransferManager::OnRelayInfo(const net::FolderRelayInfo& info)
         FolderSendSessionParams params;
         std::shared_ptr<FolderSendSession>  session;
         std::shared_ptr<FolderSendCallback> callback;
+        bool directWithoutLink = false;   //单文件直传却没有 P2P 通道工厂：不起会话，直接按 622 失败
         {
             std::lock_guard<std::mutex> guard(m_mtx);
             FolderSessionRecord* record = m_registry.FindBySessionId(info.m_sessionId);
@@ -1062,12 +1211,26 @@ void FolderTransferManager::OnRelayInfo(const net::FolderRelayInfo& info)
             params.m_rootPath = record->m_rootPath;
             params.m_manifest = record->m_manifest;   //重试时复用的正是同一份清单
             params.m_connectTimeoutSec = kFolderConnectTimeoutSec;
+            //服务器公钥：CIUSocket 从 flamingo.ini 读入并常驻进程，指针在传输期间始终有效
+            params.m_serverPubKey = CIUSocket::GetInstance().GetServerPublicKey();
+            record->m_p2pFactory = CreateLaneTransportFactory(info, record->m_kind);
+            record->m_transportFactory = record->m_p2pFactory;
+            params.m_transportFactory = record->m_transportFactory.get();
+            params.m_hooks = record->m_directSendHooks.get();
+            directWithoutLink = (record->m_kind == net::folder_kind_file && !record->m_p2pFactory);
 
             record->m_active = true;
             callback.reset(new FolderSendCallback(this, info.m_sessionId));
             session.reset(new FolderSendSession());
             record->m_sendCallback = callback;
             record->m_sendSession = session;
+        }
+
+        if (directWithoutLink)
+        {
+            LOG_WARNING("Direct file send: no p2p link offered, session=%s.", info.m_sessionId.c_str());
+            OnSendFailedFromWorker(info.m_sessionId, error_code_folder_direct_unavailable, "no p2p session");
+            return;
         }
 
         //Start 只起线程即返回，但仍放到锁外调 —— 它一返回工作线程就可能回调进本单例。
@@ -1086,6 +1249,7 @@ void FolderTransferManager::OnRelayInfo(const net::FolderRelayInfo& info)
         std::shared_ptr<FolderRecvSession>  session;
         std::shared_ptr<FolderRecvCallback> callback;
         std::shared_ptr<FolderReceiveState> state;
+        bool directWithoutLink = false;   //单文件直传却没有 P2P 通道工厂：不起会话，直接按 622 失败
         {
             std::lock_guard<std::mutex> guard(m_mtx);
             FolderSessionRecord* record = m_registry.FindBySessionId(info.m_sessionId);
@@ -1110,6 +1274,13 @@ void FolderTransferManager::OnRelayInfo(const net::FolderRelayInfo& info)
             params.m_relayToken = info.m_token;
             params.m_dataLanes = info.m_lanes;
             params.m_saveParentDir = record->m_saveParentDir;
+            //服务器公钥：CIUSocket 从 flamingo.ini 读入并常驻进程，指针在传输期间始终有效
+            params.m_serverPubKey = CIUSocket::GetInstance().GetServerPublicKey();
+            record->m_p2pFactory = CreateLaneTransportFactory(info, record->m_kind);
+            record->m_transportFactory = record->m_p2pFactory;
+            params.m_transportFactory = record->m_transportFactory.get();
+            params.m_hooks = record->m_directRecvHooks.get();
+            directWithoutLink = (record->m_kind == net::folder_kind_file && !record->m_p2pFactory);
 
             state = record->m_recvState;
             record->m_active = true;
@@ -1117,6 +1288,13 @@ void FolderTransferManager::OnRelayInfo(const net::FolderRelayInfo& info)
             session.reset(new FolderRecvSession());
             record->m_recvCallback = callback;
             record->m_recvSession = session;
+        }
+
+        if (directWithoutLink)
+        {
+            LOG_WARNING("Direct file recv: no p2p link offered, session=%s.", info.m_sessionId.c_str());
+            OnRecvFailedFromWorker(info.m_sessionId, error_code_folder_direct_unavailable, "no p2p session");
+            return;
         }
 
         if (session && !session->Start(params, state, callback.get()))
@@ -1146,6 +1324,8 @@ void FolderTransferManager::OnSendProgressFromWorker(const std::string& sessionI
     notice->m_doneFiles = doneFiles;
     notice->m_totalFiles = totalFiles;
     notice->m_currentFile = currentFile;
+    bool decided = false;
+    QueryLinkState(sessionId, notice->m_kind, notice->m_linkPath, decided);
     PostToUi(FMG_MSG_V2_FOLDER_SEND_PROGRESS, notice);
 }
 
@@ -1154,12 +1334,22 @@ void FolderTransferManager::OnSendCompletedFromWorker(const std::string& session
 {
     FolderResultNotice* notice = new FolderResultNotice();
     notice->m_sessionId = sessionId;
+    std::shared_ptr<DirectFileSendHooks> hooks;
     {
         std::lock_guard<std::mutex> guard(m_mtx);
         const FolderSessionRecord* record = m_registry.FindBySessionId(sessionId);
         if (record != NULL)
+        {
             notice->m_localRoot = record->m_rootPath;
+            hooks = record->m_directSendHooks;
+            if (record->m_kind == net::folder_kind_file)
+                notice->m_localFile = record->m_rootPath + L"\\" + record->m_folderName;
+        }
     }
+    bool decided = false;
+    QueryLinkState(sessionId, notice->m_kind, notice->m_linkPath, decided);
+    if (hooks)
+        notice->m_md5 = hooks->Md5();
     notice->m_success = true;
     notice->m_totalFiles = totalFiles;
     notice->m_totalBytes = totalBytes;
@@ -1187,9 +1377,14 @@ void FolderTransferManager::OnSendFailedFromWorker(const std::string& sessionId,
     notice->m_success = false;
     notice->m_errCode = errCode;
     notice->m_errMsg = errMsg;
+    bool decided = false;
+    QueryLinkState(sessionId, notice->m_kind, notice->m_linkPath, decided);
+    //单文件直传从没走上 P2P 链路：报 622，服务端推给双方，发送端改为离线文件（用户取消照报取消）
+    if (notice->m_kind == net::folder_kind_file)
+        notice->m_errCode = DirectFileCloseErrCode(errCode, decided);
 
-    LOG_ERROR("Folder send: failed, session=%s, errcode=%d, errmsg=%s.",
-              sessionId.c_str(), errCode, errMsg.c_str());
+    LOG_ERROR("Folder send: failed, session=%s, kind=%d, errcode=%d -> %d, errmsg=%s.",
+              sessionId.c_str(), notice->m_kind, errCode, notice->m_errCode, errMsg.c_str());
     PostToUi(FMG_MSG_V2_FOLDER_SEND_RESULT, notice);
 }
 
@@ -1205,6 +1400,8 @@ void FolderTransferManager::OnRecvProgressFromWorker(const std::string& sessionI
     notice->m_doneFiles = doneFiles;
     notice->m_totalFiles = totalFiles;
     notice->m_currentFile = currentFile;
+    bool decided = false;
+    QueryLinkState(sessionId, notice->m_kind, notice->m_linkPath, decided);
     PostToUi(FMG_MSG_V2_FOLDER_RECV_PROGRESS, notice);
 }
 
@@ -1214,11 +1411,22 @@ void FolderTransferManager::OnRecvCompletedFromWorker(const std::string& session
 {
     FolderResultNotice* notice = new FolderResultNotice();
     notice->m_sessionId = sessionId;
+    std::shared_ptr<DirectFileRecvHooks> hooks;
     {
         std::lock_guard<std::mutex> guard(m_mtx);
         FolderSessionRecord* record = m_registry.FindBySessionId(sessionId);
         if (record != NULL)
+        {
             record->m_recvRootPath = rootPath;
+            hooks = record->m_directRecvHooks;
+        }
+    }
+    bool decided = false;
+    QueryLinkState(sessionId, notice->m_kind, notice->m_linkPath, decided);
+    if (hooks)
+    {
+        notice->m_md5 = hooks->Md5();
+        notice->m_localFile = hooks->FinalPath();
     }
     notice->m_success = true;
     notice->m_localRoot = rootPath;
@@ -1250,9 +1458,13 @@ void FolderTransferManager::OnRecvFailedFromWorker(const std::string& sessionId,
     notice->m_success = false;
     notice->m_errCode = errCode;
     notice->m_errMsg = errMsg;
+    bool decided = false;
+    QueryLinkState(sessionId, notice->m_kind, notice->m_linkPath, decided);
+    if (notice->m_kind == net::folder_kind_file)
+        notice->m_errCode = DirectFileCloseErrCode(errCode, decided);
 
-    LOG_ERROR("Folder recv: failed, session=%s, errcode=%d, errmsg=%s.",
-              sessionId.c_str(), errCode, errMsg.c_str());
+    LOG_ERROR("Folder recv: failed, session=%s, kind=%d, errcode=%d -> %d, errmsg=%s.",
+              sessionId.c_str(), notice->m_kind, errCode, notice->m_errCode, errMsg.c_str());
     PostToUi(FMG_MSG_V2_FOLDER_RECV_RESULT, notice);
 }
 
@@ -1268,7 +1480,10 @@ void FolderTransferManager::FinishSend(const FolderResultNotice& result)
         FolderSessionRecord* record = m_registry.FindBySessionId(result.m_sessionId);
         if (record != NULL)
         {
-            if (result.m_success)
+            //单文件直传从没走上 P2P 链路（622）：服务端收到这帧 1814 就销毁会话，发送端改为离线文件，不留续传记录
+            const bool directNoLink = (record->m_kind == net::folder_kind_file
+                                       && result.m_errCode == error_code_folder_direct_unavailable);
+            if (result.m_success || directNoLink)
             {
                 m_registry.Erase(result.m_sessionId);
             }
@@ -1281,7 +1496,8 @@ void FolderTransferManager::FinishSend(const FolderResultNotice& result)
         }
     }
 
-    SendClose(result.m_sessionId, result.m_success, result.m_errCode, result.m_errMsg);
+    SendClose(result.m_sessionId, result.m_success, result.m_errCode, result.m_errMsg, result.m_linkPath,
+              result.m_success ? result.m_md5 : std::string());
 }
 
 void FolderTransferManager::FinishRecv(const FolderResultNotice& result)
@@ -1293,7 +1509,10 @@ void FolderTransferManager::FinishRecv(const FolderResultNotice& result)
         FolderSessionRecord* record = m_registry.FindBySessionId(result.m_sessionId);
         if (record != NULL)
         {
-            if (result.m_success)
+            //理由同 FinishSend：单文件直传从没走上 P2P 链路时不留续传记录
+            const bool directNoLink = (record->m_kind == net::folder_kind_file
+                                       && result.m_errCode == error_code_folder_direct_unavailable);
+            if (result.m_success || directNoLink)
             {
                 m_registry.Erase(result.m_sessionId);
             }
@@ -1306,7 +1525,8 @@ void FolderTransferManager::FinishRecv(const FolderResultNotice& result)
         }
     }
 
-    SendClose(result.m_sessionId, result.m_success, result.m_errCode, result.m_errMsg);
+    SendClose(result.m_sessionId, result.m_success, result.m_errCode, result.m_errMsg, result.m_linkPath,
+              result.m_success ? result.m_md5 : std::string());
 }
 
 } // namespace foldertransfer

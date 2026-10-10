@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 18 章：屏幕共享（发起、选择共享内容、控制条、更多菜单、标注、观看与申请控制、结束共享）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>屏幕共享 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c18">
+<article class="doc">
+  <h1>屏幕共享</h1>
+  <p class="lead">屏幕共享把你的整块屏幕或某个窗口实时展示给单聊对象或群成员，适合演示方案、讲解界面和远程协作。共享过程中可以讲话、标注、录制，观看者还可以申请控制你的鼠标和键盘。</p>
+  <ul class="facts">
+    <li>适用：全体员工，单聊和群聊都可以发起</li>
+    <li>云端录制：需要企业开启「云端录制」开关</li>
+    <li>字幕：需要企业开启「语音字幕」开关</li>
+  </ul>
+
+  <h2 id="start">发起屏幕共享</h2>
+  <p>以下任一位置都可以发起：</p>
+  <ul>
+    <li>单聊窗或群聊窗头部的显示器图标（鼠标停在上面提示 <span class="ui">共享屏幕</span>），见下图。</li>
+    <li>在主面板右键会话、联系人或群，选 <span class="ui">共享屏幕给TA</span> 或 <span class="ui">共享屏幕到本群</span>。</li>
+    <li>主面板系统菜单或托盘菜单里的 <span class="ui">发起屏幕共享</span>：先选择一个联系人或群，再打开对应的聊天窗开始共享。</li>
+    <li>一对一通话中点 <span class="ui">共享屏幕</span>，见<a href="16-calls.html">「语音与视频通话」</a>。</li>
+  </ul>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/t_share_card.png" width="760" alt="共享屏幕按钮与屏幕共享卡片">
+      <span class="pin" style="left:69.9%;top:11.8%">1</span>
+      <span class="pin" style="left:52%;top:60%">2</span>
+    </div>
+    <figcaption>单聊窗头部的「共享屏幕」按钮，以及开始共享后发到聊天里的卡片</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>共享屏幕</b>：打开「选择要共享的内容」窗口</li>
+    <li><b>屏幕共享卡片</b>：显示共享标题、描述和状态，对方从这里加入</li>
+  </ol>
+
+  <h2 id="picker">选择共享内容</h2>
+  <p>点共享入口后会打开「选择要共享的内容」窗口：</p>
+  <figure class="shot center">
+    <img src="../img/t_share_picker.png" width="740" alt="选择要共享的内容">
+    <figcaption>选择要共享的屏幕或窗口，并填写标题</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">屏幕</span> 页签里选一块显示器，或在 <span class="ui">窗口</span> 页签里选一个程序窗口。列表不是最新时点右上角的 <span class="ui">刷新</span>。</li>
+    <li>填写 <span class="ui">标题</span>（必填）和 <span class="ui">描述</span>（选填），它们会显示在聊天卡片和邀请提示里。</li>
+    <li>按需勾选下方的选项（见下表）。</li>
+    <li>点 <span class="ui">开始共享</span>。</li>
+  </ol>
+  <table>
+    <tr><th style="min-width:9.5em">选项</th><th>作用</th></tr>
+    <tr><td>同时开启麦克风</td><td>开始共享时就打开麦克风，观看者能听到你讲话；共享中也可以随时在控制条上开关</td></tr>
+    <tr><td>同时共享电脑声音</td><td>把电脑上播放的声音（如视频的声音）一并传给观看者</td></tr>
+    <tr><td>强制模式</td><td>观看者加入后只能全屏观看、不能中途退出，切到别的程序会被拉回，直到你结束共享</td></tr>
+    <tr><td>禁止观看者录制</td><td>观看者不能录制这场共享</td></tr>
+    <tr><td>设置密码</td><td>勾选后在右侧填写 6 位数字密码，观看者加入时需要输入</td></tr>
+    <tr><td>为我的发言生成字幕</td><td>把你讲的话实时识别成字幕显示给观看者，见<a href="20-captions.html">「字幕模式与字幕编辑」</a>；企业关闭「语音字幕」开关时没有这一项</td></tr>
+  </table>
+
+  <h2 id="sharing">共享中的控制条</h2>
+  <p>开始共享后，被共享的屏幕或窗口四周会出现一圈边框，标明观看者能看到的范围；屏幕顶部出现控制条，左侧显示「正在共享」和已共享的时长。</p>
+  <figure class="shot">
+    <div class="annotated">
+      <img src="../img/t_share_bar.png" width="880" alt="屏幕共享控制条">
+      <span class="pin" style="left:48.8%;top:12%">1</span>
+      <span class="pin" style="left:57.3%;top:12%">2</span>
+      <span class="pin" style="left:60.9%;top:12%">3</span>
+      <span class="pin" style="left:64.6%;top:12%">4</span>
+      <span class="pin" style="left:68.2%;top:12%">5</span>
+      <span class="pin" style="left:71.9%;top:12%">6</span>
+      <span class="pin" style="left:75.5%;top:12%">7</span>
+      <span class="pin" style="left:79.2%;top:12%">8</span>
+      <span class="pin" style="left:82.8%;top:12%">9</span>
+      <span class="pin" style="left:86.5%;top:12%">10</span>
+      <span class="pin" style="left:90.1%;top:12%">11</span>
+      <span class="pin" style="left:93.8%;top:12%">12</span>
+      <span class="pin" style="left:97.4%;top:12%">13</span>
+    </div>
+    <figcaption>共享者屏幕顶部的控制条；还没有人加入时显示「暂无观看者」</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>观看者名单</b>：显示「N 人观看 ▾」，点开查看和管理观看者</li>
+    <li><b>标注</b>：在共享的屏幕上画图、写字，见下文<a href="#annotate">「标注」</a></li>
+    <li><b>录制</b>：在本机录制这场共享</li>
+    <li><b>麦克风</b>：打开或关闭麦克风</li>
+    <li><b>电脑声音</b>：开始或停止共享电脑声音</li>
+    <li><b>摄像头</b>：打开或关闭摄像头画面</li>
+    <li><b>字幕</b>：开始或停止为你的发言生成字幕</li>
+    <li><b>暂停 / 继续</b>：暂停期间观看者看到「对方已暂停共享」</li>
+    <li><b>切换内容</b>：重新选择要共享的屏幕或窗口，不中断这场共享</li>
+    <li><b>更多</b>：弹出更多菜单，见下文</li>
+    <li><b>结束共享</b>：红色按钮，结束这场共享</li>
+    <li><b>隐藏</b>：完全隐藏控制条，鼠标移到屏幕顶部边缘时重新出现</li>
+    <li><b>收起 / 固定</b>：把控制条收成顶部的小把手，鼠标移上去时临时展开；临时展开时点「固定」恢复常驻显示</li>
+  </ol>
+  <div class="callout note"><b>控制条不会出现在共享画面里</b>控制条默认不会被截图，也不会出现在观看者看到的画面里。需要截取控制条时，在「更多」菜单里勾选 <span class="ui">允许截图</span>。</div>
+
+  <h3 id="viewers">观看者名单</h3>
+  <p>点控制条上的「N 人观看 ▾」打开观看者名单，标题显示当前人数。名单顶部有 <span class="ui">全员静音</span>，每位观看者一行，可以对他单独操作：</p>
+  <ul>
+    <li><span class="ui">静音</span>：关闭这位观看者的麦克风，已关闭时显示「已静音」。</li>
+    <li><span class="ui">移出</span>：把他移出这场共享，操作前会确认「确定将 某某 移出屏幕共享吗？」。</li>
+    <li><span class="ui">允许控制</span> / <span class="ui">收回控制</span>：主动把鼠标键盘的控制权交给他，或者收回，见下文<a href="#control">「申请控制」</a>。</li>
+  </ul>
+
+  <h3 id="more">「更多」菜单</h3>
+  <div class="shot-row">
+    <figure class="shot" style="flex:0 0 205px"><img src="../img/t_share_more_menu.png" width="205" alt="更多菜单"><figcaption>控制条的「更多」菜单</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <ul>
+        <li><span class="ui">修改标题与描述</span>：共享中随时修改，聊天卡片同步更新。</li>
+        <li><span class="ui">全员静音</span>：关闭所有观看者的麦克风。</li>
+        <li><span class="ui">禁止他人录制</span>：禁止后变为「允许他人录制」。</li>
+        <li><span class="ui">停止我的共享</span>：暂时不再共享自己的屏幕，这场共享保留，可以再「恢复我的共享」。</li>
+        <li><span class="ui">新建白板</span>：新建一块白板作为这场共享里的一个画面，大家可以在上面写画；关闭有笔迹的白板前会提示保存。</li>
+        <li><span class="ui">为我的发言生成字幕</span>、<span class="ui">显示字幕</span>：字幕开关，前提是企业开启了「语音字幕」。</li>
+        <li><span class="ui">复制分享链接</span>：复制一条链接，发给别人后点链接即可加入。</li>
+        <li><span class="ui">发送邀请到…</span>：选择会话，把邀请发过去。</li>
+        <li><span class="ui">开始云端录制</span>：把这场共享录制并保存到服务器，前提是企业开启了「云端录制」；录制中可以暂停、继续或停止。录好的录像在<a href="19-recording.html#manager">「录制管理」</a>的「云端」页签里。</li>
+        <li><span class="ui">鼠标光圈</span>、<span class="ui">点击效果</span>、<span class="ui">鼠标轨迹</span>、<span class="ui">光圈颜色</span>、<span class="ui">轨迹颜色</span>：让观看者更容易看清你的鼠标位置和点击。</li>
+        <li><span class="ui">允许截图</span>：勾选后控制条可以被截图。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="annotate">标注</h3>
+  <p>点控制条上的画笔图标进入标注，屏幕顶部换成标注工具条，就可以直接在共享的屏幕上画图、写字，观看者同步看到。</p>
+  <figure class="shot">
+    <img src="../img/t_share_annot_bar.png" width="880" alt="标注工具条">
+    <figcaption>标注工具条</figcaption>
+  </figure>
+  <ul>
+    <li>最左边四个图标依次是：<b>鼠标</b>（暂停画图，可以操作桌面上的程序，已画的标注保留）、<b>收起</b>工具条、<b>隐藏</b>工具条、<b>选择</b>（移动、缩放或删除已画的对象）。</li>
+    <li><span class="ui">钢笔 ▾</span> 是绘图工具按钮，显示当前工具，点开可以换成其他画笔、线条、箭头、形状、标号、文字、橡皮等。</li>
+    <li><span class="ui">颜色</span>、<span class="ui">粗细</span>、<span class="ui">线型</span>、<span class="ui">填充</span>：设置接下来画的样式。</li>
+    <li><span class="ui">撤销</span> 撤销上一笔，<span class="ui">清空</span> 清除全部标注。</li>
+    <li><span class="ui">禁止他人标注</span>：不让观看者在你的屏幕上标注，禁止后变为「允许他人标注」。</li>
+    <li><span class="ui">保存为图片</span>：把当前画面连同标注保存为图片。</li>
+    <li><span class="ui">退出标注</span>：结束标注，回到普通的控制条。</li>
+  </ul>
+
+  <h2 id="join">加入观看</h2>
+  <p>开始共享后，对方屏幕右下角会弹出邀请提示，标题栏显示倒计时「屏幕共享 · N 秒后关闭」，正文写明共享者、标题和描述。点 <span class="ui">加入</span> 开始观看，点 <span class="ui">忽略</span> 关闭提示。</p>
+  <figure class="shot center">
+    <img src="../img/t_share_invite_b.png" width="400" alt="屏幕共享邀请">
+    <figcaption>被邀请人收到的屏幕共享邀请</figcaption>
+  </figure>
+  <p>错过了提示也没关系：聊天里的屏幕共享卡片在共享进行中显示「正在共享」，点卡片下方的 <span class="ui">加入</span> 即可观看；共享结束后卡片显示「共享已结束」。群聊窗里还会显示一条「某某 正在共享：标题，点击加入 ›」的横幅。</p>
+  <figure class="shot center">
+    <img src="../img/t_share_card_b.png" width="760" alt="观看者一侧的屏幕共享卡片">
+    <figcaption>赵卓轩一侧看到的卡片，带「加入」按钮</figcaption>
+  </figure>
+  <ul>
+    <li>设了密码的共享，卡片副标题后标有「需要密码」，加入时要输入共享者告诉你的 6 位数字。</li>
+    <li>强制模式的共享，卡片上会注明「强制模式：加入后全屏观看、不能退出，直到共享结束」，加入前还会再确认一次。</li>
+    <li>正在共享自己屏幕、或正在观看另一场共享时，不能再加入新的共享。</li>
+  </ul>
+
+  <h3 id="viewer">观看窗口</h3>
+  <p>观看窗口默认全屏显示，顶部有一条工具条，左侧显示共享标题和时长。下表中的「主持人」指发起这场共享的人。</p>
+  <figure class="shot">
+    <img src="../img/t_share_viewer_bar.png" width="880" alt="观看者的全屏工具条">
+    <figcaption>观看者全屏时顶部的工具条</figcaption>
+  </figure>
+  <table>
+    <tr><th>按钮</th><th>作用</th></tr>
+    <tr><td>打开麦克风 / 打开摄像头</td><td>开启自己的麦克风或摄像头，与共享者和其他观看者交流</td></tr>
+    <tr><td>标注</td><td>在共享的画面上标注；共享者禁止他人标注时，点了只会给出提示</td></tr>
+    <tr><td>录制</td><td>在本机录制这场共享；录制中共享者收回了录制权限，录制会停止并保存已录的部分</td></tr>
+    <tr><td>申请控制</td><td>申请控制共享者的鼠标和键盘，见下文</td></tr>
+    <tr><td>共享我的屏幕</td><td>申请把自己的屏幕也共享出来，主持人同意后生效；有多个画面时观看窗口会把它们并列显示</td></tr>
+    <tr><td>新建白板</td><td>申请新建一块白板，主持人同意后生效</td></tr>
+    <tr><td>N 人观看 ▾</td><td>查看观看者名单</td></tr>
+    <tr><td>共享说明</td><td>查看共享者填写的描述，只在共享有描述时出现</td></tr>
+    <tr><td>退出全屏</td><td>改为窗口方式观看；也可以按 <kbd>Esc</kbd>，按 <kbd>F11</kbd> 在全屏和窗口之间切换</td></tr>
+    <tr><td>离开</td><td>退出观看</td></tr>
+    <tr><td>收起</td><td>把工具条收成顶部的小把手</td></tr>
+  </table>
+  <p>退出全屏后，这些按钮以图标形式排在观看窗口的标题栏上，鼠标停在图标上会显示名称；标题栏还显示共享标题、时长和帧率，画面左上角显示「P2P」表示双方直接连接。强制模式的共享只能全屏观看，<kbd>F11</kbd> 和 <kbd>Esc</kbd> 都不起作用。</p>
+  <figure class="shot">
+    <img src="../img/t_share_viewer.png" width="880" alt="窗口方式的观看窗口">
+    <figcaption>以窗口方式观看时，按钮都在标题栏右侧</figcaption>
+  </figure>
+  <div class="callout note"><b>截图里为什么有层层嵌套的画面</b>演示时共享者和观看者登录在同一台电脑上，观看窗口本身也出现在被共享的屏幕里，于是画面中又套着画面。两台不同的电脑之间不会出现这种情况。画面底部的深色条是截图后做的遮挡处理。</div>
+
+  <h3 id="control">申请控制</h3>
+  <ol class="steps">
+    <li>观看者点 <span class="ui">申请控制</span>，按钮变为「取消申请」，等待共享者同意。</li>
+    <li>共享者屏幕右下角弹出「某某 申请控制你的屏幕」，点同意或拒绝。共享者也可以在观看者名单里直接点 <span class="ui">允许控制</span>。</li>
+    <li>获得控制权后，观看者在画面上的鼠标和键盘操作会作用到共享者的电脑上，按钮变为「结束控制」。</li>
+  </ol>
+  <p>控制期间，共享者的控制条上显示「某某 正在控制你的屏幕」和 <span class="ui">收回控制</span> 按钮。共享者自己动一下鼠标或键盘，也会立即收回控制。</p>
+
+  <h2 id="end">结束共享</h2>
+  <p>共享者点控制条上红色的结束按钮即可结束共享。结束后，共享者和观看者都会收到「屏幕共享已结束。」的小结，列出标题、时长、分享人和参与者，点 <span class="ui">知道了</span> 关闭。观看者点 <span class="ui">离开</span> 只是自己退出，共享继续进行。</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/t_share_ended_a.png" width="400" alt="共享者看到的结束小结"><figcaption>共享者看到的小结</figcaption></figure>
+    <figure class="shot"><img src="../img/t_share_ended_b.png" width="400" alt="观看者看到的结束小结"><figcaption>观看者看到的小结</figcaption></figure>
+  </div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

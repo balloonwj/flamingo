@@ -6,7 +6,7 @@
  *  框架 Catch2 v3。
  *
  *  「PAC」= Platform Announcement Client，与服务端 doctest 的 Suite PA 呼应。
- *  注意本文件测的是<u>平台公告</u>（消息盒子），与群公告的测试无关。
+ *  注意本文件测的是<u>平台公告</u>（公告中心），与群公告的测试无关。
  *
  *  balloonwj@qq.com   2026-08-05
  */

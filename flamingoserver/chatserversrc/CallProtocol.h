@@ -83,10 +83,13 @@ public:
      *  @param code      结果码，0 成功，非 0 见 enum error_code（如对方离线 / 忙）
      *  @param msg       结果描述
      *  @param sessionid 本次通话会话 id（仅成功时下发）
+     *  @param p2pSessionId 服务端在响铃阶段为这次通话建的 P2P 会话号（P2P 方案第 6 期）；仅成功且非空时写入
+     *                   p2psessionid 字段，没建时与原来逐字相同
      *  @return 紧凑 JSON 文本
      */
     static std::string buildInviteResponse(int code, const std::string& msg,
-                                           const std::string& sessionid);
+                                           const std::string& sessionid,
+                                           const std::string& p2pSessionId = std::string());
 
     /**
      *  构造邀请推送（cmd_call_invite_notify=1702），发给被叫。
@@ -94,10 +97,13 @@ public:
      *  @param fromid    主叫 userid（以字符串编码写入，避免精度丢失）
      *  @param fromname  主叫昵称（UTF-8，用于来电界面文案展示）
      *  @param media     媒体类型，取值见 enum call_media
+     *  @param ringMs    剩余振铃毫秒数（第 15 期，字段 ringms）：被叫的来电弹窗据此显示倒计时；小于 0 时不带该字段
+     *  @param p2pSessionId 服务端在响铃阶段为这次通话建的 P2P 会话号（P2P 方案第 6 期）；为空时不带 p2psessionid 字段
      *  @return 紧凑 JSON 文本
      */
     static std::string buildInviteNotify(const std::string& sessionid, int64_t fromid,
-                                         const std::string& fromname, int media);
+                                         const std::string& fromname, int media, int64_t ringMs = -1,
+                                         const std::string& p2pSessionId = std::string());
 
     /**
      *  构造中转参数下发推送（cmd_call_signaling=1707），接通后发给双方各一份。
@@ -141,6 +147,63 @@ public:
      */
     static std::string buildMediaChangedNotify(const std::string& sessionid, int media,
                                                int64_t operatorId);
+
+    //==== 一对一通话卡片（message_type_rtc，content 的 kind 为 call；docs/协议设计-v2.md 7.8「一对一通话卡片」）====
+
+    /**
+     *  构造一对一通话卡片的 content。呼叫建好会话时由服务端以主叫的名义写入两人的单聊，形如
+     *  {"kind":"call","sessionid":"...","media":1,"caller":"5127","callername":"张勇","callee":"5308",
+     *   "starttime":"1791167956000"}；64 位 id 与时间按字符串编码，与群通话卡片同一口径。
+     *  @param sessionid  会话 id
+     *  @param media      呼叫时的媒体类型，取值见 enum call_media
+     *  @param callerId   主叫 userid
+     *  @param callerName 主叫昵称（卡片上显示）
+     *  @param calleeId   被叫 userid
+     *  @param startTime  呼叫发起时刻，Unix 毫秒
+     *  @return 紧凑 JSON 文本
+     */
+    static std::string buildCardContent(const std::string& sessionid, int media, int64_t callerId,
+                                        const std::string& callerName, int64_t calleeId, int64_t startTime);
+
+    /**
+     *  通话结束时改写卡片：在原 content 上写入 result（结束方式，取 call_state 的终态：ended / rejected / canceled /
+     *  timeout）与 endtime（Unix 毫秒，字符串）；接通过的再写 duration（接通到结束的时长，秒，整数），没接通过不写；
+     *  media 改为结束时的媒体类型（通话中切换过媒体时以结束时为准）。原 content 不可用（解析失败或不是一对一通话卡片）
+     *  时按传入的会话信息重建。
+     *  @param oldContent  卡片原来的 content
+     *  @param sessionid   会话 id
+     *  @param media       结束时的媒体类型，取值见 enum call_media
+     *  @param callerId    主叫 userid
+     *  @param callerName  主叫昵称（重建时用）
+     *  @param calleeId    被叫 userid
+     *  @param startTime   呼叫发起时刻，Unix 毫秒（重建时用）
+     *  @param connectTime 接通时刻，Unix 毫秒；0 表示没有接通过
+     *  @param result      结束方式，取值见 enum call_state
+     *  @param endTime     结束时刻，Unix 毫秒
+     *  @return 紧凑 JSON 文本
+     */
+    static std::string buildEndedCardContent(const std::string& oldContent, const std::string& sessionid, int media,
+                                             int64_t callerId, const std::string& callerName, int64_t calleeId,
+                                             int64_t startTime, int64_t connectTime, int result, int64_t endTime);
+
+    /**
+     *  判断 content 是不是一对一通话卡片，是时取出其媒体类型（会话列表摘要据此写「[语音通话]」「[视频通话]」）。
+     *  @param content 卡片 content
+     *  @return 一对一通话卡片返回 media（call_media_audio / call_media_video）；不是、解析失败或 media 非法返回 0
+     */
+    static int cardMedia(const std::string& content);
+
+    /**
+     *  构造 cmd_call_card_notify（1717）推送 JSON：{ sessionid, msgid, cid, content }。主叫与被叫各推一份：cid 是
+     *  接收方视角下的会话 id（即对方的 userid），msgid 与 cid 都按字符串编码；content 是改写后的卡片 content（JSON 对象）。
+     *  @param sessionid 会话 id
+     *  @param msgId     卡片消息的 msgid
+     *  @param cid       接收方视角下的会话 id（对方的 userid）
+     *  @param content   改写后的卡片 content（紧凑 JSON 文本）
+     *  @return 紧凑 JSON 文本
+     */
+    static std::string buildCardNotify(const std::string& sessionid, int64_t msgId, int64_t cid,
+                                       const std::string& content);
 
 private:
     CallProtocol() = delete;

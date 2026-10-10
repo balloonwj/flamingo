@@ -49,6 +49,9 @@ static std::wstring FreshTempDb(const wchar_t* name)
     path += prefix;
     path += name;
     ::DeleteFileW(path.c_str());
+    //本地库是 WAL 模式：上次异常退出残留的日志文件会被套用到同名新库上，一并删掉
+    ::DeleteFileW((path + L"-wal").c_str());
+    ::DeleteFileW((path + L"-shm").c_str());
     return path;
 }
 
@@ -1143,6 +1146,44 @@ TEST_CASE("CS4 删除某会话的全部消息与覆盖区间，其它会话不�
     CHECK(deleted == 0);
 }
 
+TEST_CASE("CS5 按清空锚点删除某会话的本地消息：只删不大于锚点的，覆盖区间清掉，其它会话不受影响", "[coverage][clearconv]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_cs5.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //单聊 10：三条；群 10（同 cid 不同 ctype）：一条
+    store.Upsert(MakeRecord(100, 1, 10, 10, 1, 1000, "a", false, false));
+    store.Upsert(MakeRecord(110, 1, 10, 7, 1, 1100, "b", false, false));
+    store.Upsert(MakeRecord(120, 1, 10, 10, 1, 1200, "c", false, false));
+    store.Upsert(MakeRecord(130, 2, 10, 7, 1, 1300, "d", false, false));
+    REQUIRE(store.SetCoverage(1, 10, MakeStoredCover(100, 120, true)));
+
+    //锚点 110：100、110 删掉，120 留下（清空之后才到的消息）
+    int deleted = -1;
+    REQUIRE(store.DeleteConversationUpTo(1, 10, 110, deleted));
+    CHECK(deleted == 2);
+    std::vector<int64_t> ids;
+    REQUIRE(store.QueryMsgidsInRange(1, 10, 0, 1000000, ids));
+    REQUIRE(ids.size() == 1);
+    CHECK(ids[0] == 120);
+    //覆盖区间作废：下次打开消息记录窗时从服务端重新验证
+    CoverRange got;
+    REQUIRE(store.GetCoverage(1, 10, got));
+    CHECK_FALSE(got.m_valid);
+    //群 10 不受影响
+    REQUIRE(store.QueryMsgidsInRange(2, 10, 0, 1000000, ids));
+    CHECK(ids.size() == 1);
+
+    //锚点为 0（清空的是一个没有消息的会话）：一条都不删
+    REQUIRE(store.DeleteConversationUpTo(1, 10, 0, deleted));
+    CHECK(deleted == 0);
+
+    //数据库未打开时返回失败
+    CV2MsgStore closed;
+    CHECK_FALSE(closed.DeleteConversationUpTo(1, 10, 110, deleted));
+}
+
 TEST_CASE("CS3 区间内最早一条的时间：只看指定会话、msgid 不小于下界的行", "[coverage]")
 {
     std::wstring path = FreshTempDb(L"flamingo_cs3.db");
@@ -1275,4 +1316,95 @@ TEST_CASE("HS2 一个会话 10 万条消息时按关键字搜索的耗时", "[.]
     RunSearchBench(store, "一条都不会命中的关键字", countMs, pageMs, total);
     WARN("HS2 keyword hits none: total " << total << ", count " << countMs << " ms, first page " << pageMs << " ms");
     CHECK(total == 0);
+}
+
+//==================== 群接龙 2c：按主键取一行、只改 content 列 ====================
+
+TEST_CASE("V2S-RELAY1 QueryRecord 按主键取一行，取不到时 found 为 false", "[grouprelay]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_v2s_relay1.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    HistoryRecord rec = MakeRecord(9001, 2, 600001, 100001, 11, 1759400000000LL, u8"周五团建报名", false, false);
+    rec.m_clientmsgid = "relay-1";
+    rec.m_content     = "{\"relay\":{\"title\":\"t\"}}";
+    rec.m_raw         = "{\"msgid\":\"9001\"}";
+    REQUIRE(store.Upsert(rec));
+
+    //取到：各字段与写入时一致
+    HistoryRecord got;
+    bool found = false;
+    REQUIRE(store.QueryRecord(2, 600001, 9001, got, found));
+    CHECK(found);
+    CHECK(got.m_msgid == 9001);
+    CHECK(got.m_clientmsgid == "relay-1");
+    CHECK(got.m_ctype == 2);
+    CHECK(got.m_cid == 600001);
+    CHECK(got.m_fromid == 100001);
+    CHECK(got.m_msgtype == 11);
+    CHECK(got.m_content == rec.m_content);
+    CHECK(got.m_searchText == rec.m_searchText);
+    CHECK(got.m_timestamp == 1759400000000LL);
+    CHECK(got.m_raw == rec.m_raw);
+
+    //msgid 不存在、会话不对：执行成功但 found 为 false，出参不被改写
+    HistoryRecord untouched;
+    untouched.m_msgid = 42;
+    found = true;
+    REQUIRE(store.QueryRecord(2, 600001, 9999, untouched, found));
+    CHECK_FALSE(found);
+    CHECK(untouched.m_msgid == 42);
+    found = true;
+    REQUIRE(store.QueryRecord(2, 600002, 9001, untouched, found));
+    CHECK_FALSE(found);
+    found = true;
+    REQUIRE(store.QueryRecord(1, 600001, 9001, untouched, found));
+    CHECK_FALSE(found);
+
+    //msgid 非正：返回 false
+    CHECK_FALSE(store.QueryRecord(2, 600001, 0, untouched, found));
+    store.Close();
+}
+
+TEST_CASE("V2S-RELAY2 UpdateContent 只改 content 列，其余列不动", "[grouprelay]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_v2s_relay2.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    HistoryRecord rec = MakeRecord(9002, 2, 600001, 100001, 11, 1759400000000LL, "search me", false, false);
+    rec.m_content = "{\"relay\":{\"title\":\"old\"}}";
+    rec.m_raw     = "{\"msgid\":\"9002\",\"content\":{\"title\":\"old\"}}";
+    REQUIRE(store.Upsert(rec));
+    bool hit = false;
+    REQUIRE(store.SetPinned(2, 600001, 9002, true, 1759400001000LL, hit));
+    REQUIRE(hit);
+
+    //命中：content 换成新值
+    const std::string newContent = "{\"relay\":{\"title\":\"old\",\"state\":1}}";
+    hit = false;
+    REQUIRE(store.UpdateContent(2, 600001, 9002, newContent, hit));
+    CHECK(hit);
+
+    HistoryRecord got;
+    bool found = false;
+    REQUIRE(store.QueryRecord(2, 600001, 9002, got, found));
+    REQUIRE(found);
+    CHECK(got.m_content == newContent);
+    //raw、search_text、Pin、撤回都不动
+    CHECK(got.m_raw == rec.m_raw);
+    CHECK(got.m_searchText == "search me");
+    CHECK(got.m_pinned);
+    CHECK(got.m_pinTime == 1759400001000LL);
+    CHECK_FALSE(got.m_recalled);
+
+    //没命中（本机没有这条）：执行成功，hit 为 false
+    hit = true;
+    REQUIRE(store.UpdateContent(2, 600001, 9999, newContent, hit));
+    CHECK_FALSE(hit);
+
+    //msgid 非正：返回 false
+    CHECK_FALSE(store.UpdateContent(2, 600001, -1, newContent, hit));
+    store.Close();
 }

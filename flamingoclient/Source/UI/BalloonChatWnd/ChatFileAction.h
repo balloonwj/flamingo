@@ -34,12 +34,15 @@ struct ChatFileActionData
     std::string fileId;       // 文件ID（接收方重新下载用，来自消息 content）
     std::string md5;          // 文件内容MD5（接收方重新下载校验用）
     long long   sizeBytes;    // 文件字节数
+    bool        direct;           // 是不是在线直传的文件（2026-10-04 起）：动作交给文件夹传输管理器，而不是上传下载队列
+    std::string directSessionId;  // 直传的会话 id（UTF-8）；发送方在 1810 应答到达之前为空，此时按 clientMsgId 定位
 
     ChatFileActionData()
         : action(0)
         , fromMe(false)
         , msgid(0)
         , sizeBytes(0)
+        , direct(false)
     {
     }
 };

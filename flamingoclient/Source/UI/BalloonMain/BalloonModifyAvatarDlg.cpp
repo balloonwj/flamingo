@@ -41,10 +41,17 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/Util/FileDialogFilter.h"   // filedlg::MakeFilter：文件对话框过滤串的说明文字逐段翻译
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
-static const int kDlgWidth      = 560;
-static const int kDlgHeight     = 476;
+// 含标题栏的整窗初始尺寸（逻辑像素）。2026-10-02 修复 ResizeClient 多叠加系统边框的问题时由 560×476 加上
+// 修复前多叠加的 18×47（120 DPI 实测），保持修复前的窗口大小。
+static const int kDlgWidth      = 578;
+static const int kDlgHeight     = 523;
+// 最小尺寸（逻辑像素），沿用修复前的 560×476：初始尺寸加大之后最小尺寸不跟着变
+static const int kDlgMinWidth   = 560;
+static const int kDlgMinHeight  = 476;
 static const int kDlgTitleBarH  = 36;
 
 // ---- 控件 id（对话框内唯一即可；避开标题栏保留的 1/2/3）----------------
@@ -122,6 +129,7 @@ struct GlyphPreset
     int     colorIndex;  // 底色槽下标 [0,kAvatarPickerSize)
 };
 
+// i18n-ignore-begin: 预设头像的字形是头像图案本身，选中后随头像保存，不随界面语言变化
 static const GlyphPreset kSystemPresets[] =
 {
     { _T("萌"), 0 }, { _T("酷"), 1 }, { _T("星"), 2 }, { _T("月"), 3 },
@@ -129,6 +137,7 @@ static const GlyphPreset kSystemPresets[] =
     { _T("风"), 8 }, { _T("林"), 9 }, { _T("雪"), 10 }, { _T("阳"), 11 },
     { _T("心"), 0 }, { _T("梦"), 4 }, { _T("春"), 2 }, { _T("夏"), 7 },
 };
+// i18n-ignore-end
 static const int kSystemPresetCount = (int)(sizeof(kSystemPresets) / sizeof(kSystemPresets[0]));
 
 // 把 HICON 合成到 sizePx×sizePx 位图、底色填 bgColor，返回 HBITMAP（同改密对话框）。
@@ -322,11 +331,11 @@ public:
 
                 Gdiplus::SolidBrush mainBrush(Gdiplus::Color(255, GetRValue(maintc), GetGValue(maintc), GetBValue(maintc)));
                 Gdiplus::RectF rMain((Gdiplus::REAL)rc.left, cy - 2.0f, (Gdiplus::REAL)w, 22.0f);
-                g.DrawString(L"点击选择本地图片", -1, &fMain, rMain, &sf, &mainBrush);
+                g.DrawString(TR(L"点击选择本地图片"), -1, &fMain, rMain, &sf, &mainBrush);
 
                 Gdiplus::SolidBrush hintBrush(Gdiplus::Color(255, GetRValue(kHintColor), GetGValue(kHintColor), GetBValue(kHintColor)));
                 Gdiplus::RectF rHint((Gdiplus::REAL)rc.left, cy + 22.0f, (Gdiplus::REAL)w, 18.0f);
-                g.DrawString(L"支持 JPG / PNG / GIF · 最大 2MB", -1, &fHint, rHint, &sf, &hintBrush);
+                g.DrawString(TR(L"支持 JPG / PNG / GIF · 最大 2MB"), -1, &fHint, rHint, &sf, &hintBrush);
             }
         }
 
@@ -428,7 +437,7 @@ void CBalloonModifyAvatarDlg::OpenForTarget(int targetKind, __int64 targetId, LP
     m_selfUserId = selfUserId;
 
     // 同一个对话框实例两种目标轮流用，标题每次都要按本次目标写一遍。
-    LPCTSTR szTitle = (targetKind == target_group) ? _T("修改群头像") : _T("修改头像");
+    LPCTSTR szTitle = (targetKind == target_group) ? TR(L"修改群头像") : TR(L"修改头像");
 
     if (!IsWindow())
     {
@@ -441,7 +450,7 @@ void CBalloonModifyAvatarDlg::OpenForTarget(int targetKind, __int64 targetId, LP
         }
         SetTitleBarHeight(kDlgTitleBarH);
         SetButtons(false, false, true);   // 只留关闭按钮
-        SetMinSize(kDlgWidth, kDlgHeight);
+        SetMinSize(kDlgMinWidth, kDlgMinHeight);
 
         if (m_titleIconBmp == NULL)
         {
@@ -457,6 +466,8 @@ void CBalloonModifyAvatarDlg::OpenForTarget(int targetKind, __int64 targetId, LP
         {
             SetIcon(m_titleIconBmp);
         }
+        //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         m_built = false;
         BuildUiOnce();
@@ -600,13 +611,13 @@ void CBalloonModifyAvatarDlg::BuildUiOnce()
         texts->SetGap(6);
 
         std::unique_ptr<balloonwjui::DuiLabel> title(new balloonwjui::DuiLabel());
-        title->SetText(_T("预览"));
+        title->SetText(TR(L"预览"));
         title->SetTextColor(kHeadingColor);
         title->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         texts->AddChild(std::move(title), balloonwjui::DuiLayout::Hint().Fixed(20));
 
         std::unique_ptr<balloonwjui::DuiLabel> desc(new balloonwjui::DuiLabel());
-        desc->SetText(_T("选择一种方式来设置你的头像。修改后联系人列表、消息气泡、个人资料处会同步更新。"));
+        desc->SetText(TR(L"选择一种方式来设置你的头像。修改后联系人列表、消息气泡、个人资料处会同步更新。"));
         desc->SetTextColor(kDescColor);
         desc->SetTextAlign(DT_LEFT | DT_TOP | DT_WORDBREAK);
         texts->AddChild(std::move(desc), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -627,7 +638,7 @@ void CBalloonModifyAvatarDlg::BuildUiOnce()
         std::unique_ptr<balloonwjui::DuiHBox> tabs(new balloonwjui::DuiHBox());
         tabs->SetGap(8);
 
-        LPCTSTR labels[3] = { _T("系统头像"), _T("首字母"), _T("本地上传") };
+        LPCTSTR labels[3] = { TR(L"系统头像"), TR(L"首字母"), TR(L"本地上传") };
         for (int i = 0; i < 3; ++i)
         {
             std::unique_ptr<balloonwjui::DuiButton> btn(new balloonwjui::DuiButton());
@@ -680,14 +691,14 @@ void CBalloonModifyAvatarDlg::BuildUiOnce()
         cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         cancel->SetVariant(balloonwjui::DuiButton::Variant::Default);
         cancel->SetCtrlId(kIdCancel);
-        cancel->SetText(_T("取消"));
+        cancel->SetText(TR(L"取消"));
         bottom->AddChild(std::move(cancel), balloonwjui::DuiLayout::Hint().Fixed(kBtnCancelW));
 
         std::unique_ptr<balloonwjui::DuiButton> use(new balloonwjui::DuiButton());
         use->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         use->SetVariant(balloonwjui::DuiButton::Variant::Primary);
         use->SetCtrlId(kIdUse);
-        use->SetText(_T("使用此头像"));
+        use->SetText(TR(L"使用此头像"));
         bottom->AddChild(std::move(use), balloonwjui::DuiLayout::Hint().Fixed(kBtnUseW));
 
         root->AddChild(std::move(bottom), balloonwjui::DuiLayout::Hint().Fixed(kBottomBarH));
@@ -715,7 +726,7 @@ void CBalloonModifyAvatarDlg::BuildSystemPage(balloonwjui::DuiVBox* host)
     defaultRow->AddChild(std::move(defaultTile), balloonwjui::DuiLayout::Hint().Fixed(kTileSize));
 
     std::unique_ptr<balloonwjui::DuiLabel> defaultTip(new balloonwjui::DuiLabel());
-    defaultTip->SetText(_T("默认头像 —— 按名称首字自动生成"));
+    defaultTip->SetText(TR(L"默认头像 —— 按名称首字自动生成"));
     defaultTip->SetTextColor(kDescColor);
     defaultTip->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     defaultRow->AddChild(std::move(defaultTip), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -757,7 +768,7 @@ void CBalloonModifyAvatarDlg::BuildLetterPage(balloonwjui::DuiVBox* host)
     host->SetGap(8);
 
     std::unique_ptr<balloonwjui::DuiLabel> lab1(new balloonwjui::DuiLabel());
-    lab1->SetText(_T("字母 / 字符"));
+    lab1->SetText(TR(L"字母 / 字符"));
     lab1->SetTextColor(kFieldLabelColor);
     lab1->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     host->AddChild(std::move(lab1), balloonwjui::DuiLayout::Hint().Fixed(16));
@@ -777,7 +788,7 @@ void CBalloonModifyAvatarDlg::BuildLetterPage(balloonwjui::DuiVBox* host)
     }
 
     std::unique_ptr<balloonwjui::DuiLabel> lab2(new balloonwjui::DuiLabel());
-    lab2->SetText(_T("背景色"));
+    lab2->SetText(TR(L"背景色"));
     lab2->SetTextColor(kFieldLabelColor);
     lab2->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     host->AddChild(std::move(lab2), balloonwjui::DuiLayout::Hint().Fixed(16));
@@ -805,7 +816,7 @@ void CBalloonModifyAvatarDlg::BuildLetterPage(balloonwjui::DuiVBox* host)
         hint->SetCornerRadius(8);
         hint->SetPadding(12);
         std::unique_ptr<balloonwjui::DuiLabel> tip(new balloonwjui::DuiLabel());
-        tip->SetText(_T("字母头像会自动取你昵称的首字。也可以手动输入 1-2 个字符。"));
+        tip->SetText(TR(L"字母头像会自动取你昵称的首字。也可以手动输入 1-2 个字符。"));
         tip->SetTextColor(kHintTextColor);
         tip->SetTextAlign(DT_LEFT | DT_TOP | DT_WORDBREAK);
         hint->AddChild(std::move(tip), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -835,7 +846,7 @@ void CBalloonModifyAvatarDlg::BuildUploadPage(balloonwjui::DuiVBox* host)
         hint->SetCornerRadius(8);
         hint->SetPadding(12);
         std::unique_ptr<balloonwjui::DuiLabel> tip(new balloonwjui::DuiLabel());
-        tip->SetText(_T("提示：上传后会自动居中裁剪为 1:1 方形。"));
+        tip->SetText(TR(L"提示：上传后会自动居中裁剪为 1:1 方形。"));
         tip->SetTextColor(kHintTextColor);
         tip->SetTextAlign(DT_LEFT | DT_TOP | DT_WORDBREAK);
         hint->AddChild(std::move(tip), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -1132,7 +1143,7 @@ void CBalloonModifyAvatarDlg::DoUse()
         return;   // 已提交、等待应答，忽略重复点击
     }
 
-    LPCTSTR szTitle = (m_targetKind == target_group) ? _T("修改群头像") : _T("修改头像");
+    LPCTSTR szTitle = (m_targetKind == target_group) ? TR(L"修改群头像") : TR(L"修改头像");
 
     // 本地上传页：先把已处理好的图片上传到图片服务器，拿到 fileid 后（在
     // OnAvatarUploadResult 里）再发落库请求。上传这一步与目标是谁无关 ——
@@ -1141,7 +1152,7 @@ void CBalloonModifyAvatarDlg::DoUse()
     {
         if (!m_hasPendingUpload || m_pendingAvatarFile.IsEmpty())
         {
-            ::MessageBox(IsWindow() ? m_hWnd : NULL, _T("请先选择一张本地图片。"),
+            ::MessageBox(IsWindow() ? m_hWnd : NULL, TR(L"请先选择一张本地图片。"),
                          szTitle, MB_OK | MB_ICONINFORMATION);
             return;
         }
@@ -1149,7 +1160,7 @@ void CBalloonModifyAvatarDlg::DoUse()
         // 改群头像时后者是群 id，拿它判登录状态永远为真。
         if (m_selfUserId <= 0)
         {
-            ::MessageBox(IsWindow() ? m_hWnd : NULL, _T("尚未登录，无法上传头像。"),
+            ::MessageBox(IsWindow() ? m_hWnd : NULL, TR(L"尚未登录，无法上传头像。"),
                          szTitle, MB_OK | MB_ICONWARNING);
             return;
         }
@@ -1202,10 +1213,13 @@ void CBalloonModifyAvatarDlg::OnPickLocalImage()
     OPENFILENAMEW ofn = { 0 };
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = IsWindow() ? m_hWnd : NULL;
-    ofn.lpstrFilter = L"图片文件 (*.jpg;*.jpeg;*.png;*.gif;*.bmp)\0*.jpg;*.jpeg;*.png;*.gif;*.bmp\0所有文件 (*.*)\0*.*\0";
+    //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+    const std::wstring fileFilter = filedlg::MakeFilter(TR(L"图片文件 (*.jpg;*.jpeg;*.png;*.gif;*.bmp)"), L"*.jpg;*.jpeg;*.png;*.gif;*.bmp",
+                                                        TR(L"所有文件 (*.*)"), L"*.*");
+    ofn.lpstrFilter = fileFilter.c_str();
     ofn.lpstrFile   = szFile;
     ofn.nMaxFile    = MAX_PATH;
-    ofn.lpstrTitle  = L"选择头像图片";
+    ofn.lpstrTitle  = TR(L"选择头像图片");
     ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
     if (!::GetOpenFileNameW(&ofn))
     {
@@ -1217,7 +1231,7 @@ void CBalloonModifyAvatarDlg::OnPickLocalImage()
                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hf == INVALID_HANDLE_VALUE)
     {
-        ::MessageBox(m_hWnd, _T("无法打开所选图片。"), _T("修改头像"), MB_OK | MB_ICONWARNING);
+        ::MessageBox(m_hWnd, TR(L"无法打开所选图片。"), TR(L"修改头像"), MB_OK | MB_ICONWARNING);
         return;
     }
     LARGE_INTEGER li = { 0 };
@@ -1225,8 +1239,8 @@ void CBalloonModifyAvatarDlg::OnPickLocalImage()
     ::CloseHandle(hf);
     if (!gotSize || li.QuadPart <= 0 || li.QuadPart > kMaxAvatarSrcBytes)
     {
-        ::MessageBox(m_hWnd, _T("图片大小须在 2MB 以内，请换一张。"),
-                     _T("修改头像"), MB_OK | MB_ICONWARNING);
+        ::MessageBox(m_hWnd, TR(L"图片大小须在 2MB 以内，请换一张。"),
+                     TR(L"修改头像"), MB_OK | MB_ICONWARNING);
         return;
     }
 
@@ -1238,8 +1252,8 @@ void CBalloonModifyAvatarDlg::OnPickLocalImage()
 
     if (!balloonmain::ProcessAvatarSourceFile(szFile, kAvatarUploadPx, outPath.c_str()))
     {
-        ::MessageBox(m_hWnd, _T("该图片无法识别或处理失败，请换一张。"),
-                     _T("修改头像"), MB_OK | MB_ICONWARNING);
+        ::MessageBox(m_hWnd, TR(L"该图片无法识别或处理失败，请换一张。"),
+                     TR(L"修改头像"), MB_OK | MB_ICONWARNING);
         return;
     }
 
@@ -1294,11 +1308,11 @@ void CBalloonModifyAvatarDlg::OnChangeAvatarResult(const net::UpdateProfileRespo
         return;
     }
 
-    LPCTSTR szTitle = (m_targetKind == target_group) ? _T("修改群头像") : _T("修改头像");
+    LPCTSTR szTitle = (m_targetKind == target_group) ? TR(L"修改群头像") : TR(L"修改头像");
 
     if (resp.code == kRespCodeAvatarTooLarge)
     {
-        ::MessageBox(hParent, _T("头像文件过大，请换一张更小的图片。"),
+        ::MessageBox(hParent, TR(L"头像文件过大，请换一张更小的图片。"),
                      szTitle, MB_OK | MB_ICONWARNING);
         return;
     }
@@ -1307,24 +1321,24 @@ void CBalloonModifyAvatarDlg::OnChangeAvatarResult(const net::UpdateProfileRespo
     // "刚被撤了管理员、界面还没刷新"，故给出明确原因而不是笼统的"请稍后重试"。
     if (m_targetKind == target_group && resp.code == kRespCodeNotGroupAdmin)
     {
-        ::MessageBox(hParent, _T("只有群主和管理员可以修改群头像。"),
+        ::MessageBox(hParent, TR(L"只有群主和管理员可以修改群头像。"),
                      szTitle, MB_OK | MB_ICONWARNING);
         return;
     }
 
-    ::MessageBox(hParent, _T("头像修改失败，请稍后重试。"),
+    ::MessageBox(hParent, TR(L"头像修改失败，请稍后重试。"),
                  szTitle, MB_OK | MB_ICONWARNING);
 }
 
 void CBalloonModifyAvatarDlg::OnAvatarUploadResult(const net::AvatarUploadResult& result)
 {
     HWND hParent = IsWindow() ? m_hWnd : NULL;
-    LPCTSTR szTitle = (m_targetKind == target_group) ? _T("修改群头像") : _T("修改头像");
+    LPCTSTR szTitle = (m_targetKind == target_group) ? TR(L"修改群头像") : TR(L"修改头像");
 
     if (!result.m_ok)
     {
         m_submitting = false;
-        ::MessageBox(hParent, _T("头像上传失败，请检查网络后重试。"),
+        ::MessageBox(hParent, TR(L"头像上传失败，请检查网络后重试。"),
                      szTitle, MB_OK | MB_ICONWARNING);
         return;
     }

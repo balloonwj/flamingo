@@ -17,6 +17,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 class CFlamingoClient;
 
@@ -88,4 +89,6 @@ private:
     // 标题栏图标位图（程序图标 IDR_MAINFRAME 合成到标题栏底色上的 HBITMAP）。
     // DuiFrameWindow::SetIcon 仅借用，故由本类持有、析构时 DeleteObject。
     HBITMAP m_titleIconBmp;
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 };

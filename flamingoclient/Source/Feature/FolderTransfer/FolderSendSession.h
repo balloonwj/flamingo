@@ -72,6 +72,8 @@
 
 #include "FolderManifest.h"       // FolderManifest / MakeLongPath / Utf8ToUtf16
 #include "FolderRelayFraming.h"   // 应用帧结构体与 kFolderRelayChunkBytes 等常量
+#include "FolderTransferHooks.h"  // IFolderSendHooks：文件共享的传输子会话用来定制前置交换与清单
+#include "FolderLaneTransport.h"  // IFolderLaneTransportFactory：通道走中转还是 P2P（P2P 方案第 5 期）
 
 namespace foldertransfer {
 
@@ -140,7 +142,7 @@ struct FolderSendFileTask
  *  （方案 4.3）。队列内部自带一把锁，故<u>可以被多条工作线程并发调用</u>。
  *
  *  续传起点由 ApplyResumePoints 一次性应用：已在接收端完整落盘的文件（位点等于文件长度）
- *  直接从队列里跳过，半成品从给定偏移续传，其余从 0 开始。
+ *  直接从队列里跳过，半成品从给定偏移续传，其余从 0 开始。0 字节文件不跳过，见 IsAlreadyComplete。
  *
  *  生命周期：一次文件夹传输一个实例，Reset → ApplyResumePoints → 若干次 TakeNext。
  */
@@ -223,7 +225,7 @@ public:
         for (size_t i = 0; i < m_tasks.size(); ++i)
         {
             m_resumedBytes += m_tasks[i].m_startOffset;
-            if (m_tasks[i].m_startOffset >= m_tasks[i].m_size)
+            if (IsAlreadyComplete(m_tasks[i]))
                 ++m_skippedCount;
         }
         return true;
@@ -243,12 +245,25 @@ public:
             const size_t pos = m_cursor;
             ++m_cursor;
             //起传偏移已等于文件长度：接收端上次已完整收下，本次跳过不再传
-            if (m_tasks[pos].m_startOffset >= m_tasks[pos].m_size)
+            if (IsAlreadyComplete(m_tasks[pos]))
                 continue;
             out = m_tasks[pos];
             return true;
         }
         return false;
+    }
+
+    /**
+     *  一个文件是否已在接收端完整落盘、本次可以跳过：起传偏移已到文件末尾。
+     *  0 字节文件例外，永远不算已完成：接收端要靠它的 ft_file_begin / ft_file_end 才会建出这个文件并计为完成，
+     *  跳过它会让接收端一直等下去（2026-10-04 P2P 第 5 期的用例 FP2P4 查出）。续传时把已收过的空文件再发一遍
+     *  没有副作用，接收端按「重传一个已完成的文件」重新收下。
+     *  @param task 待传文件
+     *  @return 可以跳过返回 true
+     */
+    static bool IsAlreadyComplete(const FolderSendFileTask& task)
+    {
+        return task.m_size > 0 && task.m_startOffset >= task.m_size;
     }
 
     //队列里的文件总数（含被续传位点跳过的那些）。可在任意线程调用。
@@ -265,7 +280,7 @@ public:
         size_t count = 0;
         for (size_t i = m_cursor; i < m_tasks.size(); ++i)
         {
-            if (m_tasks[i].m_startOffset < m_tasks[i].m_size)
+            if (!IsAlreadyComplete(m_tasks[i]))
                 ++count;
         }
         return count;
@@ -496,6 +511,31 @@ inline bool CheckManifestFramesFitLimit(const std::vector<std::string>& frames,
     return true;
 }
 
+//清单重发（2026-10-05）：fileserver 在两端的同序号通道都报到之前收到的帧直接丢弃，而发送端连好通道就发
+//清单；接收端晚一步报到时清单就丢了，发送端等满 kFolderSendManifestAckTimeoutSec 后整笔失败。现在发送端在收到
+//ft_manifest_ack 之前按递增的间隔重发整份清单，接收端的重组器只认收齐的第一份（见 FolderRelayManifestAssembler）。
+
+//第一次重发前的等待，单位：毫秒。接收端通常比发送端晚报到几百毫秒以内，1 秒足以覆盖
+const int kFolderManifestResendFirstMs = 1000;
+
+//重发间隔的上限，单位：毫秒。间隔每次翻倍，到这个值后不再增长；接收端真的在建一棵很大的目录树时，
+//每 16 秒重发一份清单的开销可以忽略
+const int kFolderManifestResendMaxMs = 16000;
+
+/**
+ *  第几次重发清单之前要等多久。
+ *  @param resendCount 已经重发过的次数，从 0 起（0 表示第一次发出之后、第一次重发之前）；为负时按 0 处理
+ *  @return 等待时长，单位：毫秒。依次为 1000、2000、4000、8000、16000，之后一直是 16000
+ */
+inline int FolderManifestResendDelayMs(int resendCount)
+{
+    //从第一次的等待起每次翻倍，翻到上限为止；逐次相乘而不是移位，次数再大也不会溢出
+    int delay = kFolderManifestResendFirstMs;
+    for (int i = 0; i < resendCount && delay < kFolderManifestResendMaxMs; ++i)
+        delay *= 2;
+    return delay < kFolderManifestResendMaxMs ? delay : kFolderManifestResendMaxMs;
+}
+
 // ======================== 与上层的接口 ========================
 
 /**
@@ -573,11 +613,25 @@ struct FolderSendSessionParams
     std::wstring   m_rootPath;            // 本地根目录的完整路径，与生成清单时用的那个一致；读源文件时与相对路径拼接
     FolderManifest m_manifest;            // 待发送的清单（ScanFolderTree 的产物），含根文件夹名、目录列表与文件列表
     int            m_connectTimeoutSec;   // 单条通道"连接 + 加密握手 + 报到"的总超时（秒）；填 0 表示用通道层默认值
+    // 服务器长期公钥（32 字节），用于各条通道的协议加密握手；NULL 表示服务端未配置公钥、通道全程明文。
+    // 不接管所有权：指向的内存须在 Start 返回之后仍然有效（主程序取自 CIUSocket，进程内常驻；
+    // 文件共享 DLL 取自宿主接口，同样进程内常驻）。由调用方传入而不是本模块自己去取，
+    // 是为了让本模块不依赖主程序的全局对象，主程序与文件共享 DLL 可以编译同一份源文件
+    const unsigned char* m_serverPubKey;
+    // 扩展点（不拥有，生命周期须长于会话）；NULL 表示单聊文件夹传输，行为不变。文件共享的传输子会话用它在发清单之前
+    // 交换 st_job / st_job_ack，下载时由它给出清单（见 FolderTransferHooks.h）
+    IFolderSendHooks*    m_hooks;
+    // 通道工厂（不拥有，生命周期须长于会话）；NULL 表示各条通道都是到 fileserver 的中转连接（按上面的中转参数建），
+    // 行为不变。单聊文件夹传输在 1816 带 p2psessionid 时给出 P2P 的工厂（先等 P2P 链路，建链失败再退回中转）
+    IFolderLaneTransportFactory* m_transportFactory;
 
     FolderSendSessionParams()
         : m_relayPort(0)
         , m_dataLanes(0)
         , m_connectTimeoutSec(0)
+        , m_serverPubKey(NULL)
+        , m_hooks(NULL)
+        , m_transportFactory(NULL)
     {
     }
 };
@@ -592,7 +646,7 @@ struct FolderSendSessionParams
  *  除 Start 之外的公开方法都可以在任意线程调用。Start 之后不要再改 params —— 参数在
  *  Start 内部已整份拷走，改外面那份不起作用。
  */
-class FolderSendSession
+class FolderSendSession : private IFolderControlSender
 {
 public:
     FolderSendSession();
@@ -652,10 +706,20 @@ private:
     //任一条连不上即整体失败 —— 少一条通道就有一批文件没人传。
     bool OpenLanes();
 
+    //建好通道之后、发清单之前执行扩展点的前置交换（没有扩展点时直接返回 true）；成功时按扩展点给出的清单重建发送队列
+    bool RunPreamble();
+
+    //按 m_params.m_manifest 建文件列表与发送队列（Start 与前置交换之后各调一次）
+    void BuildFileQueue();
+
+    //IFolderControlSender：经控制通道（lane 0）发扩展点的自定义帧
+    virtual bool SendControl(const std::string& frame) override;
+
     //把清单分段后在控制通道逐段发出。
     bool SendManifest();
 
-    //阻塞等待接收端回 ft_manifest_ack（对方建完目录才会回），并把续传位点应用到队列。
+    //阻塞等待接收端回 ft_manifest_ack（对方建完目录才会回），并把续传位点应用到队列。回执到达之前按
+    //FolderManifestResendDelayMs 的间隔重发整份清单，总时限仍是 kFolderSendManifestAckTimeoutSec。
     bool WaitManifestAck();
 
     //在指定数据通道上把一个文件从起传偏移传到末尾，并等对方的文件校验结果。

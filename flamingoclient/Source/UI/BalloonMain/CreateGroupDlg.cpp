@@ -10,9 +10,11 @@
  */
 #include "stdafx.h"
 #include "CreateGroupDlg.h"
+#include "SensitiveWordTips.h"   // CreateGroupFailureText（建群失败按错误码给提示）
 #include "ContactRemarkModel.h"   // ResolveContactDisplayName（显示名口径全局唯一）
 #include "MemberPickerTreeView.h"   // 左侧候选树（滚轮上抛 + 复选框点击判定）
 #include "MemberPickerRow.h"        // 候选树的行内容（复选框 + 头像 + 姓名）
+#include "MemberPickerLayout.h"     // BuildMemberPickerLayout：整棵控件树；邀请入群的同步选项取值规则
 
 #include <memory>
 #include <set>
@@ -25,6 +27,7 @@
 #include "../../App/FlamingoClient.h"          // CFlamingoClient::m_UserMgr
 #include "../../net/ContactsProtocolClient.h"  // net::ContactItem / DepartmentItem / DeptMemberItem
 #include "../../net/GroupProtocolClient.h"     // net::CreateGroupResponse
+#include "../../net/ConversationsProtocolClient.h" // net::kGroupFollowMax（管理关注的成员的人数上限）
 #include "../../net/IUSocket.h"            // CIUSocket::SendCreateGroup
 #include "../../Session/UserSessionData.h" // FMG_MSG_TRANSFER_GROUP_OWNER
 #include "GroupExitFlow.h"                 // TransferOwnerRequest / BuildTransferConfirmText
@@ -34,13 +37,15 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
-static const int kDlgWidth     = 760;
-static const int kDlgHeight     = 560;
-static const int kDlgMinWidth   = 640;
-static const int kDlgMinHeight  = 460;
-static const int kDlgTitleBarH  = 36;
+// 含标题栏的整窗尺寸（逻辑像素）。由 MemberPickerLayout.h 统一定义，布局单测用的是同一组值
+static const int kDlgWidth     = balloonmain::kPickerDlgWidth;
+static const int kDlgHeight    = balloonmain::kPickerDlgHeight;
+static const int kDlgMinWidth  = balloonmain::kPickerDlgMinWidth;
+static const int kDlgMinHeight = balloonmain::kPickerDlgMinHeight;
+static const int kDlgTitleBarH = balloonmain::kPickerDlgTitleBarH;
 
 // 标题栏左侧图标边长（逻辑像素）。标题栏按 16x16 绘制，取同值免去缩放。
 static const int kDlgTitleIconSize = 16;
@@ -51,25 +56,21 @@ static const int kDlgTitleIconSize = 16;
 static const COLORREF kDlgTitleBarBg = RGB(245, 246, 250);
 
 // ---- 控件 id（对话框内唯一即可）----------------------------------------
-static const UINT kIdSearch       = 1;   // 搜索联系人输入框
-static const UINT kIdName         = 2;   // 群聊名称输入框
-static const UINT kIdMemberScroll = 3;   // 左侧成员滚动区
-static const UINT kIdChipScroll   = 4;   // 右侧已选成员滚动区
-static const UINT kIdCount        = 5;   // 底部"已选 N 人"标签
-static const UINT kIdCancel       = 6;   // 取消按钮
-static const UINT kIdCreate       = 7;   // 创建群聊按钮
+// 骨架里的控件 id 由 MemberPickerLayout.h 统一定义（控件树在那里搭），这里取短名沿用
+static const UINT kIdSearch       = balloonmain::kPickerIdSearch;    // 搜索联系人输入框
+static const UINT kIdCancel       = balloonmain::kPickerIdCancel;    // 取消按钮
+static const UINT kIdCreate       = balloonmain::kPickerIdConfirm;   // 确认按钮（创建群聊 / 邀请入群等）
 // 成员行复选框 id 基址（+ 行序号）；与已选区 ✕ 按钮 id 基址分段，互不冲突。
 static const UINT kCheckboxIdBase = 1000;
 static const UINT kChipRemoveBase = 2000;
 
 // ---- 行高 / 颜色 --------------------------------------------------------
-static const int kEditRowH     = 34;   // 顶部搜索 / 群名输入框高（单行，别太高）
-static const int kMemberRowH   = 44;   // 成员行高
 static const int kHeaderRowH   = 26;   // 部门分组标题行高
 static const int kChipRowH     = 36;   // 已选成员行高
 static const int kAvatarSize   = 32;   // 成员行头像边长
 static const int kChipAvatar   = 26;   // 已选成员头像边长
 static const COLORREF kSectionColor = RGB(0x9A, 0x9A, 0x9A);   // 分组标题/计数 灰
+static const COLORREF kErrorColor   = RGB(0xE0, 0x3E, 0x3E);   // 邀请入群：同步条数不合法时的错误提示（红）
 
 // =======================================================================
 // 文件作用域编码 / 配色辅助
@@ -142,6 +143,7 @@ CCreateGroupDlg::CCreateGroupDlg(CFlamingoClient* pFMGClient)
     : m_lpFMGClient(pFMGClient)
     , m_selfUserId(0)
     , m_purpose(kPurposeCreateGroup)
+    , m_pickSink(NULL)
     , m_groupId(0)
     , m_hNotifyTarget(NULL)
     , m_searchInput(NULL)
@@ -150,7 +152,14 @@ CCreateGroupDlg::CCreateGroupDlg(CFlamingoClient* pFMGClient)
     , m_memberTree(NULL)
     , m_chipScroll(NULL)
     , m_countLabel(NULL)
+    , m_confirmButton(NULL)
+    , m_groupAllowsHistory(true)
+    , m_inviteConfirm(false)
     , m_builtPurpose(kPurposeCreateGroup)
+    , m_threadGroupAvailable(false)
+    , m_builtShowGroupType(false)
+    , m_groupTypeNormal(NULL)
+    , m_groupTypeThread(NULL)
     , m_built(false)
     , m_creating(false)
     , m_hTitleIcon(NULL)
@@ -191,6 +200,32 @@ void CCreateGroupDlg::OpenForPick(HWND owner, Purpose purpose, int64_t groupId,
     OpenInternal(owner, selfUserId, candidates, departments);
 }
 
+void CCreateGroupDlg::SetPickSink(IMemberPickSink* sink)
+{
+    m_pickSink = sink;
+}
+
+void CCreateGroupDlg::SetInitialSelection(const std::vector<int64_t>& userIds)
+{
+    m_initialSelection = userIds;
+}
+
+void CCreateGroupDlg::SetInviteOptions(bool groupAllowsHistory, bool inviteConfirm)
+{
+    m_groupAllowsHistory = groupAllowsHistory;
+    m_inviteConfirm = inviteConfirm;
+}
+
+void CCreateGroupDlg::SetThreadGroupAvailable(bool available)
+{
+    m_threadGroupAvailable = available;
+}
+
+bool CCreateGroupDlg::ShowGroupType() const
+{
+    return m_purpose == kPurposeCreateGroup && m_threadGroupAvailable;
+}
+
 void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
                                    const std::vector<net::ContactItem>& contacts,
                                    const std::vector<net::DepartmentItem>& departments)
@@ -201,12 +236,24 @@ void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
     m_contacts    = contacts;
     m_departments = departments;
     m_selected.clear();
+    //预先勾选：只保留确实在候选里、且不是自己的人
+    for (size_t i = 0; i < m_initialSelection.size(); ++i)
+    {
+        const UINT uid = (UINT)m_initialSelection[i];
+        if (uid != m_selfUserId && FindContact(uid) != NULL
+            && std::find(m_selected.begin(), m_selected.end(), uid) == m_selected.end())
+        {
+            m_selected.push_back(uid);
+        }
+    }
+    m_initialSelection.clear();
     m_creating = false;
 
     //窗口还开着、但这次要用的用途与上次搭界面时的用途不同：必须销毁重建。
     //各用途的控件集合并不相同（建群多一个群名输入框），沿用上一次搭好的界面会出现
     //"顶着建群的样子走邀请入群的逻辑"这种错乱。
-    if (IsWindow() && m_built && m_builtPurpose != m_purpose)
+    //帖子群功能的可用状态变了（「群类型」选项组要加上或去掉）：同样销毁重建
+    if (IsWindow() && m_built && (m_builtPurpose != m_purpose || m_builtShowGroupType != ShowGroupType()))
     {
         DestroyWindow();
     }
@@ -235,6 +282,8 @@ void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
         {
             SetIcon(m_hTitleIcon);
         }
+        //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         SetButtons(false, false, true);   // 只留关闭按钮（不需要最小化 / 最大化）
         SetMinSize(kDlgMinWidth, kDlgMinHeight);
@@ -253,8 +302,25 @@ void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
     {
         m_nameInput->SetText(_T(""));
     }
+    //窗口没关、上一次建群的应答还没回来时，按钮停在「正在创建…」：重新打开时恢复。放在重建界面之后：
+    //窗口关过的话旧控件树已经释放，m_confirmButton 由 BuildUiOnce 换成新树里的按钮
+    balloonmain::SetPickerConfirmBusy(m_confirmButton, false, ConfirmButtonText());
+    //「群类型」每次打开都回到「普通群」
+    if (m_groupTypeNormal != NULL && m_groupTypeThread != NULL)
+    {
+        m_groupTypeNormal->SetCheck(true, false);
+        m_groupTypeThread->SetCheck(false, false);
+    }
     RebuildMemberList(CString());
     RebuildSelected();
+    //邀请入群：选项组回到初始状态，说明按本次的群设置与同意开关
+    ResetInviteHistoryOptions();
+    //SetInviteOptions 只对邀请入群那一次打开有意义；以别的用途打开时恢复为默认值，免得下次邀请沿用旧值
+    if (m_purpose != kPurposeInvite)
+    {
+        m_groupAllowsHistory = true;
+        m_inviteConfirm = false;
+    }
 
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -280,133 +346,76 @@ void CCreateGroupDlg::BuildUiOnce()
     //而各用途构建出来的控件集合并不相同（如群名输入框只有建群用途才建），若只靠
     //"各分支各自赋值"，换个用途重开时就会拿着上一轮的野指针去用 —— 曾因此崩溃过
     //（OpenInternal 里用到了随窗口销毁而释放掉的输入框）。统一在这里清零，后面
-    //哪个分支建了哪个控件就只由那个分支填回来。
-    m_searchInput    = NULL;
-    m_nameInput      = NULL;
-    m_memberScroll   = NULL;
-    m_memberTree     = NULL;
-    m_chipScroll     = NULL;
-    m_countLabel     = NULL;
+    //由 BuildMemberPickerLayout 的出参填回本次实际构建的控件。
+    m_searchInput      = NULL;
+    m_nameInput        = NULL;
+    m_memberScroll     = NULL;
+    m_memberTree       = NULL;
+    m_chipScroll       = NULL;
+    m_countLabel       = NULL;
+    m_history          = balloonmain::InviteHistoryControls();
+    m_groupTypeNormal  = NULL;
+    m_groupTypeThread  = NULL;
 
     //记下这一轮界面是按哪种用途搭的，供 OpenInternal 判断要不要重建（见那里的说明）
     m_builtPurpose = m_purpose;
 
-    std::unique_ptr<balloonwjui::DuiVBox> root(new balloonwjui::DuiVBox());
-    root->SetPadding(16);
-    root->SetGap(12);
+    //控件树由 BuildMemberPickerLayout 按用途搭出，布局单测调用的是同一个函数
+    balloonmain::MemberPickerLayoutSpec spec;
+    spec.m_showNameInput      = (m_purpose == kPurposeCreateGroup);
+    spec.m_showInviteHistory  = (m_purpose == kPurposeInvite);
+    spec.m_showGroupType      = ShowGroupType();
+    spec.m_groupAllowsHistory = m_groupAllowsHistory;
+    spec.m_inviteConfirm      = m_inviteConfirm;
+    spec.m_confirmText        = ConfirmButtonText();
+    balloonmain::MemberPickerLayoutRefs refs;
+    std::unique_ptr<balloonwjui::DuiVBox> root = balloonmain::BuildMemberPickerLayout(spec, refs);
 
-    // ---- 上半区：左(搜索+成员列表) | 右(群名+已选成员) ----
-    {
-        std::unique_ptr<balloonwjui::DuiHBox> top(new balloonwjui::DuiHBox());
-        top->SetGap(16);
-
-        // 左列。
-        {
-            std::unique_ptr<balloonwjui::DuiVBox> left(new balloonwjui::DuiVBox());
-            left->SetGap(8);
-
-            std::unique_ptr<balloonwjui::DuiEdit> search(new balloonwjui::DuiEdit());
-            search->SetCtrlId(kIdSearch);
-            search->SetPlaceholder(_T("搜索联系人"));
-            search->SetBgColor(RGB(255, 255, 255));
-            m_searchInput = search.get();
-            left->AddChild(std::move(search), balloonwjui::DuiLayout::Hint().Fixed(kEditRowH));
-
-            std::unique_ptr<balloonwjui::DuiScrollView> scroll(new balloonwjui::DuiScrollView());
-            scroll->SetCtrlId(kIdMemberScroll);
-            // 内容是一棵单列 DuiTreeView。它自己不滚、GetDesiredSize 也返 0，故关掉
-            // 自动测高，改由 SyncTreeHeight 按树的内容总高显式设给滚动区。
-            scroll->SetAutoContentHeight(false);
-            std::unique_ptr<balloonmain::MemberPickerTreeView> tree(
-                new balloonmain::MemberPickerTreeView());
-            tree->SetRowHeight(kMemberRowH);
-            m_memberTree = tree.get();
-            scroll->SetContent(std::unique_ptr<balloonwjui::DuiControl>(tree.release()));
-            m_memberScroll = scroll.get();
-            left->AddChild(std::move(scroll), balloonwjui::DuiLayout::Hint().Weight(1));
-
-            top->AddChild(std::move(left), balloonwjui::DuiLayout::Hint().Weight(1));
-        }
-
-        // 右列。
-        {
-            std::unique_ptr<balloonwjui::DuiVBox> right(new balloonwjui::DuiVBox());
-            right->SetGap(8);
-
-
-            //群名输入框只有"新建群聊"用得上。其余三种用途是往已有的群里选人，
-            //群名早就定了，这一行整个不构建（而不是藏起来），免得留一条空白带。
-            if (m_purpose == kPurposeCreateGroup)
-            {
-                std::unique_ptr<balloonwjui::DuiEdit> name(new balloonwjui::DuiEdit());
-                name->SetCtrlId(kIdName);
-                name->SetPlaceholder(_T("群聊名称（选填）"));
-                name->SetBgColor(RGB(255, 255, 255));
-                m_nameInput = name.get();
-                right->AddChild(std::move(name), balloonwjui::DuiLayout::Hint().Fixed(kEditRowH));
-            }
-            else
-            {
-                m_nameInput = NULL;
-            }
-
-            std::unique_ptr<balloonwjui::DuiLabel> selTitle(new balloonwjui::DuiLabel());
-            selTitle->SetText(_T("已选成员"));
-            selTitle->SetTextColor(kSectionColor);
-            selTitle->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-            right->AddChild(std::move(selTitle), balloonwjui::DuiLayout::Hint().Fixed(20));
-
-            std::unique_ptr<balloonwjui::DuiScrollView> chip(new balloonwjui::DuiScrollView());
-            chip->SetCtrlId(kIdChipScroll);
-            chip->SetAutoContentHeight(true);
-            std::unique_ptr<balloonwjui::DuiVBox> empty2(new balloonwjui::DuiVBox());
-            chip->SetContent(std::move(empty2));
-            m_chipScroll = chip.get();
-            right->AddChild(std::move(chip), balloonwjui::DuiLayout::Hint().Weight(1));
-
-            top->AddChild(std::move(right), balloonwjui::DuiLayout::Hint().Weight(1));
-        }
-
-        root->AddChild(std::move(top), balloonwjui::DuiLayout::Hint().Weight(1));
-    }
-
-    BuildBottomBar(*root);
+    m_searchInput      = refs.m_searchInput;
+    m_nameInput        = refs.m_nameInput;
+    m_memberScroll     = refs.m_memberScroll;
+    m_memberTree       = refs.m_memberTree;
+    m_chipScroll       = refs.m_chipScroll;
+    m_countLabel       = refs.m_countLabel;
+    m_confirmButton    = refs.m_confirmButton;
+    m_history          = refs.m_history;
+    m_groupTypeNormal  = refs.m_groupTypeNormal;
+    m_groupTypeThread  = refs.m_groupTypeThread;
+    m_builtShowGroupType = spec.m_showGroupType;
 
     SetClientContent(std::move(root));
     m_built = true;
-}
-
-void CCreateGroupDlg::BuildBottomBar(balloonwjui::DuiVBox& root)
-{
-    // ---- 底部栏：已选 N 人 | 取消 | 创建群聊(或"发送"等，按用途) ----
-    std::unique_ptr<balloonwjui::DuiHBox> bottom(new balloonwjui::DuiHBox());
-    bottom->SetGap(10);
-
-    std::unique_ptr<balloonwjui::DuiLabel> count(new balloonwjui::DuiLabel());
-    count->SetCtrlId(kIdCount);
-    count->SetTextColor(kSectionColor);
-    count->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    m_countLabel = count.get();
-    bottom->AddChild(std::move(count), balloonwjui::DuiLayout::Hint().Weight(1));
-
-    std::unique_ptr<balloonwjui::DuiButton> cancel(new balloonwjui::DuiButton());
-    cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
-    cancel->SetVariant(balloonwjui::DuiButton::Variant::Default);
-    cancel->SetCtrlId(kIdCancel);
-    cancel->SetText(_T("取消"));
-    bottom->AddChild(std::move(cancel), balloonwjui::DuiLayout::Hint().Fixed(88));
-
-    std::unique_ptr<balloonwjui::DuiButton> create(new balloonwjui::DuiButton());
-    create->SetButtonType(balloonwjui::DuiButton::StylePushButton);
-    create->SetVariant(balloonwjui::DuiButton::Variant::Primary);
-    create->SetCtrlId(kIdCreate);
-    create->SetText(ConfirmButtonText());
-    bottom->AddChild(std::move(create), balloonwjui::DuiLayout::Hint().Fixed(110));
-
-    root.AddChild(std::move(bottom), balloonwjui::DuiLayout::Hint().Fixed(40));
 
     //计数文案按用途不同（"已选 N 人" / "已选 N 个接收者"），统一由 RebuildSelected
     //填，这里不写死初值。
+}
+
+void CCreateGroupDlg::ResetInviteHistoryOptions()
+{
+    if (!m_history.IsBuilt())
+    {
+        return;
+    }
+    //每次打开都回到「全部聊天记录」与默认条数：上一次邀请时的选择与条数不带到下一次
+    CString defaultCount;
+    defaultCount.Format(_T("%d"), balloonmain::kInviteHistoryDefaultCount);
+    m_history.m_count->SetTextNoNotify(defaultCount);
+    balloonmain::SelectInviteHistoryMode(m_history, balloonmain::kInviteHistoryModeAll, m_groupAllowsHistory);
+    RestoreInviteHistoryHint();
+}
+
+void CCreateGroupDlg::RestoreInviteHistoryHint()
+{
+    if (m_history.m_hint == NULL)
+    {
+        return;
+    }
+    m_history.m_hint->SetText(balloonmain::InviteHistoryHintText(m_groupAllowsHistory, m_inviteConfirm));
+    m_history.m_hint->SetTextColor(kSectionColor);
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
 }
 
 // =======================================================================
@@ -512,7 +521,7 @@ void CCreateGroupDlg::RebuildMemberList(const CString& filter)
     {
         // 一个候选都没有：放一行提示，不可选中、也不挂行控件（于是没有复选框）。
         const int hintId = m_memberTree->AddRoot(
-            filter.IsEmpty() ? CString(_T("暂无联系人")) : CString(_T("无匹配联系人")));
+            filter.IsEmpty() ? CString(TR(L"暂无联系人")) : CString(TR(L"无匹配联系人")));
         m_memberTree->SetItemSelectable(hintId, false);
         SyncTreeHeight();
         if (IsWindow())
@@ -689,7 +698,7 @@ void CCreateGroupDlg::RebuildSelected()
             }
             else
             {
-                display.Format(_T("用户%u"), uid);
+                display.Format(TR(L"用户%u"), uid);
             }
 
             std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
@@ -734,7 +743,7 @@ void CCreateGroupDlg::RebuildSelected()
     if (m_countLabel != NULL)
     {
         CString text;
-        text.Format(_T("已选 %d 人"), (int)m_selected.size());
+        text.Format(TR(L"已选 %d 人"), (int)m_selected.size());
         m_countLabel->SetText(text);
     }
     if (IsWindow())
@@ -800,9 +809,13 @@ void CCreateGroupDlg::DoCreate()
         memberIds.push_back((int64_t)m_selected[i]);
     }
 
+    //群类型：只有显示了「群类型」选项组且选中「帖子群」时才建帖子群
+    const int groupType = balloonmain::SelectedGroupType(m_groupTypeNormal, m_groupTypeThread);
     m_creating = true;
-    CIUSocket::GetInstance().SendCreateGroup(name, memberIds);
-    LOG_INFO("发起建群: members=%u。", (uint32_t)memberIds.size());
+    //成员多时服务端要处理一阵，按钮先变为不可点的「正在创建…」，免得看上去像卡住了
+    balloonmain::SetPickerConfirmBusy(m_confirmButton, true, ConfirmButtonText());
+    CIUSocket::GetInstance().SendCreateGroup(name, memberIds, groupType);
+    LOG_INFO("create group sent: members=%u, grouptype=%d.", (uint32_t)memberIds.size(), groupType);
 }
 
 void CCreateGroupDlg::OnCreateGroupResult(const net::CreateGroupResponse& resp)
@@ -811,7 +824,7 @@ void CCreateGroupDlg::OnCreateGroupResult(const net::CreateGroupResponse& resp)
     if (resp.m_code == 0)
     {
         LOG_INFO("建群成功: groupid=%lld。", (long long)resp.m_groupid);
-        ::MessageBox(m_hWnd, _T("群聊创建成功。"), _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, TR(L"群聊创建成功。"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         if (IsWindow())
         {
             DestroyWindow();
@@ -820,9 +833,14 @@ void CCreateGroupDlg::OnCreateGroupResult(const net::CreateGroupResponse& resp)
     }
 
     LOG_ERROR("建群失败: code=%d, msg=%s。", resp.m_code, resp.m_msg.c_str());
-    CString tip;
-    tip.Format(_T("创建群聊失败（错误码 %d）。"), resp.m_code);
-    ::MessageBox(m_hWnd, tip, _T("FlamingoIM"), MB_OK | MB_ICONWARNING);
+    //失败：按钮恢复为可点，用户改完可以再提交。窗口已经关掉时控件树已释放，不能再碰 m_confirmButton
+    if (IsWindow())
+    {
+        balloonmain::SetPickerConfirmBusy(m_confirmButton, false, ConfirmButtonText());
+    }
+    //群名称命中敏感词有专门的说法，其余错误码带上错误码
+    const CString tip = balloonmain::CreateGroupFailureText(resp.m_code);
+    ::MessageBox(m_hWnd, tip, g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
 }
 
 // =======================================================================
@@ -865,6 +883,33 @@ LRESULT CCreateGroupDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         {
             OnTreeCheckToggled(m_memberTree->GetToggledNodeId());
         }
+        return 0;
+    }
+
+    // 邀请入群：点了「全部 / 最近 N 条 / 不同步」中的一项 → 取消另外两项、刷新条数输入框的可用状态，并清掉错误提示。
+    // 三个单选按钮不在同一个父容器里，balloonui 不会替它们互斥，由 SelectInviteHistoryMode 处理
+    if (pNotify->code == balloonwjui::DUIN_VALUECHANGED
+        && (pNotify->ctrlId == balloonmain::kPickerIdHistoryAll || pNotify->ctrlId == balloonmain::kPickerIdHistoryRecent
+            || pNotify->ctrlId == balloonmain::kPickerIdHistoryNone))
+    {
+        int mode = balloonmain::kInviteHistoryModeAll;
+        if (pNotify->ctrlId == balloonmain::kPickerIdHistoryRecent)
+        {
+            mode = balloonmain::kInviteHistoryModeRecent;
+        }
+        else if (pNotify->ctrlId == balloonmain::kPickerIdHistoryNone)
+        {
+            mode = balloonmain::kInviteHistoryModeNone;
+        }
+        balloonmain::SelectInviteHistoryMode(m_history, mode, m_groupAllowsHistory);
+        RestoreInviteHistoryHint();
+        return 0;
+    }
+
+    // 邀请入群：条数改了 → 清掉上一次提交时的错误提示，恢复平时的说明。
+    if (pNotify->code == balloonwjui::DUIN_VALUECHANGED && pNotify->ctrlId == balloonmain::kPickerIdHistoryCount)
+    {
+        RestoreInviteHistoryHint();
         return 0;
     }
 
@@ -921,17 +966,35 @@ LPCTSTR CCreateGroupDlg::WindowTitleText() const
     switch (m_purpose)
     {
     case kPurposeInvite:
-        return _T("邀请成员入群");
+        return TR(L"邀请成员入群");
     case kPurposeMute:
-        return _T("选择要禁言的成员");
+        return TR(L"选择要禁言的成员");
     case kPurposeTransfer:
-        return _T("转让群主");
+        return TR(L"转让群主");
     //群主退群前选新群主
     case kPurposeTransferThenLeave:
-        return _T("转让群主并退出");
+        return TR(L"转让群主并退出");
+    //文件共享窗口的「发起共享」
+    case kPurposeShareTargets:
+        return TR(L"选择共享对象");
+    //群备忘编辑对话框的「选择成员」
+    case kPurposeMemoTargets:
+        return TR(L"选择提醒对象");
+    //群聊窗的「语音通话」「视频通话」：选要振铃的人
+    case kPurposeGroupCall:
+        return TR(L"选择通话成员");
+    //群通话窗的「邀请成员」
+    case kPurposeGroupCallInvite:
+        return TR(L"邀请成员加入通话");
+    //群的「管理关注的成员…」
+    case kPurposeGroupFollow:
+        return TR(L"管理关注的成员");
+    //个人机器人规则的「发送者 ▸ 指定的人」
+    case kPurposeBotSenders:
+        return TR(L"选择指定的人");
     case kPurposeCreateGroup:
     default:
-        return _T("新建群聊");
+        return TR(L"新建群聊");
     }
 }
 
@@ -940,22 +1003,75 @@ LPCTSTR CCreateGroupDlg::ConfirmButtonText() const
     switch (m_purpose)
     {
     case kPurposeInvite:
-        return _T("邀请入群");
+        return TR(L"邀请入群");
     case kPurposeMute:
-        return _T("禁言");
+        return TR(L"禁言");
     case kPurposeTransfer:
-        return _T("转让");
+        return TR(L"转让");
     //群主退群前选新群主
     case kPurposeTransferThenLeave:
-        return _T("转让并退出");
+        return TR(L"转让并退出");
+    //文件共享窗口的「发起共享」：选完人接着选共享内容
+    case kPurposeShareTargets:
+        return TR(L"下一步");
+    //群备忘编辑对话框的「选择成员」：选完回到编辑对话框
+    case kPurposeMemoTargets:
+        return TR(L"确定");
+    //群聊窗的「语音通话」「视频通话」：选完即发起
+    case kPurposeGroupCall:
+        return TR(L"开始通话");
+    //群通话窗的「邀请成员」
+    case kPurposeGroupCallInvite:
+        return TR(L"邀请");
+    //群的「管理关注的成员…」：选完即保存名单
+    case kPurposeGroupFollow:
+        return TR(L"确定");
+    //个人机器人规则的「指定的人」：选完回到规则编辑窗
+    case kPurposeBotSenders:
+        return TR(L"确定");
     case kPurposeCreateGroup:
     default:
-        return _T("创建群聊");
+        return TR(L"创建群聊");
     }
 }
 
 void CCreateGroupDlg::DoPickConfirm()
 {
+    //选择共享对象、选择备忘提醒对象、选择群通话成员：不发协议，先关窗再把已选的人交出去 —— 接收方随即弹出
+    //或回到自己的对话框，晚于它关窗会让系统把前台切到别的窗口
+    if (m_purpose == kPurposeShareTargets || m_purpose == kPurposeMemoTargets || m_purpose == kPurposeGroupCall
+        || m_purpose == kPurposeGroupCallInvite || m_purpose == kPurposeGroupFollow || m_purpose == kPurposeBotSenders)
+    {
+        //管理关注的成员：一个都不选表示清空名单，照常确认；其余用途没选人时什么都不做，让用户接着选
+        if (m_selected.empty() && m_purpose != kPurposeGroupFollow)
+        {
+            return;
+        }
+        //关注名单有上限（与服务端一致），超出时留在本窗口提示，让用户去掉几位再确认
+        if (m_purpose == kPurposeGroupFollow && m_selected.size() > net::kGroupFollowMax)
+        {
+            const std::wstring tip = TRF(L"每个群最多关注 {0} 位成员，请去掉几位再确定。", (int)net::kGroupFollowMax);
+            ::MessageBox(m_hWnd, tip.c_str(), TR(L"管理关注的成员"), MB_OK | MB_ICONINFORMATION);
+            return;
+        }
+        std::vector<int64_t> ids;
+        for (size_t i = 0; i < m_selected.size(); ++i)
+        {
+            ids.push_back((int64_t)m_selected[i]);
+        }
+        IMemberPickSink* sink = m_pickSink;
+        if (IsWindow())
+        {
+            DestroyWindow();
+        }
+        LOG_INFO("Pick targets confirmed: purpose=%d, count=%u.", (int)m_purpose, (uint32_t)ids.size());
+        if (sink != NULL)
+        {
+            sink->OnMembersPicked(ids);
+        }
+        return;
+    }
+
     if (m_groupId <= 0 || m_selected.empty())
     {
         //没选人就点确认：什么都不做，让用户接着选。按钮本身没做禁用态，
@@ -969,14 +1085,34 @@ void CCreateGroupDlg::DoPickConfirm()
     {
     case kPurposeInvite:
     {
+        //「入群后可查看的聊天记录」：条数不合法时在选项组下方就地提示，不发请求、不关窗
+        int historyLimit = balloonmain::kInviteHistoryAll;
+        if (m_history.IsBuilt())
+        {
+            const int err = balloonmain::ParseInviteHistoryLimit(m_groupAllowsHistory,
+                                                                 balloonmain::InviteHistoryModeOf(m_history),
+                                                                 m_history.m_count->GetText(), historyLimit);
+            if (err != balloonmain::kInviteHistoryOk)
+            {
+                if (m_history.m_hint != NULL)
+                {
+                    m_history.m_hint->SetText(balloonmain::InviteHistoryErrorText(err));
+                    m_history.m_hint->SetTextColor(kErrorColor);
+                    ::InvalidateRect(m_hWnd, NULL, FALSE);
+                }
+                LOG_INFO("Invite to group rejected locally: invalid history count, error=%d.", err);
+                return;
+            }
+        }
+
         std::vector<int64_t> ids;
         for (size_t i = 0; i < m_selected.size(); ++i)
         {
             ids.push_back((int64_t)m_selected[i]);
         }
-        socket.SendInviteToGroup(m_groupId, ids);
-        LOG_INFO("邀请入群: groupid=%lld, count=%u。",
-                 (long long)m_groupId, (uint32_t)ids.size());
+        socket.SendInviteToGroup(m_groupId, ids, historyLimit);
+        LOG_INFO("Invite to group: groupid=%lld, count=%u, historylimit=%d.",
+                 (long long)m_groupId, (uint32_t)ids.size(), historyLimit);
         break;
     }
 
@@ -1005,7 +1141,7 @@ void CCreateGroupDlg::DoPickConfirm()
         const net::ContactItem* c = FindContact(m_selected[0]);
         const CString name = (c != NULL) ? DisplayNameOf(*c) : CString();
         const std::wstring tip = balloonmain::BuildTransferConfirmText((LPCTSTR)name, false);
-        if (::MessageBox(m_hWnd, tip.c_str(), _T("转让群主"),
+        if (::MessageBox(m_hWnd, tip.c_str(), TR(L"转让群主"),
                          MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
         {
             return;   // 用户取消：窗口留着，让他重选或关掉
@@ -1025,7 +1161,7 @@ void CCreateGroupDlg::DoPickConfirm()
         const net::ContactItem* c = FindContact(m_selected[0]);
         const CString name = (c != NULL) ? DisplayNameOf(*c) : CString();
         const std::wstring tip = balloonmain::BuildTransferConfirmText((LPCTSTR)name, true);
-        if (::MessageBox(m_hWnd, tip.c_str(), _T("转让群主并退出"),
+        if (::MessageBox(m_hWnd, tip.c_str(), TR(L"转让群主并退出"),
                          MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
         {
             return;   // 用户取消：窗口留着，让他重选或关掉

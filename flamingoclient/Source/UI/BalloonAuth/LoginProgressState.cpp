@@ -113,32 +113,32 @@ const wchar_t* LoginErrorText(long nLoginResultCode)
     {
     //网络层就没走通：连不上服务器、或收发超时
     case LOGIN_FAILED:
-        return UI_LOGIN_ERR_NETWORK;
+        return TR(UI_LOGIN_ERR_NETWORK);
 
     //服务端明确答复该账号不存在
     case LOGIN_UNREGISTERED:
-        return UI_LOGIN_ERR_UNREGISTERED;
+        return TR(UI_LOGIN_ERR_UNREGISTERED);
 
     //服务端明确答复口令不对
     case LOGIN_PASSWORD_ERROR:
-        return UI_LOGIN_ERR_PASSWORD;
+        return TR(UI_LOGIN_ERR_PASSWORD);
 
     //服务端拒绝了本次登录（账号被停用等）
     case LOGIN_SERVER_REFUSED:
-        return UI_LOGIN_ERR_REFUSED;
+        return TR(UI_LOGIN_ERR_REFUSED);
 
     //服务端在超时时间内没有应答
     case LOGIN_SERVER_NOT_RESPONSE:
-        return UI_LOGIN_ERR_NO_RESPONSE;
+        return TR(UI_LOGIN_ERR_NO_RESPONSE);
 
     //客户端版本低于服务端要求，重试无用，须先升级
     case LOGIN_VERSION_TOO_OLD:
-        return UI_LOGIN_ERR_VERSION_TOO_OLD;
+        return TR(UI_LOGIN_ERR_VERSION_TOO_OLD);
 
     //兜底：出现了这里没列到的结果码。返回一句通用文案而不是空指针，
     //否则调用方拿去显示时会崩，而它本来只是想告诉用户"没登上"。
     default:
-        return UI_LOGIN_ERR_UNKNOWN;
+        return TR(UI_LOGIN_ERR_UNKNOWN);
     }
 }
 

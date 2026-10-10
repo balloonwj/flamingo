@@ -110,10 +110,10 @@ void HttpWorker::ThreadMain()
         unsigned elapsedMs = static_cast<unsigned>(::GetTickCount64() - t0);
 
         // 把应答结果补全到调试控制台对应的记录上。
-        // 注意：本函数运行在 HTTP 工作线程，而 Logger（FA_LOGI 等，见
-        // Util/Logger.h）是单线程 / 仅 UI 线程使用、非线程安全的，故此处
-        // 严禁调用 FA_LOGI 等日志宏。本路径的「日志轨迹」由 DebugConsole
-        // 的这条记录承担 —— 后来者请勿在 ThreadMain 里「补」日志调用。
+        // 本函数运行在 HTTP 工作线程。本路径的「日志轨迹」由 DebugConsole
+        // 的这条记录承担，ThreadMain 里不另写 FA_LOGI 等日志。（Logger 自
+        // 2026-10-04 起已对写文件加锁、可在工作线程调用，见 Util/Logger.h，
+        // 此前它不是线程安全的，这正是这里原先禁止写日志的原因。）
         DebugConsole::Instance().EndEntry(dbgSeq, result.m_transportOk,
                                           result.m_statusCode, result.m_body,
                                           result.m_error, elapsedMs);

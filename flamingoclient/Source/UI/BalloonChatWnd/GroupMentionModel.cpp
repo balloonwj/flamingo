@@ -125,9 +125,12 @@ int Utf8ByteOffsetToUtf16Index(const std::string& utf8Text, int byteOff)
     return utf16Index;
 }
 
-bool CanMentionAll(int role)
+bool CanMentionAll(int role, int atAllScope)
 {
-    return role == kGroupRoleAdminVal || role == kGroupRoleOwnerVal;
+    if (role == kGroupRoleAdminVal || role == kGroupRoleOwnerVal)
+        return true;
+    //普通成员（含未知、越界的角色）：群设置不是「仅群主和管理员」时可以，与服务端 canMentionAll 相同
+    return atAllScope != kGroupAtAllOwnerAdminVal;
 }
 
 std::vector<RenderSpan> ConvertSpansForRender(const std::string& utf8Text,

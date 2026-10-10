@@ -132,6 +132,86 @@ OrgNode BuildOrgTree(const std::vector<OrgDeptRaw>& depts,
     return root;
 }
 
+const wchar_t* const kLeaderNoneText = L"不设置";
+
+namespace {
+
+// 深度优先收集员工节点，按 ID 去重。
+//   node：子树根；deptName：node 所在部门的名称（node 本身是部门时即其名称）；
+//   seen：已收集的员工 ID；out：输出的候选人列表。
+void CollectLeadersFrom(const OrgNode& node, const CString& deptName,
+                        std::vector<CString>& seen, std::vector<LeaderCandidate>& out)
+{
+    for (size_t i = 0; i < node.m_children.size(); ++i)
+    {
+        const OrgNode& child = node.m_children[i];
+        if (child.m_kind == OrgNodeKind::Dept)
+        {
+            CollectLeadersFrom(child, child.m_name, seen, out);
+            continue;
+        }
+        if (std::find(seen.begin(), seen.end(), child.m_id) != seen.end())
+        {
+            continue;
+        }
+        seen.push_back(child.m_id);
+        LeaderCandidate c;
+        c.m_userId  = child.m_id;
+        c.m_name    = child.m_name;
+        c.m_subText = deptName;
+        if (!child.m_title.IsEmpty())
+        {
+            c.m_subText += _T(" · ");
+            c.m_subText += child.m_title;
+        }
+        out.push_back(c);
+    }
+}
+
+} // anonymous namespace
+
+std::vector<LeaderCandidate> CollectLeaderCandidates(const OrgNode* root)
+{
+    std::vector<LeaderCandidate> out;
+    if (root == nullptr)
+    {
+        return out;
+    }
+    std::vector<CString> seen;
+    CollectLeadersFrom(*root, root->m_name, seen, out);
+    return out;
+}
+
+long long ResolveLeaderChoice(const std::vector<LeaderCandidate>& candidates,
+                              int comboSel, const CString& comboText)
+{
+    CString text = comboText;
+    text.Trim();
+    if (text.IsEmpty() || (comboSel == 0 && text == kLeaderNoneText))
+    {
+        return 0;
+    }
+
+    const int candidateIndex = comboSel - 1;   // 下拉框第 0 项是「不设置」
+    if (candidateIndex >= 0 && candidateIndex < static_cast<int>(candidates.size())
+        && candidates[candidateIndex].m_name == text)
+    {
+        return _ttoi64(candidates[candidateIndex].m_userId);
+    }
+
+    long long found = kLeaderInvalid;
+    int matches = 0;
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        if (candidates[i].m_name == text)
+        {
+            ++matches;
+            found = _ttoi64(candidates[i].m_userId);
+        }
+    }
+    return (matches == 1) ? found : kLeaderInvalid;
+}
+
 } // namespace orgtree
 
 } // namespace flamingoadmin

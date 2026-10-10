@@ -4,6 +4,7 @@
  */
 #include "HistoryImageGrid.h"
 #include <sstream>
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -178,17 +179,21 @@ std::wstring BuildBatchNoticeText(const HistoryBatchFinish& finish)
     {
     //有失败：先说失败几个，若同时有成功的再在括号里补一句
     case kHistoryBatchNoticeFailed:
-        text << finish.m_failed << L" 个文件下载失败，请检查网络后重试";
+        //有成功的与没有成功的各用一句完整的模板，{0} 为失败个数，{1} 为成功个数
         if (finish.m_succeeded > 0)
         {
-            text << L"（另有 " << finish.m_succeeded << L" 个已下载完成）";
+            text << TRF(L"{0} 个文件下载失败，请检查网络后重试（另有 {1} 个已下载完成）。",
+                        finish.m_failed, finish.m_succeeded);
         }
-        text << L"。";
+        else
+        {
+            text << TRF(L"{0} 个文件下载失败，请检查网络后重试。", finish.m_failed);
+        }
         break;
 
     //全部成功
     case kHistoryBatchNoticeAllDone:
-        text << finish.m_succeeded << L" 个文件已下载完成";
+        text << TRF(L"{0} 个文件已下载完成", finish.m_succeeded);
         break;
 
     //整批尚未结束，或整批都被取消：没有要说的

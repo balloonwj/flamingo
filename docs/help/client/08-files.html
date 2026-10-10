@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 8 章：在单聊中发送与查看图片，发送、接收文件和文件夹（在线直传与离线文件）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图片、文件与文件夹 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c08">
+<article class="doc">
+  <h1>图片、文件与文件夹</h1>
+  <p class="lead">本章介绍在单聊中发送和查看图片、发送和接收文件，以及把整个文件夹传给同事。对方在线时，文件和文件夹会优先在两台电脑之间直接传输，速度更快。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：已登录且网络在线</li>
+    <li>发送文件夹：对方必须在线</li>
+  </ul>
+
+  <h2 id="image">发送与查看图片</h2>
+  <p>点输入工具栏的 <span class="ui">图片</span> 按钮，在弹出的对话框里选一张图片，图片会直接发给对方，不需要再点发送。也可以用截图功能截一张图发出去，见<a href="09-screenshot.html">「截图与图片文字识别」</a>。</p>
+  <figure class="shot center">
+    <img src="../img/d_image_sent.png" width="760" alt="发出的图片消息">
+    <figcaption>发出的图片显示为缩略图，下方同样有「未读 / 已读」</figcaption>
+  </figure>
+  <p>双击聊天中的图片，会打开「图片查看」窗口查看大图：</p>
+  <figure class="shot center">
+    <img src="../img/d_image_viewer.png" width="880" alt="图片查看窗口">
+    <figcaption>图片查看窗口，底部是工具栏</figcaption>
+  </figure>
+  <p>按 <kbd>Esc</kbd> 可以关闭这个窗口。底部工具栏从左到右依次是：</p>
+  <table>
+    <tr><th>按钮</th><th>作用</th></tr>
+    <tr><td>缩小 / 放大</td><td>逐级缩放图片，两个按钮中间显示当前的显示比例（如 100%）</td></tr>
+    <tr><td>原始尺寸（1:1）</td><td>按图片的实际像素大小显示</td></tr>
+    <tr><td>适应窗口</td><td>缩放到整张图片刚好放进窗口</td></tr>
+    <tr><td>向左旋转 / 向右旋转</td><td>每次旋转 90 度</td></tr>
+    <tr><td>复制图片</td><td>把图片复制到剪贴板，可以粘贴到其他程序里</td></tr>
+    <tr><td>另存为</td><td>把图片保存到你选择的位置</td></tr>
+    <tr><td>图片文字识别</td><td>识别图片中的文字，见<a href="09-screenshot.html#ocr">图片文字识别</a></td></tr>
+  </table>
+  <p>右键聊天中的图片，还可以选 <span class="ui">图片另存为</span>、<span class="ui">图片文字识别</span>、<span class="ui">再次发送</span> 等操作，见<a href="07-message-actions.html#menu">「消息的更多操作」</a>。</p>
+
+  <h2 id="file">发送文件</h2>
+  <p>点输入工具栏的 <span class="ui">发送文件</span> 按钮选一个文件，或者直接把文件拖进输入框。客户端会根据对方是否在线选择传输方式：</p>
+  <table>
+    <tr><th>情况</th><th>传输方式</th></tr>
+    <tr><td>对方在线</td><td><b>在线直传</b>：等对方点「接收」后，文件在两台电脑之间直接传输，不经过服务器保存</td></tr>
+    <tr><td>对方不在线，或无法直传</td><td><b>离线文件</b>：先上传到服务器，对方上线后随时可以接收</td></tr>
+  </table>
+
+  <h3>在线直传的过程</h3>
+  <ol class="steps">
+    <li>你发出文件后，聊天里出现一张文件卡片，显示文件名、大小和「等待对方接收」。卡片下方有两个链接：<span class="ui">发送离线文件</span> 立即改为上传到服务器，<span class="ui">取消</span> 撤销这次发送。</li>
+    <li>对方的聊天窗口里出现同样的文件卡片，显示「等待接收」，对方可以点 <span class="ui">接收</span> 或 <span class="ui">拒绝</span>。</li>
+    <li>对方接收后两边显示传输进度。传完后，你这边显示「对方已接收」，对方那边显示「已完成」，文件图标上出现绿色对勾。</li>
+    <li>卡片下方出现 <span class="ui">打开文件</span>、<span class="ui">打开所在文件夹</span> 和 <span class="ui">另存为</span>，接收方可以直接打开文件，或另存到其他位置。</li>
+  </ol>
+  <figure class="shot center"><img src="../img/d_file_sent.png" width="760" alt="发送方等待对方接收"><figcaption>发送方（罗俊辉）：等待对方接收</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_file_recv_b.png" width="760" alt="接收方等待接收"><figcaption>接收方（赵卓轩）：可以「接收」或「拒绝」</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_file_sent_done.png" width="760" alt="发送方显示对方已接收"><figcaption>发送方：对方已接收</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_file_recv_b_done.png" width="760" alt="接收方显示已完成"><figcaption>接收方：已完成，可以打开文件</figcaption></figure>
+  <div class="callout note"><b>「P2P」标记是什么意思</b>状态文字旁的绿色「P2P」表示这次传输的数据在两台电脑之间直接传送（局域网直连或公网直连），没有经过服务器。网络条件不允许直连时，数据会经服务器转发，这时不显示「P2P」。</div>
+
+  <h3>什么时候会改为离线文件</h3>
+  <ul>
+    <li>对方不在线、对方使用的客户端不支持直传，或企业关闭了点对点直连时，文件直接上传到服务器，作为离线文件发出。</li>
+    <li>两台电脑之间无法建立连接时，自动改为上传到服务器。</li>
+    <li>对方一直没有点「接收」，超过一定时间（默认 5 分钟）后自动改为离线文件。等待期间你也可以点 <span class="ui">发送离线文件</span> 提前转换。</li>
+  </ul>
+  <div class="callout warn"><b>在线直传的文件服务器上不保存</b>直传成功后，文件只存在于你们两人的电脑上。在其他设备上看到这条记录时无法下载，删除本机的文件后也无法再从服务器取回，聊天记录里会显示「在线直传，服务器未保存」。需要长期留存的文件，可以在等待接收时点 <span class="ui">发送离线文件</span>。</div>
+
+  <h2 id="folder">发送文件夹</h2>
+  <p>点输入工具栏的 <span class="ui">发送文件夹</span> 按钮选一个文件夹，或者把文件夹拖进输入框，就能把整个文件夹（包括其中的子文件夹）发给对方。发送文件夹需要对方在线，对方不在线时会提示「对方当前不在线，暂时无法发送文件夹。等对方上线后再发送吧。」</p>
+  <ol class="steps">
+    <li>发出后，你这边出现文件夹卡片，显示文件夹名、文件个数与总大小，以及「等待对方接收…」。在对方回应之前可以点 <span class="ui">取消</span> 撤回。</li>
+    <li>对方看到「对方想给你发送一个文件夹」，可以选择：<span class="ui">接收</span> 直接保存到默认的文件夹接收目录；<span class="ui">另存为</span> 先选择保存位置再接收；<span class="ui">拒绝</span> 不接收。</li>
+    <li>传输过程中，卡片显示正在传的文件以及「第 i / 共 n 个」。</li>
+    <li>全部传完后，接收方显示「全部接收完成」，发送方显示「全部发送完成」，双方都可以点 <span class="ui">打开文件夹</span>。</li>
+  </ol>
+  <figure class="shot center"><img src="../img/d_folder_sent.png" width="760" alt="发送方等待对方接收文件夹"><figcaption>发送方（罗俊辉）：等待对方接收</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_folder_recv_b.png" width="760" alt="接收方收到文件夹邀请"><figcaption>接收方（赵卓轩）：接收、另存为或拒绝</figcaption></figure>
+  <figure class="shot center">
+    <img src="../img/d_folder_recv_b_done.png" width="760" alt="接收方显示全部接收完成">
+    <figcaption>接收方：全部接收完成，带「P2P」标记</figcaption>
+  </figure>
+  <p>文件夹同样优先在两台电脑之间直接传输，直连成功时卡片上显示「P2P」标记。</p>
+  <div class="callout note"><b>传输中断怎么办</b>传到一半失败时（例如网络断开），发送方的卡片上会出现 <span class="ui">↻ 重试</span>，10 分钟内点它可以从中断处继续传；超过 10 分钟就只能 <span class="ui">↻ 重新发送</span>，重新征得对方同意。对方一直不回应时，邀请会在一段时间后（默认 30 分钟）自动作废，卡片显示「邀请已超时」。服务器对文件夹里的文件个数和总大小设有上限，超出时卡片会说明原因。</div>
+
+  <h2 id="drag">把文件拖进输入框</h2>
+  <p>在资源管理器里选中文件或文件夹，直接拖到聊天窗口的输入框上松开，就会按上面的方式发出，与点工具栏按钮的效果相同。工具栏 <span class="ui">发送文件</span>、<span class="ui">发送文件夹</span> 按钮的提示文字里也有这个说明。请拖到输入框上，拖到消息区不会发送。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

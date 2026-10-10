@@ -16,6 +16,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiListBox.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiLayout;
@@ -29,8 +30,9 @@ namespace {
 const UINT kIdStarredList = 911;   // 上下线事件列表
 
 // ---- 计时器 ----
-const UINT_PTR kAutoCloseTimerId = 1;      // 自动关闭计时器 id（本窗口只有这一个计时器）
-const UINT     kAutoCloseMs      = 6000;   // 无人理会时多久自己收起（毫秒）。太短来不及看清名字，太长挡着屏幕右下角
+const UINT_PTR kAutoCloseTimerId = 1;      // 自动关闭计时器 id（本窗口只有这一个计时器）；第 15 期起每秒触发一次，刷新标题里的倒计时
+const int64_t  kAutoCloseMs      = 6000;   // 无人理会时多久自己收起（毫秒）。太短来不及看清名字，太长挡着屏幕右下角
+const wchar_t* const kPopupTitle = TR_NOOP(L"特别关注");   // 标题栏文字（倒计时接在它后面）
 
 // ---- 尺寸（像素）----
 const int kDlgWidth      = 300;   // 客户区宽。够放「某某某某某 已上线」一行而不省略号
@@ -85,15 +87,15 @@ void CStarredPopupWindow::AddPresenceEvent(HWND ownerPanel, int64_t userid,
     if (!IsWindow())
     {
         //owner 传 NULL：让子控件通知自路由回本窗口（与新公告提示窗同处理）。
-        if (Create(NULL, CWindow::rcDefault, _T("特别关注"),
+        if (Create(NULL, CWindow::rcDefault, TR(L"特别关注"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR(_T("特别关注提示窗 Create 失败。"));
             return;
         }
-        SetTitle(_T("特别关注"));
+        SetTitle(TR(kPopupTitle));
         SetTitleBarHeight(kDlgTitleBarH);
-        SetButtons(false, false, true);   //只留关闭按钮
+        SetButtons(false, false, true);   //只留关闭按钮：会自动关闭的提示不加最小化（第 15 期）
         SetResizable(false);
 
         if (m_titleIconBmp == NULL)
@@ -104,6 +106,8 @@ void CStarredPopupWindow::AddPresenceEvent(HWND ownerPanel, int64_t userid,
         {
             SetIcon(m_titleIconBmp);
         }
+        //本窗口有任务栏按钮，按钮上同样显示程序图标（第 15 期）
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         BuildUiOnce();
     }
@@ -136,6 +140,7 @@ void CStarredPopupWindow::HideAndClear()
         return;
     }
     StopAutoCloseTimer();
+    m_countdown.Stop();
     m_hovering = false;
     ShowWindow(SW_HIDE);
 }
@@ -193,7 +198,7 @@ void CStarredPopupWindow::RefreshRows()
     //窗口高度按行数算，恰好装下 —— 只有一条提示时不该留一大片空白。
     const int clientH = kRootPad * 2 + (int)rows.size() * kRowH;
     SetMinSize(kDlgWidth, clientH + kDlgTitleBarH);
-    ResizeClient(kDlgWidth, clientH);
+    ResizeClient(kDlgWidth, clientH + kDlgTitleBarH);
 }
 
 void CStarredPopupWindow::RestartAutoCloseTimer()
@@ -202,8 +207,22 @@ void CStarredPopupWindow::RestartAutoCloseTimer()
     {
         return;
     }
-    //SetTimer 用同一个 id 重复调用即为"重新计时"，不必先 KillTimer。
-    ::SetTimer(m_hWnd, kAutoCloseTimerId, kAutoCloseMs, NULL);
+    //从头倒计时；SetTimer 用同一个 id 重复调用即为"重新计时"，不必先 KillTimer。第 15 期起定时器每秒触发一次，
+    //刷新标题里的剩余秒数，到时才收起
+    m_countdown.Start(kAutoCloseMs, static_cast<int64_t>(::GetTickCount64()));
+    RefreshTitle();
+    ::SetTimer(m_hWnd, kAutoCloseTimerId, balloonmain::kCornerCountdownTickMs, NULL);
+}
+
+void CStarredPopupWindow::RefreshTitle()
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+    const int64_t remaining = m_countdown.RemainingMs(static_cast<int64_t>(::GetTickCount64()));
+    SetTitle(balloonmain::MakeCornerCountdownTitle(TR(kPopupTitle), remaining,
+                                                   balloonmain::corner_countdown_close).c_str());
 }
 
 void CStarredPopupWindow::StopAutoCloseTimer()
@@ -213,6 +232,8 @@ void CStarredPopupWindow::StopAutoCloseTimer()
         return;
     }
     ::KillTimer(m_hWnd, kAutoCloseTimerId);
+    //倒计时停在当前的剩余秒数，标题随之不再变化
+    m_countdown.Pause(static_cast<int64_t>(::GetTickCount64()));
 }
 
 LRESULT CStarredPopupWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -239,6 +260,12 @@ LRESULT CStarredPopupWindow::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam,
         return 0;
     }
 
+    //没到时只刷新标题里的剩余秒数
+    if (!m_countdown.Expired(static_cast<int64_t>(::GetTickCount64())))
+    {
+        RefreshTitle();
+        return 0;
+    }
     HideAndClear();
     return 0;
 }

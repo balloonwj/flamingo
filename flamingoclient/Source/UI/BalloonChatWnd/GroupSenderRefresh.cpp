@@ -38,6 +38,7 @@ extern CAppModule _Module;
 #include "ChatBubble.h"
 #include "ChatMessageList.h"
 #include "../../Common/Log/IULog.h"   // 刷新结果的日志
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -52,13 +53,25 @@ GroupSenderRender ResolveGroupSender(int64_t userId, const GroupSenderRender* fo
     }
     if (r.m_name.IsEmpty())
     {
-        r.m_name.Format(_T("用户%lld"), (long long)userId);
+        r.m_name.Format(TR(L"用户%lld"), (long long)userId);
     }
     if (r.m_glyph.IsEmpty())
     {
         r.m_glyph = r.m_name.Left(1);
     }
     return r;
+}
+
+bool SenderFromBotMark(int64_t botId, const CString& botName, GroupSenderRender& out)
+{
+    if (botId <= 0 || botName.IsEmpty())
+    {
+        return false;
+    }
+    out = GroupSenderRender();
+    out.m_name = botName;
+    out.m_isBot = true;
+    return true;
 }
 
 bool LookupGroupSenderChain(int64_t userId,
@@ -108,7 +121,9 @@ int ApplyGroupSendersToList(ChatMessageList& list, GroupSenderLookup lookup, voi
             continue;   //已退群等查不到的人：保持原样，不把已有的备用信息清掉
         }
         const GroupSenderRender r = ResolveGroupSender(msg.senderUserId, &found, found.m_color);
-        if (b->SetSenderInfo(r.m_name, r.m_glyph, r.m_color, r.m_imagePath))
+        const bool infoChanged = b->SetSenderInfo(r.m_name, r.m_glyph, r.m_color, r.m_imagePath);
+        const bool botChanged = b->SetSenderBot(r.m_isBot);
+        if (infoChanged || botChanged)
         {
             ++updated;
         }

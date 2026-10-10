@@ -77,6 +77,24 @@ std::vector<DeleteRange> MergeDeleteRanges(const std::vector<DeleteRange>& exist
     return merged;
 }
 
+std::string BuildNotClearedClause(int64_t userid, const char* tablePrefix)
+{
+    //会话类型取值与协议一致（Protocol.h 的 conversation_single / conversation_group）。本文件刻意
+    //不引入 Protocol.h、保持纯逻辑，故在此复制两个取值
+    const int kCtypeGroup = 2;
+    const std::string p = tablePrefix;
+
+    //子查询里的表别名取 mcc，避免与外层查询可能用到的短别名重名
+    std::ostringstream os;
+    os << " AND " << p << "f_msgid > COALESCE((SELECT mcc.f_cleared_msgid FROM t_conversation mcc"
+       << " WHERE mcc.f_userid = " << userid
+       << " AND mcc.f_ctype = " << p << "f_ctype"
+       << " AND mcc.f_cid = (CASE WHEN " << p << "f_ctype = " << kCtypeGroup << " THEN " << p << "f_to"
+       << " WHEN " << p << "f_from = " << userid << " THEN " << p << "f_to"
+       << " ELSE " << p << "f_from END)), 0)";
+    return os.str();
+}
+
 std::string BuildNotInDeletedRangeClause(int64_t userid, const char* timeColumn)
 {
     //子查询里的表别名取 mdr，避免与外层查询可能用到的短别名（如 r、m）重名

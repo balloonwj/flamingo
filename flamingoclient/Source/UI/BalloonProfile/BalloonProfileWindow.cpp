@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include "BalloonProfileWindow.h"
+#include "../../App/BrandText.h"   // g_strAppTitle（窗口与弹窗标题用的产品名称）
 
 #include <memory>
 
@@ -17,21 +18,15 @@
 #include "ProfileLayout.h"            // BuildProfileBody / ProfileCtrlId / helper
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using namespace balloonwjui;
 using namespace balloonprofile;
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
-namespace {
-
-// 个人信息对话框固定客户区宽度（逻辑像素，设计稿 Modal width 420）。
-const int kProfileWindowWidth = 420;
-
-// 标题栏高度（逻辑像素，设计稿 Modal header 44）。
-const int kProfileTitleBarHeight = 44;
-
-} // anonymous namespace
+// 窗口宽度与标题栏高度（kProfileWindowWidth / kProfileTitleBarHeight）定义在
+// ProfileLayout.h，与布局单测共用同一份。
 
 // =======================================================================
 // 构造 / 析构
@@ -57,21 +52,21 @@ void CBalloonProfileWindow::CreateAndShow(HWND hMainDlg)
 {
     m_hMainDlg = hMainDlg;
 
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR(_T("个人信息对话框 Create 失败。"));
         return;
     }
 
-    SetTitle(_T("个人信息"));
+    SetTitle(TR(L"个人信息"));
     SetTitleBarHeight(kProfileTitleBarHeight);
     SetButtons(false, false, true);   // 只保留关闭按钮
     SetResizable(false);              // 固定尺寸对话框
 
     // 初始为查看态，构建客户区并按查看态高度定窗口尺寸。
     m_editMode = false;
-    SetMinSize(kProfileWindowWidth, ProfileBodyHeight(false));
+    SetMinSize(kProfileWindowWidth, ProfileBodyHeight(false) + kProfileTitleBarHeight);
     RebuildUi();
 
     CenterWindow();
@@ -129,7 +124,8 @@ void CBalloonProfileWindow::RebuildUi()
     LoadModelIntoUi();
 
     // 按当前模式同步窗口尺寸（两态布局高度不同）。
-    ResizeClient(kProfileWindowWidth, ProfileBodyHeight(m_editMode));
+    //ProfileBodyHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+    ResizeClient(kProfileWindowWidth, ProfileBodyHeight(m_editMode) + kProfileTitleBarHeight);
 
     LOG_INFO(_T("个人信息对话框客户区已重建（模式：%s）。"),
              m_editMode ? _T("编辑态") : _T("查看态"));
@@ -150,6 +146,10 @@ void CBalloonProfileWindow::LoadModelIntoUi()
         letter = m_model.Name().Left(1);
     }
     SetProfileAvatarLetter(content, kIdAvatar, letter);
+
+    // 头部的姓名与「账号 xxx」：XML 里不再写模拟初值，按模型填写（查看态与编辑态都有这两项）
+    SetProfileViewText(content, kIdHeaderName, m_model.Name());
+    SetProfileViewText(content, kIdHeaderAccount, TRF(L"账号 {0}", (LPCTSTR)m_model.Account()).c_str());
 
     // 状态胶囊：按模型当前状态刷新三个胶囊的选中态。
     const UINT pillIds[kProfileStatusCount] =
@@ -183,14 +183,12 @@ void CBalloonProfileWindow::LoadModelIntoUi()
             content->FindCtrlById(kIdEditGender));
         if (gender != NULL)
         {
-            // 找到与模型性别匹配的项并选中；找不到则不动默认项。
-            for (int i = 0; i < gender->GetCount(); ++i)
+            // 按模型里的性别规范值选中对应序号的项（选项显示的是译文，不能按文字比较）；
+            // 不是规范值时不动默认项。
+            const int index = ProfileGenderIndex(m_model.Gender());
+            if (index >= 0 && index < gender->GetCount())
             {
-                if (gender->GetItemText(i) == m_model.Gender())
-                {
-                    gender->SetCurSel(i, false);
-                    break;
-                }
+                gender->SetCurSel(index, false);
             }
         }
 
@@ -220,7 +218,7 @@ void CBalloonProfileWindow::LoadModelIntoUi()
         // 查看态：把只读字段值灌进文本控件。
         SetProfileViewText(content, kIdViewNickname,  m_model.Nickname());
         SetProfileViewText(content, kIdViewSignature, m_model.Signature());
-        SetProfileViewText(content, kIdViewGender,    m_model.Gender());
+        SetProfileViewText(content, kIdViewGender,    ProfileGenderText(m_model.Gender()));
         SetProfileViewText(content, kIdViewBirthday,  m_model.Birthday());
         SetProfileViewText(content, kIdViewRegion,    m_model.Region());
         SetProfileViewText(content, kIdViewEmail,     m_model.Email());
@@ -255,7 +253,12 @@ void CBalloonProfileWindow::CommitUiToModel()
         content->FindCtrlById(kIdEditGender));
     if (gender != NULL)
     {
-        m_model.SetGender(gender->GetText());
+        // 写回中文规范值，而不是下拉框上显示的译文，模型里的取值不随界面语言变化
+        const CString value = ProfileGenderValueAt(gender->GetCurSel());
+        if (!value.IsEmpty())
+        {
+            m_model.SetGender(value);
+        }
     }
 
     DuiEdit* birth = dynamic_cast<DuiEdit*>(
@@ -313,7 +316,7 @@ void CBalloonProfileWindow::DoSave()
     CommitUiToModel();
     SwitchMode(false);
 
-    LOG_INFO(_T("个人信息已保存（昵称=%s，性别=%s）。"),
+    LOG_INFO(_T("profile saved (nickname=%s, gender=%s)."),
              (LPCTSTR)m_model.Nickname(), (LPCTSTR)m_model.Gender());
 }
 
@@ -354,8 +357,8 @@ LRESULT CBalloonProfileWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         case kIdAvatar:
             // 头像点击 = 换头像入口（功能开发中，当前仅占位提示）。
             ::MessageBox(m_hWnd,
-                         _T("更换头像功能开发中。"),
-                         _T("个人信息"), MB_OK | MB_ICONINFORMATION);
+                         TR(L"更换头像功能开发中。"),
+                         TR(L"个人信息"), MB_OK | MB_ICONINFORMATION);
             return 0;
 
         case kIdPillOnline:

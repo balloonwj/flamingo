@@ -1,7 +1,7 @@
 /**
- *  「消息盒子」窗口——balloonui 客户区布局种子，AnnounceBoxLayout.h
+ *  「公告中心」窗口——balloonui 客户区布局种子，AnnounceBoxLayout.h
  *
- *  把"消息盒子长什么样"从窗口类里抽出成一个可独立编译、可被单元测试直接调用的纯
+ *  把"公告中心长什么样"从窗口类里抽出成一个可独立编译、可被单元测试直接调用的纯
  *  构造模块——CBalloonAnnounceBoxWindow 与 FlamingoUnit 测试工程共用本文件（与
  *  HistoryWindowLayout / BalloonMainLayout 同约定）。
  *
@@ -42,7 +42,7 @@ namespace balloonhistory { class HistoryContentView; }
 namespace balloonannounce {
 
 /**
- *  消息盒子窗里所有"需要被窗口代码引用"的控件的数字 id。
+ *  公告中心窗里所有"需要被窗口代码引用"的控件的数字 id。
  *
  *  固定控件用 7xx；列表行数量不定，用基址 + 序号动态生成（kIdAnnRowBase）。
  *  与历史窗的 5xx / 6xx / 1000+ / 3000+ 各段错开，两窗的 id 互不干扰。
@@ -69,7 +69,7 @@ enum AnnounceBoxCtrlId : UINT
 
 //行 id 段的容量。判定"是不是行"时必须按 `基址 <= id < 基址 + 容量`，
 //<u>不得</u>拿下一段的基址当上界 —— 历史窗那边正是这个写法出过事（见 HistoryCtrlId 注释）。
-//消息盒子一次全量渲染所有公告（不分页），给到 2000 作兜底。
+//公告中心一次全量渲染所有公告（不分页），给到 2000 作兜底。
 constexpr UINT kIdAnnRowCapacity = 2000;
 
 //列表里一条公告的渲染视图数据。
@@ -120,7 +120,7 @@ struct AnnounceBoxViewData
 };
 
 /**
- *  构造消息盒子窗客户区控件树（不含窗口边框——边框由 DuiFrameWindow 负责）。
+ *  构造公告中心窗客户区控件树（不含窗口边框——边框由 DuiFrameWindow 负责）。
  *    data：整窗渲染数据。
  *  @return 客户区根控件（一个 vbox），调用方拿到所有权。
  */
@@ -214,7 +214,7 @@ int RowIndexFromCtrlId(UINT ctrlId);
  *  今年的公告显示「MM-DD HH:MM」，往年的带上年份「YYYY-MM-DD HH:MM」——
  *  跨年之后光看月日会分不清是哪一年的。
  *
- *  放在本模块而不是各窗口自己写一份：消息盒子列表与新公告提示窗都要显示时间，
+ *  放在本模块而不是各窗口自己写一份：公告中心列表与新公告提示窗都要显示时间，
  *  两处口径必须一致，否则同一条公告在两个地方显示的时间不一样。
  *
  *    timestampMs：Unix 毫秒；<= 0 或无法转换时返回空串。

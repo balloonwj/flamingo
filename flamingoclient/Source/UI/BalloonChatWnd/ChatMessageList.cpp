@@ -51,12 +51,18 @@ extern CAppModule _Module;
 #include "ChatTimeSeparator.h"    // 时间分隔行的判定与文案（何时插、插什么字）
 #include "ChatClipboardIo.h"      // Ctrl+C 时写入纯文字 + Flamingo 格式
 #include "ChatMessageMenu.h"      // CanForwardMessage / ForwardMsgidOf（多选转发时判定与取 msgid）
+#include "ChatDirectFileModel.h"  // DirectFileHasLocalCopy：转发在线直传文件时实测本机有没有这份文件
+#include "../BalloonMain/ForwardRequest.h"   // DecideDirectFileForward：转发在线直传文件的处理规则
+#include "ChatVoiceBubble.h"      // ChatVoiceState：语音下载结果与重发只改相应状态的气泡
+#include "ChatFileStateModel.h"   // kFileNormal：重发被拒绝的文件消息时把气泡改回已完成
+#include "RecallEdit.h"           // 撤回时生成「编辑」用的快照、计算到期时刻（docs/撤回后重新编辑方案.md）
 #include <time.h>                // time（取当前时刻，用于"今天 / 昨天"的判定）
 #include "../../App/CustomMsgDef.h"   // WM_CHAT_RECALL_REQUEST（撤回请求转交宿主聊天窗）
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
 #include "../../../third-party/balloonui/balloonui/DuiTrace.h"   // BUI_TRACE：滚轮与绘制耗时的时序跟踪
 #include "../../../third-party/balloonui/balloonui/DuiAnimation.h"   // DuiAnim / DuiAnimMgr：平滑滚动的逐帧驱动
 #include "../../Common/Util/PerfStopWatch.h"                      // 滚轮排版、列表绘制的计时
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -92,7 +98,7 @@ void DrawBarText(HDC hdc, LPCWSTR text, const RECT& rc, COLORREF color)
     HFONT hFont = ::CreateFontW(
         -kBarTextPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -174,6 +180,7 @@ ChatMessageList::ChatMessageList()
     , m_multiSelect(false)
     , m_readReceiptEnabled(false)
     , m_peerReadMsgid(0)
+    , m_selfAvatarGray(false)
     , m_thumbDragging(false)
     , m_thumbDragOffsetY(0)
     , m_memDC(NULL)
@@ -187,7 +194,11 @@ ChatMessageList::ChatMessageList()
     , m_roleQueryUd(NULL)
     , m_starredQuery(NULL)
     , m_starredQueryUd(NULL)
+    , m_groupFollowQuery(NULL)
+    , m_groupFollowQueryUd(NULL)
     , m_myNetRole(-1)
+    , m_memoMenuMode(kChatMemoMenuNone)
+    , m_secretRestricted(false)
     , m_prependActive(false)
     , m_prependMarkCount(0)
     , m_prependMarkHeight(0)
@@ -195,6 +206,7 @@ ChatMessageList::ChatMessageList()
     , m_prependSavedLastMs(0)
 {
     m_scrollAnimToken->m_owner = this;
+    m_scrollFade.SetOwner(this);
 }
 
 void ChatMessageList::RefreshAllRows()
@@ -257,6 +269,21 @@ bool ChatMessageList::IsStarred(long long uid) const
     return m_starredQuery(m_starredQueryUd, uid);
 }
 
+void ChatMessageList::SetGroupFollowQuery(StarredQuery fn, void* userdata)
+{
+    m_groupFollowQuery   = fn;
+    m_groupFollowQueryUd = userdata;
+}
+
+bool ChatMessageList::IsGroupFollowed(long long uid) const
+{
+    if (m_groupFollowQuery == NULL)
+    {
+        return false;   // 无从查证（单聊窗 / 调试入口），按"未关注"显示
+    }
+    return m_groupFollowQuery(m_groupFollowQueryUd, uid);
+}
+
 void ChatMessageList::SetMyNetRole(int role)
 {
     m_myNetRole = role;
@@ -265,6 +292,16 @@ void ChatMessageList::SetMyNetRole(int role)
 int ChatMessageList::MyNetRole() const
 {
     return m_myNetRole;
+}
+
+void ChatMessageList::SetMemoMenuMode(int mode)
+{
+    m_memoMenuMode = mode;
+}
+
+int ChatMessageList::MemoMenuMode() const
+{
+    return m_memoMenuMode;
 }
 
 ChatMessageList::~ChatMessageList()
@@ -481,6 +518,10 @@ void ChatMessageList::AppendMessage(const ChatMessage& msg)
     std::unique_ptr<ChatBubble> bubble(new ChatBubble());
     bubble->SetReadReceiptEnabled(m_readReceiptEnabled);
     bubble->SetMessage(msg);
+    // 头像灰彩：本人的气泡按本端连接态，别人的按该发送者当前是否离线（宿主经
+    // SetSelfAvatarGray / SetSenderAvatarGray 告知）
+    bubble->SetAvatarGray(msg.fromMe ? m_selfAvatarGray
+                                     : (m_graySenders.count(msg.senderUserId) != 0));
     // 对方的已读位点先于本行到达（例如先收到已读推送、后翻页加载到这条历史消息）：
     // 追加时就按位点判定，不必等下一次推送。
     if (msg.fromMe && msg.msgid > 0 && msg.msgid <= m_peerReadMsgid)
@@ -499,6 +540,46 @@ void ChatMessageList::AppendMessage(const ChatMessage& msg)
     }
     ForceLayout(GetRect());
     Invalidate();
+}
+
+void ChatMessageList::SetSenderAvatarGray(int64_t senderUserId, bool gray)
+{
+    if (senderUserId <= 0)
+    {
+        return;
+    }
+    if (gray)
+    {
+        m_graySenders.insert(senderUserId);
+    }
+    else
+    {
+        m_graySenders.erase(senderUserId);
+    }
+
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* bubble = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (bubble != NULL && !bubble->GetMessage().fromMe && bubble->SenderUserId() == senderUserId)
+        {
+            bubble->SetAvatarGray(gray);
+        }
+    }
+}
+
+void ChatMessageList::SetSelfAvatarGray(bool gray)
+{
+    m_selfAvatarGray = gray;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* bubble = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (bubble != NULL && bubble->GetMessage().fromMe)
+        {
+            bubble->SetAvatarGray(gray);
+        }
+    }
 }
 
 void ChatMessageList::SetReadReceiptEnabled(bool b)
@@ -666,6 +747,43 @@ bool ChatMessageList::GetMessageByMsgid(long long msgid, ChatMessage& out) const
     return false;
 }
 
+bool ChatMessageList::SetMessageByMsgid(long long msgid, const ChatMessage& msg)
+{
+    if (msgid == 0)
+    {
+        return false;
+    }
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && b->Msgid() == msgid)
+        {
+            b->SetMessage(msg);
+            //卡片高度随内容变化，只 Invalidate 的话新增的接龙行会被裁在气泡外面
+            ForceLayout(GetRect());
+            Invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<long long> ChatMessageList::GetMsgidsOfKind(int kind) const
+{
+    std::vector<long long> msgids;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b != NULL && b->GetMessage().kind == kind && b->Msgid() != 0)
+        {
+            msgids.push_back(b->Msgid());
+        }
+    }
+    return msgids;
+}
+
 void ChatMessageList::SetImageIdsByClientMsgId(const std::string& clientMsgId,
                                                const CString& fileid, const CString& md5)
 {
@@ -822,6 +940,190 @@ void ChatMessageList::MarkImageDownloadFailedByMsgid(long long msgid)
             return;
         }
     }
+}
+
+int ChatMessageList::ApplyVoiceDownloadResult(const std::string& md5, bool ok, const CString& localPath)
+{
+    if (md5.empty())
+        return 0;
+    int changed = 0;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL)
+            continue;
+        const ChatMessage& m = b->GetMessage();
+        if (m.kind != kMsgVoice || m.voiceMd5 != md5)
+            continue;
+        //发送中的本人语音（文件本来就在本机）与已就绪的气泡不受下载结果影响
+        if (m.voiceState != kVoiceStateDownloading && m.voiceState != kVoiceStateDownloadFailed)
+            continue;
+        if (ok)
+            b->SetVoiceDownloaded(localPath);
+        else
+            b->SetVoiceDownloadFailed();
+        ++changed;
+    }
+    //语音气泡的高度不随状态变化，重绘即可，不必重排
+    if (changed > 0)
+        Invalidate();
+    return changed;
+}
+
+namespace {
+
+//一行是不是要找的那条语音：有 msgid 按 msgid 认，否则按 clientMsgId 认（还没回执的本人语音只有后者）
+bool isVoiceRow(const ChatMessage& m, long long msgid, const std::string& clientMsgId)
+{
+    if (m.kind != kMsgVoice)
+    {
+        return false;
+    }
+    if (msgid > 0 && m.msgid == msgid)
+    {
+        return true;
+    }
+    return !clientMsgId.empty() && m.clientMsgId == clientMsgId;
+}
+
+} // namespace
+
+bool ChatMessageList::SetVoicePlaying(long long msgid, const std::string& clientMsgId, bool playing)
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    ChatBubble* target = NULL;
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && isVoiceRow(b->GetMessage(), msgid, clientMsgId))
+        {
+            target = b;
+            break;
+        }
+    }
+    if (target == NULL)
+    {
+        return false;
+    }
+    //开播一条之前，同一列表里别的正在播的停下（语音中心同一时刻只播一条）
+    if (playing)
+    {
+        StopAllVoicePlaying();
+    }
+    target->SetVoicePlaying(playing);
+    return true;
+}
+
+bool ChatMessageList::SetVoicePlayFrame(long long msgid, const std::string& clientMsgId, int frame)
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && isVoiceRow(b->GetMessage(), msgid, clientMsgId))
+        {
+            //帧没变时不重绘：进度约每 100 毫秒来一次，图标每 kVoicePlayFrameMs 毫秒才换一帧
+            if (b->GetMessage().voicePlayFrame != frame)
+            {
+                b->SetVoicePlayFrame(frame);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void ChatMessageList::StopAllVoicePlaying()
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && b->GetMessage().kind == kMsgVoice && b->GetMessage().voicePlaying)
+        {
+            b->SetVoicePlaying(false);
+        }
+    }
+}
+
+bool ChatMessageList::NextAutoPlayVoice(long long msgid, const std::string& clientMsgId, ChatMessage& next) const
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    std::vector<ChatMessage> rows;
+    rows.reserve(kids.size());
+    size_t current = kids.size();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b == NULL)
+        {
+            continue;
+        }
+        if (current == kids.size() && isVoiceRow(b->GetMessage(), msgid, clientMsgId))
+        {
+            current = rows.size();
+        }
+        rows.push_back(b->GetMessage());
+    }
+    if (current >= rows.size())
+    {
+        return false;
+    }
+    const int index = PickNextAutoPlayVoice(rows, current);
+    if (index < 0)
+    {
+        return false;
+    }
+    next = rows[static_cast<size_t>(index)];
+    return true;
+}
+
+int ChatMessageList::MarkVoiceDownloading(const std::string& md5)
+{
+    if (md5.empty())
+    {
+        return 0;
+    }
+    int changed = 0;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && b->GetMessage().kind == kMsgVoice && b->GetMessage().voiceMd5 == md5
+            && b->GetMessage().voiceState == kVoiceStateDownloadFailed)
+        {
+            b->SetVoiceDownloading();
+            ++changed;
+        }
+    }
+    return changed;
+}
+
+bool ChatMessageList::MarkVoicePlayedByMsgid(long long msgid)
+{
+    if (msgid <= 0)
+    {
+        return false;
+    }
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL || b->GetMessage().msgid != msgid)
+        {
+            continue;
+        }
+        //msgid 全局唯一，找到即可结束；只有对方发来、还没听过的语音才需要去掉红点
+        const ChatMessage& m = b->GetMessage();
+        if (m.kind != kMsgVoice || m.fromMe || m.voicePlayed)
+        {
+            return false;
+        }
+        b->SetVoicePlayed();
+        return true;
+    }
+    return false;
 }
 
 bool ChatMessageList::HasFileMsgid(long long msgid) const
@@ -1106,6 +1408,56 @@ bool ChatMessageList::GetFolderMessage(const std::string& sessionId, ChatMessage
     return false;
 }
 
+//一行是不是 key 指定的那条在线直传文件气泡（按直传会话 id 或本端 clientMsgId 匹配）
+static bool IsDirectFileBubble(const ChatBubble* bubble, const std::string& key)
+{
+    if (bubble == NULL)
+        return false;
+    const ChatMessage& m = bubble->GetMessage();
+    if (m.kind != kMsgFile || !m.fileDirect)
+        return false;
+    return (!m.fileDirectSessionId.empty() && m.fileDirectSessionId == key)
+        || (!m.fileClientMsgId.empty() && m.fileClientMsgId == key);
+}
+
+bool ChatMessageList::GetDirectFileMessage(const std::string& key, ChatMessage& out) const
+{
+    if (key.empty())
+        return false;
+    //从后往前找：同一会话若有多条（历史里的记录与实时气泡），最后那条是正在变化的那条
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = kids.size(); i > 0; --i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i - 1].get());
+        if (IsDirectFileBubble(b, key))
+        {
+            out = b->GetMessage();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatMessageList::SetDirectFileMessage(const std::string& key, const ChatMessage& msg)
+{
+    if (key.empty())
+        return false;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = kids.size(); i > 0; --i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i - 1].get());
+        if (IsDirectFileBubble(b, key))
+        {
+            b->SetMessage(msg);
+            //文件卡片的高度随状态变化（进度条、按钮行的有无），只重绘的话新出现的按钮会被裁在气泡外面
+            ForceLayout(GetRect());
+            Invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ChatMessageList::SetFolderMessage(const std::string& sessionId, const ChatMessage& msg)
 {
     if (sessionId.empty())
@@ -1148,6 +1500,161 @@ bool ChatMessageList::RemoveFolderMessage(const std::string& sessionId)
         }
     }
     return false;
+}
+
+//一行是不是 sessionId 指定的那张密聊邀请卡片
+static bool IsSecretInviteBubble(const ChatBubble* bubble, unsigned long long sessionId)
+{
+    if (bubble == NULL || sessionId == 0)
+        return false;
+    const ChatMessage& m = bubble->GetMessage();
+    return m.kind == kMsgSecretInvite && m.secretSessionId == sessionId;
+}
+
+bool ChatMessageList::GetSecretInviteMessage(unsigned long long sessionId, ChatMessage& out) const
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (IsSecretInviteBubble(b, sessionId))
+        {
+            out = b->GetMessage();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatMessageList::SetSecretInviteMessage(unsigned long long sessionId, const ChatMessage& msg, bool relayout)
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (IsSecretInviteBubble(b, sessionId))
+        {
+            b->SetMessage(msg);
+            //按钮数变化会改变卡片高度，此时要重排；只改剩余秒数时高度不变，重绘这一行即可
+            if (relayout)
+            {
+                ForceLayout(GetRect());
+                Invalidate();
+            }
+            else
+            {
+                b->Invalidate();
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatMessageList::RemoveSecretInviteMessage(unsigned long long sessionId)
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (IsSecretInviteBubble(b, sessionId))
+        {
+            //RemoveChild 会立即销毁这个气泡，其后不得再访问 b；做法同 RemoveFolderMessage
+            RemoveChild(b);
+            ForceLayout(GetRect());
+            Invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<unsigned long long> ChatMessageList::GetSecretInviteSessionIds() const
+{
+    std::vector<unsigned long long> ids;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b != NULL && b->GetMessage().kind == kMsgSecretInvite && b->GetMessage().secretSessionId != 0)
+        {
+            ids.push_back(b->GetMessage().secretSessionId);
+        }
+    }
+    return ids;
+}
+
+void ChatMessageList::SetSecretRestricted(bool on)
+{
+    m_secretRestricted = on;
+    //进入密聊状态时若正在多选，立即退出，避免多选条上的转发、删除作用到密聊消息
+    if (on && m_multiSelect)
+    {
+        SetMultiSelectMode(false);
+    }
+}
+
+bool ChatMessageList::GetMessageByClientMsgId(const std::string& clientMsgId, ChatMessage& out) const
+{
+    if (clientMsgId.empty())
+        return false;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b != NULL && b->ClientMsgId() == clientMsgId)
+        {
+            out = b->GetMessage();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatMessageList::SetMessageByClientMsgId(const std::string& clientMsgId, const ChatMessage& msg)
+{
+    if (clientMsgId.empty())
+        return false;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && b->ClientMsgId() == clientMsgId)
+        {
+            b->SetMessage(msg);
+            //图片收齐后尺寸可能与占位不同，须重排
+            ForceLayout(GetRect());
+            Invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t ChatMessageList::WipeSecretMessages()
+{
+    //先收集再移除：RemoveChild 会改动子控件序列
+    std::vector<ChatBubble*> doomed;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL && b->IsSecretRow())
+        {
+            b->WipeSecretText();
+            doomed.push_back(b);
+        }
+    }
+    for (size_t i = 0; i < doomed.size(); ++i)
+    {
+        RemoveChild(doomed[i]);
+    }
+    if (!doomed.empty())
+    {
+        ForceLayout(GetRect());
+        Invalidate();
+    }
+    return doomed.size();
 }
 
 bool ChatMessageList::ReviveFolderMessage(const std::string& sessionId)
@@ -1202,6 +1709,11 @@ void ChatMessageList::MarkFileDeletedByMsgid(long long msgid)
 void ChatMessageList::SetMultiSelectMode(bool on)
 {
     if (m_multiSelect == on)
+    {
+        return;
+    }
+    //密聊状态下不能进入多选（退出多选不受限制）
+    if (on && m_secretRestricted)
     {
         return;
     }
@@ -1294,6 +1806,11 @@ std::vector<long long> ChatMessageList::DeleteSelected()
 
 std::vector<long long> ChatMessageList::GetSelectedForwardMsgids(size_t* skipped) const
 {
+    return GetSelectedForwardMsgids(false, skipped);
+}
+
+std::vector<long long> ChatMessageList::GetSelectedForwardMsgids(bool merge, size_t* skipped) const
+{
     if (skipped != NULL)
     {
         *skipped = 0;
@@ -1318,7 +1835,9 @@ std::vector<long long> ChatMessageList::GetSelectedForwardMsgids(size_t* skipped
         }
 
         const ChatMessage& msg = b->GetMessage();
-        if (!CanForwardMessage(msg.kind, msg.msgid, msg.fileMsgid))
+        const bool can = merge ? CanMergeForwardMessage(msg.kind, msg.msgid, msg.fileMsgid)
+                               : CanForwardMessage(msg.kind, msg.msgid, msg.fileMsgid);
+        if (!can)
         {
             if (skipped != NULL)
             {
@@ -1338,6 +1857,97 @@ std::vector<long long> ChatMessageList::GetSelectedForwardMsgids(size_t* skipped
     //的先后排在末尾，不一定严格有序；服务端也是按 msgid 升序处理转发源
     std::sort(msgids.begin(), msgids.end());
     return msgids;
+}
+
+ChatForwardRequest ChatMessageList::CollectSelectedForward(bool merge) const
+{
+    ChatForwardRequest out;
+    out.m_merge = merge;
+    if (!m_multiSelect)
+    {
+        return out;
+    }
+
+    //msgid 去重的理由同 GetSelectedForwardMsgids；重新发送的文件按路径去重，同一份文件只发一次
+    std::set<long long> seen;
+    std::set<std::wstring> seenFiles;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b == NULL || !b->IsSelected())
+        {
+            continue;
+        }
+
+        const ChatMessage& msg = b->GetMessage();
+        const bool can = merge ? CanMergeForwardMessage(msg.kind, msg.msgid, msg.fileMsgid)
+                               : CanForwardMessage(msg.kind, msg.msgid, msg.fileMsgid);
+        if (!can)
+        {
+            //发送中 / 发送失败（含还没传完、没有 msgid 的在线直传文件）、文件夹行等
+            ++out.m_skipped;
+            continue;
+        }
+
+        const long long id = ForwardMsgidOf(msg.msgid, msg.fileMsgid);
+        if (msg.kind == kMsgFile && msg.fileDirect)
+        {
+            //在线直传的文件服务器上没有副本；合并转发不看本机文件，逐条转发才实测磁盘
+            const bool hasLocal = !merge && DirectFileHasLocalCopy(std::wstring((LPCWSTR)msg.fileLocalPath),
+                                                                    msg.fileSizeBytes);
+            switch (balloonmain::DecideDirectFileForward(merge, hasLocal))
+            {
+            //合并转发：照常进入记录，对方在记录里看到说明文字
+            case balloonmain::kDirectForwardPlaceholder:
+                if (seen.insert(id).second)
+                {
+                    out.m_msgids.push_back(id);
+                    ++out.m_directPlaceholders;
+                }
+                break;
+            //逐条转发且本机有文件：改为以离线文件重新发送
+            case balloonmain::kDirectForwardReupload:
+                if (seenFiles.insert(std::wstring((LPCWSTR)msg.fileLocalPath)).second)
+                {
+                    out.m_reuploadFiles.push_back(std::wstring((LPCWSTR)msg.fileLocalPath));
+                }
+                break;
+            //逐条转发且本机没有文件：无法转发
+            case balloonmain::kDirectForwardSkip:
+            default:
+                ++out.m_skippedDirect;
+                break;
+            }
+            continue;
+        }
+
+        if (seen.insert(id).second)
+        {
+            out.m_msgids.push_back(id);
+        }
+    }
+
+    //按 msgid 升序，理由同 GetSelectedForwardMsgids
+    std::sort(out.m_msgids.begin(), out.m_msgids.end());
+    return out;
+}
+
+void ChatMessageList::PostDirectForwardUnavailable()
+{
+    //与多选转发走同一条消息：请求里没有可转发的内容、只有一条无法转发的在线直传文件，宿主据此提示
+    HWND hwnd = HostHwnd();
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    ChatForwardRequest* pReq = new ChatForwardRequest();
+    pReq->m_skippedDirect = 1;
+    if (!::PostMessage(hwnd, WM_CHAT_FORWARD_REQUEST, 0, (LPARAM)pReq))
+    {
+        //投递失败（窗口已销毁）时自行释放，避免泄漏
+        delete pReq;
+    }
 }
 
 bool ChatMessageList::ContainsMessage(long long msgid, const std::string& clientMsgId) const
@@ -1492,6 +2102,130 @@ int ChatMessageList::CountPinned() const
     return count;
 }
 
+// 判定列表「停在最底部」时允许的误差（像素）：滚动位置离最底部不超过这么多就算在底部
+static const int kStickToBottomSlack = 4;
+
+bool ChatMessageList::MarkSendFailed(const std::string& clientMsgId, const CString& reason)
+{
+    if (clientMsgId.empty())
+    {
+        return false;
+    }
+
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL)
+        {
+            continue;
+        }
+        //文本 / 图片按 clientMsgId，文件按 fileClientMsgId 匹配，与 BackfillSentMessage 相同
+        const ChatMessage& cur = b->GetMessage();
+        const bool hit = (!cur.clientMsgId.empty() && cur.clientMsgId == clientMsgId)
+                      || (!cur.fileClientMsgId.empty() && cur.fileClientMsgId == clientMsgId);
+        if (!hit)
+        {
+            continue;
+        }
+        //已经回填了服务器 msgid 的行是发送成功的，同一个 clientMsgId 不会再有失败回执；万一有也不改
+        if (!cur.fromMe || cur.msgid > 0 || cur.fileMsgid > 0)
+        {
+            return false;
+        }
+        //标记前若停在最底部（正看着最新消息），标记后仍停在最底部：群聊里该行多出原因行，不跟着滚的话
+        //最后一行的原因会被挡在视口下方（第 5 期联调时发现）。停在别处的不动
+        const bool atBottom = (m_scrollY >= m_contentHeight - m_viewHeight - kStickToBottomSlack);
+        b->SetSendFailed(reason);
+        //群聊里行高多出原因行，须重排；单聊行高不变，重排一次也无妨
+        ForceLayout(GetRect());
+        if (atBottom)
+        {
+            ScrollToBottom();
+        }
+        Invalidate();
+        return true;
+    }
+    return false;
+}
+
+bool ChatMessageList::RestartFileMessageSendByClientMsgId(const std::string& clientMsgId)
+{
+    if (clientMsgId.empty())
+    {
+        return false;
+    }
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL || b->GetMessage().kind != kMsgFile || b->GetMessage().fileClientMsgId != clientMsgId)
+        {
+            continue;
+        }
+        //只重发本人被拒绝的那条：还在发送中、已发送成功的不动
+        if (!b->GetMessage().fromMe || !b->GetMessage().sendFailed)
+        {
+            return false;
+        }
+        ChatMessage updated = b->GetMessage();
+        updated.sendFailed = false;
+        updated.failReason.Empty();
+        //文件早已在服务器上，只重发消息：回到已完成态，仍可打开本地文件
+        updated.fileState = kFileNormal;
+        //停在最底部时重排后仍停在最底部，理由同 MarkSendFailed
+        const bool atBottom = (m_scrollY >= m_contentHeight - m_viewHeight - kStickToBottomSlack);
+        b->SetMessage(updated);
+        //群聊里失败原因那一行去掉了，行高变矮，须重排
+        ForceLayout(GetRect());
+        if (atBottom)
+        {
+            ScrollToBottom();
+        }
+        Invalidate();
+        return true;
+    }
+    return false;
+}
+
+bool ChatMessageList::RestartVoiceSendByClientMsgId(const std::string& clientMsgId)
+{
+    if (clientMsgId.empty())
+    {
+        return false;
+    }
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL || b->GetMessage().kind != kMsgVoice || b->GetMessage().clientMsgId != clientMsgId)
+        {
+            continue;
+        }
+        //只重发本人发送失败的那条：还在发送中、已发送成功的不动
+        if (!b->GetMessage().fromMe || !b->GetMessage().sendFailed)
+        {
+            return false;
+        }
+        ChatMessage updated = b->GetMessage();
+        updated.sendFailed = false;
+        updated.failReason.Empty();
+        updated.voiceState = kVoiceStateSending;
+        //停在最底部时重排后仍停在最底部，理由同 MarkSendFailed
+        const bool atBottom = (m_scrollY >= m_contentHeight - m_viewHeight - kStickToBottomSlack);
+        b->SetMessage(updated);
+        //群聊里失败原因那一行去掉了，行高变矮，须重排
+        ForceLayout(GetRect());
+        if (atBottom)
+        {
+            ScrollToBottom();
+        }
+        Invalidate();
+        return true;
+    }
+    return false;
+}
+
 bool ChatMessageList::BackfillSentMessage(const std::string& clientMsgId, long long msgid,
                                           long long timestampMs)
 {
@@ -1538,6 +2272,16 @@ bool ChatMessageList::BackfillSentMessage(const std::string& clientMsgId, long l
 
 bool ChatMessageList::RecallMessageByMsgid(long long msgid, const CString& tipText)
 {
+    return RecallMessageByMsgid(msgid, tipText, false, 0, NULL);
+}
+
+bool ChatMessageList::RecallMessageByMsgid(long long msgid, const CString& tipText, bool recalledByMe, long long nowMs,
+                                           std::string* outDraftJson)
+{
+    if (outDraftJson != NULL)
+    {
+        outDraftJson->clear();
+    }
     if (msgid <= 0)
     {
         return false;
@@ -1551,14 +2295,30 @@ bool ChatMessageList::RecallMessageByMsgid(long long msgid, const CString& tipTe
         {
             continue;
         }
-        //重连补推同一条撤回通知时会再次走到这里：RecallToTip 是幂等的（同一条 msgid
-        //只会被写成同一句提示文案），故无需额外判断本行是否已经是提示行。
         if (b->Msgid() != msgid)
         {
             continue;
         }
 
+        //重连补推同一条撤回通知时会再次走到这里：这一行已经是提示行，RecallToTip 是幂等的（同一条 msgid
+        //只会被写成同一句提示文案），「编辑」也原样保留，不重新生成快照。
+        const bool alreadyTip = (b->GetMessage().kind == kMsgTime);
+        std::string draftJson;
+        if (!alreadyTip && CanOfferRecallEdit(b->GetMessage(), recalledByMe))
+        {
+            //快照必须在 RecallToTip 覆盖原文之前生成
+            draftJson = SerializeRecallDraft(BuildRecallDraft(b->GetMessage()));
+        }
+
         b->RecallToTip(tipText);
+        if (!draftJson.empty())
+        {
+            b->SetRecallEdit(draftJson, RecallEditDeadline(nowMs, nowMs));
+            if (outDraftJson != NULL)
+            {
+                *outDraftJson = draftJson;
+            }
+        }
         //撤回后该行高度变化（变为时间提示行高），须重排。
         ForceLayout(GetRect());
         Invalidate();
@@ -1566,6 +2326,40 @@ bool ChatMessageList::RecallMessageByMsgid(long long msgid, const CString& tipTe
     }
 
     return false;
+}
+
+long long ChatMessageList::ExpireRecallEdits(long long nowMs)
+{
+    long long nextDeadline = 0;
+    bool changed = false;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL)
+        {
+            continue;
+        }
+        if (b->ExpireRecallEdit(nowMs))
+        {
+            changed = true;
+            continue;
+        }
+        //仍带「编辑」的行：记下最早的到期时刻
+        if (b->HasRecallEdit(nowMs))
+        {
+            const long long deadline = b->GetMessage().recallEditDeadlineMs;
+            if (nextDeadline == 0 || deadline < nextDeadline)
+            {
+                nextDeadline = deadline;
+            }
+        }
+    }
+    if (changed)
+    {
+        Invalidate();
+    }
+    return nextDeadline;
 }
 
 int ChatMessageList::RemoveMessagesByMsgid(const std::vector<long long>& msgids)
@@ -1652,6 +2446,11 @@ int ChatMessageList::RemoveMessagesByMsgid(const std::vector<long long>& msgids)
 
 void ChatMessageList::EnterMultiSelectWith(ChatBubble* bubble)
 {
+    //密聊状态下不能多选（docs/密聊方案.md 4.5）
+    if (m_secretRestricted)
+    {
+        return;
+    }
     m_multiSelect = true;
 
     // 仅预选中作为起点的那一条。
@@ -1671,9 +2470,10 @@ void ChatMessageList::EnterMultiSelectWith(ChatBubble* bubble)
 
 size_t ChatMessageList::RequestForwardSelected(bool merge)
 {
-    size_t skipped = 0;
-    const std::vector<long long> msgids = GetSelectedForwardMsgids(&skipped);
-    if (msgids.empty())
+    //在线直传的文件按 CollectSelectedForward 的规则单独整理：逐条转发时本机有文件的改为重新发送
+    const ChatForwardRequest collected = CollectSelectedForward(merge);
+    const size_t count = collected.m_msgids.size() + collected.m_reuploadFiles.size();
+    if (count == 0)
     {
         return 0;
     }
@@ -1683,10 +2483,7 @@ size_t ChatMessageList::RequestForwardSelected(bool merge)
     HWND hwnd = HostHwnd();
     if (::IsWindow(hwnd))
     {
-        ChatForwardRequest* pReq = new ChatForwardRequest();
-        pReq->m_merge = merge;
-        pReq->m_msgids = msgids;
-        pReq->m_skipped = skipped;
+        ChatForwardRequest* pReq = new ChatForwardRequest(collected);
         if (!::PostMessage(hwnd, WM_CHAT_FORWARD_REQUEST, 0, (LPARAM)pReq))
         {
             //投递失败（窗口已销毁）时自行释放，避免泄漏
@@ -1696,7 +2493,7 @@ size_t ChatMessageList::RequestForwardSelected(bool merge)
 
     //退出多选并重排（SetMultiSelectMode 内含 ForceLayout），留下的行一并清掉选中态
     SetMultiSelectMode(false);
-    return msgids.size();
+    return count;
 }
 
 MultiSelectBarButton MultiSelectBarHitTest(const RECT& bar, POINT pt)
@@ -1840,6 +2637,11 @@ void PutTextToClipboard(HWND owner, LPCWSTR text)
 
 bool ChatMessageList::CopySelectedTextToClipboard()
 {
+    //密聊状态下不响应 Ctrl+C（docs/密聊方案.md 4.5）
+    if (m_secretRestricted)
+    {
+        return false;
+    }
     const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
     for (size_t i = 0; i < kids.size(); ++i)
     {
@@ -1987,7 +2789,7 @@ void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        PaintChatScrollThumb(g, thumb);
+        PaintChatScrollThumb(g, thumb, m_scrollFade.Alpha());
     }
 
     // ---- 多选操作条 ----
@@ -2002,26 +2804,29 @@ void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         // 删除按选中条数计；转发按其中能转发的条数计（发送中 / 发送失败、文件夹行不算），
         // 能转发的一条都没有时两个转发按钮置灰、点击不响应。
         const int n = SelectedCount();
-        const int forwardable = (int)GetSelectedForwardMsgids(NULL).size();
+        //两种转发各自计数：接龙卡片能合并转发、不能逐条转发；逐条转发时要重新发送的在线直传文件也算一条
+        const ChatForwardRequest each = CollectSelectedForward(false);
+        const int forwardable = (int)(each.m_msgids.size() + each.m_reuploadFiles.size());
+        const int mergeable = (int)CollectSelectedForward(true).m_msgids.size();
 
         // 取消。
-        DrawBarText(hdc, L"取消", MultiSelectBarButtonRect(bar, kBarButtonCancel), kBarCancelColor);
+        DrawBarText(hdc, TR(L"取消"), MultiSelectBarButtonRect(bar, kBarButtonCancel), kBarCancelColor);
 
         // 逐条转发 N。
         CString fwdEach;
-        fwdEach.Format(_T("逐条转发 %d"), forwardable);
+        fwdEach.Format(TR(L"逐条转发 %d"), forwardable);
         DrawBarText(hdc, (LPCWSTR)fwdEach, MultiSelectBarButtonRect(bar, kBarButtonForwardEach),
                     (forwardable > 0) ? kBarForwardColor : kBarDisabledColor);
 
         // 合并转发 N。
         CString fwdMerged;
-        fwdMerged.Format(_T("合并转发 %d"), forwardable);
+        fwdMerged.Format(TR(L"合并转发 %d"), mergeable);
         DrawBarText(hdc, (LPCWSTR)fwdMerged, MultiSelectBarButtonRect(bar, kBarButtonForwardMerged),
-                    (forwardable > 0) ? kBarForwardColor : kBarDisabledColor);
+                    (mergeable > 0) ? kBarForwardColor : kBarDisabledColor);
 
         // 删除 N。
         CString del;
-        del.Format(_T("删除 %d"), n);
+        del.Format(TR(L"删除 %d"), n);
         DrawBarText(hdc, (LPCWSTR)del, MultiSelectBarButtonRect(bar, kBarButtonDelete),
                     (n > 0) ? kBarDeleteColor : kBarDisabledColor);
     }
@@ -2056,6 +2861,8 @@ bool ChatMessageList::OnMouseWheel(POINT /*pt*/, short zDelta, UINT /*mkFlags*/)
     {
         EnsureScrollTicker();
     }
+    //滚动时滑块淡入，停手 kIdleHideMs 后淡出
+    m_scrollFade.OnScrolled();
     BUI_TRACE("CHATLIST-WHEEL delta=%d scroll=%d target=%.1f animating=%d rows=%u",
               (int)zDelta, m_scrollY, m_smooth.Target(), animating ? 1 : 0,
               (unsigned)Children().size());
@@ -2209,7 +3016,15 @@ bool ChatMessageList::OnMouseMove(POINT pt, UINT /*mkFlags*/)
         ScrollToThumbTop(pt.y - m_thumbDragOffsetY);
         return true;
     }
+    // 鼠标在命中带上时滑块淡入并保持可见，离开命中带后重新计时淡出
+    m_scrollFade.SetHover(HitScrollBarBand(pt));
     return false;
+}
+
+bool ChatMessageList::OnMouseLeave()
+{
+    m_scrollFade.OnOwnerMouseLeave();
+    return balloonwjui::DuiControl::OnMouseLeave();
 }
 
 bool ChatMessageList::OnLButtonUp(POINT /*pt*/, UINT /*mkFlags*/)
@@ -2217,6 +3032,7 @@ bool ChatMessageList::OnLButtonUp(POINT /*pt*/, UINT /*mkFlags*/)
     if (m_thumbDragging)
     {
         m_thumbDragging = false;
+        m_scrollFade.SetDragging(false);
         ReleaseCapture();
         return true;
     }
@@ -2243,6 +3059,7 @@ bool ChatMessageList::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
             ScrollToThumbTop(pt.y - m_thumbDragOffsetY);
         }
         m_thumbDragging = true;
+        m_scrollFade.SetDragging(true);
         Capture();
         return true;
     }

@@ -38,6 +38,9 @@ extern CAppModule _Module;
 #include "ChatPaintUtil.h"     // AddRoundRect / DrawGdiText / MeasureTextWidth
 #include "ChatFileVisual.h"    // FileTypeColor（与消息记录窗共用同一套配色）
 #include "ChatFileAction.h"    // ChatFileActionKind
+#include "ChatDirectFileModel.h"   // DirectFileStatusKey：在线直传特有的状态文字（2026-10-04 起）
+#include "../BalloonMain/P2PBadge.h"   // ShouldShowP2PBadge：链路是否直连
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -95,7 +98,7 @@ int FileCardHeight(const ChatMessage& m)
     //按钮，行高就是同一份
     const int st = m.fileState;
     int h = kFileHeaderH;
-    if (FileStateHasProgress(st))
+    if (FileCardShowsProgress(st, m.fileDirect))
     {
         h += kFileProgressH;
     }
@@ -106,18 +109,53 @@ int FileCardHeight(const ChatMessage& m)
     return h;
 }
 
+CString FileCardLinkLabel(const ChatMessage& m, int act)
+{
+    switch (act)
+    {
+    //完成态：用关联程序打开本地文件
+    case kChatFileOpen:
+        return TR(L"打开文件");
+    //完成态：在资源管理器里定位本地文件
+    case kChatFileOpenFolder:
+        return TR(L"打开所在文件夹");
+    //完成态：把本地文件另存到别处
+    case kChatFileSaveAs:
+        return TR(L"另存为");
+    //传输中：取消这次上传或下载
+    case kChatFileCancel:
+        return TR(L"取消");
+    //待接收：单聊里对方发来的写「接收」；自己发出的、群聊与聊天记录里的文件谈不上接收，
+    //只是把它从服务器取回本地，写「下载」
+    case kChatFileAccept:
+        return FileCardSkipsReject(m) ? TR(L"下载") : TR(L"接收");
+    //单聊待接收：拒绝接收
+    case kChatFileReject:
+        return TR(L"拒绝");
+    //在线直传等待对方接收（发送方）：改为上传服务器，按离线文件发送
+    case kChatFileSendOffline:
+        return TR(L"发送离线文件");
+    //失败、已取消、已拒绝：重新发送或重新下载（\x21BB 为循环箭头），按手头数据判定（见 FileCardCanResend）
+    case kChatFileRetry:
+    default:
+        return FileCardCanResend(m) ? TR(L"\x21BB 重新发送") : TR(L"\x21BB 重新下载");
+    }
+}
+
 void PaintFileCardShapes(Gdiplus::Graphics& g, const RECT& card, const ChatMessage& m)
 {
     const int  bubbleX = card.left;
     const int  bubbleY = card.top;
     const int  bubbleW = card.right - card.left;
     const int  st      = m.fileState;
-    const bool deleted = (st == kFileDeleted);
+    //本机没有这份文件：普通文件是服务器上已删除（画垃圾桶），在线直传是服务器上本来就没有（只把图标置灰）
+    const bool gone    = (st == kFileDeleted);
+    const bool deleted = gone && !m.fileDirect;
     const int  iconX   = bubbleX + kFilePadH;
     const int  iconY   = bubbleY + kFileIconTop;
 
-    // ---- 类型图标（圆角方块）：正常用类型色，已删除用灰 ----
-    COLORREF ftc = deleted ? RGB(0xB8, 0xB5, 0xB1) : FileTypeColor(m.fileType);
+    // ---- 类型图标（圆角方块）：正常用类型色，本机没有文件用灰 ----
+    COLORREF ftc = gone ? RGB(0xB8, 0xB5, 0xB1) : FileTypeColor(m.fileType);
     {
         Gdiplus::GraphicsPath ftPath;
         AddRoundRect(ftPath, (Gdiplus::REAL)iconX, (Gdiplus::REAL)iconY,
@@ -181,7 +219,7 @@ void PaintFileCardShapes(Gdiplus::Graphics& g, const RECT& card, const ChatMessa
     }
 
     // ---- 进度条（上传 / 下载 / 失败 / 已取消）----
-    if (FileStateHasProgress(st))
+    if (FileCardShowsProgress(st, m.fileDirect))
     {
         const int barX = bubbleX + kFilePadH;
         const int barY = bubbleY + kFileHeaderH;
@@ -226,7 +264,9 @@ void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const Ch
     const int  bubbleY = card.top;
     const int  bubbleW = card.right - card.left;
     const int  st      = m.fileState;
-    const bool deleted = (st == kFileDeleted);
+    //含义同 PaintFileCardShapes：在线直传在本机没有文件时不画垃圾桶、不划删除线，只说明服务器未保存
+    const bool gone    = (st == kFileDeleted);
+    const bool deleted = gone && !m.fileDirect;
     const int  iconX   = bubbleX + kFilePadH;
     const int  iconY   = bubbleY + kFileIconTop;
     const int  textX   = iconX + kFileIconSize + 12;          // 名 / 状态左
@@ -273,7 +313,7 @@ void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const Ch
         g.DrawLine(&excl, tcx, tcy - 2, tcx, tcy + 1);
         sx += 16;
     }
-    else if (deleted)
+    else if (gone)
     {
         // 信息圆（灰底白 i）。
         const Gdiplus::REAL icx = (Gdiplus::REAL)(sx + 6);
@@ -292,51 +332,76 @@ void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const Ch
     bool     statusBold  = false;
     if (st == kFileUploading)
     {
-        statusText.Format(_T("传送中 %d%%"), m.fileProgress);
+        statusText.Format(TR(L"传送中 %d%%"), m.fileProgress);
         statusColor = RGB(0xFF, 0x6A, 0x3D);
         statusBold  = true;
     }
     else if (st == kFileDownloading)
     {
-        statusText.Format(_T("下载中 %d%%"), m.fileProgress);
+        statusText.Format(TR(L"下载中 %d%%"), m.fileProgress);
     }
     else if (st == kFileNormal)
     {
-        statusText  = m.fromMe ? _T("传送完成") : _T("已完成");
+        statusText  = m.fromMe ? TR(L"传送完成") : TR(L"已完成");
         statusColor = RGB(0xFF, 0x7A, 0x45);
         statusBold  = true;
     }
     else if (st == kFileFailed)
     {
-        statusText  = _T("传输失败");
+        statusText  = TR(L"传输失败");
         statusColor = RGB(0xE5, 0x39, 0x35);
         statusBold  = true;
     }
     else if (st == kFileCancelled)
     {
-        statusText = _T("已取消");
+        statusText = TR(L"已取消");
     }
     else if (st == kFilePendingAccept && m.fileDirectDownload)
     {
         //群聊或聊天记录里的文件还没下载：没有接收流程，只说明本地还没有这份文件
-        statusText = _T("未下载");
+        statusText = TR(L"未下载");
     }
     else if (st == kFilePendingAccept)
     {
         //还没开始下载，提示用户需要自己决定收不收
-        statusText  = _T("等待接收");
+        statusText  = TR(L"等待接收");
         statusColor = RGB(0xFF, 0x7A, 0x45);
         statusBold  = true;
     }
     else if (st == kFileRejected)
     {
-        statusText  = _T("已拒绝接收");
+        statusText  = TR(L"已拒绝接收");
         statusColor = RGB(0x9A, 0x97, 0x92);
     }
     else   // deleted
     {
-        statusText  = _T("文件已删除，无法下载");
+        statusText  = TR(L"文件已删除，无法下载");
         statusColor = RGB(0x9A, 0x97, 0x92);
+    }
+
+    // 在线直传特有的状态文字（等待对方接收、作废原因、历史里本机没有文件、接收中），覆盖上面按普通文件算出的文字
+    const wchar_t* directKey = DirectFileStatusKey(st, m.fileDirectEnd, m.fromMe, m.fileDirect);
+    if (directKey != NULL)
+    {
+        if (st == kFileDownloading)
+        {
+            statusText.Format(TR(directKey), m.fileProgress);
+        }
+        else
+        {
+            statusText = TR(directKey);
+        }
+        if (st == kFileDirectWaiting)
+        {
+            statusColor = RGB(0xFF, 0x7A, 0x45);
+            statusBold  = true;
+        }
+        else if (st == kFileDirectToOffline || gone || st == kFileCancelled)
+        {
+            //作废、服务器未保存、发送方已取消发送：都是灰色常规字
+            statusColor = RGB(0x9A, 0x97, 0x92);
+            statusBold  = false;
+        }
     }
 
     // 本端发出的文件：只要对方有过动作，状态行就改说对方那边的进展 —— 自己传完了
@@ -345,19 +410,19 @@ void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const Ch
     {
         if (m.filePeerState == kFilePeerReceiving)
         {
-            statusText  = _T("对方正在接收");
+            statusText  = TR(L"对方正在接收");
             statusColor = RGB(0xFF, 0x7A, 0x45);
             statusBold  = true;
         }
         else if (m.filePeerState == kFilePeerReceived)
         {
-            statusText  = _T("对方已接收");
+            statusText  = TR(L"对方已接收");
             statusColor = RGB(0x3B, 0xA5, 0x5D);   // 绿：这条文件已经安全送达
             statusBold  = true;
         }
         else if (m.filePeerState == kFilePeerRejected)
         {
-            statusText  = _T("对方已拒绝接收");
+            statusText  = TR(L"对方已拒绝接收");
             statusColor = RGB(0x9A, 0x97, 0x92);
             statusBold  = false;
         }
@@ -366,6 +431,13 @@ void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const Ch
     RECT stRc = { sx, statusY, textR, statusB };
     DrawGdiText(hdc, (LPCWSTR)statusText, stRc, 11, statusBold, statusColor,
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+
+    // 「P2P」徽章：在线直传的数据经直连链路传输时画在状态文字之后（2026-10-04 起）
+    if (FileCardShowsP2PBadge(st, m.fileDirect, balloonmain::ShouldShowP2PBadge(m.fileLinkPath)))
+    {
+        const int statusW = MeasureTextWidth(hdc, (LPCWSTR)statusText, 11, statusBold);
+        chatpaint::DrawP2PBadgeInRow(hdc, sx + statusW + chatpaint::kP2PBadgeGapPx, statusY, statusB, textR);
+    }
 
     // ---- 底部操作：文字超链接（无按钮底 / 边框）。按各自文字宽度从左到右排布，
     //      整行高度作点击矩形（便于点击），写进 links。----
@@ -380,50 +452,28 @@ void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const Ch
     const int kLinkPx  = 13;   // 超链接文字字号
     const int kLinkGap = 18;   // 相邻超链接水平间距
     const int rowTop    = bubbleY + kFileHeaderH
-                        + (FileStateHasProgress(st) ? kFileProgressH : 0)
+                        + (FileCardShowsProgress(st, m.fileDirect) ? kFileProgressH : 0)
                         + kFileBtnTopGap;
     const int rowBottom = rowTop + kFileBtnH;
     int linkX = bubbleX + kFilePadH;
     for (int bi = 0; bi < links.m_count; ++bi)
     {
-        const int act = acts[bi];
-        CString   label;
-        COLORREF  lblColor = RGB(0xFF, 0x7A, 0x45);   // 默认主题橙（可点链接）
+        const int     act      = acts[bi];
+        const CString label    = FileCardLinkLabel(m, act);
+        COLORREF      lblColor = RGB(0xFF, 0x7A, 0x45);   // 默认主题橙（可点链接）
         switch (act)
         {
-        //完成态：用关联程序打开本地文件
-        case kChatFileOpen:
-            label = _T("打开文件");
-            break;
-        //完成态：在资源管理器里定位本地文件
-        case kChatFileOpenFolder:
-            label = _T("打开所在文件夹");
-            break;
-        //完成态：把本地文件另存到别处
-        case kChatFileSaveAs:
-            label = _T("另存为");
-            break;
-        //传输中：取消这次上传或下载，灰色链接
+        //取消与拒绝是次要动作，用灰色链接
         case kChatFileCancel:
-            label    = _T("取消");
-            lblColor = RGB(0x8A, 0x8A, 0x8A);
-            break;
-        //待接收：开始下载。单聊里对方发来的写「接收」；自己发出的、群聊与聊天记录里的
-        //文件谈不上接收，只是把它从服务器取回本地，写「下载」。主动作用主题橙突出
-        case kChatFileAccept:
-            label = FileCardSkipsReject(m) ? _T("下载") : _T("接收");
-            break;
-        //单聊待接收：拒绝接收，次要动作用灰色链接
         case kChatFileReject:
-            label    = _T("拒绝");
             lblColor = RGB(0x8A, 0x8A, 0x8A);
             break;
-        //失败、已取消、已拒绝：重新发送或重新下载（\x21BB 为循环箭头）。是重发还是重下按
-        //手头数据判定（见 FileCardCanResend）。失败态用红，其余用主题橙
+        //失败、已取消、已拒绝后的重试：失败态用红，其余用主题橙
         case kChatFileRetry:
-        default:
-            label    = FileCardCanResend(m) ? _T("\x21BB 重新发送") : _T("\x21BB 重新下载");
             lblColor = (st == kFileFailed) ? RGB(0xE5, 0x39, 0x35) : RGB(0xFF, 0x7A, 0x45);
+            break;
+        //其余动作（打开、打开所在文件夹、另存为、接收 / 下载、发送离线文件）都用主题橙
+        default:
             break;
         }
         const int linkW = MeasureTextWidth(hdc, (LPCWSTR)label, kLinkPx);

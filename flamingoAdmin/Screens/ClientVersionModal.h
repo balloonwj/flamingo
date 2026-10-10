@@ -50,6 +50,9 @@ public:
     // 编辑态下正在编辑的记录 ID；新建态返回 0。
     long long GetEditingId() const { return m_editingId; }
 
+    // 编辑态下这条记录的版本号（最低版本不得高于它）；新建态返回空串。
+    CString GetEditingVersion() const { return m_editingVersion; }
+
     // 装入一次扫描结果并切回<u>新建态</u>，同时清空表单（每次打开前调用）。
     // 默认选中第一个「是 zip 且尚未被引用」的候选包 —— 那多半就是刚放进去的
     // 新包，省掉一次点击。
@@ -93,6 +96,7 @@ private:
     int     m_selected;  //选中的候选包下标；-1 表示未选
 
     long long m_editingId;   //编辑态下的目标记录 ID；0 表示新建态
+    CString   m_editingVersion;  //编辑态下目标记录的版本号，校验最低版本时用；新建态为空
     CString   m_editInfo;    //编辑态下展示的只读信息行（版本号 · 平台 · 包名）
 
     std::vector<RECT> m_rowHits;   //候选包各行的命中矩形，与 m_packages 同序

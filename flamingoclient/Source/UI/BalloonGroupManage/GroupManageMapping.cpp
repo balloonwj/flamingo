@@ -10,6 +10,9 @@
 
 #include <windows.h>
 #include <time.h>          //localtime_s：公告发布时刻要按本地时区拆成年月日时分
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../net/GroupLinkProtocolClient.h"   // net::GroupLinksResult（加群链接列表应答）
+#include "../BalloonMain/GroupLinkFlow.h"        // GroupLinkExpireText：链接到期时间的说法
 
 namespace balloongroupmanage {
 
@@ -103,7 +106,7 @@ CString FormatMuteRemaining(int64_t muteUntil, int64_t nowMs)
     //到期时间为 0 是"永久禁言"这一约定的取值，不是"没设置"
     if (muteUntil <= 0)
     {
-        return CString(_T("永久禁言"));
+        return CString(TR(L"永久禁言"));
     }
 
     const int64_t left = muteUntil - nowMs;
@@ -117,20 +120,20 @@ CString FormatMuteRemaining(int64_t muteUntil, int64_t nowMs)
     CString text;
     if (left >= kMillisPerDay)
     {
-        text.Format(_T("剩余 %d 天"), static_cast<int>(left / kMillisPerDay));
+        text.Format(TR(L"剩余 %d 天"), static_cast<int>(left / kMillisPerDay));
     }
     else if (left >= kMillisPerHour)
     {
-        text.Format(_T("剩余 %d 小时"), static_cast<int>(left / kMillisPerHour));
+        text.Format(TR(L"剩余 %d 小时"), static_cast<int>(left / kMillisPerHour));
     }
     else if (left >= kMillisPerMinute)
     {
-        text.Format(_T("剩余 %d 分钟"), static_cast<int>(left / kMillisPerMinute));
+        text.Format(TR(L"剩余 %d 分钟"), static_cast<int>(left / kMillisPerMinute));
     }
     else
     {
         //不足一分钟不显示"剩余 0 分钟"，那读起来像已经解禁了
-        text = _T("剩余不到 1 分钟");
+        text = TR(L"剩余不到 1 分钟");
     }
     return text;
 }
@@ -142,21 +145,21 @@ CString FormatRelativeTime(int64_t timestamp, int64_t nowMs)
     //时间戳晚于当前时刻说明两端时钟不同步，按"刚刚"处理，不显示负数
     if (elapsed < kMillisPerMinute)
     {
-        return CString(_T("刚刚"));
+        return CString(TR(L"刚刚"));
     }
 
     CString text;
     if (elapsed >= kMillisPerDay)
     {
-        text.Format(_T("%d 天前"), static_cast<int>(elapsed / kMillisPerDay));
+        text.Format(TR(L"%d 天前"), static_cast<int>(elapsed / kMillisPerDay));
     }
     else if (elapsed >= kMillisPerHour)
     {
-        text.Format(_T("%d 小时前"), static_cast<int>(elapsed / kMillisPerHour));
+        text.Format(TR(L"%d 小时前"), static_cast<int>(elapsed / kMillisPerHour));
     }
     else
     {
-        text.Format(_T("%d 分钟前"), static_cast<int>(elapsed / kMillisPerMinute));
+        text.Format(TR(L"%d 分钟前"), static_cast<int>(elapsed / kMillisPerMinute));
     }
     return text;
 }
@@ -243,8 +246,10 @@ void ApplyGroupInfo(const net::GroupInfoResult& info, GroupManageModel& model)
     model.m_perms.newMemberSeeHistory = (info.m_newseehistory != 0);
     model.m_perms.memberInviteFriend = (info.m_memberinvite != 0);
     model.m_perms.welcomeMessage = (info.m_welcomeon != 0);
-    model.m_perms.sensitiveWordFilter = (info.m_sensitiveon != 0);
     model.m_welcomeText = Utf8ToCString(info.m_welcometext);
+
+    //入群必读的公告ID（2026-10-07 起）
+    model.m_mustReadId = info.m_mustreadid;
 
     //群简介、欢迎语、群权限与全员禁言从此按真实值显示，不再显示加载提示
     model.m_groupInfoState = kLoadDone;
@@ -289,6 +294,7 @@ void ApplyGroupMembers(const net::GroupMembersResult& members, int64_t nowMs,
         m.muteUntil = src.m_muteuntil;
         m.muteReason = Utf8ToCString(src.m_mutereason);
         m.muted = (src.m_muted != 0);
+        m.mustReadPending = (src.m_mustread != 0);
         if (m.muted && m.muteUntil > 0 && m.muteUntil <= nowMs)
         {
             m.muted = false;
@@ -346,7 +352,7 @@ CString FormatAnnouncementTime(int64_t timestamp, int64_t nowMs)
     if (when.tm_year == now.tm_year && when.tm_yday == now.tm_yday)
     {
         //当天发的用"今天"更好读
-        text.Format(_T("今天 %02d:%02d"), when.tm_hour, when.tm_min);
+        text.Format(TR(L"今天 %02d:%02d"), when.tm_hour, when.tm_min);
     }
     else if (when.tm_year == now.tm_year)
     {
@@ -456,33 +462,6 @@ void ApplyJoinRequests(const net::GroupJoinRequestsResult& requests, int64_t now
     model.m_requestsState = kLoadDone;
 }
 
-void ApplySensitiveWords(const net::SensitiveWordsResult& words, int64_t nowMs,
-                         GroupManageModel& model)
-{
-    model.m_sensitiveWords.clear();
-
-    for (size_t i = 0; i < words.m_words.size(); ++i)
-    {
-        const net::SensitiveWordItem& src = words.m_words[i];
-
-        SensitiveWord w;
-        w.id = src.m_id;
-        w.word = Utf8ToCString(src.m_word);
-        if (w.id <= 0 || w.word.IsEmpty())
-        {
-            //没有词条ID就删不掉、空词也没有展示价值 —— 解析层已经挡过一道，
-            //这里再挡一次，两边都便宜。
-            continue;
-        }
-        w.timeText = FormatRelativeTime(src.m_timestamp, nowMs);
-        model.m_sensitiveWords.push_back(w);
-    }
-
-    //即便词库是空的也要置为"已加载" —— 界面要靠它区分"还没拉回来"（显示
-    //加载中）与"拉过了但确实没有词"（显示空状态提示）。
-    model.m_sensitiveWordsLoaded = true;
-}
-
 // =====================================================================
 // 失败提示
 // =====================================================================
@@ -506,20 +485,49 @@ CString DescribeGroupOpFailure(int cmd, int code, const std::string& msgUtf8)
     //下面那些逐操作的中文提示一句都走不到，只能把服务端的英文原文抛给用户。
     const int kErrPermissionDenied   = 6;
     const int kErrCannotOperateOwner = 307;  // 不能对群主执行该操作
+    const int kErrJoinRequestHandled = 308;  // 加群申请不存在或已处理（error_code_join_req_not_exist）
+    const int kErrGroupSensitiveWord = 312;  // 群资料、群公告、禁言原因等包含敏感词（error_code_group_sensitive_word）
+
+    //审批一条已被别的管理员处理过的申请（含两人同时处理时没抢到的一方，docs/邀请入群方案.md 第 4 期）。
+    //失败后 OnGroupOpResult 会重拉群数据，待审批列表随之去掉这一条
+    if (cmd == kCmdHandleJoinGroup && code == kErrJoinRequestHandled)
+    {
+        return CString(TR(L"该申请已被其他管理员处理。"));
+    }
+
+    //入群必读：设为必读的公告已被删除（error_code_announcement_404）
+    const int kCmdSetMustRead       = 1332;
+    const int kErrAnnouncementGone  = 310;
+    if (cmd == kCmdSetMustRead && code == kErrAnnouncementGone)
+    {
+        return CString(TR(L"这条公告已被删除，不能设为入群必读。"));
+    }
+    //作废加群链接：链接已失效或已被作废（error_code_group_link_invalid）
+    const int kCmdRevokeLink        = 1342;
+    const int kErrLinkInvalid       = 316;
+    if (cmd == kCmdRevokeLink && code == kErrLinkInvalid)
+    {
+        return CString(TR(L"这个链接已失效或已被作废。"));
+    }
 
     //先按错误码给通用解释 —— 同一个错误码在各操作下的含义是一致的
     if (code == kErrNotGroupAdmin)
     {
-        return CString(_T("你不是本群的群主或管理员，无法执行该操作。"));
+        return CString(TR(L"你不是本群的群主或管理员，无法执行该操作。"));
     }
     if (code == kErrCannotOperateOwner)
     {
-        return CString(_T("不能对群主执行该操作。"));
+        return CString(TR(L"不能对群主执行该操作。"));
+    }
+    if (code == kErrGroupSensitiveWord)
+    {
+        //改群名称 / 群介绍、发群公告、禁言原因等命中发送者所属企业的敏感词库（docs/敏感词方案.md 8.6）
+        return CString(TR(L"内容包含敏感词，未能保存。"));
     }
     if (code == kErrNotGroupMember)
     {
         //目标已经不在群里了 —— 多半是别人刚把他移出去、本端列表还没刷新
-        return CString(_T("该成员已不在本群，请刷新后重试。"));
+        return CString(TR(L"该成员已不在本群，请刷新后重试。"));
     }
 
     if (code == kErrPermissionDenied)
@@ -528,24 +536,24 @@ CString DescribeGroupOpFailure(int cmd, int code, const std::string& msgUtf8)
         switch (cmd)
         {
         case kCmdSetMemberRole:
-            return CString(_T("只有群主可以设置或撤销管理员。"));
+            return CString(TR(L"只有群主可以设置或撤销管理员。"));
         case kCmdMuteMember:
-            return CString(_T("你没有权限禁言该成员（管理员不能禁言其他管理员）。"));
+            return CString(TR(L"你没有权限禁言该成员（管理员不能禁言其他管理员）。"));
         case kCmdKickMember:
-            return CString(_T("你没有权限移出该成员（管理员不能移出其他管理员）。"));
+            return CString(TR(L"你没有权限移出该成员（管理员不能移出其他管理员）。"));
         case kCmdTransferOwner:
-            return CString(_T("只有群主可以转让群主。"));
+            return CString(TR(L"只有群主可以转让群主。"));
         case kCmdDismissGroup:
-            return CString(_T("只有群主可以解散群聊。"));
+            return CString(TR(L"只有群主可以解散群聊。"));
         case kCmdHandleJoinGroup:
-            return CString(_T("只有群主或管理员可以审批加群申请。"));
+            return CString(TR(L"只有群主或管理员可以审批加群申请。"));
         default:
-            return CString(_T("你没有权限执行该操作。"));
+            return CString(TR(L"你没有权限执行该操作。"));
         }
     }
 
     //没有对应条目：给一句通用提示，并把服务端原文附上，免得线索被吞掉
-    CString tip(_T("操作失败。"));
+    CString tip(TR(L"操作失败。"));
     if (!msgUtf8.empty())
     {
         CString detail = Utf8ToCString(msgUtf8);
@@ -574,8 +582,10 @@ bool IsPageVisibleForRole(int pageId, int myRole)
     const int kPageBasicInfo = 1004;   // 基本信息
     const int kPagePerms     = 1005;   // 群权限
     const int kPageDanger    = 1006;   // 危险区域
-    const int kPageSensitive = 1007;   // 管理词库（群权限页的二级界面）
+    //1007 曾是「管理词库」页，随群级敏感词于 2026-10-02 删除；该编号走 default，对任何角色都不可见
     const int kPageAnnouncement = 1008;   // 群公告
+    const int kPageLinks        = 1009;   // 加群链接（docs/邀请入群方案.md §12）
+    const int kPageBots         = 1010;   // 群机器人（docs/机器人方案.md §14.9）
 
     switch (pageId)
     {
@@ -587,8 +597,7 @@ bool IsPageVisibleForRole(int pageId, int myRole)
     case kPageApproval:
     case kPageMute:
     case kPagePerms:
-    case kPageSensitive:
-        //管理词库是群权限页的二级界面，可见性与它一致
+        //加群审批、禁言管理、群权限只有群主与管理员能操作
         return (myRole == kRoleOwner || myRole == kRoleAdmin);
 
     case kPageAnnouncement:
@@ -596,13 +605,33 @@ bool IsPageVisibleForRole(int pageId, int myRole)
         //走群聊窗右侧边栏的「公告」Tab，那里是只读的。
         return (myRole == kRoleOwner || myRole == kRoleAdmin);
 
+    case kPageLinks:
+        //查看与作废本群的全部加群链接，只有群主与管理员（普通成员生成的链接在「生成加群链接」窗口里）
+        return (myRole == kRoleOwner || myRole == kRoleAdmin);
+
     case kPageDanger:
         //解散群与转让群主只有群主能做，整页对管理员都不显示
+        return (myRole == kRoleOwner);
+
+    //群机器人只有群主能添加与管理（docs/机器人方案.md §11 Q4），管理员与普通成员都看不到
+    case kPageBots:
         return (myRole == kRoleOwner);
 
     default:
         return false;
     }
+}
+
+bool IsBotsPageVisible(int myRole, bool botsAvailable)
+{
+    const int kPageBots = 1010;   // 与 GroupManageLayout.h 的 kPageBots 一致
+    return botsAvailable && IsPageVisibleForRole(kPageBots, myRole);
+}
+
+bool IsAnnouncementPageVisible(int myRole, bool isThreadGroup)
+{
+    const int kPageAnnouncement = 1008;   // 与 GroupManageLayout.h 的 kPageAnnouncement 一致
+    return !isThreadGroup && IsPageVisibleForRole(kPageAnnouncement, myRole);
 }
 
 // =====================================================================
@@ -651,12 +680,12 @@ std::vector<MemberMenuEntry> BuildMemberMenuModel(const MemberMenuState& state)
     //"给自己发消息"也没有意义，故一并去掉。
     if (state.m_isSelf)
     {
-        AppendEntry(entries, kMemberMenuProfile, L"查看资料");
+        AppendEntry(entries, kMemberMenuProfile, TR(L"查看资料"));
         return entries;
     }
 
-    AppendEntry(entries, kMemberMenuSendMsg, L"发消息");
-    AppendEntry(entries, kMemberMenuProfile, L"查看资料");
+    AppendEntry(entries, kMemberMenuSendMsg, TR(L"发消息"));
+    AppendEntry(entries, kMemberMenuProfile, TR(L"查看资料"));
 
     //"群主是权限顶点、谁都不能对他设管理员 / 禁言 / 移出"这条已经收进下面两个
     //共用判定里，故此处不再单独算 targetIsOwner。
@@ -687,11 +716,11 @@ std::vector<MemberMenuEntry> BuildMemberMenuModel(const MemberMenuState& state)
     {
         if (grouprole::ShouldOfferCancelAdmin(UiRoleToNetRole(state.m_targetRole)))
         {
-            AppendEntry(entries, kMemberMenuCancelAdmin, L"撤销管理员");
+            AppendEntry(entries, kMemberMenuCancelAdmin, TR(L"撤销管理员"));
         }
         else
         {
-            AppendEntry(entries, kMemberMenuSetAdmin, L"设为管理员");
+            AppendEntry(entries, kMemberMenuSetAdmin, TR(L"设为管理员"));
         }
     }
 
@@ -699,20 +728,49 @@ std::vector<MemberMenuEntry> BuildMemberMenuModel(const MemberMenuState& state)
     {
         if (state.m_targetMuted)
         {
-            AppendEntry(entries, kMemberMenuUnmute, L"解除禁言");
+            AppendEntry(entries, kMemberMenuUnmute, TR(L"解除禁言"));
         }
         else
         {
-            AppendEntry(entries, kMemberMenuMute, L"禁言");
+            AppendEntry(entries, kMemberMenuMute, TR(L"禁言"));
         }
 
         //移出本群与上面几项之间再隔一道 —— 它是这个菜单里唯一不可撤销的操作，
         //不该紧挨着禁言，避免手滑点错。
         AppendSeparator(entries);
-        AppendEntry(entries, kMemberMenuKick, L"移出本群");
+        AppendEntry(entries, kMemberMenuKick, TR(L"移出本群"));
+    }
+
+    //尚未确认入群必读的成员：群主与管理员可以代为确认（放行），不受「管理员不能管管理员」的限制
+    if (state.m_targetMustRead && (state.m_myRole == kRoleOwner || state.m_myRole == kRoleAdmin))
+    {
+        AppendSeparator(entries);
+        AppendEntry(entries, kMemberMenuReleaseMustRead, TR(L"代为确认入群必读"));
     }
 
     return entries;
+}
+
+void ApplyGroupLinks(const net::GroupLinksResult& result, int64_t nowMs, GroupManageModel& model)
+{
+    if (result.m_code != 0)
+    {
+        model.m_linksState = LoadStateAfterFailure(model.m_linksState);
+        return;
+    }
+    model.m_links.clear();
+    for (size_t i = 0; i < result.m_links.size(); ++i)
+    {
+        const net::GroupLinkItem& src = result.m_links[i];
+        GroupLinkRow row;
+        row.id = src.m_id;
+        row.url = Utf8ToCString(src.m_url);
+        row.creatorName = Utf8ToCString(src.m_creatorname);
+        row.createText = FormatAnnouncementTime(src.m_createtime, nowMs);
+        row.expireText = balloonmain::GroupLinkExpireText(src.m_expiretime).c_str();
+        model.m_links.push_back(row);
+    }
+    model.m_linksState = kLoadDone;
 }
 
 } // namespace balloongroupmanage

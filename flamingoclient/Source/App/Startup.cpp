@@ -13,13 +13,22 @@
 #include "..\Common\Log\IULog.h"
 #include "..\Session\UserSessionData.h"
 #include "Crash.h"                    // ConfigureCrashDumpEnvironment（转储目录 + WER 配置）
+#include "HangWatchdog.h"             // CHangWatchdog：界面线程无响应时自动写转储（bugs.md BUG-120）
 #include "..\Common\Util\Utils.h"
 #include "..\Common\Util\IniFile.h"
 #include "../net/StorageLocation.h"      // ResolveDataRoot（本地数据根目录的归一）
 #include "../net/FrameCrypto.h"          // net::cryptoInit（协议加密的一次性初始化）
 #include "UIText.h"
+#include "BrandText.h"                // 品牌文字与注册默认公司的读取（[ui] apptitle / slogan / defaultcompany 等）
+#include "../Common/I18n/I18n.h"      // 界面语言（[ui] language）与可选语言包 FlamingoLang.dll
+#include "AppRestart.h"               // 重启时新进程先等旧进程退出（--wait-pid）
 #include "..\Common\Log\LogCleanupPolicy.h"         // 「启动时清空历史日志」开关的取值规则
 #include "../../third-party/balloonui/balloonui/DuiDpi.h"
+#include "../../third-party/balloonui/balloonui/DuiTextResolver.h"   // SetTextResolver：balloonui 内置文字的转换回调
+#include "../Common/I18n/BalloonUiText.h"   // ResolveBalloonUiText：balloonui 内置文字的译文
+#include "../../third-party/balloonui/balloonui/DuiTheme.h"   // SetDefaultFontFace：balloonui 的默认字体随界面语言
+#include "UrlProtocolRegistry.h"                  // RegisterFlamingoUrlProtocol：注册 flamingo:// 协议
+#include "../UI/BalloonMain/GroupLinkFlow.h"      // FindJoinUrlInCommandLine / kCopyDataJoinGroupLink：启动参数里的加群链接
 
 CAppModule _Module;
 
@@ -28,6 +37,46 @@ CAppModule _Module;
 //如果单纯地将窗口风格由WS_EX_APPWINDOW设置为WS_EX_TOOLWINDOW后，此种风格的窗口
 //会在失去焦点后默认Z轴变为0，这点特别讨厌。
 HWND	   g_hwndOwner = NULL;
+
+//启动命令行里的加群链接（docs/邀请入群方案.md §12）：本进程是唯一的客户端时，留给登录成功后处理；没有时为空
+static std::wstring s_pendingJoinUrl;
+
+//把加群链接交给已运行的客户端时，等对方处理 WM_COPYDATA 的上限（毫秒）
+static const UINT kCopyDataTimeoutMs = 5000;
+
+//代理窗的窗口类名（与 CFlamingoClient 注册的一致），用来找已运行的客户端
+static const TCHAR kProxyWindowClass[] = _T("FLAMINGO_PROXY_WND");
+
+/**
+ *  命令行里有加群链接、且已有客户端在运行时，把链接交给它（WM_COPYDATA 发给它的代理窗）。
+ *    url：加群链接。
+ *  @return 已交给运行中的客户端返回 true，本进程随即退出；没有在运行的客户端返回 false
+ */
+static bool ForwardJoinUrlToRunningInstance(const std::wstring& url)
+{
+    HWND hRunning = ::FindWindow(kProxyWindowClass, NULL);
+    if (hRunning == NULL)
+    {
+        return false;
+    }
+    //本进程由用户点击启动、可以前置窗口：把前置的权利让给运行中的客户端，它弹出的确认框才能到最前面
+    DWORD runningPid = 0;
+    ::GetWindowThreadProcessId(hRunning, &runningPid);
+    if (runningPid != 0)
+    {
+        ::AllowSetForegroundWindow(runningPid);
+    }
+    COPYDATASTRUCT cds;
+    cds.dwData = balloonmain::kCopyDataJoinGroupLink;
+    cds.cbData = (DWORD)((url.size() + 1) * sizeof(wchar_t));
+    cds.lpData = (PVOID)url.c_str();
+    DWORD_PTR result = 0;
+    const LRESULT sent = ::SendMessageTimeout(hRunning, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG,
+                                              kCopyDataTimeoutMs, &result);
+    LOG_INFO("join link: forwarded to the running instance (pid %lu), sent=%d, result=%d.", runningPid,
+             sent != 0 ? 1 : 0, (int)result);
+    return sent != 0 && result != 0;
+}
 
 HWND CreateOwnerWindow()
 {
@@ -63,11 +112,21 @@ int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
 
     g_hwndOwner = CreateOwnerWindow();
 
+    //界面线程无响应检测（bugs.md BUG-120）：g_hwndOwner 在界面线程上、由 DefWindowProc 处理消息，用它作探测目标。
+    //界面线程连续无响应 15 秒时自动写一份转储到 Users\dump，事后据此查看各线程的堆栈
+    balloonapp::CHangWatchdog hangWatchdog;
+    if (g_hwndOwner != NULL)
+    {
+        hangWatchdog.Start(g_hwndOwner, PrepareCrashDumpDirectory(), balloonapp::HangWatchConfig());
+    }
+
     //nCmdShow 不予理会：本程序没有「主窗口」这个概念上的启动窗口 —— 未登录时可见的是
     //登录窗，登录后是主面板，两者的显示时机都由登录流程决定。
     UNREFERENCED_PARAMETER(nCmdShow);
 
     balloonapp::CAppShell shell;
+    //启动命令行里的加群链接：交给进程外壳，主面板建好后转交，登录成功后处理
+    shell.SetPendingJoinUrl(s_pendingJoinUrl);
     int nRet = 0;
     if (shell.Startup(g_hwndOwner))
     {
@@ -75,6 +134,8 @@ int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
     }
     //Startup 返回 false（调试入口要求立即退出、或用户直接关掉了登录窗）时也要收尾。
     shell.Shutdown();
+    //退出收尾也在检测范围内，收尾完成后再停
+    hangWatchdog.Stop();
 
     _Module.RemoveMessageLoop();
     return nRet;
@@ -187,10 +248,84 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     _stprintf_s(szLogFilePathPrefix, MAX_PATH, _T("%sLogs\\flamingo"), g_szHomePath);
     CIULog::Init(true, false, szLogFilePathPrefix);
 
+    //加群链接（docs/邀请入群方案.md §12）：系统按 flamingo:// 协议启动本程序时，链接在命令行里。已有客户端在运行
+    //就交给它并退出；没有时记下来，登录成功后由主面板处理
+    {
+        const std::wstring joinUrl = balloonmain::FindJoinUrlInCommandLine(::GetCommandLineW());
+        if (!joinUrl.empty())
+        {
+            if (ForwardJoinUrlToRunningInstance(joinUrl))
+            {
+                CIULog::Uninit();
+                return 0;
+            }
+            s_pendingJoinUrl = joinUrl;
+            LOG_INFO("join link: no running instance, the link is kept until login.");
+        }
+    }
+
+    //把 flamingo:// 注册为当前用户的协议，指向本程序（已是本程序时不重复写）
+    {
+        TCHAR szExePath[MAX_PATH] = { 0 };
+        if (::GetModuleFileName(NULL, szExePath, MAX_PATH) > 0)
+        {
+            apputil::RegisterFlamingoUrlProtocol(szExePath);
+        }
+    }
+
+    //由「立即重启」启动的新进程：命令行带着旧进程的 pid，先等它退出再往下走，避免新旧两个进程
+    //同时读写配置与本地数据库（见 App/AppRestart.h）。等待有上限，旧进程卡住时照常启动。
+    {
+        DWORD previousPid = apprestart::ParseWaitPid(lpstrCmdLine);
+        if (previousPid != 0)
+        {
+            bool exited = apprestart::WaitForProcessExit(previousPid, apprestart::kWaitPreviousMs);
+            LOG_INFO("restart: waited for the previous instance (pid %lu), %s.", previousPid,
+                     exited ? "it has exited" : "timed out, starting anyway");
+        }
+    }
+
     //TODO: 统一到AppConfig类中去
     CIniFile iniFile;
     CString strIniFilePath(g_szHomePath);
     strIniFilePath += _T("config\\flamingo.ini");
+
+    //界面语言：读 [ui] language（没有这一项或为空表示跟随系统界面语言），需要时加载 exe 同目录下的
+    //语言包 FlamingoLang.dll（规则见 Common/I18n/I18n.h、docs/多语言方案.md）。必须在创建任何窗口、
+    //取用任何界面文字之前完成——此后各处 TR 取到的都是这里定下的语言，切换语言要重启才生效。
+    //语言包不存在或加载失败时一律退回简体中文，不影响启动。
+    {
+        TCHAR szLanguage[MAX_PATH] = { 0 };
+        iniFile.ReadString(i18n::kIniSection, i18n::kIniKey, _T(""), szLanguage, MAX_PATH, strIniFilePath);
+        std::wstring langDllPath = std::wstring(g_szHomePath) + FLAMINGO_LANG_DLL_NAME;
+        i18n::InitResult langResult = i18n::Init(szLanguage, langDllPath, ::GetUserDefaultUILanguage());
+        LOG_INFO("%s", i18n::DescribeInitResult(langResult).c_str());
+        if (i18n::GetEarlyLookupCount() > 0)
+            LOG_WARNING("i18n: %u text lookups happened before the language was decided.", i18n::GetEarlyLookupCount());
+        //balloonui 的默认字体也换成当前界面语言的界面字体（多语言第 3e 步），各控件的默认字体由它决定
+        balloonwjui::DuiTheme::Inst().SetDefaultFontFace(i18n::UiFontName());
+        //balloonui 自带的文字（输入框右键菜单等）也经语言模块翻译（多语言第 3d 步）
+        balloonwjui::SetTextResolver(&i18n::ResolveBalloonUiText);
+    }
+
+    //产品名称、标语、版权文字与注册窗的默认公司（[ui] apptitle / slogan / copyrighttext /
+    //defaultcompany，读取与编码识别规则见 BrandText.h）。放在这里读，是因为下面加密库初始化
+    //失败时弹出的提示框就要用产品名称做标题，各窗口的标题、登录窗与注册窗的品牌文字、关于
+    //对话框、注册窗「公司名称」的默认项也都取自这几个全局变量。
+    g_strAppTitle = brandtext::ReadAppTitle(strIniFilePath);
+    g_strAppSlogan = brandtext::ReadSlogan(strIniFilePath);
+    g_strAppCopyright = brandtext::ReadCopyright(strIniFilePath);
+    g_strDefaultCompany = brandtext::ReadDefaultCompany(strIniFilePath);
+    LOG_INFO("brand: apptitle %s, slogan %s, copyright %s, defaultcompany %s.",
+             (g_strAppTitle == brandtext::kDefaultAppTitle) ? "default" : "customized",
+             (g_strAppSlogan == brandtext::kDefaultSlogan) ? "default"
+                 : (g_strAppSlogan.empty() ? "hidden" : "customized"),
+             (g_strAppCopyright == brandtext::kDefaultCopyright) ? "default" : "customized",
+             (g_strDefaultCompany == brandtext::kDefaultCompany) ? "default" : "customized");
+    //没有配置标语时用的内置标语要随界面语言翻译（BrandText.cpp 只做标记）。放在写日志之后，
+    //上面「default / customized」的判断比的仍是原文
+    if (g_strAppSlogan == brandtext::kDefaultSlogan)
+        g_strAppSlogan = TR(brandtext::kDefaultSlogan);
 
     //「启动时清空历史日志」：取值规则（含配置项缺失 / 被写坏时的默认值）收口在
     //LogCleanupPolicy 里，系统设置的存储页改的也是同一项，两边不会漂移。
@@ -222,17 +357,12 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     if (!net::cryptoInit())
     {
         LOG_ERROR("sodium_init failed, protocol encryption is unavailable.");
-        ::MessageBox(NULL, UI_MSG_CRYPTO_INIT_FAILED, g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
+        ::MessageBox(NULL, TR(UI_MSG_CRYPTO_INIT_FAILED), g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
         return 0;
     }
 
     if (!InitSocket())
         return 0;
-
-    //加载配置的程序标题
-    TCHAR szAppTitle[128] = { 0 };
-    iniFile.ReadString(_T("ui"), _T("apptitle"), UI_APP_TITLE, szAppTitle, ARRAYSIZE(szAppTitle), strIniFilePath);
-    g_strAppTitle = szAppTitle;
 
     //tstring strFileName = Hootina::CPath::GetAppPath() + _T("richFace.dll");
     //BOOL bRet = DllRegisterServer(strFileName.c_str());	// 注册COM组件

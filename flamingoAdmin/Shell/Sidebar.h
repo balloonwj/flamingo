@@ -30,6 +30,18 @@ public:
     //   collapsed：true 紧凑态，false 标准态。
     void SetCollapsed(bool collapsed);
 
+    // 按当前登录者的角色调整导航项。侧栏只在第一次登录时构建，换账号登录时由 AdminFrame
+    // 每次进入主界面都调用一次：
+    //   · 平台超管：全部导航项可见，「企业管理」叫「企业管理」；
+    //   · 企业管理员：「公告中心」「客户端版本」隐藏（相关接口只给平台超管），
+    //     「企业管理」改名为「本企业」（点击直接打开本企业详情）。
+    //   platformAdmin：true 为平台超管，false 为企业管理员。
+    void ApplyRole(bool platformAdmin);
+
+    // 以下两个取值函数供单元测试核对导航项的显隐与名称；navId 不存在时分别返回 false 与空串。
+    bool    IsNavVisible(int navId) const;
+    CString GetNavLabel(int navId) const;
+
 private:
     // 构建品牌头部（徽标 + 名称两行）。
     std::unique_ptr<balloonwjui::DuiControl> BuildHeader();
@@ -47,6 +59,10 @@ private:
     // 结果第 6 项越界写到紧跟其后的计数器上，平台超管登录即崩。
     std::vector<SidebarNavItem*> m_navItems;
 
+    // 按 navId 找导航项，找不到返回 nullptr。
+    SidebarNavItem* FindNavItem(int navId) const;
+
+    balloonwjui::DuiControl* m_nav          = nullptr; // 导航区 VBox（借用；导航项显隐变化后对它 ForceLayout）
     balloonwjui::DuiControl* m_headerTitles = nullptr; // 头部副标题 VBox（紧凑态隐藏）
     bool                     m_collapsed    = false;   // 当前是否紧凑态
 };

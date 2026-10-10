@@ -31,6 +31,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
 #include "ChatClipboardContent.h"   // ChatClipSegment（粘贴 / 拖入的聊天内容片段）
+#include "ChatScrollFade.h"         // 细滚动条滑块的淡入淡出（成员需完整类型）
 
 #include <string>
 #include <vector>
@@ -111,6 +112,15 @@ public:
     void SetMentionMsgs(UINT nChangedMsg, UINT nNavMsg, UINT nWheelMsg);
 
     /**
+     *  设置粘贴识别用的消息号（docs/代码片段方案.md 第 3.1 节），**投递**给宿主：
+     *    · 往空输入框里做了一次普通粘贴（剪贴板里不是 Flamingo 聊天内容）时，粘贴完成之后投递一次，wParam 为 1；
+     *    · 内容有变化时投递，wParam 为 0（宿主据此在用户继续输入时收起提示条）。
+     *  「空」指什么都没有或只有空白字符。粘贴完成之后才投递，宿主收到时读到的是粘贴后的内容。
+     *    nMsg：消息号；0 表示不启用。
+     */
+    void SetPasteTextMsg(UINT nMsg);
+
+    /**
      *  「把一张图片登记为待发送、并插入输入框当前光标处」的回调原型。粘贴或拖入的聊天
      *  内容里有图片时调用：图片要连同源文件一起登记，发送时才能取回原图，而待发送表归聊天
      *  窗管（见聊天窗的 StageImageInInput），故由调用方注入。
@@ -159,8 +169,10 @@ public:
     // 落在细滚动条命中带里时开始拖动滑块（点在轨道空白处时滑块中心先跳到点击处），
     // 否则照常交给基类（定位光标、开始选择文字）。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
-    // 拖动滑块时按指针位置滚动，否则交给基类。
+    // 拖动滑块时按指针位置滚动；否则报告鼠标是否在滚动条命中带上（悬停时滑块淡入并保持可见），再交给基类。
     bool OnMouseMove(POINT pt, UINT mkFlags) override;
+    // 鼠标离开本控件（2026-10-04 起）：滑块开始淡出，再交给基类。返回值同基类。
+    bool OnMouseLeave() override;
     // 结束拖动滑块，否则交给基类。
     bool OnLButtonUp(POINT pt, UINT mkFlags) override;
     bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
@@ -185,8 +197,20 @@ private:
     //false，调用方继续走原来的粘贴。
     bool TryPasteChatContent();
 
+    //剪贴板里没有文字、只有图片时（截图「完成」、系统截图工具），把图片存成临时 PNG，交给 SetImageStager 注册的回调
+    //按截图「发送到对话框」的路径插入，并返回 true。RichEdit 原生粘贴进来的位图发送时只读出一个空格，消息发不出去
+    //（bugs.md BUG-106，docs/截图独立模块方案.md 第 7 节）。剪贴板里不是只有图片、没有注册插图回调或输入框只读时
+    //返回 false，调用方继续走原来的粘贴；只有图片却没能存成 PNG 时也返回 true（不交给 RichEdit），日志里记一条警告。
+    bool TryPasteClipboardImage();
+
     //告诉宿主「用户现在在发送框操作」。宿主据此决定 Ctrl+C 归谁。
     void NotifyFocusInput();
+
+    //输入框里是否什么都没有或只有空白字符（粘贴识别用）。
+    bool IsInputBlank() const;
+
+    //告诉宿主「刚往空输入框里粘贴了文字」（粘贴识别，wParam 为 1）。没有设置消息号时什么都不做。
+    void NotifyPastedIntoBlank();
 
     //投递一次「正在输入」通知。
     //  bKillFocus：true 表示这次是失焦引发的，宿主应立即收尾。
@@ -216,6 +240,7 @@ private:
     UINT m_nMentionChangedMsg; // @提醒：内容变化，投递；0 = 不启用
     UINT m_nMentionNavMsg;     // @提醒：导航键，同步发送；0 = 不启用
     UINT m_nMentionWheelMsg;   // @提醒：滚轮，同步发送；0 = 不启用
+    UINT m_nPasteTextMsg;      // 粘贴识别（往空输入框粘贴之后、内容变化时），投递；0 = 不启用
 
     //是否正处于输入法合成期。合成期内的回车是「候选词上屏」，不能当成发送。
     bool m_bImeComposing;
@@ -235,6 +260,7 @@ private:
     RECT m_thumbCacheRect;     // 缓存的滑块矩形（宿主客户区坐标）；空矩形表示内容放得下、没有滑块
     RECT m_thumbCacheItem;     // 查询时的控件矩形；控件矩形变了（缩放、重排）也要重新查询
     unsigned long m_thumbQueryCount;   // 绘制时向引擎查询滚动状态的累计次数，仅供测试
+    CChatScrollFade m_scrollFade;      // 细滚动条滑块的淡入淡出（2026-10-04 起，与 balloonui 滚动条同一时序），随本控件销毁
 };
 
 } // namespace balloonchatwnd

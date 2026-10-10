@@ -19,17 +19,7 @@
 #include "../UI/BalloonMain/KickoutNotice.h"                     // KickoutReasonValue（--reason=N）
 #include "../UI/BalloonUpdate/BalloonUpdateWindow.h"             // --updatewindow
 #include "../Feature/Update/UpdateManager.h"                     // update::UpdateTaskResult（--updatewindow）
-#include "../Feature/RemoteDesktop/RdRelaySelfTest.h"            // --rdrelayselftest
-#include "../Feature/RemoteDesktop/DxgiScreenCapturer.h"         // --dxgicap
-#include "../Feature/RemoteDesktop/RdScreenCapturer.h"           // --dxgipipe / --dxgipipegdi
-#include "../UI/BalloonRemoteDesktop/RdViewerToolbar.h"          // --rdtoolbar
-#include "../Feature/Call/CallRelaySelfTest.h"                   // --callrelayselftest
-#include "../Feature/Call/AudioLoopback.h"                       // --callaudioloop
-#include "../Feature/Call/CameraPreviewDebug.h"                  // --camerapreview
-#include "../Feature/Call/CameraDisplayTest.h"                   // --cameratest
-#include "../Feature/Call/H264SelfTest.h"                        // --h264selftest
-#include "../Feature/Call/VideoLoopbackDebug.h"                  // --videoloop
-#include "../Feature/Call/CallVideoUiDebug.h"                    // --callvideoui
+#include "../../FlamingoMedia/Api/FlamingoMediaApi.h"            // IMediaModule::RunDebugEntry（通话与远程桌面的调试入口在 DLL 里）
 #include "../Common/Log/IULog.h"
 #include "../Session/UserSessionData.h"
 #include "../UI/BalloonMain/MainPanelBench.h"                  // --mainpanel --stress / --bench
@@ -39,6 +29,15 @@
 #include "../third-party/jsoncpp-1.9.0/json.h"                // --mergedviewer：构造合并记录的 content
 #include <time.h>                                              // --mergedviewer：子消息时间取当前时间往前推
 #include "../net/Protocol.h"                                   // conversation_single / conversation_group
+#include "../Feature/Ocr/OcrModuleHost.h"                      // --ocrtest：预加载图片文字识别模块
+#include "../Feature/Ocr/OcrLauncher.h"                        // --ocrtest：经正式入口的路径发起识别
+#include "../UI/BalloonOcr/OcrEntry.h"                         // --ocrtest：注册发起识别的实现
+#include "../Common/I18n/I18n.h"                               // --ocrtest：i18n::GetLanguage 选默认识别语言
+#include <shellapi.h>                                          // --ocrtest：CommandLineToArgvW 取图片路径
+#include "../Feature/Markdown/MarkdownModuleHost.h"             // --chatwindow / --groupchatwindow：等 Markdown 模块预加载结束
+
+//调试入口开聊天窗之前等待 Markdown 模块预加载结束的最长时间（毫秒）
+static const DWORD kMarkdownPreloadWaitMs = 3000;
 
 namespace balloonapp {
 
@@ -278,6 +277,65 @@ void OpenMergedViewerPreview(CMergedRecordWindow& wnd)
     LOG_INFO("debug entry: merged record viewer opened.");
 }
 
+#ifdef _DEBUG
+//--ocrtest / --withocr 等待识别模块预加载完成的最长时间（毫秒）。仅调试入口在界面线程上等待，正式流程从不等待
+const DWORD kOcrPreloadWaitMs = 5000;
+
+//--ocrtest / --withocr：注册发起实现、预加载识别模块（不登录）并等待完成；返回预加载是否在时限内结束
+bool PreloadOcrForDebug()
+{
+    balloonocr::RegisterOcrLaunchers();
+    CString dllPath(g_szHomePath);
+    dllPath += FLAMINGO_OCR_DLL_NAME;
+    ocr::COcrModuleHost& module = ocr::COcrModuleHost::GetInstance();
+    module.StartPreload(std::wstring((LPCWSTR)dllPath), i18n::GetLanguage());
+    const bool finished = module.WaitForPreload(kOcrPreloadWaitMs);
+    LOG_INFO("debug entry: ocr preload finished=%d, state=%d.", finished ? 1 : 0, module.GetState());
+    return finished;
+}
+
+//--ocrtest：取命令行里 --ocrtest 后面的那个参数作为图片路径；没有时返回空串
+std::wstring OcrTestImagePath()
+{
+    std::wstring path;
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    if (argv == NULL)
+        return path;
+    for (int i = 0; i + 1 < argc; ++i)
+    {
+        if (::lstrcmpiW(argv[i], L"--ocrtest") == 0)
+        {
+            path = argv[i + 1];
+            break;
+        }
+    }
+    ::LocalFree(argv);
+    return path;
+}
+
+//--ocrtest：预加载识别模块（不登录），完成后按正式入口的路径识别命令行给出的图片；
+//不带图片路径时按主面板系统菜单「图片文字识别」的路径打开还没有图片的识别窗口（docs/图片文字识别方案.md 第 14 节）
+void RunOcrDebugEntry(HWND host)
+{
+    PreloadOcrForDebug();
+    ocr::COcrModuleHost& module = ocr::COcrModuleHost::GetInstance();
+    const std::wstring path = OcrTestImagePath();
+    LOG_INFO("debug entry: ocr test, image path given=%d.", path.empty() ? 0 : 1);
+    if (path.empty())
+    {
+        balloonocr::LaunchOcrWindow(host);
+        return;
+    }
+    if (!module.CanShowEntry())
+    {
+        //正式流程里此时入口不显示；调试入口照样走一遍，弹出的是「组件不可用」提示
+        LOG_INFO("debug entry: ocr module unavailable: %s.", module.GetSnapshot().m_failure.c_str());
+    }
+    ocr::LaunchOcrForFile(host, path, 0);
+}
+#endif // _DEBUG
+
 } // anonymous namespace
 
 CDebugEntryRunner::CDebugEntryRunner(CFlamingoClient* pFMGClient)
@@ -302,7 +360,6 @@ void CDebugEntryRunner::DestroyPreviewWindows()
 {
     // 逐个销毁。这些都是 ATL 窗口类，对象析构时仍持有 HWND 会触发断言，所以宁可
     // 全部列全 —— 漏一个的代价是「用过某个调试入口再退出就崩」，而且现象离原因很远。
-    // （m_rdSelfTestWindow 不在此列：它不是 ATL 窗口类，自己用原生 Win32 API 管句柄。）
     if (m_chatWindow.IsWindow())
         m_chatWindow.DestroyWindow();
     if (m_groupChatWindow.IsWindow())
@@ -329,10 +386,8 @@ void CDebugEntryRunner::DestroyPreviewWindows()
         m_mergedViewer.DestroyWindow();
     if (m_imageViewerWindow.IsWindow())
         m_imageViewerWindow.DestroyWindow();
-    if (m_rdDlg.IsWindow())
-        m_rdDlg.CloseDlg();
-    if (m_rdControlledBar.IsWindow())
-        m_rdControlledBar.Hide();
+    if (m_codeSnippetDemo.IsWindow())
+        m_codeSnippetDemo.DestroyWindow();
 }
 
 int CDebugEntryRunner::CountAlivePreviewWindows() const
@@ -351,14 +406,34 @@ int CDebugEntryRunner::CountAlivePreviewWindows() const
     n += m_forwardPickerDlg.IsWindow() ? 1 : 0;
     n += m_mergedViewer.IsWindow() ? 1 : 0;
     n += m_imageViewerWindow.IsWindow() ? 1 : 0;
-    n += m_rdDlg.IsWindow() ? 1 : 0;
-    n += m_rdControlledBar.IsWindow() ? 1 : 0;
+    n += m_codeSnippetDemo.IsWindow() ? 1 : 0;
     return n;
 }
 
 DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
 {
 #ifdef _DEBUG
+    // 已迁入 FlamingoMedia.dll 的调试入口先交给媒体模块：一对一通话的 --callrelayselftest /
+    // --callaudioloop / --camerapreview / --cameratest / --h264selftest / --videoloop / --callvideoui，
+    // 各入口的说明见 FlamingoMedia/Call/CallDebugEntries.h；远程桌面的 --rddlg / --rdpselftest / --rdrelayselftest /
+    // --rdbar / --rdtoolbar / --dxgicap / --dxgipipe / --dxgipipegdi，说明见 FlamingoMedia/RemoteDesktop/RdDebugEntries.h。
+    // 模块未命中再检查下面本类自己的开关。
+    if (ctx.m_pMediaModule != NULL)
+    {
+        const int mediaResult = ctx.m_pMediaModule->RunDebugEntry(::GetCommandLine(), ctx.m_hHost);
+        if (mediaResult == flamingomedia::media_debug_request_exit)
+            return kDebugEntryRequestExit;
+        if (mediaResult == flamingomedia::media_debug_handled)
+            return kDebugEntryHandled;
+    }
+
+    // 调试入口的附加开关：命令行带 --withocr 时，先预加载图片文字识别模块再打开下面的调试窗口，
+    // 看图窗工具栏、截图操作栏、聊天图片右键菜单因此带上识别入口（docs/图片文字识别方案.md 第 11 节）。
+    if (::_tcsstr(::GetCommandLine(), _T("--withocr")) != NULL)
+    {
+        PreloadOcrForDebug();
+    }
+
     // 调试入口：命令行带 --mainpanel 时跳过登录，直接用 mock 数据弹出
     // 新版 balloonui 主面板，便于开发期截图核对主面板视觉。正式发布
     // 构建（非 _DEBUG）不含此分支。
@@ -401,6 +476,9 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
     // 单聊窗口（mock 数据），便于开发期截图核对单聊窗视觉。
     if (::_tcsstr(::GetCommandLine(), _T("--chatwindow")) != NULL)
     {
+        //正式流程里 Markdown 模块在登录完成前早已加载完；调试入口不登录、启动后立即开窗，
+        //先等后台预加载结束，Markdown 开关才会出现（只在调试入口等待，最多 kMarkdownPreloadWaitMs）
+        markdown::CMarkdownModuleHost::GetInstance().WaitForPreload(kMarkdownPreloadWaitMs);
         m_chatWindow.CreateAndShow(ctx.m_hHost);
         return kDebugEntryHandled;
     }
@@ -408,6 +486,8 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
     // 群聊窗口（mock 数据），便于开发期截图核对群聊窗视觉。
     if (::_tcsstr(::GetCommandLine(), _T("--groupchatwindow")) != NULL)
     {
+        //同上：等 Markdown 模块预加载结束再开窗
+        markdown::CMarkdownModuleHost::GetInstance().WaitForPreload(kMarkdownPreloadWaitMs);
         m_groupChatWindow.CreateAndShow(ctx.m_hHost);
         return kDebugEntryHandled;
     }
@@ -476,6 +556,15 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
         //须显式填入示例数据
         m_groupManageWindow.LoadMockData();
         m_groupManageWindow.CreateAndShow(ctx.m_hHost);
+        return kDebugEntryHandled;
+    }
+    // 调试入口：命令行带 --ocrtest <图片路径> 时跳过登录，预加载图片文字识别模块，完成后经正式入口
+    // 同一条路径（ocr::LaunchOcrForFile）打开识别结果窗口识别这张图，便于开发期核对结果窗口与识别效果
+    //（docs/图片文字识别方案.md 第 11 节）。模块不可用时弹出与正式入口相同的提示。
+    // 只写 --ocrtest、不带图片路径时，按系统菜单「图片文字识别」的路径打开还没有图片的识别窗口（第 14 节）。
+    if (::_tcsstr(::GetCommandLine(), _T("--ocrtest")) != NULL)
+    {
+        RunOcrDebugEntry(ctx.m_hHost);
         return kDebugEntryHandled;
     }
     // 调试入口：命令行带 --syssettings 时跳过登录，直接弹出新版系统设置
@@ -600,28 +689,10 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
         seed.ownerName   = _T("谢知行");
         seed.announcement= _T("v3.2 版本即将发布，全员准备。");
         seed.myCard      = _T("林知夏");
-        seed.mute        = false;
+        seed.notifyMode  = notify_mode_allow;
         seed.pinned      = true;
         // 调试入口无宿主主面板：pHost 传 NULL，开关 / 退群退化为直接发协议、不更新缓存。
         m_groupInfoDlg.OpenForGroup(ctx.m_hHost, m_lpFMGClient, NULL, seed);
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --rddlg 时跳过登录，直接弹出远程桌面会话提示对话框（假数据），
-    // 便于核对它贴桌面右下角的落点、置顶效果与标题栏按钮，不必真的发起一次远程桌面。
-    // 默认弹被控端那一路（"XXX 请求远程控制你的电脑"，拒绝 / 接受两个按钮）；
-    // 再带 --calling 则弹发起方那一路（"正在呼叫 XXX…"，只有取消按钮）。
-    // 两路的显示收尾都走 ShowAtWorkAreaCorner，位置与置顶行为一致。
-    if (::_tcsstr(::GetCommandLine(), _T("--rddlg")) != NULL)
-    {
-        const bool bCalling = (::_tcsstr(::GetCommandLine(), _T("--calling")) != NULL);
-        if (bCalling)
-        {
-            m_rdDlg.OpenCalling(ctx.m_hHost, _T("林知夏"), 700002);
-        }
-        else
-        {
-            m_rdDlg.OpenAuth(ctx.m_hHost, _T("林知夏"), std::string("mock-rd-session"), 700002);
-        }
         return kDebugEntryHandled;
     }
     // 调试入口：命令行带 --imageviewer 时跳过登录，直接弹出新版聊天图片放大
@@ -632,160 +703,11 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
         m_imageViewerWindow.CreateAndShow(ctx.m_hHost);
         return kDebugEntryHandled;
     }
-    // 调试入口：命令行带 --rdpselftest 时跳过登录，直接弹出远程桌面引擎自环
-    // 测试窗口（抓本机屏→编码→解码→绘制），便于开发期目视确认引擎闭环出画面。
-    if (::_tcsstr(::GetCommandLine(), _T("--rdpselftest")) != NULL)
+    // 调试入口：命令行带 --codesnippet 时跳过登录，直接弹出代码片段效果演示窗：左边粘贴代码，右边按聊天窗的
+    // 样式对照「作为普通文字发送」与「作为代码片段发送」两种效果。关闭窗口即请求退出进程。
+    if (::_tcsstr(::GetCommandLine(), _T("--codesnippet")) != NULL)
     {
-        m_rdSelfTestWindow.CreateAndShow(ctx.m_hHost);
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --rdrelayselftest 时跳过登录，进程内开两条 relay 连接连
-    // imgserver 中转端口(20003)，互发字节验证「连接→握手→双向透传」整条中转通路。
-    // 需 imgserver 在跑、且其 relaytokenkey 为 flamingo-relay-token-secret（见 imgserver.conf）。
-    if (::_tcsstr(::GetCommandLine(), _T("--rdrelayselftest")) != NULL)
-    {
-        bool selfTestOk = false;
-        std::string report = remotedesktop::RunRdRelaySelfTest(
-            "127.0.0.1", 20003, "flamingo-relay-token-secret", selfTestOk);
-        CString text(CA2W(report.c_str(), CP_UTF8));
-        ::MessageBox(ctx.m_hHost, text, _T("远程桌面中转自环自测"),
-                     MB_OK | (selfTestOk ? MB_ICONINFORMATION : MB_ICONWARNING));
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --callrelayselftest 时跳过登录，进程内开两条 relay 连接（主叫 /
-    // 被叫，同 sessionid 相反 role）连 imgserver 中转端口(20003)，双向互发测试帧验证
-    // 「连接→握手→透传」整条通话中转通路。需 imgserver 在跑、且其 relaytokenkey 为
-    // flamingo-relay-token-secret（见 imgserver.conf）。
-    if (::_tcsstr(::GetCommandLine(), _T("--callrelayselftest")) != NULL)
-    {
-        bool selfTestOk = false;
-        std::string report = call::RunCallRelaySelfTest(
-            "127.0.0.1", 20003, "flamingo-relay-token-secret", selfTestOk);
-        CString text(CA2W(report.c_str(), CP_UTF8));
-        ::MessageBox(ctx.m_hHost, text, _T("通话中转自环自测"),
-                     MB_OK | (selfTestOk ? MB_ICONINFORMATION : MB_ICONWARNING));
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --callaudioloop 时跳过登录，做本地音频回环自测：WASAPI 麦克风采集
-    // → Opus 编码 → 解码 → WASAPI 扬声器播放（对着麦克风说话应能听到自己）。弹框运行期间
-    // 回环持续运行，点确定停止。需默认麦克风/扬声器可用且采集率为 Opus 支持率（常 48kHz）。
-    if (::_tcsstr(::GetCommandLine(), _T("--callaudioloop")) != NULL)
-    {
-        call::RunAudioLoopbackDebug();
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --camerapreview 时跳过登录，打开默认摄像头，把采集到的画面实时
-    // 显示在预览窗口里（验证 MF 摄像头采集 + NV12→BGRA 显示这层）。关窗即停。需有摄像头。
-    if (::_tcsstr(::GetCommandLine(), _T("--camerapreview")) != NULL)
-    {
-        call::RunCameraPreviewDebug();
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --cameratest 时跳过登录，运行自包含的摄像头显示测试——全程打日志到
-    // E:\flamingo\cameratest.log，逐步定位「摄像头数据显示不出来」卡在哪一步（初始化/枚举/打开/
-    // 协商/取帧/绘制）。弹窗显示画面，关窗弹统计框。
-    if (::_tcsstr(::GetCommandLine(), _T("--cameratest")) != NULL)
-    {
-        call::RunCameraDisplayTest();
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --h264selftest 时跳过登录，做 H.264 编解码自测：合成 NV12 灰度
-    // 渐变 → MF H.264 编码 → 解码 → 首帧落 BMP（E:\flamingo\h264_selftest_decoded.bmp）。
-    // 不需要摄像头，验证 MF H.264 编解码 round-trip。
-    if (::_tcsstr(::GetCommandLine(), _T("--h264selftest")) != NULL)
-    {
-        call::RunH264SelfTest();
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --videoloop 时跳过登录，做本地视频回环：摄像头采集 → H.264 编码 →
-    // 回灌解码 → 首个解码帧落 BMP（E:\flamingo\videoloop_decoded.bmp），验证整条视频管线。
-    if (::_tcsstr(::GetCommandLine(), _T("--videoloop")) != NULL)
-    {
-        call::RunVideoLoopbackDebug();
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --callvideoui 时跳过登录，以"视频通话中"形态打开通话窗，并用本机
-    // 摄像头回环填充画面（本地预览=原始采集，远端区=自采→编码→解码后的画面），便于单机目检
-    // 通话窗的视频布局与画面渲染（无需服务器 / 第二台机器）。关窗即停。
-    if (::_tcsstr(::GetCommandLine(), _T("--callvideoui")) != NULL)
-    {
-        call::RunCallVideoUiDebug();
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --rdbar 时跳过登录，直接在屏幕顶部弹出被控端受控提示条，
-    // 便于开发期目视核对其外观 / 布局 / 结束按钮（点"结束控制"会关掉提示条）。
-    if (::_tcsstr(::GetCommandLine(), _T("--rdbar")) != NULL)
-    {
-        m_rdControlledBar.Show(L"张三", ctx.m_hHost);
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --rdtoolbar 时跳过登录，直接在主显示器顶部弹出控制端全屏
-    // 工具条，便于目视核对其外观 / 布局 / 两个按钮（实际运行时它只在观看窗全屏态出现）。
-    if (::_tcsstr(::GetCommandLine(), _T("--rdtoolbar")) != NULL)
-    {
-        //调试期单弹一个工具条实例看外观；用静态对象使其在函数返回后仍存活。命令消息传
-        //WM_NULL（点了按钮也只是给本窗口投递一条无副作用的空消息）。
-        static CRdViewerToolbar s_dbgToolbar;
-        HMONITOR mon = ::MonitorFromWindow(ctx.m_hHost, MONITOR_DEFAULTTOPRIMARY);
-        s_dbgToolbar.ShowOnMonitor(mon, ctx.m_hHost, WM_NULL);
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --dxgicap 时跳过登录，用 DXGI Desktop Duplication 抓一帧屏幕
-    // 存成 exe 同目录的 dxgicap.bmp，弹框报结果。用于在本机显卡上验证 DuplicateOutput
-    // 能否跑通（不同显卡 / 虚拟机 / RDP 下行为差异大，先探路）。
-    if (::_tcsstr(::GetCommandLine(), _T("--dxgicap")) != NULL)
-    {
-        wchar_t path[MAX_PATH] = { 0 };
-        ::GetModuleFileNameW(NULL, path, MAX_PATH);
-        wchar_t* slash = wcsrchr(path, L'\\');
-        if (slash != NULL)
-            wcscpy(slash + 1, L"dxgicap.bmp");
-        else
-            wcscpy(path, L"dxgicap.bmp");
-
-        std::wstring msg;
-        bool ok = remotedesktop::CDxgiScreenCapturer::DebugCaptureToBmp(path, msg);
-        ::MessageBoxW(ctx.m_hHost, msg.c_str(), L"DXGI 抓屏自测",
-                      MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --dxgipipegdi 时强制走 GDI 降级后端跑同一闭环，存 dxgipipegdi.bmp，
-    // 用于本地验证 GDI 抓取（增量3 写的降级后端，此前只跑过 DXGI 主路径）出图正确。
-    // 须在 --dxgipipe 之前判断（--dxgipipegdi 含 "--dxgipipe" 子串）。
-    if (::_tcsstr(::GetCommandLine(), _T("--dxgipipegdi")) != NULL)
-    {
-        wchar_t path[MAX_PATH] = { 0 };
-        ::GetModuleFileNameW(NULL, path, MAX_PATH);
-        wchar_t* slash = wcsrchr(path, L'\\');
-        if (slash != NULL)
-            wcscpy(slash + 1, L"dxgipipegdi.bmp");
-        else
-            wcscpy(path, L"dxgipipegdi.bmp");
-
-        std::wstring msg;
-        bool ok = remotedesktop::RdScreenCapturer::DebugPipelineToBmp(path, msg, true);   // 强制 GDI 后端
-        ::MessageBoxW(ctx.m_hHost, msg.c_str(), L"GDI 降级抓屏链路闭环自测",
-                      MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
-        return kDebugEntryHandled;
-    }
-    // 调试入口：命令行带 --dxgipipe 时跳过登录，本地走通整条抓屏链路（DXGI/GDI 抓 →
-    // 16 位编码 → DIFF → 解码 → 绘制）并把还原画面存成 exe 同目录的 dxgipipe.bmp，
-    // 不连服务器即可肉眼确认编码链路出图正确（方向 / 颜色 / 光标）。后端走 DXGI 还是
-    // 降级 GDI 看客户端日志。
-    if (::_tcsstr(::GetCommandLine(), _T("--dxgipipe")) != NULL)
-    {
-        wchar_t path[MAX_PATH] = { 0 };
-        ::GetModuleFileNameW(NULL, path, MAX_PATH);
-        wchar_t* slash = wcsrchr(path, L'\\');
-        if (slash != NULL)
-            wcscpy(slash + 1, L"dxgipipe.bmp");
-        else
-            wcscpy(path, L"dxgipipe.bmp");
-
-        std::wstring msg;
-        bool ok = remotedesktop::RdScreenCapturer::DebugPipelineToBmp(path, msg);
-        ::MessageBoxW(ctx.m_hHost, msg.c_str(), L"DXGI 抓屏链路闭环自测",
-                      MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
+        m_codeSnippetDemo.CreateAndShow(ctx.m_hHost);
         return kDebugEntryHandled;
     }
 #else

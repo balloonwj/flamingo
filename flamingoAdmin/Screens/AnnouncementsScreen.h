@@ -24,6 +24,8 @@ namespace balloonwjui { class DuiButton; }   // FlatButton 已迁到 balloonwjui
 
 namespace flamingoadmin {
 
+namespace ui { class PagerBar; }
+
 class OverlayScrollbar;             // 公告列表 / 预览区的悬浮滚动条子控件
 class AnnouncementPreviewPanel;     // 右栏「公告详情」面板(取代原 PaintPreview 自绘)
 
@@ -68,9 +70,9 @@ private:
     const Announcement* Selected() const;
     void PaintList   (HDC hdc, const RECT& rc);
 
-    // 画左侧列表底部的分页条(上一页 / 第 X / Y 页 / 下一页),并登记翻页命中区。
-    //   rc：分页条矩形;total：当前筛选下公告总数;pageSize：每页条数。
-    void PaintPager  (HDC hdc, const RECT& rc, int total, int pageSize);
+    // 左侧列表底部分页条的翻页回调：切到目标页并重绘（与滚轮翻页相同）。
+    //   user：本界面指针；newPage：目标页码，从 1 起。
+    static void OnListPageThunk(void* user, int newPage);
 
     // 收集当前筛选(m_filter)下的公告,按 DataStore 顺序。返回总数;out 非空时
     // 顺带填充指针(指向 DataStore vector 元素,仅在本次同步调用内有效)。
@@ -119,6 +121,10 @@ private:
 
     // 左侧公告列表的悬浮滚动条（auto-hide 悬浮式子控件，见 Widgets/OverlayScrollbar）。
     OverlayScrollbar* m_listSb = nullptr;
+
+    // 左侧公告列表底部的分页条（子控件，与企业列表、审计页共用 ui::PagerBar）；生命周期由
+    // m_children 持有。PaintList 每次绘制时按当前筛选与每页条数刷新它的页码。
+    ui::PagerBar* m_listPager = nullptr;
 
     // 右栏「公告详情」面板(子控件,所有权在 m_children)。Layout 时按 -m_previewScroll
     // 偏移到 m_previewRc 内;高度从 GetDesiredSize().cy 取,用于算滚动条 metrics。

@@ -94,6 +94,38 @@ static bool getNonNegativeInt64(const Json::Value& root, const char* key, int64_
     return out >= 0;
 }
 
+//取出可选的链路路径字段：缺省按 0（没有走 P2P）处理并返回 true；存在时必须是 0~3 的整数
+static bool getOptionalLinkPath(const Json::Value& root, int& out)
+{
+    if (!getOptionalInt(root, "linkpath", out))
+        return false;
+    return out >= kFolderLinkPathNone && out <= kFolderLinkPathMax;
+}
+
+//取出可选的 MD5 字段：缺省为空并返回 true；存在时必须是 32 位十六进制字符串，统一转成小写
+static bool getOptionalMd5(const Json::Value& root, std::string& out)
+{
+    out.clear();
+    if (!root.isMember("md5"))
+        return true;
+    if (!root["md5"].isString())
+        return false;
+    std::string v = root["md5"].asString();
+    if (v.size() != kFolderMd5HexLength)
+        return false;
+    for (size_t i = 0; i < v.size(); ++i)
+    {
+        char c = v[i];
+        if (c >= 'A' && c <= 'F')
+            c = static_cast<char>(c - 'A' + 'a');
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            return false;
+        v[i] = c;
+    }
+    out = v;
+    return true;
+}
+
 bool FolderTransferProtocol::parseInviteRequest(const std::string& json, FolderInviteRequest& req)
 {
     Json::Value root;
@@ -115,6 +147,16 @@ bool FolderTransferProtocol::parseInviteRequest(const std::string& json, FolderI
     if (!getNonNegativeInt64(root, "totalfiles", req.totalfiles))
         return false;
     if (!getNonNegativeInt64(root, "totalsize", req.totalsize))
+        return false;
+
+    //传输种类可缺省（2026-10-04 之前的客户端不带，按文件夹传输）；存在时只认 0 / 1
+    if (!getOptionalInt(root, "kind", req.kind))
+        return false;
+    if (req.kind != folder_kind_folder && req.kind != folder_kind_file)
+        return false;
+
+    //单文件直传：恰好一个文件、没有目录；否则接收端按单个文件落地时对不上
+    if (req.kind == folder_kind_file && (req.totaldirs != 0 || req.totalfiles != 1))
         return false;
 
     return true;
@@ -187,6 +229,12 @@ bool FolderTransferProtocol::parseCloseRequest(const std::string& json, FolderCl
     if (!getOptionalString(root, "errmsg", req.errmsg))
         return false;
 
+    //链路路径与 MD5（2026-10-04 起）都可缺省，存在时须合法
+    if (!getOptionalLinkPath(root, req.linkpath))
+        return false;
+    if (!getOptionalMd5(root, req.md5))
+        return false;
+
     return true;
 }
 
@@ -231,6 +279,9 @@ std::string FolderTransferProtocol::buildInviteNotify(const std::string& session
     root["totaldirs"]  = static_cast<Json::Int64>(req.totaldirs);
     root["totalfiles"] = static_cast<Json::Int64>(req.totalfiles);
     root["totalsize"]  = static_cast<Json::Int64>(req.totalsize);
+    //只有单文件直传才写 kind：文件夹传输的推送与 2026-10-04 之前逐字相同
+    if (req.kind == folder_kind_file)
+        root["kind"] = folder_kind_file;
     return writeCompact(root);
 }
 
@@ -271,7 +322,8 @@ std::string FolderTransferProtocol::buildStateNotify(const std::string& sessioni
 
 std::string FolderTransferProtocol::buildRelayInfo(const std::string& sessionid, int role,
                                                    const std::string& relayip, int relayport,
-                                                   const std::string& token, int lanes)
+                                                   const std::string& token, int lanes,
+                                                   const std::string& p2pSessionId)
 {
     Json::Value root;
     root["sessionid"] = sessionid;
@@ -283,6 +335,9 @@ std::string FolderTransferProtocol::buildRelayInfo(const std::string& sessionid,
     root["token"]     = token;
     //数据通道条数，不含 lane 0 那条控制通道
     root["lanes"]     = lanes;
+    //P2P 会话号：只在为本次传输建了 P2P 会话时带上，老客户端不认识这个字段，照旧走中转
+    if (!p2pSessionId.empty())
+        root["p2psessionid"] = p2pSessionId;
     return writeCompact(root);
 }
 
@@ -303,6 +358,10 @@ std::string FolderTransferProtocol::buildRecordContent(const FolderTransferRecor
         root["errcode"] = rec.errcode;
     else
         root["errcode"] = 0;
+
+    //链路路径只在走过 P2P 时写（2026-10-04 起），客户端据此在历史里显示「P2P」徽章
+    if (rec.linkpath > kFolderLinkPathNone)
+        root["linkpath"] = rec.linkpath;
 
     return writeCompact(root);
 }
@@ -331,9 +390,9 @@ bool FolderTransferProtocol::parseRecordContent(const std::string& json, FolderT
     if (!getRequiredInt(root, "result", rec.result))
         return false;
 
-    //记录条只在会话走到终态时产生，故 result 必须是终态值；响铃中 / 传输中这两个
-    //过程态出现在这里即说明记录是伪造的或写坏了
-    if (!isTerminalState(rec.result))
+    //记录条只在会话走到终态时产生，故 result 必须是文件夹传输的终态值（3~8）；响铃中 / 传输中这两个
+    //过程态出现在这里即说明记录是伪造的或写坏了。「已改为离线发送」(9) 只属于单文件直传，也不会出现在文件夹记录里
+    if (rec.result < folder_state_rejected || rec.result > folder_state_completed)
         return false;
 
     //errcode 可缺省（按 0 处理），存在时必须是整数
@@ -354,7 +413,8 @@ bool FolderTransferProtocol::parseRecordContent(const std::string& json, FolderT
             return false;
     }
 
-    return true;
+    //链路路径可缺省（2026-10-04 之前的记录没有），存在时须合法
+    return getOptionalLinkPath(root, rec.linkpath);
 }
 
 std::string FolderTransferProtocol::buildRecordClientMsgId(const std::string& sessionid,
@@ -367,19 +427,96 @@ std::string FolderTransferProtocol::buildRecordClientMsgId(const std::string& se
 
 bool FolderTransferProtocol::isTerminalState(int state)
 {
-    //enum folder_transfer_state 取值连续，3~8 这一段全是终态：
-    //已拒绝 / 已取消 / 对方离线 / 已超时 / 已失败 / 已完成
-    return state >= folder_state_rejected && state <= folder_state_completed;
+    //enum folder_transfer_state 取值连续，3~9 这一段全是终态：
+    //已拒绝 / 已取消 / 对方离线 / 已超时 / 已失败 / 已完成 / 已改为离线发送
+    return state >= folder_state_rejected && state <= folder_state_to_offline;
 }
 
 bool FolderTransferProtocol::isValidState(int state)
 {
-    //enum folder_transfer_state 取值连续（1~8），按上下界判定即可
-    return state >= folder_state_ringing && state <= folder_state_completed;
+    //enum folder_transfer_state 取值连续（1~9），按上下界判定即可
+    return state >= folder_state_ringing && state <= folder_state_to_offline;
 }
 
 bool FolderTransferProtocol::isValidErrorCode(int errcode)
 {
-    //error_code_folder_* 这组码取值连续（606~620），按上下界判定即可
-    return errcode >= error_code_folder_rejected && errcode <= error_code_folder_busy;
+    //error_code_folder_* 这组码 606~620 连续，按上下界判定；621 已被敏感词占用，单文件直传的 622 单独判
+    return (errcode >= error_code_folder_rejected && errcode <= error_code_folder_busy)
+        || errcode == error_code_folder_direct_unavailable;
+}
+
+//==== 2026-10-04 单文件直传与链路路径 ====
+
+bool FolderTransferProtocol::parseCancelRequest(const std::string& json, std::string& sessionid, int& tooffline)
+{
+    tooffline = 0;
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    //缺会话 id 视为非法
+    if (!getRequiredString(root, "sessionid", sessionid))
+        return false;
+
+    //tooffline 可缺省（普通撤回），存在时只认 0 / 1
+    if (!getOptionalInt(root, "tooffline", tooffline))
+        return false;
+    return tooffline == 0 || tooffline == 1;
+}
+
+std::string FolderTransferProtocol::buildDirectFileContent(const DirectFileRecord& rec)
+{
+    Json::Value root;
+    //与普通文件消息同名的三项：客户端照常按文件气泡渲染
+    root["filename"] = rec.filename;
+    root["filesize"] = static_cast<Json::Int64>(rec.filesize);
+    if (!rec.md5.empty())
+        root["md5"] = rec.md5;
+    //直传标记与会话 id：客户端据前者知道服务器上没有这个文件，据后者接管聊天窗里那条实时气泡
+    root["direct"]    = 1;
+    root["sessionid"] = rec.sessionid;
+    root["result"]    = rec.result;
+    if (rec.linkpath > kFolderLinkPathNone)
+        root["linkpath"] = rec.linkpath;
+    return writeCompact(root);
+}
+
+bool FolderTransferProtocol::parseDirectFileContent(const std::string& json, DirectFileRecord& rec)
+{
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    //没有 direct=1 的是普通离线文件消息，不归本函数解析
+    int direct = 0;
+    if (!getOptionalInt(root, "direct", direct) || direct != 1)
+        return false;
+
+    if (!getRequiredString(root, "sessionid", rec.sessionid))
+        return false;
+    if (!getRequiredString(root, "filename", rec.filename))
+        return false;
+    if (!getNonNegativeInt64(root, "filesize", rec.filesize))
+        return false;
+    if (!getRequiredInt(root, "result", rec.result))
+        return false;
+
+    //直传只在完成与拒绝两种结局留下文件消息（见 shouldWriteRecord）
+    if (rec.result != folder_state_completed && rec.result != folder_state_rejected)
+        return false;
+
+    if (!getOptionalMd5(root, rec.md5))
+        return false;
+    return getOptionalLinkPath(root, rec.linkpath);
+}
+
+bool FolderTransferProtocol::shouldWriteRecord(int kind, int state)
+{
+    //单文件直传：完成与拒绝各留一条文件消息；其余终态之后发送端要么续传、要么改走上传服务器，
+    //随后的离线文件消息或最终结局代替它，不留中间状态
+    if (kind == folder_kind_file)
+        return state == folder_state_completed || state == folder_state_rejected;
+
+    //文件夹传输：每个终态都留一条记录（状态 9 只属于单文件直传，不会出现在文件夹传输里）
+    return state >= folder_state_rejected && state <= folder_state_completed;
 }

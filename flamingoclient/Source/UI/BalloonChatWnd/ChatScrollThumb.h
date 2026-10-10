@@ -68,9 +68,11 @@ bool HitChatScrollBand(POINT pt, const RECT& thumb, const RECT& view);
 
 /**
  *  画滑块：半透明灰色、两端为半圆的竖条。
- *    g：    目标 Graphics；调用方应已开启抗锯齿。
- *    thumb：滑块矩形；为空时不画。
+ *    g：      目标 Graphics；调用方应已开启抗锯齿。
+ *    thumb：  滑块矩形；为空时不画。
+ *    opacity：淡入淡出的不透明度 0～1（2026-10-04 起，取自 CChatScrollFade::Alpha），乘在滑块自身的半透明度上；
+ *             不大于 0 时不画。默认 1。
  */
-void PaintChatScrollThumb(Gdiplus::Graphics& g, const RECT& thumb);
+void PaintChatScrollThumb(Gdiplus::Graphics& g, const RECT& thumb, float opacity = 1.0f);
 
 } // namespace balloonchatwnd

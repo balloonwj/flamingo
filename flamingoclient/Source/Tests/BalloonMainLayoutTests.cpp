@@ -7,6 +7,7 @@
  *
  *  覆盖用例（与需求确认一致）：
  *    M1-M6  主面板布局契约
+ *    M10    搜索框是带放大镜与清除叉号的 DuiSearchBox，文字非空时才出现叉号
  *    C1     CtrlId enum 自洽
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
@@ -27,6 +28,7 @@
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"                    // DispatchMouseWheel（滚轮派发入口）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSearchBox.h"   // M10
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
@@ -81,6 +83,22 @@ TEST_CASE("M2 主面板含搜索框", "[p1a][main]")
     DuiControl* search = root->FindCtrlById(kIdSearchBox);
     REQUIRE(search != nullptr);
     CHECK(dynamic_cast<DuiEdit*>(search) != nullptr);
+}
+
+TEST_CASE("M10 搜索框带放大镜，文字非空时才出现清除叉号", "[p1a][main][globalsearch]")
+{
+    auto root = BuildMainPanelBody();
+    REQUIRE(root != nullptr);
+    DuiSearchBox* sb = dynamic_cast<DuiSearchBox*>(root->FindCtrlById(kIdSearchBox));
+    REQUIRE(sb != nullptr);
+    //左侧放大镜
+    CHECK(sb->GetGlyphStripWidth() > 0);
+    //空时没有叉号，有字时出现，清空后消失
+    CHECK_FALSE(sb->IsClearShowing());
+    sb->SetText(_T("设计稿"));
+    CHECK(sb->IsClearShowing());
+    sb->SetText(_T(""));
+    CHECK_FALSE(sb->IsClearShowing());
 }
 
 TEST_CASE("M3 主面板含消息 / 联系人 / 群三个 Tab 按钮", "[p1a][main]")

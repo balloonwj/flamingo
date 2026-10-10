@@ -27,6 +27,7 @@
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY
 #include "ChatCleanFlow.h"    // 成员需完整类型
 #include "ChatCleanRange.h"   // LocalMinute
+#include "../BalloonMain/TitleBarIcon.h"   // m_programIcons：标题栏与任务栏的程序图标
 
 /**
  *  CBalloonChatCleanDlg —— 清理聊天记录对话框（非模态浮窗，owner = 系统设置窗）。
@@ -112,4 +113,6 @@ private:
     HWND                          m_ownerHwnd;  // 宿主（系统设置窗）句柄，仅作语义留存
     balloonsettings::ChatCleanFlow m_flow;      // 流程状态；每次新建窗口时 Reset
     bool                          m_timerOn;    // 等应答的超时定时器是否在跑；关窗与收到应答时停掉
+    // 标题栏左侧与任务栏的程序图标（2026-10-07 起，开发约定文档 UI 约定第 10 条），随本对象释放，关窗再开时复用
+    balloonmain::ProgramWindowIcons m_programIcons;
 };

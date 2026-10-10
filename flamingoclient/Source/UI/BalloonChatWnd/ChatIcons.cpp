@@ -18,6 +18,7 @@
 #pragma comment(lib, "gdiplus.lib")
 
 #include "ChatIcons.h"
+#include "ChatMarkdownIcons.h"   // DrawMarkdownChatIcon：Markdown 开关与格式条的图标
 
 namespace balloonchatwnd {
 
@@ -31,6 +32,21 @@ void MakeStrokePen(Gdiplus::Pen& pen)
     pen.SetStartCap(Gdiplus::LineCapRound);
     pen.SetEndCap(Gdiplus::LineCapRound);
     pen.SetLineJoin(Gdiplus::LineJoinRound);
+}
+
+// 描边一个圆角矩形（viewBox 坐标）。
+//   left / top / right / bottom：矩形四边；radius：圆角半径，须不大于宽、高的一半。
+void DrawRoundBox(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::REAL left, Gdiplus::REAL top,
+                  Gdiplus::REAL right, Gdiplus::REAL bottom, Gdiplus::REAL radius)
+{
+    const Gdiplus::REAL d = radius * 2.0f;
+    Gdiplus::GraphicsPath path;
+    path.AddArc(left, top, d, d, 180.0f, 90.0f);
+    path.AddArc(right - d, top, d, d, 270.0f, 90.0f);
+    path.AddArc(right - d, bottom - d, d, d, 0.0f, 90.0f);
+    path.AddArc(left, bottom - d, d, d, 90.0f, 90.0f);
+    path.CloseFigure();
+    g.DrawPath(&pen, &path);
 }
 
 } // anonymous namespace
@@ -204,6 +220,23 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
         }
         break;
 
+    case kChatIconClear:
+        // 扫帚：竖直手柄 + 一道扎绳 + 下宽上窄的梯形刷头，刷头里三条刷毛线向下散开。
+        {
+            g.DrawLine(&pen, 12.0f, 3.0f, 12.0f, 11.0f);   // 手柄
+            g.DrawLine(&pen, 8.5f, 11.0f, 15.5f, 11.0f);   // 扎绳
+            Gdiplus::GraphicsPath head;
+            head.AddLine(8.5f, 11.0f, 15.5f, 11.0f);
+            head.AddLine(15.5f, 11.0f, 18.0f, 20.0f);
+            head.AddLine(18.0f, 20.0f, 6.0f, 20.0f);
+            head.CloseFigure();
+            g.DrawPath(&pen, &head);
+            g.DrawLine(&pen, 10.0f, 14.0f, 9.2f, 20.0f);    // 左刷毛
+            g.DrawLine(&pen, 12.0f, 14.0f, 12.0f, 20.0f);   // 中刷毛
+            g.DrawLine(&pen, 14.0f, 14.0f, 14.8f, 20.0f);   // 右刷毛
+        }
+        break;
+
     case kChatIconFolder:
         // 发送文件夹：文件夹外框（带左上页签）+ 夹内一支向上的箭头。
         // 箭头两翼开口取得比常规箭头大（左右各 3.6、下探 2.9），是为了在按钮实际
@@ -233,6 +266,40 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
             head.AddLine(kArrowCx - kArrowWingDx, kArrowTip + kArrowWingDy, kArrowCx, kArrowTip);
             head.AddLine(kArrowCx, kArrowTip, kArrowCx + kArrowWingDx, kArrowTip + kArrowWingDy);
             g.DrawPath(&pen, &head);
+        }
+        break;
+
+    case kChatIconRelay:
+        // 群接龙：写字板外框 + 顶部夹子，板内三行「实心圆点 + 横线」表示一条条接龙。
+        {
+            const Gdiplus::REAL kBoardLeft   = 5.0f;    // 写字板左边 x
+            const Gdiplus::REAL kBoardRight  = 19.0f;   // 写字板右边 x
+            const Gdiplus::REAL kBoardTop    = 4.5f;    // 写字板顶边 y
+            const Gdiplus::REAL kBoardBottom = 21.0f;   // 写字板底边 y
+            const Gdiplus::REAL kClipLeft    = 9.0f;    // 夹子左边 x
+            const Gdiplus::REAL kClipRight   = 15.0f;   // 夹子右边 x
+            const Gdiplus::REAL kClipTop     = 2.5f;    // 夹子顶边 y
+            const Gdiplus::REAL kClipBottom  = 6.5f;    // 夹子底边 y
+            const Gdiplus::REAL kDotX        = 7.6f;    // 条目圆点左上角 x
+            const Gdiplus::REAL kDotSize     = 2.2f;    // 条目圆点直径
+            const Gdiplus::REAL kLineLeft    = 11.0f;   // 条目横线左端 x
+            const Gdiplus::REAL kLineRight   = 16.5f;   // 条目横线右端 x
+            const Gdiplus::REAL kRowY[]      = { 10.5f, 14.0f, 17.5f };   // 三行条目的中线 y
+
+            Gdiplus::GraphicsPath board;
+            board.AddLine(kClipLeft, kBoardTop, kBoardLeft, kBoardTop);
+            board.AddLine(kBoardLeft, kBoardTop, kBoardLeft, kBoardBottom);
+            board.AddLine(kBoardLeft, kBoardBottom, kBoardRight, kBoardBottom);
+            board.AddLine(kBoardRight, kBoardBottom, kBoardRight, kBoardTop);
+            board.AddLine(kBoardRight, kBoardTop, kClipRight, kBoardTop);
+            g.DrawPath(&pen, &board);
+            g.DrawRectangle(&pen, kClipLeft, kClipTop, kClipRight - kClipLeft, kClipBottom - kClipTop);
+
+            for (size_t ri = 0; ri < sizeof(kRowY) / sizeof(kRowY[0]); ++ri)
+            {
+                g.FillEllipse(&brush, kDotX, kRowY[ri] - kDotSize / 2.0f, kDotSize, kDotSize);
+                g.DrawLine(&pen, kLineLeft, kRowY[ri], kLineRight, kRowY[ri]);
+            }
         }
         break;
 
@@ -380,6 +447,341 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
         }
         break;
 
+    case kChatIconShare:
+        // 文件共享：文件夹外框（与发送文件夹同一外形）+ 夹内三个圆点用两条线相连，是通用的「共享」符号。
+        {
+            const Gdiplus::REAL kFolderTop    = 9.6f;   // 夹体顶边 y
+            const Gdiplus::REAL kFolderBottom = 20.2f;  // 夹体底边 y
+            const Gdiplus::REAL kTabTop       = 6.8f;   // 左上页签顶边 y
+            const Gdiplus::REAL kDotR         = 1.5f;   // 三个圆点的半径
+            const Gdiplus::REAL kLeftX        = 8.6f;   // 左侧圆点圆心 x
+            const Gdiplus::REAL kRightX       = 15.6f;  // 右侧两个圆点圆心 x
+            const Gdiplus::REAL kMidY         = 15.0f;  // 左侧圆点圆心 y
+            const Gdiplus::REAL kUpperY       = 12.6f;  // 右上圆点圆心 y
+            const Gdiplus::REAL kLowerY       = 17.4f;  // 右下圆点圆心 y
+
+            Gdiplus::GraphicsPath folder;
+            folder.AddLine(3.0f, kFolderBottom, 3.0f, kTabTop);
+            folder.AddLine(3.0f, kTabTop, 9.0f, kTabTop);
+            folder.AddLine(9.0f, kTabTop, 11.3f, kFolderTop);
+            folder.AddLine(11.3f, kFolderTop, 21.0f, kFolderTop);
+            folder.AddLine(21.0f, kFolderTop, 21.0f, kFolderBottom);
+            folder.CloseFigure();
+            g.DrawPath(&pen, &folder);
+
+            Gdiplus::Pen thin(color, strokeWidth * 0.6f);
+            MakeStrokePen(thin);
+            g.DrawLine(&thin, kLeftX, kMidY, kRightX, kUpperY);
+            g.DrawLine(&thin, kLeftX, kMidY, kRightX, kLowerY);
+            g.FillEllipse(&brush, kLeftX - kDotR, kMidY - kDotR, kDotR * 2.0f, kDotR * 2.0f);
+            g.FillEllipse(&brush, kRightX - kDotR, kUpperY - kDotR, kDotR * 2.0f, kDotR * 2.0f);
+            g.FillEllipse(&brush, kRightX - kDotR, kLowerY - kDotR, kDotR * 2.0f, kDotR * 2.0f);
+        }
+        break;
+
+    case kChatIconScreenShare:
+        // 共享屏幕：与远程桌面相同的显示器外形（圆角屏幕 + 竖杆 + 底座），屏幕内画一个向上的箭头表示「把屏幕分享出去」，
+        // 与远程桌面（只有显示器）区分开。
+        {
+            const Gdiplus::REAL kArrowX      = 12.0f;   // 箭头竖线 x（屏幕水平中线）
+            const Gdiplus::REAL kArrowTop    = 7.0f;    // 箭头尖 y
+            const Gdiplus::REAL kArrowBottom = 12.5f;   // 箭头竖线底端 y
+            const Gdiplus::REAL kArrowWing   = 2.5f;    // 箭头两翼的水平与垂直跨度
+
+            Gdiplus::GraphicsPath screen;
+            screen.AddArc(3.0f, 4.0f, 4.0f, 4.0f, 180.0f, 90.0f);
+            screen.AddArc(17.0f, 4.0f, 4.0f, 4.0f, 270.0f, 90.0f);
+            screen.AddArc(17.0f, 11.0f, 4.0f, 4.0f, 0.0f, 90.0f);
+            screen.AddArc(3.0f, 11.0f, 4.0f, 4.0f, 90.0f, 90.0f);
+            screen.CloseFigure();
+            g.DrawPath(&pen, &screen);
+            g.DrawLine(&pen, 12.0f, 15.0f, 12.0f, 19.0f);
+            g.DrawLine(&pen, 8.0f, 19.0f, 16.0f, 19.0f);
+            g.DrawLine(&pen, kArrowX, kArrowTop, kArrowX, kArrowBottom);
+            g.DrawLine(&pen, kArrowX - kArrowWing, kArrowTop + kArrowWing, kArrowX, kArrowTop);
+            g.DrawLine(&pen, kArrowX + kArrowWing, kArrowTop + kArrowWing, kArrowX, kArrowTop);
+        }
+        break;
+
+    case kChatIconGroupInvite:
+        // 入群邀请：左侧一个人形（圆形的头 + 半圆弧的肩），右上角一个加号，即「把人加进来」的通用画法
+        {
+            const Gdiplus::REAL kHeadCX     = 9.5f;    // 头部圆心 x
+            const Gdiplus::REAL kHeadCY     = 8.0f;    // 头部圆心 y
+            const Gdiplus::REAL kHeadR      = 3.5f;    // 头部半径
+            const Gdiplus::REAL kShoulderX  = 3.0f;    // 肩部弧外接矩形左边 x
+            const Gdiplus::REAL kShoulderY  = 14.0f;   // 肩部弧外接矩形顶边 y
+            const Gdiplus::REAL kShoulderW  = 13.0f;   // 肩部弧外接矩形宽
+            const Gdiplus::REAL kShoulderH  = 12.0f;   // 肩部弧外接矩形高（只画上半段）
+            const Gdiplus::REAL kPlusCX     = 18.5f;   // 加号中心 x
+            const Gdiplus::REAL kPlusCY     = 8.0f;    // 加号中心 y
+            const Gdiplus::REAL kPlusHalf   = 2.8f;    // 加号半臂长
+            const Gdiplus::REAL kArcStart   = 180.0f;  // 肩部弧起始角（度），从左侧水平方向开始
+            const Gdiplus::REAL kArcSweep   = 180.0f;  // 肩部弧扫过的角度（度），画上半圆
+
+            g.DrawEllipse(&pen, kHeadCX - kHeadR, kHeadCY - kHeadR, kHeadR * 2.0f, kHeadR * 2.0f);
+            g.DrawArc(&pen, kShoulderX, kShoulderY, kShoulderW, kShoulderH, kArcStart, kArcSweep);
+            g.DrawLine(&pen, kPlusCX - kPlusHalf, kPlusCY, kPlusCX + kPlusHalf, kPlusCY);
+            g.DrawLine(&pen, kPlusCX, kPlusCY - kPlusHalf, kPlusCX, kPlusCY + kPlusHalf);
+        }
+        break;
+
+    case kChatIconVoiceWave1:
+    case kChatIconVoiceWave2:
+    case kChatIconVoiceWave3:
+        // 语音：左侧实心喇叭（方块 + 喇叭口），右侧 1~3 道同心圆弧表示声波；播放时按帧轮换道数
+        {
+            const Gdiplus::REAL kBoxLeft    = 3.0f;    // 喇叭方块左边 x
+            const Gdiplus::REAL kBoxTop     = 9.0f;    // 喇叭方块顶边 y
+            const Gdiplus::REAL kBoxRight   = 7.0f;    // 喇叭方块右边 x（喇叭口从这里开始）
+            const Gdiplus::REAL kBoxBottom  = 15.0f;   // 喇叭方块底边 y
+            const Gdiplus::REAL kHornRight  = 12.0f;   // 喇叭口右边 x
+            const Gdiplus::REAL kHornTop    = 4.5f;    // 喇叭口上沿 y
+            const Gdiplus::REAL kHornBottom = 19.5f;   // 喇叭口下沿 y
+            const Gdiplus::REAL kWaveCX     = 12.0f;   // 声波圆心 x
+            const Gdiplus::REAL kWaveCY     = 12.0f;   // 声波圆心 y
+            const Gdiplus::REAL kWaveR1     = 3.5f;    // 第 1 道声波半径
+            const Gdiplus::REAL kWaveStep   = 3.5f;    // 相邻两道声波的半径差
+            const Gdiplus::REAL kWaveStart  = -45.0f;  // 声波圆弧起始角（度）
+            const Gdiplus::REAL kWaveSweep  = 90.0f;   // 声波圆弧扫过的角度（度）
+
+            Gdiplus::PointF horn[6] = {
+                Gdiplus::PointF(kBoxLeft, kBoxTop), Gdiplus::PointF(kBoxRight, kBoxTop),
+                Gdiplus::PointF(kHornRight, kHornTop), Gdiplus::PointF(kHornRight, kHornBottom),
+                Gdiplus::PointF(kBoxRight, kBoxBottom), Gdiplus::PointF(kBoxLeft, kBoxBottom)
+            };
+            g.FillPolygon(&brush, horn, 6);
+            const int waves = (kind == kChatIconVoiceWave1) ? 1 : ((kind == kChatIconVoiceWave2) ? 2 : 3);
+            for (int i = 0; i < waves; ++i)
+            {
+                const Gdiplus::REAL r = kWaveR1 + kWaveStep * (Gdiplus::REAL)i;
+                g.DrawArc(&pen, kWaveCX - r, kWaveCY - r, r * 2.0f, r * 2.0f, kWaveStart, kWaveSweep);
+            }
+        }
+        break;
+
+    case kChatIconRecord:
+        // 屏幕录制：场记板。上方是带两道斜纹的打板，下方板身里一个实心圆点表示「录制」。2026-10-06 用户从两组候选里
+        // 选定（候选效果图在 tmp/rec_icon/），之前是「圆环 + 实心圆点」。与 MainPanelIcons.cpp 的 kIconRecord 同一造型，
+        // 两处的几何常量须保持一致（单元测试 RIC1 检查两者逐像素接近）。
+        {
+            const Gdiplus::REAL kLeft        = 3.5f;    // 打板与板身的左边 x
+            const Gdiplus::REAL kRight       = 20.5f;   // 打板与板身的右边 x
+            const Gdiplus::REAL kClapTop     = 5.5f;    // 打板顶边 y
+            const Gdiplus::REAL kBodyTop     = 10.0f;   // 板身顶边 y，也是打板的底边
+            const Gdiplus::REAL kBodyBottom  = 20.0f;   // 板身底边 y
+            const Gdiplus::REAL kCorner      = 1.5f;    // 板身圆角半径
+            const Gdiplus::REAL kStripe1X    = 9.5f;    // 第一道斜纹在打板顶边上的 x
+            const Gdiplus::REAL kStripe2X    = 15.5f;   // 第二道斜纹在打板顶边上的 x
+            const Gdiplus::REAL kStripeSlant = 2.5f;    // 斜纹从顶边到底边向左偏移的距离
+            const Gdiplus::REAL kDotX        = 12.0f;   // 圆点圆心 x
+            const Gdiplus::REAL kDotY        = 15.0f;   // 圆点圆心 y
+            const Gdiplus::REAL kDotR        = 2.2f;    // 圆点半径
+
+            const Gdiplus::REAL d = kCorner * 2.0f;
+            Gdiplus::GraphicsPath body;
+            body.AddArc(kLeft, kBodyTop, d, d, 180.0f, 90.0f);
+            body.AddArc(kRight - d, kBodyTop, d, d, 270.0f, 90.0f);
+            body.AddArc(kRight - d, kBodyBottom - d, d, d, 0.0f, 90.0f);
+            body.AddArc(kLeft, kBodyBottom - d, d, d, 90.0f, 90.0f);
+            body.CloseFigure();
+            g.DrawPath(&pen, &body);
+
+            // 打板：左边、顶边、右边三条线，底边与板身顶边共用
+            Gdiplus::GraphicsPath clapper;
+            clapper.AddLine(kLeft, kBodyTop, kLeft, kClapTop);
+            clapper.AddLine(kLeft, kClapTop, kRight, kClapTop);
+            clapper.AddLine(kRight, kClapTop, kRight, kBodyTop);
+            g.DrawPath(&pen, &clapper);
+            g.DrawLine(&pen, kStripe1X, kClapTop, kStripe1X - kStripeSlant, kBodyTop);
+            g.DrawLine(&pen, kStripe2X, kClapTop, kStripe2X - kStripeSlant, kBodyTop);
+
+            g.FillEllipse(&brush, kDotX - kDotR, kDotY - kDotR, kDotR * 2.0f, kDotR * 2.0f);
+        }
+        break;
+
+    case kChatIconDisk:
+        // 磁盘：横置的圆角矩形机身，下部一条分隔线，右下一个实心指示灯。
+        {
+            const Gdiplus::REAL kBodyLeft   = 3.0f;    // 机身左边 x
+            const Gdiplus::REAL kBodyTop    = 7.0f;    // 机身顶边 y
+            const Gdiplus::REAL kBodyW      = 18.0f;   // 机身宽
+            const Gdiplus::REAL kBodyH      = 11.0f;   // 机身高
+            const Gdiplus::REAL kCorner     = 2.5f;    // 圆角半径
+            const Gdiplus::REAL kSplitY     = 13.5f;   // 分隔线 y
+            const Gdiplus::REAL kLedX       = 17.0f;   // 指示灯圆心 x
+            const Gdiplus::REAL kLedY       = 15.8f;   // 指示灯圆心 y
+            const Gdiplus::REAL kLedR       = 1.1f;    // 指示灯半径
+
+            Gdiplus::GraphicsPath body;
+            const Gdiplus::REAL d = kCorner * 2.0f;
+            body.AddArc(kBodyLeft, kBodyTop, d, d, 180.0f, 90.0f);
+            body.AddArc(kBodyLeft + kBodyW - d, kBodyTop, d, d, 270.0f, 90.0f);
+            body.AddArc(kBodyLeft + kBodyW - d, kBodyTop + kBodyH - d, d, d, 0.0f, 90.0f);
+            body.AddArc(kBodyLeft, kBodyTop + kBodyH - d, d, d, 90.0f, 90.0f);
+            body.CloseFigure();
+            g.DrawPath(&pen, &body);
+            g.DrawLine(&pen, kBodyLeft, kSplitY, kBodyLeft + kBodyW, kSplitY);
+            g.FillEllipse(&brush, kLedX - kLedR, kLedY - kLedR, kLedR * 2.0f, kLedR * 2.0f);
+        }
+        break;
+
+    case kChatIconSubtitle:
+        // 字幕模式：圆角框表示画面，框内下部一短一长两行居中的横线表示字幕
+        {
+            Gdiplus::GraphicsPath frame;
+            frame.AddArc(3.0f, 5.0f, 4.0f, 4.0f, 180.0f, 90.0f);
+            frame.AddArc(17.0f, 5.0f, 4.0f, 4.0f, 270.0f, 90.0f);
+            frame.AddArc(17.0f, 15.0f, 4.0f, 4.0f, 0.0f, 90.0f);
+            frame.AddArc(3.0f, 15.0f, 4.0f, 4.0f, 90.0f, 90.0f);
+            frame.CloseFigure();
+            g.DrawPath(&pen, &frame);
+            g.DrawLine(&pen, 9.0f, 12.5f, 15.0f, 12.5f);   // 上一行（短）
+            g.DrawLine(&pen, 7.0f, 15.5f, 17.0f, 15.5f);   // 下一行（长）
+        }
+        break;
+
+    case kChatIconLock:
+    case kChatIconUnlock:
+        // 挂锁：圆角矩形锁身 + 中间的锁孔圆点 + 上方半圆锁梁。锁定时锁梁两腿都插进锁身；
+        // 解锁时整个锁梁抬高，左腿离开锁身（右腿仍连着），是「打开的锁」的通用画法
+        {
+            const Gdiplus::REAL kBodyTop    = 11.0f;   // 锁身顶边 y
+            const Gdiplus::REAL kBodyLeft   = 5.0f;    // 锁身左边 x
+            const Gdiplus::REAL kBodyW      = 14.0f;   // 锁身宽
+            const Gdiplus::REAL kBodyH      = 9.0f;    // 锁身高
+            const Gdiplus::REAL kBodyRadius = 2.0f;    // 锁身圆角半径
+            const Gdiplus::REAL kShackleR   = 4.0f;    // 锁梁半径
+            const Gdiplus::REAL kShackleCX  = 12.0f;   // 锁梁圆心 x
+            const Gdiplus::REAL kHoleR      = 1.3f;    // 锁孔圆点半径
+            const Gdiplus::REAL kHoleY      = 15.5f;   // 锁孔圆点圆心 y
+            const bool open = (kind == kChatIconUnlock);
+            const Gdiplus::REAL shackleCY = open ? 6.0f : 8.0f;   // 锁梁圆心 y：解锁时抬高 2
+            const Gdiplus::REAL leftLegBottom = open ? 8.0f : kBodyTop;   // 左腿下端：解锁时不碰锁身
+
+            Gdiplus::GraphicsPath body;
+            const Gdiplus::REAL d = kBodyRadius * 2.0f;
+            body.AddArc(kBodyLeft, kBodyTop, d, d, 180.0f, 90.0f);
+            body.AddArc(kBodyLeft + kBodyW - d, kBodyTop, d, d, 270.0f, 90.0f);
+            body.AddArc(kBodyLeft + kBodyW - d, kBodyTop + kBodyH - d, d, d, 0.0f, 90.0f);
+            body.AddArc(kBodyLeft, kBodyTop + kBodyH - d, d, d, 90.0f, 90.0f);
+            body.CloseFigure();
+            g.DrawPath(&pen, &body);
+            g.DrawArc(&pen, kShackleCX - kShackleR, shackleCY - kShackleR, kShackleR * 2.0f, kShackleR * 2.0f,
+                      180.0f, 180.0f);
+            g.DrawLine(&pen, kShackleCX - kShackleR, shackleCY, kShackleCX - kShackleR, leftLegBottom);
+            g.DrawLine(&pen, kShackleCX + kShackleR, shackleCY, kShackleCX + kShackleR, kBodyTop);
+            g.FillEllipse(&brush, kShackleCX - kHoleR, kHoleY - kHoleR, kHoleR * 2.0f, kHoleR * 2.0f);
+        }
+        break;
+
+    case kChatIconBackToChat:
+        // 回到聊天窗：右上角缺口的方框表示窗口，一支箭头从框内指向右上角，即「跳转到窗口」的通用画法
+        {
+            Gdiplus::GraphicsPath frame;
+            frame.AddLine(11.0f, 4.0f, 6.0f, 4.0f);
+            frame.AddArc(4.0f, 4.0f, 4.0f, 4.0f, 270.0f, -90.0f);
+            frame.AddLine(4.0f, 6.0f, 4.0f, 18.0f);
+            frame.AddArc(4.0f, 16.0f, 4.0f, 4.0f, 180.0f, -90.0f);
+            frame.AddLine(6.0f, 20.0f, 18.0f, 20.0f);
+            frame.AddArc(16.0f, 16.0f, 4.0f, 4.0f, 90.0f, -90.0f);
+            frame.AddLine(20.0f, 18.0f, 20.0f, 13.0f);
+            g.DrawPath(&pen, &frame);
+            g.DrawLine(&pen, 11.0f, 13.0f, 20.0f, 4.0f);   // 箭杆
+            g.DrawLine(&pen, 14.5f, 4.0f, 20.0f, 4.0f);    // 箭头上翼
+            g.DrawLine(&pen, 20.0f, 4.0f, 20.0f, 9.5f);    // 箭头右翼
+        }
+        break;
+
+    case kChatIconClose:
+        // 叉号：两条对角线
+        g.DrawLine(&pen, 6.0f, 6.0f, 18.0f, 18.0f);
+        g.DrawLine(&pen, 18.0f, 6.0f, 6.0f, 18.0f);
+        break;
+
+    case kChatIconAnnounce:
+        // 群公告：扩音器。左侧一个小方块作喇叭尾部，向右张开成喇叭口，喇叭口右端一条竖线封口，
+        // 方块下方斜出一截手柄，即「发通知」的通用画法
+        {
+            const Gdiplus::REAL kTailLeft   = 3.5f;    // 喇叭尾部方块左边 x
+            const Gdiplus::REAL kTailRight  = 8.0f;    // 喇叭尾部方块右边 x（喇叭口从这里开始张开）
+            const Gdiplus::REAL kTailTop    = 9.0f;    // 喇叭尾部方块顶边 y
+            const Gdiplus::REAL kTailBottom = 15.0f;   // 喇叭尾部方块底边 y
+            const Gdiplus::REAL kMouthX     = 19.5f;   // 喇叭口右端 x
+            const Gdiplus::REAL kMouthTop   = 4.0f;    // 喇叭口上沿 y
+            const Gdiplus::REAL kMouthBot   = 20.0f;   // 喇叭口下沿 y
+            const Gdiplus::REAL kHandleX0   = 6.0f;    // 手柄起点 x（尾部方块底边上）
+            const Gdiplus::REAL kHandleX1   = 8.0f;    // 手柄终点 x
+            const Gdiplus::REAL kHandleY1   = 20.0f;   // 手柄终点 y
+
+            Gdiplus::GraphicsPath horn;
+            horn.AddLine(kTailLeft, kTailTop, kTailRight, kTailTop);
+            horn.AddLine(kTailRight, kTailTop, kMouthX, kMouthTop);
+            horn.AddLine(kMouthX, kMouthTop, kMouthX, kMouthBot);
+            horn.AddLine(kMouthX, kMouthBot, kTailRight, kTailBottom);
+            horn.AddLine(kTailRight, kTailBottom, kTailLeft, kTailBottom);
+            horn.CloseFigure();
+            g.DrawPath(&pen, &horn);
+            g.DrawLine(&pen, kHandleX0, kTailBottom, kHandleX1, kHandleY1);
+        }
+        break;
+
+    case kChatIconMemo:
+        // 群备忘：日历。圆角外框，框内上部一条横线隔出表头，顶边上方两个挂环，格内一个对勾
+        {
+            const Gdiplus::REAL kBoxLeft    = 4.0f;    // 外框左边 x
+            const Gdiplus::REAL kBoxTop     = 6.0f;    // 外框顶边 y
+            const Gdiplus::REAL kBoxRight   = 20.0f;   // 外框右边 x
+            const Gdiplus::REAL kBoxBottom  = 20.0f;   // 外框底边 y
+            const Gdiplus::REAL kCorner     = 2.0f;    // 外框圆角直径
+            const Gdiplus::REAL kHeaderY    = 10.0f;   // 表头分隔线 y
+            const Gdiplus::REAL kRingLeftX  = 8.5f;    // 左挂环 x
+            const Gdiplus::REAL kRingRightX = 15.5f;   // 右挂环 x
+            const Gdiplus::REAL kRingTop    = 3.5f;    // 挂环上端 y
+            const Gdiplus::REAL kRingBottom = 8.0f;    // 挂环下端 y
+            const Gdiplus::REAL kTickX0     = 8.5f;    // 对勾起点 x
+            const Gdiplus::REAL kTickY0     = 15.0f;   // 对勾起点 y
+            const Gdiplus::REAL kTickX1     = 11.0f;   // 对勾拐点 x
+            const Gdiplus::REAL kTickY1     = 17.5f;   // 对勾拐点 y
+            const Gdiplus::REAL kTickX2     = 15.5f;   // 对勾终点 x
+            const Gdiplus::REAL kTickY2     = 12.5f;   // 对勾终点 y
+            const Gdiplus::REAL kArc90      = 90.0f;   // 圆角弧扫过的角度（度）
+
+            Gdiplus::GraphicsPath box;
+            box.AddArc(kBoxLeft, kBoxTop, kCorner, kCorner, 2.0f * kArc90, kArc90);
+            box.AddArc(kBoxRight - kCorner, kBoxTop, kCorner, kCorner, 3.0f * kArc90, kArc90);
+            box.AddArc(kBoxRight - kCorner, kBoxBottom - kCorner, kCorner, kCorner, 0.0f, kArc90);
+            box.AddArc(kBoxLeft, kBoxBottom - kCorner, kCorner, kCorner, kArc90, kArc90);
+            box.CloseFigure();
+            g.DrawPath(&pen, &box);
+            g.DrawLine(&pen, kBoxLeft, kHeaderY, kBoxRight, kHeaderY);
+            g.DrawLine(&pen, kRingLeftX, kRingTop, kRingLeftX, kRingBottom);
+            g.DrawLine(&pen, kRingRightX, kRingTop, kRingRightX, kRingBottom);
+            g.DrawLine(&pen, kTickX0, kTickY0, kTickX1, kTickY1);
+            g.DrawLine(&pen, kTickX1, kTickY1, kTickX2, kTickY2);
+        }
+        break;
+
+    case kChatIconCaret:
+        // 下拉箭头：图标中心一个尖朝下的实心小三角。按钮只有 14 像素宽，三角形只占 viewBox
+        // 中央 7×4 的范围，按钮宽度小于图标边长时也不会画出按钮之外
+        {
+            const Gdiplus::REAL kCaretLeft   = 8.5f;    // 三角形左上角 x
+            const Gdiplus::REAL kCaretRight  = 15.5f;   // 三角形右上角 x
+            const Gdiplus::REAL kCaretTop    = 10.5f;   // 三角形上边 y
+            const Gdiplus::REAL kCaretTipX   = 12.0f;   // 尖端 x（水平居中）
+            const Gdiplus::REAL kCaretTipY   = 14.5f;   // 尖端 y
+            Gdiplus::PointF tri[3] =
+            {
+                Gdiplus::PointF(kCaretLeft, kCaretTop),
+                Gdiplus::PointF(kCaretRight, kCaretTop),
+                Gdiplus::PointF(kCaretTipX, kCaretTipY),
+            };
+            Gdiplus::SolidBrush caretBrush(color);
+            g.FillPolygon(&caretBrush, tri, 3);
+        }
+        break;
+
     case kChatIconFont:
         // 字体设置 —— 一个大写字母「A」（两条斜腿 + 中横），文字 / 字体的通用
         // 形象。对照 design/聊天字体设置1.png toolbar 上的「AF」按钮。
@@ -388,7 +790,79 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
         g.DrawLine(&pen, 8.2f, 13.0f, 15.8f, 13.0f);   // 中横
         break;
 
+    case kChatIconCode:
+        // 发送代码 ——「</>」：左右两个尖括号夹一条斜线，代码的通用形象
+        g.DrawLine(&pen, 8.0f, 7.0f, 3.5f, 12.0f);     // 左尖括号上半
+        g.DrawLine(&pen, 3.5f, 12.0f, 8.0f, 17.0f);    // 左尖括号下半
+        g.DrawLine(&pen, 16.0f, 7.0f, 20.5f, 12.0f);   // 右尖括号上半
+        g.DrawLine(&pen, 20.5f, 12.0f, 16.0f, 17.0f);  // 右尖括号下半
+        g.DrawLine(&pen, 13.5f, 5.0f, 10.5f, 19.0f);   // 中间的斜线
+        break;
+
+    case kChatIconSystemAudio:
+        // 共享电脑声音：与远程桌面相同的显示器外形（圆角屏幕 + 竖杆 + 底座），屏幕内画一个八分音符（实心符头 + 符干 +
+        // 符尾），表示「把电脑播放的声音分享出去」，与共享屏幕（屏幕内向上的箭头）区分开
+        {
+            const Gdiplus::REAL kHeadCX   = 10.4f;   // 符头中心 x
+            const Gdiplus::REAL kHeadCY   = 11.6f;   // 符头中心 y
+            const Gdiplus::REAL kHeadRX   = 2.0f;    // 符头横向半径
+            const Gdiplus::REAL kHeadRY   = 1.5f;    // 符头纵向半径
+            const Gdiplus::REAL kStemX    = 12.2f;   // 符干 x（贴着符头右缘）
+            const Gdiplus::REAL kStemTop  = 6.5f;    // 符干顶端 y
+            const Gdiplus::REAL kFlagX    = 15.2f;   // 符尾末端 x
+            const Gdiplus::REAL kFlagY    = 8.6f;    // 符尾末端 y
+
+            Gdiplus::GraphicsPath screen;
+            screen.AddArc(3.0f, 4.0f, 4.0f, 4.0f, 180.0f, 90.0f);
+            screen.AddArc(17.0f, 4.0f, 4.0f, 4.0f, 270.0f, 90.0f);
+            screen.AddArc(17.0f, 11.0f, 4.0f, 4.0f, 0.0f, 90.0f);
+            screen.AddArc(3.0f, 11.0f, 4.0f, 4.0f, 90.0f, 90.0f);
+            screen.CloseFigure();
+            g.DrawPath(&pen, &screen);
+            g.DrawLine(&pen, 12.0f, 15.0f, 12.0f, 19.0f);
+            g.DrawLine(&pen, 8.0f, 19.0f, 16.0f, 19.0f);
+            g.FillEllipse(&brush, kHeadCX - kHeadRX, kHeadCY - kHeadRY, kHeadRX * 2.0f, kHeadRY * 2.0f);
+            g.DrawLine(&pen, kStemX, kHeadCY, kStemX, kStemTop);
+            g.DrawLine(&pen, kStemX, kStemTop, kFlagX, kFlagY);
+        }
+        break;
+
+    case kChatIconOrgTree:
+        // 组织架构图（「按部门」切换按钮）：上方一个框，竖线向下接到一条横线，横线两端各向下接一个框，
+        // 表示部门的上下级。几何与 2026-10-07 给用户看的候选样图 A 相同（tmp/icon_preview/member_view_icons.py）
+        {
+            const Gdiplus::REAL kBoxRadius   = 1.5f;    // 三个框的圆角半径
+            const Gdiplus::REAL kTopLeft     = 8.5f;    // 上方框左边 x
+            const Gdiplus::REAL kTopRight    = 15.5f;   // 上方框右边 x
+            const Gdiplus::REAL kTopTop      = 3.0f;    // 上方框顶边 y
+            const Gdiplus::REAL kTopBottom   = 8.5f;    // 上方框底边 y（竖线从这里向下）
+            const Gdiplus::REAL kCenterX     = 12.0f;   // 竖线 x
+            const Gdiplus::REAL kBarY        = 12.0f;   // 连接横线 y
+            const Gdiplus::REAL kLeftStemX   = 6.0f;    // 左下框上方连接线 x（左下框的中线）
+            const Gdiplus::REAL kRightStemX  = 18.0f;   // 右下框上方连接线 x（右下框的中线）
+            const Gdiplus::REAL kLowTop      = 15.5f;   // 两个下方框的顶边 y
+            const Gdiplus::REAL kLowBottom   = 21.0f;   // 两个下方框的底边 y
+            const Gdiplus::REAL kLowHalfW    = 3.5f;    // 下方框宽度的一半
+
+            DrawRoundBox(g, pen, kTopLeft, kTopTop, kTopRight, kTopBottom, kBoxRadius);
+            g.DrawLine(&pen, kCenterX, kTopBottom, kCenterX, kBarY);
+            // 横线与两端向下的短线画成一条折线，拐角按圆角连接
+            const Gdiplus::PointF connector[4] =
+            {
+                Gdiplus::PointF(kLeftStemX, kLowTop),
+                Gdiplus::PointF(kLeftStemX, kBarY),
+                Gdiplus::PointF(kRightStemX, kBarY),
+                Gdiplus::PointF(kRightStemX, kLowTop),
+            };
+            g.DrawLines(&pen, connector, 4);
+            DrawRoundBox(g, pen, kLeftStemX - kLowHalfW, kLowTop, kLeftStemX + kLowHalfW, kLowBottom, kBoxRadius);
+            DrawRoundBox(g, pen, kRightStemX - kLowHalfW, kLowTop, kRightStemX + kLowHalfW, kLowBottom, kBoxRadius);
+        }
+        break;
+
+    // Markdown 编辑器按钮与格式按钮的图标（kChatIconMarkdown 起的一段），绘制在 ChatMarkdownIcons.cpp
     default:
+        DrawMarkdownChatIcon(g, kind, pen, color);
         break;
     }
 

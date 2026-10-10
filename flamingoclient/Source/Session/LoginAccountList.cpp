@@ -1,11 +1,19 @@
 ﻿/**
  *  本机历史登录账号列表的读写实现，见 LoginAccountList.h。
  *
- *  磁盘格式（Bin\Users\LoginAccountList.dat，每次写入的数据块按字节异或
+ *  磁盘格式（程序目录\Users\LoginAccountList.dat，每次写入的数据块按字节异或
  *  0x88，见 Encrypt / Decrypt）：
  *
  *    [账号条数 int][最后登录索引 int][基础记录 * 条数]        <- 主体，格式自始未变
- *    [魔数 int][版本号 int][账号条数 int][姓名 * 条数]        <- 姓名尾块，本次新增
+ *    [魔数 int][版本号 int][账号条数 int][姓名 * 条数]        <- 姓名尾块
+ *    [魔数 int][版本号 int][账号条数 int][头像 * 条数]        <- 头像尾块，2026-10-04 新增；
+ *        每条头像依次是 userid(long long)、头像类型(int)、头像内容(定长
+ *        kLoginAccountCustomFaceBytes 字节的 UTF-8)。兼容方式与姓名尾块相同：
+ *        此前的客户端读到姓名尾块就收工，看不见这一段；新客户端读老文件时读到
+ *        文件末尾，头像留空。
+ *    [魔数 int][版本号 int][账号条数 int][规范账号 * 条数]    <- 规范账号尾块，2026-10-06 新增；
+ *        每条是定长 kLoginAccountNameLen 个字符的服务端规范账号。兼容方式同上：
+ *        此前的客户端读到头像尾块就收工；新客户端读老文件时规范账号留空，按 szUser 处理。
  *
  *  姓名之所以<u>追加在文件末尾</u>、而不是并进记录里或加个文件头，是为了
  *  双向兼容：
@@ -34,6 +42,20 @@ static const int kNickNameSectionMagic = 0x464C4131;
 // 姓名尾块的版本号。1 = 每条账号一个定长 kLoginAccountNickNameLen 字符的姓名。
 // 日后姓名段若要改布局，递增此值，读到不认识的版本就整块忽略。
 static const int kNickNameSectionVersion = 1;
+
+// 头像尾块的起始魔数。取 'F''L''A''2' 四个字符的 ASCII 拼接，与姓名尾块的魔数区分。
+static const int kAvatarSectionMagic = 0x464C4132;
+
+// 头像尾块的版本号。1 = 每条账号依次为 userid、头像类型、定长头像内容。
+// 日后若要改布局，递增此值，读到不认识的版本就整块忽略。
+static const int kAvatarSectionVersion = 1;
+
+// 规范账号尾块的起始魔数。取 'F''L''A''3' 四个字符的 ASCII 拼接，与前两个尾块的魔数区分。
+static const int kAccountNameSectionMagic = 0x464C4133;
+
+// 规范账号尾块的版本号。1 = 每条账号一个定长 kLoginAccountNameLen 字符的规范账号。
+// 日后若要改布局，递增此值，读到不认识的版本就整块忽略。
+static const int kAccountNameSectionVersion = 1;
 
 // 账号条数的合理上限 —— 文件损坏时条数字段可能是个天文数字，据此挡掉，
 // 避免按错误条数疯狂分配内存。本机历史登录账号不可能有这么多。
@@ -101,7 +123,13 @@ BOOL CLoginAccountList::LoadFile(LPCTSTR lpszFileName)
 	// 老版本客户端写的文件到此就结束了，姓名留空。
 	ReadNickNameSection(fp, nLoaded);
 
-	// 姓名补齐之后再清理空账号 —— 尾块按位置对应主体记录，先删会让姓名错位。
+	// 姓名尾块之后若还跟着头像尾块（2026-10-04 起的客户端写的），把 userid 与头像补进各条账号。
+	ReadAvatarSection(fp, nLoaded);
+
+	// 头像尾块之后若还跟着规范账号尾块（2026-10-06 起的客户端写的），把规范账号补进各条账号。
+	ReadAccountNameSection(fp, nLoaded);
+
+	// 各尾块补齐之后再清理空账号 —— 尾块按位置对应主体记录，先删会让姓名、头像与规范账号错位。
 	PurgeBlankAccounts();
 
 	// 修复之前的客户端写下的、没勾"记住密码"却带着密码的记录，读入时清掉密码。
@@ -277,6 +305,12 @@ BOOL CLoginAccountList::SaveFile(LPCTSTR lpszFileName)
 	// 姓名尾块：接在主体之后，老版本客户端读到主体末尾就收工，看不见这一段。
 	WriteNickNameSection(fp, nCount2);
 
+	// 头像尾块：接在姓名尾块之后。
+	WriteAvatarSection(fp, nCount2);
+
+	// 规范账号尾块：接在头像尾块之后。
+	WriteAccountNameSection(fp, nCount2);
+
 	// 有条目为空指针被跳过时，回填实际写出的条数。条数是文件的第一个字段，
 	// 故 fseek 回文件开头。
 	if (nCount2 != nCount)
@@ -310,6 +344,155 @@ void CLoginAccountList::WriteNickNameSection(FILE* fp, int nCount)
 		_tcsncpy(szNickName, lpAccount->szNickName, kLoginAccountNickNameLen);
 		szNickName[kLoginAccountNickNameLen-1] = _T('\0');
 		_fwrite(szNickName, sizeof(szNickName), 1, fp);
+	}
+}
+
+// 读取姓名尾块之后的头像尾块，按顺序填进刚读出的那批账号
+void CLoginAccountList::ReadAvatarSection(FILE* fp, int nLoaded)
+{
+	if (nLoaded <= 0)
+		return;
+
+	// 没有这一段（此前的客户端写的文件）—— 读到文件末尾，头像保持空。
+	int nMagic = 0;
+	if (_fread(&nMagic, sizeof(nMagic), 1, fp) != 1)
+		return;
+
+	if (nMagic != kAvatarSectionMagic)
+		return;
+
+	int nVersion = 0;
+	if (_fread(&nVersion, sizeof(nVersion), 1, fp) != 1)
+		return;
+
+	// 版本不认识（装过更新的客户端后又降级）—— 整块忽略，头像留空。
+	if (nVersion != kAvatarSectionVersion)
+		return;
+
+	int nAvatarCount = 0;
+	if (_fread(&nAvatarCount, sizeof(nAvatarCount), 1, fp) != 1)
+		return;
+
+	// 条数对不上说明文件被别的版本改写过 —— 宁可不画头像，也不能张冠李戴。
+	if (nAvatarCount != nLoaded)
+		return;
+
+	// 与姓名尾块一样按存入顺序一一对应，从数组末尾往前数 nLoaded 条即是它们。
+	int nBase = (int)m_arrLoginAccount.size() - nLoaded;
+	for (int i = 0; i < nLoaded; i++)
+	{
+		long long nUserId = 0;
+		int nFaceType = 0;
+		char szCustomFace[kLoginAccountCustomFaceBytes] = { 0 };
+		if (_fread(&nUserId, sizeof(nUserId), 1, fp) != 1)
+			return;
+		if (_fread(&nFaceType, sizeof(nFaceType), 1, fp) != 1)
+			return;
+		if (_fread(szCustomFace, sizeof(szCustomFace), 1, fp) != 1)
+			return;
+
+		szCustomFace[kLoginAccountCustomFaceBytes - 1] = '\0';
+		LOGIN_ACCOUNT_INFO* lpAccount = m_arrLoginAccount[nBase + i];
+		if (NULL == lpAccount)
+			continue;
+		lpAccount->nUserId = nUserId;
+		lpAccount->nFaceType = nFaceType;
+		memcpy(lpAccount->szCustomFace, szCustomFace, sizeof(szCustomFace));
+	}
+}
+
+// 在姓名尾块之后写出头像尾块
+void CLoginAccountList::WriteAvatarSection(FILE* fp, int nCount)
+{
+	if (nCount <= 0)
+		return;
+
+	_fwrite(&kAvatarSectionMagic, sizeof(kAvatarSectionMagic), 1, fp);
+	_fwrite(&kAvatarSectionVersion, sizeof(kAvatarSectionVersion), 1, fp);
+	_fwrite(&nCount, sizeof(nCount), 1, fp);
+
+	// 逐条写出，顺序与主体里的账号记录一一对应（空指针条目在主体里也被跳过）。
+	for (int i = 0; i < (int)m_arrLoginAccount.size(); i++)
+	{
+		LOGIN_ACCOUNT_INFO* lpAccount = m_arrLoginAccount[i];
+		if (NULL == lpAccount)
+			continue;
+
+		char szCustomFace[kLoginAccountCustomFaceBytes] = { 0 };
+		memcpy(szCustomFace, lpAccount->szCustomFace, sizeof(szCustomFace));
+		szCustomFace[kLoginAccountCustomFaceBytes - 1] = '\0';
+		_fwrite(&lpAccount->nUserId, sizeof(lpAccount->nUserId), 1, fp);
+		_fwrite(&lpAccount->nFaceType, sizeof(lpAccount->nFaceType), 1, fp);
+		_fwrite(szCustomFace, sizeof(szCustomFace), 1, fp);
+	}
+}
+
+// 读取头像尾块之后的规范账号尾块，按顺序填进刚读出的那批账号
+void CLoginAccountList::ReadAccountNameSection(FILE* fp, int nLoaded)
+{
+	if (nLoaded <= 0)
+		return;
+
+	// 没有这一段（此前的客户端写的文件）—— 读到文件末尾，规范账号保持空串。
+	int nMagic = 0;
+	if (_fread(&nMagic, sizeof(nMagic), 1, fp) != 1)
+		return;
+
+	if (nMagic != kAccountNameSectionMagic)
+		return;
+
+	int nVersion = 0;
+	if (_fread(&nVersion, sizeof(nVersion), 1, fp) != 1)
+		return;
+
+	// 版本不认识（装过更新的客户端后又降级）—— 整块忽略，规范账号留空。
+	if (nVersion != kAccountNameSectionVersion)
+		return;
+
+	int nNameCount = 0;
+	if (_fread(&nNameCount, sizeof(nNameCount), 1, fp) != 1)
+		return;
+
+	// 条数对不上说明文件被别的版本改写过 —— 宁可留空按 szUser 处理，也不能张冠李戴。
+	if (nNameCount != nLoaded)
+		return;
+
+	// 与前两个尾块一样按存入顺序一一对应，从数组末尾往前数 nLoaded 条即是它们。
+	int nBase = (int)m_arrLoginAccount.size() - nLoaded;
+	for (int i = 0; i < nLoaded; i++)
+	{
+		TCHAR szAccountName[kLoginAccountNameLen] = { 0 };
+		if (_fread(szAccountName, sizeof(szAccountName), 1, fp) != 1)
+			return;
+
+		szAccountName[kLoginAccountNameLen - 1] = _T('\0');
+		LOGIN_ACCOUNT_INFO* lpAccount = m_arrLoginAccount[nBase + i];
+		if (lpAccount != NULL)
+			_tcscpy(lpAccount->szAccountName, szAccountName);
+	}
+}
+
+// 在头像尾块之后写出规范账号尾块
+void CLoginAccountList::WriteAccountNameSection(FILE* fp, int nCount)
+{
+	if (nCount <= 0)
+		return;
+
+	_fwrite(&kAccountNameSectionMagic, sizeof(kAccountNameSectionMagic), 1, fp);
+	_fwrite(&kAccountNameSectionVersion, sizeof(kAccountNameSectionVersion), 1, fp);
+	_fwrite(&nCount, sizeof(nCount), 1, fp);
+
+	// 逐条定长写出，顺序与主体里的账号记录一一对应（空指针条目在主体里也被跳过）。
+	for (int i = 0; i < (int)m_arrLoginAccount.size(); i++)
+	{
+		LOGIN_ACCOUNT_INFO* lpAccount = m_arrLoginAccount[i];
+		if (NULL == lpAccount)
+			continue;
+
+		TCHAR szAccountName[kLoginAccountNameLen] = { 0 };
+		_tcsncpy(szAccountName, lpAccount->szAccountName, kLoginAccountNameLen);
+		szAccountName[kLoginAccountNameLen - 1] = _T('\0');
+		_fwrite(szAccountName, sizeof(szAccountName), 1, fp);
 	}
 }
 
@@ -436,6 +619,48 @@ BOOL CLoginAccountList::SetNickName(LPCTSTR lpszUser, LPCTSTR lpszNickName)
 
 	_tcsncpy(lpAccount->szNickName, lpszNickName, kLoginAccountNickNameLen);
 	lpAccount->szNickName[kLoginAccountNickNameLen-1] = _T('\0');
+	return TRUE;
+}
+
+// 更新指定帐号的 userid 与头像
+BOOL CLoginAccountList::SetAvatar(LPCTSTR lpszUser, long long nUserId, int nFaceType, const char* lpszCustomFace)
+{
+	if (NULL == lpszUser)
+		return FALSE;
+
+	LOGIN_ACCOUNT_INFO* lpAccount = Find(lpszUser);
+	if (NULL == lpAccount)
+		return FALSE;
+
+	lpAccount->nUserId = nUserId;
+	lpAccount->nFaceType = nFaceType;
+	memset(lpAccount->szCustomFace, 0, sizeof(lpAccount->szCustomFace));
+	if (lpszCustomFace != NULL)
+	{
+		// 超长时截断：只拷前 kLoginAccountCustomFaceBytes - 1 个字节，末尾保持结束符
+		strncpy(lpAccount->szCustomFace, lpszCustomFace, kLoginAccountCustomFaceBytes - 1);
+		lpAccount->szCustomFace[kLoginAccountCustomFaceBytes - 1] = '\0';
+	}
+	return TRUE;
+}
+
+// 记下指定帐号对应的服务端规范账号
+BOOL CLoginAccountList::SetAccountName(LPCTSTR lpszUser, LPCTSTR lpszAccountName)
+{
+	if (NULL == lpszUser)
+		return FALSE;
+
+	LOGIN_ACCOUNT_INFO* lpAccount = Find(lpszUser);
+	if (NULL == lpAccount)
+		return FALSE;
+
+	memset(lpAccount->szAccountName, 0, sizeof(lpAccount->szAccountName));
+	if (lpszAccountName != NULL)
+	{
+		// 超长时截断：只拷前 kLoginAccountNameLen - 1 个字符，末尾保持结束符
+		_tcsncpy(lpAccount->szAccountName, lpszAccountName, kLoginAccountNameLen - 1);
+		lpAccount->szAccountName[kLoginAccountNameLen - 1] = _T('\0');
+	}
 	return TRUE;
 }
 
@@ -586,6 +811,29 @@ BOOL CLoginAccountList::IsAutoLogin()
 {
 	LOGIN_ACCOUNT_INFO* lpAccount = GetAccountInfo(m_nLastLoginUser);
 	return (lpAccount != NULL) ? lpAccount->bAutoLogin : FALSE;
+}
+
+// 取一条历史账号对应的本地数据目录名
+LPCTSTR LoginAccountDataName(const LOGIN_ACCOUNT_INFO* lpInfo)
+{
+	if (NULL == lpInfo)
+		return _T("");
+
+	// 没存规范账号的是这次升级之前存下的记录，那时只能用账号登录，输入的原文即账号
+	if (lpInfo->szAccountName[0] != _T('\0'))
+		return lpInfo->szAccountName;
+	return lpInfo->szUser;
+}
+
+// 已登录期间，取本次登录在历史账号列表里那条记录的键
+LPCTSTR PickLoginAccountListKey(LPCTSTR lpszLoginName, LPCTSTR lpszServerAccount)
+{
+	if (lpszLoginName != NULL && lpszLoginName[0] != _T('\0'))
+		return lpszLoginName;
+	// 原文取不到时（正常流程不会发生）退回规范账号：对只用账号登录过的人两者相同
+	if (lpszServerAccount != NULL)
+		return lpszServerAccount;
+	return _T("");
 }
 
 // 加密

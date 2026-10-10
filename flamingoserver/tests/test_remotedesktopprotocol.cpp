@@ -4,7 +4,7 @@
  *  覆盖：
  *    - RemoteDesktopProtocol 的请求解析（invite/response/cancel/close）与应答、
  *      推送构造（invite_response/invite_notify/relay_info/state_notify）的字段
- *      完整性、类型、64 位 ID 字符串编码、畸形输入安全失败；
+ *      完整性、类型、64 位 ID 字符串编码、畸形输入安全失败；relay_info 的可选 p2psessionid（RDP8，P2P 方案第 6 期）；
  *    - RemoteDesktopManager 的会话表 CRUD、按角色签发 relay 令牌（用 RelayToken
  *      校验角色 / uid / peeruid / sessionid 正确），以及 sessionid 不含令牌分隔符。
  *  balloonwj@qq.com   2026-06-08
@@ -103,6 +103,24 @@ TEST_CASE("RDP5 buildRelayInfo 字段完整")
     CHECK(root["relayip"].asString() == "192.168.1.100");
     CHECK(root["relayport"].asInt() == 20002);
     CHECK(root["token"].asString() == "1|2|3.deadbeef");
+}
+
+TEST_CASE("RDP8 buildRelayInfo 的 p2psessionid：给了才写，没给时与原来相同（P2P 方案第 6 期）")
+{
+    std::string json = RemoteDesktopProtocol::buildRelayInfo(
+        "sess-001", RelayToken::role_controlled, "192.168.1.100", 20002, "1|2|3.deadbeef", "p2p-1-2-3-4");
+    Json::Value root;
+    REQUIRE(parseJsonText(json, root));
+    CHECK(root["p2psessionid"].asString() == "p2p-1-2-3-4");
+    CHECK(root["role"].asInt() == RelayToken::role_controlled);
+
+    //不给：不写这个字段，与第 6 期之前的推送逐字相同
+    const std::string plain = RemoteDesktopProtocol::buildRelayInfo(
+        "sess-001", RelayToken::role_controller, "192.168.1.100", 20002, "1|2|3.deadbeef");
+    REQUIRE(parseJsonText(plain, root));
+    CHECK_FALSE(root.isMember("p2psessionid"));
+    CHECK(plain == RemoteDesktopProtocol::buildRelayInfo("sess-001", RelayToken::role_controller, "192.168.1.100",
+                                                          20002, "1|2|3.deadbeef", std::string()));
 }
 
 TEST_CASE("RDP6 parseSessionRequest（cancel/close 共用）取 sessionid")
@@ -212,4 +230,79 @@ TEST_CASE("RDM5 setState 更新会话状态")
     RemoteDesktopSessionInfo s;
     REQUIRE(mgr.getSession(sid, s));
     CHECK(s.state == rd_state_disconnected);
+}
+
+TEST_CASE("RDM6 掉线宽限：最后一个连接断开后超过宽限期才清理，期间重新登录则保留")
+{
+    RemoteDesktopManager& mgr = Singleton<RemoteDesktopManager>::Instance();
+    const int64_t controller = 810006;
+    const int64_t controlled = 820006;
+    //宽限期 30 秒（毫秒），与默认配置一致
+    const int64_t grace = 30 * 1000;
+    const int64_t t0 = 7000000;
+    mgr.setOfflineGraceMs(grace);
+    CHECK(mgr.offlineGraceMs() == grace);
+
+    std::string sid = mgr.createSession(controller, controlled, t0);
+    REQUIRE(mgr.setState(sid, rd_state_ringing));
+
+    //被控端掉线：宽限期内不清理
+    mgr.markUserOffline(controlled, t0 + 1000);
+    std::vector<RemoteDesktopSessionInfo> reaped;
+    mgr.reapOfflineSessions(t0 + 1000 + grace - 1, reaped);
+    CHECK(reaped.empty());
+
+    //宽限期内重新登录：掉线时刻清掉，过了原定期限也不清理
+    mgr.markUserOnline(controlled);
+    mgr.reapOfflineSessions(t0 + 1000 + grace * 2, reaped);
+    CHECK(reaped.empty());
+
+    //再次掉线：重复调用不刷新掉线时刻（以第一次为准）
+    mgr.markUserOffline(controller, t0 + 100000);
+    mgr.markUserOffline(controller, t0 + 120000);
+    mgr.reapOfflineSessions(t0 + 100000 + grace, reaped);
+    REQUIRE(reaped.size() == 1);
+    CHECK(reaped[0].sessionid == sid);
+    CHECK(reaped[0].controllerOfflineAt == t0 + 100000);
+    CHECK(reaped[0].controlledOfflineAt == 0);
+    RemoteDesktopSessionInfo info;
+    CHECK_FALSE(mgr.getSession(sid, info));
+}
+
+TEST_CASE("RDM7 掉线只影响该用户参与的会话；响铃中的会话同样按宽限期清理")
+{
+    RemoteDesktopManager& mgr = Singleton<RemoteDesktopManager>::Instance();
+    const int64_t a = 810007;
+    const int64_t b = 820007;
+    const int64_t c = 830007;
+    //宽限期 30 秒（毫秒）
+    const int64_t grace = 30 * 1000;
+    const int64_t t0 = 8000000;
+    mgr.setOfflineGraceMs(grace);
+
+    //a 控制 b（仍在响铃）；b 控制 c
+    std::string ab = mgr.createSession(a, b, t0);
+    std::string bc = mgr.createSession(b, c, t0);
+    mgr.markUserOffline(a, t0);
+    std::vector<RemoteDesktopSessionInfo> reaped;
+    mgr.reapOfflineSessions(t0 + grace, reaped);
+    REQUIRE(reaped.size() == 1);
+    CHECK(reaped[0].sessionid == ab);
+    RemoteDesktopSessionInfo info;
+    CHECK(mgr.getSession(bc, info));
+    mgr.removeSession(bc);
+}
+
+TEST_CASE("RDM8 宽限期配置：非正数按默认 30 秒处理")
+{
+    RemoteDesktopManager& mgr = Singleton<RemoteDesktopManager>::Instance();
+    //默认宽限期（毫秒）
+    const int64_t defaultGrace = 30 * 1000;
+    mgr.setOfflineGraceMs(0);
+    CHECK(mgr.offlineGraceMs() == defaultGrace);
+    mgr.setOfflineGraceMs(-1);
+    CHECK(mgr.offlineGraceMs() == defaultGrace);
+    mgr.setOfflineGraceMs(5000);
+    CHECK(mgr.offlineGraceMs() == 5000);
+    mgr.setOfflineGraceMs(defaultGrace);
 }

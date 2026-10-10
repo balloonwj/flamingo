@@ -46,6 +46,19 @@ const int kHostBufLen = 256;
 
 } // anonymous namespace
 
+LoginConfig AppConfig::ApplyPasswordChange(const LoginConfig& saved,
+                                           const CString& loginAccount,
+                                           const CString& newPassword)
+{
+    LoginConfig out = saved;
+    if (saved.m_rememberPassword && !saved.m_account.IsEmpty()
+        && saved.m_account.CompareNoCase(loginAccount) == 0)
+    {
+        out.m_password = newPassword;
+    }
+    return out;
+}
+
 AppConfig& AppConfig::Instance()
 {
     static AppConfig s_instance;

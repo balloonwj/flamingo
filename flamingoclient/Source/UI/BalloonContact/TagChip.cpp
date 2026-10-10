@@ -38,6 +38,7 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "TagChip.h"
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace ballooncontact {
 
@@ -67,7 +68,7 @@ HFONT CreateYaHeiFont(int pixelHeight)
     return ::CreateFontW(
         -pixelHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
 }
 
 // 测量单行文字宽度（像素）。text 为空返回 0。

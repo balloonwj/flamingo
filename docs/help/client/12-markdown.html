@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 12 章：Markdown 编辑器（编写、格式按钮与快捷键、查找替换、打开保存导出、发送）与 Markdown 消息的查看。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown 文档 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c12">
+<article class="doc">
+  <h1>Markdown 文档</h1>
+  <p class="lead">需要发一份带标题、列表、表格的说明时，可以用内置的 Markdown 编辑器写好再发出。对方收到的是一张文档卡片，点开即可阅读排好版的内容；文档还可以导出为 Word、PDF、网页或图片。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>单聊、群聊通用</li>
+    <li>编辑器不登录也能用，登录后才能发送</li>
+  </ul>
+
+  <h2 id="open">打开编辑器</h2>
+  <p>以下三个地方都能打开 Markdown 编辑器：</p>
+  <ul>
+    <li>聊天窗口输入工具栏的 <span class="ui">Markdown 编辑器</span> 按钮（「M↓」图标）。从这里打开时，发送对象已经预先选好当前会话。</li>
+    <li>主面板系统菜单里的 <span class="ui">Markdown 编辑器</span>。</li>
+    <li>右键托盘图标，在菜单里选 <span class="ui">Markdown 编辑器</span>。登录前也可以这样打开，只是不能发送。</li>
+  </ul>
+  <div class="callout note"><b>找不到 Markdown 相关的按钮？</b>Markdown 功能由客户端的可选组件提供。组件没有加载时，工具栏按钮和菜单项都会隐藏，收到的 Markdown 消息显示为原始的 Markdown 文字。</div>
+
+  <h2 id="editor">编写与预览</h2>
+  <p>编辑器左边是编写区，右边是实时预览，中间的分隔条可以左右拖动。点右上角的 <span class="ui">预览</span> 可以关闭或重新打开预览区。</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/h_md_editor_empty.png" width="880" alt="空的 Markdown 编辑器，格式栏按钮带编号标注">
+      <span class="pin" style="left:24.3%;top:4.8%">1</span>
+      <span class="pin" style="left:27.4%;top:4.8%">2</span>
+      <span class="pin" style="left:30.4%;top:4.8%">3</span>
+      <span class="pin" style="left:33.5%;top:4.8%">4</span>
+      <span class="pin" style="left:36.5%;top:4.8%">5</span>
+      <span class="pin" style="left:39.6%;top:4.8%">6</span>
+      <span class="pin" style="left:42.7%;top:4.8%">7</span>
+      <span class="pin" style="left:45.7%;top:4.8%">8</span>
+      <span class="pin" style="left:48.8%;top:4.8%">9</span>
+      <span class="pin" style="left:51.9%;top:4.8%">10</span>
+      <span class="pin" style="left:54.9%;top:4.8%">11</span>
+      <span class="pin" style="left:57.9%;top:4.8%">12</span>
+      <span class="pin" style="left:61%;top:4.8%">13</span>
+      <span class="pin" style="left:64.1%;top:4.8%">14</span>
+      <span class="pin" style="left:67.1%;top:4.8%">15</span>
+    </div>
+    <figcaption>从与赵卓轩的聊天窗口打开的编辑器：左上角是「打开」「保存」「导出 ▾」，其后是格式栏，底部是发送区</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>标题</b>：弹出标题级别菜单，快捷键 <kbd>Ctrl</kbd>+<kbd>1</kbd>~<kbd>6</kbd></li>
+    <li><b>加粗</b>：<kbd>Ctrl</kbd>+<kbd>B</kbd></li>
+    <li><b>斜体</b>：<kbd>Ctrl</kbd>+<kbd>I</kbd></li>
+    <li><b>下划线</b>：<kbd>Ctrl</kbd>+<kbd>U</kbd></li>
+    <li><b>删除线</b>：<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>5</kbd></li>
+    <li><b>行内代码</b>：<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>`</kbd></li>
+    <li><b>代码块</b></li>
+    <li><b>链接</b>：<kbd>Ctrl</kbd>+<kbd>K</kbd></li>
+    <li><b>引用</b></li>
+    <li><b>无序列表</b></li>
+    <li><b>有序列表</b></li>
+    <li><b>任务列表</b>：带勾选框的待办项</li>
+    <li><b>表格</b></li>
+    <li><b>分割线</b></li>
+    <li><b>警告框</b>：选择提示、技巧、重要、警告或注意</li>
+  </ol>
+  <p>选中一段文字再点格式按钮（或按快捷键），会给这段文字加上对应的格式；按 <kbd>Ctrl</kbd>+<kbd>\</kbd> 清除选中文字的格式。在列表行或引用行的末尾按 <kbd>Enter</kbd>，下一行会自动接着写列表项或引用。</p>
+  <figure class="shot center">
+    <img src="../img/h_md_editor.png" width="880" alt="写好的 v2.1 发布检查清单">
+    <figcaption>写好的「v2.1 发布检查清单」：左边是 Markdown 源文本，右边是预览</figcaption>
+  </figure>
+
+  <h3 id="heading">标题级别与警告框</h3>
+  <figure class="shot center"><img src="../img/h_md_heading_menu.png" width="880" alt="标题级别菜单"><figcaption>点「H」按钮弹出的标题级别菜单</figcaption></figure>
+  <p>点格式栏的 <b>H</b> 按钮，在菜单里选 <span class="ui">正文</span> 或 <span class="ui">一级标题</span> ~ <span class="ui">六级标题</span>，光标所在行就会变成对应的级别，当前级别前面带勾。</p>
+  <p>点最右边的 <b>警告框</b> 按钮，可以插入五种 GitHub 风格的提示块：提示、技巧、重要、警告、注意，对应的写法是 <code>&gt; [!NOTE]</code>、<code>&gt; [!TIP]</code>、<code>&gt; [!IMPORTANT]</code>、<code>&gt; [!WARNING]</code>、<code>&gt; [!CAUTION]</code>。预览里会显示带标题的彩色提示块，例如上图中蓝色的「提示」。</p>
+  <p>写在代码块里的代码，只要在开头注明语言名，预览和导出时都会按语言着色。</p>
+
+  <h2 id="find">查找与替换</h2>
+  <p>按 <kbd>Ctrl</kbd>+<kbd>F</kbd> 在编写区上方打开查找栏，按 <kbd>Ctrl</kbd>+<kbd>H</kbd> 同时打开替换栏：</p>
+  <figure class="shot center">
+    <img src="../img/h_md_find.png" width="880" alt="查找与替换栏">
+    <figcaption>查找「发布」，共找到 5 处</figcaption>
+  </figure>
+  <ul>
+    <li>在 <span class="ui">查找</span> 框输入文字，右侧显示「共 N 处」。点 <span class="ui">上一个</span> / <span class="ui">下一个</span>（或按 <kbd>Shift</kbd>+<kbd>F3</kbd> / <kbd>F3</kbd>）逐个跳转，到头后会从另一端继续查找。</li>
+    <li>勾选 <span class="ui">区分大小写</span> 时，英文字母的大小写必须一致才算找到。</li>
+    <li>在 <span class="ui">替换为</span> 框输入新文字，点 <span class="ui">替换</span> 替换当前这一处，点 <span class="ui">全部替换</span> 一次替换所有找到的地方。</li>
+    <li>按 <kbd>Esc</kbd> 或点右端的 × 关闭查找栏。</li>
+  </ul>
+
+  <h2 id="file">打开、保存与导出</h2>
+  <p>左上角的 <span class="ui">打开</span> 读取本机的 Markdown 文件，<span class="ui">保存</span> 把当前文档存为 <code>.md</code> 文件。窗口标题显示文档名，有未保存的修改时文档名前带「*」。</p>
+  <figure class="shot center"><img src="../img/h_md_export_menu.png" width="880" alt="导出菜单"><figcaption>「导出 ▾」菜单</figcaption></figure>
+  <p>点 <span class="ui">导出 ▾</span> 可以把文档导出为：</p>
+  <ul>
+    <li>Markdown 源文件（.md）</li>
+    <li>网页（.html）</li>
+    <li>图片（.png），整篇文档生成一张长图</li>
+    <li>PDF（.pdf）</li>
+    <li>Word 文档（.docx）</li>
+  </ul>
+  <div class="callout note"><b>导出 PDF 与图片</b>导出 PDF 使用 Windows 自带的「Microsoft Print to PDF」打印机，不会弹出打印对话框。系统里没有这台打印机时，客户端会询问是否改为把每一页导出为图片，这样生成的 PDF 里文字不能选中和搜索。文档太长无法生成一张图片时，请改为导出 PDF。</div>
+  <p>关闭有未保存修改的编辑器时，会询问「文档「…」有未保存的修改，是否保存？」；退出客户端时如果还有这样的文档，也会先提醒你。</p>
+
+  <h2 id="send">发送文档</h2>
+  <p>编辑器底部是发送区，左边显示「发送给：…」。</p>
+  <ol class="steps">
+    <li>从聊天窗口打开编辑器时，发送对象已经是当前会话；否则点 <span class="ui">选择…</span>，在弹出的窗口里选择要发给的人或群，可以选多个。</li>
+    <li>点 <span class="ui">发送</span>。发出后编辑器不会关闭，底部提示「已发送给 N 个对象」，可以接着修改或发给别人。</li>
+  </ol>
+  <p>没有登录时发送区显示「登录后可发送」。文档为空、或长度超过单条消息的上限时不能发送，会弹出提示；文档太长时可以先导出为文件，再以文件的方式发送。</p>
+  <figure class="shot center">
+    <img src="../img/h_md_card.png" width="760" alt="聊天中的 Markdown 卡片">
+    <figcaption>聊天中的 Markdown 卡片：标题、摘要，底部写着「Markdown 文档」</figcaption>
+  </figure>
+
+  <h2 id="view">查看收到的文档</h2>
+  <p>点聊天中的 Markdown 卡片（或右键选 <span class="ui">在窗口中查看</span>），会打开预览窗口。窗口标题是文档标题，左上角显示发送者和发送时间。</p>
+  <figure class="shot center">
+    <img src="../img/h_md_preview.png" width="760" alt="Markdown 预览窗口">
+    <figcaption>Markdown 预览窗口</figcaption>
+  </figure>
+  <ul>
+    <li><span class="ui">复制 ▾</span>：可以选 <span class="ui">复制 Markdown 源文本</span>、<span class="ui">复制全文（带格式）</span>、<span class="ui">复制为纯文字</span> 或 <span class="ui">复制为图片</span>。也可以在正文里拖动鼠标选中一部分，按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 复制。</li>
+    <li><span class="ui">导出 ▾</span>：导出格式与编辑器相同。</li>
+    <li><span class="ui">在编辑器中打开</span>：把这份文档放进 Markdown 编辑器，修改后可以另存或重新发送。</li>
+  </ul>
+  <p>在卡片上右键，还可以直接选 <span class="ui">复制 Markdown 源文本</span>。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

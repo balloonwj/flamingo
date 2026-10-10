@@ -1,8 +1,20 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="App">
+      <UniqueIdentifier>{ac863f34-6e61-8f9a-959b-5c95d5d28941}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Common">
       <UniqueIdentifier>{d13bc5b6-8b2b-d9e1-8f29-777db17cc563}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Code">
+      <UniqueIdentifier>{a7712a2f-4488-2ffd-751a-c988e8519ca5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Graphics">
+      <UniqueIdentifier>{18351ab4-92cb-c110-12fe-c76b9c2ba36f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\I18n">
+      <UniqueIdentifier>{000ae107-e24f-9932-cf9f-803a4da77c14}</UniqueIdentifier>
     </Filter>
     <Filter Include="Common\Log">
       <UniqueIdentifier>{e8ebef2f-176a-ac26-f94d-8ecd3c3880d3}</UniqueIdentifier>
@@ -13,17 +25,239 @@
     <Filter Include="Feature">
       <UniqueIdentifier>{21021ea0-e52b-e8e9-c599-f4dff41e5be0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Feature\Call">
-      <UniqueIdentifier>{787da1e9-7884-9e3d-3118-9c313af47f5d}</UniqueIdentifier>
+    <Filter Include="Feature\Bot">
+      <UniqueIdentifier>{96431bb9-6044-8d02-a926-3da4bb35a523}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Caption">
+      <UniqueIdentifier>{7c6098d4-36a0-dac5-c8b8-4a7bf3de5d66}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\FileShare">
+      <UniqueIdentifier>{4a1063fa-43db-9a84-dfec-4d439733f9ee}</UniqueIdentifier>
     </Filter>
     <Filter Include="Feature\FolderTransfer">
       <UniqueIdentifier>{83139d86-0aad-c28d-880b-d941cae834f5}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Feature\RemoteDesktop">
-      <UniqueIdentifier>{fa7ab5eb-8f31-a5fd-65ee-3aa6d560ecaf}</UniqueIdentifier>
+    <Filter Include="Feature\GroupCall">
+      <UniqueIdentifier>{0ddf8246-93eb-9804-210e-4b71ab1277e9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Lock">
+      <UniqueIdentifier>{3b7ae13c-0a5c-a065-b355-0944fc19430c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Markdown">
+      <UniqueIdentifier>{510c4f40-69c2-e361-bece-d6203c097711}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Memo">
+      <UniqueIdentifier>{8c70886e-a973-7ceb-eac3-423669c0a2ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Ocr">
+      <UniqueIdentifier>{bd65ec01-b303-8427-cbe9-ef87dcc79ff0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\P2P">
+      <UniqueIdentifier>{18970bbb-7961-3618-8764-d426a91cdabf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\RewrittenSync">
+      <UniqueIdentifier>{e982642d-1a5e-0337-cac9-881a755c6c75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\ScreenShare">
+      <UniqueIdentifier>{7846ea96-016c-0ad5-db06-cde41d12a9b0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Screenshot">
+      <UniqueIdentifier>{c00b8df4-0945-3737-4a7c-5c4faf17b51a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\ThreadGroup">
+      <UniqueIdentifier>{048e78fe-8da0-4cac-8eea-fe0abfef21fb}</UniqueIdentifier>
     </Filter>
     <Filter Include="Feature\Update">
       <UniqueIdentifier>{51f26236-504f-be38-e4c1-7fa76094c6f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Feature\Voice">
+      <UniqueIdentifier>{ae257e7c-a47f-87ff-bfc3-b2be5287eec3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoBot">
+      <UniqueIdentifier>{2dca490c-dd7f-276e-861e-4ce8636fd31b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoBot\Core">
+      <UniqueIdentifier>{d89bce0f-bea0-feb5-6691-a083faf5e91e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoBot\Host">
+      <UniqueIdentifier>{40ee2dcb-d8e7-004f-d486-f1ce603e5705}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoBot\Tests">
+      <UniqueIdentifier>{08d8a369-a073-de1e-eef3-5448da5dd19d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoBot\UI">
+      <UniqueIdentifier>{568b748c-48ef-64a4-c622-740fb95b466a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption">
+      <UniqueIdentifier>{1815f813-db00-426f-d417-e9cd4c50a918}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Editor">
+      <UniqueIdentifier>{7ad9d2ed-076a-b7b0-684a-0d6dadb5b357}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Engine">
+      <UniqueIdentifier>{703296b1-6bef-fcfa-dc7a-c930bee8d74e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Export">
+      <UniqueIdentifier>{fb5dd49a-8f5c-2adb-8c5f-a3e2e0b04daf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Model">
+      <UniqueIdentifier>{42573095-1964-ce2b-83a9-970ea8fe3680}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Render">
+      <UniqueIdentifier>{861a6df4-7b2d-1c7d-c77b-c18dbd53b81c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoCaption\Tests">
+      <UniqueIdentifier>{d2ecde04-377d-ee59-cf25-7c9acad14b99}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoFileShare">
+      <UniqueIdentifier>{e3bd9bbe-5589-1c20-0283-ebe14c538472}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoFileShare\Engine">
+      <UniqueIdentifier>{b32b6760-4005-0c25-fca2-96c389c3f1b1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoFileShare\Tests">
+      <UniqueIdentifier>{c42d9061-e690-4550-51f9-7302aabe2ddd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoFileShare\UI">
+      <UniqueIdentifier>{05a6ee02-dce3-92d7-3900-496c1a3bb009}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLang">
+      <UniqueIdentifier>{72a051bc-e638-3565-876a-19c5dad801f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLang\Tests">
+      <UniqueIdentifier>{7a421ed7-1f31-3f4f-140d-fce4c3445423}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock">
+      <UniqueIdentifier>{287154da-4eb0-db8f-174d-66d102ec4710}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock\Core">
+      <UniqueIdentifier>{2872bb24-9515-feb0-077e-0e8c92e8927e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock\Render">
+      <UniqueIdentifier>{39202b37-827d-cf29-21bc-a93e3f411ce5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock\Scene">
+      <UniqueIdentifier>{8f54a30a-b7f7-1354-b481-83dc90ea0442}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLock\Tests">
+      <UniqueIdentifier>{57c6bb2b-388c-3e0f-7e61-bd21437aeeeb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMarkdown">
+      <UniqueIdentifier>{15e5751d-6e77-dc47-bebc-49ef80690279}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMarkdown\Core">
+      <UniqueIdentifier>{ad7573a4-7a55-e965-0069-08bfea74e9ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMarkdown\Tests">
+      <UniqueIdentifier>{84fc1455-029f-7a96-1941-1465bb287fc8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Call">
+      <UniqueIdentifier>{a27d7bb5-7e7c-4599-52cd-97fb1970ab41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Caption">
+      <UniqueIdentifier>{0bebb1f4-2232-7a77-5a25-42185aaa8803}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Common">
+      <UniqueIdentifier>{fa05ed8c-3dc2-cd28-d630-cce49a17707b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\GroupCall">
+      <UniqueIdentifier>{233c54d1-e8a8-181e-250e-a7d731e4edf8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Record">
+      <UniqueIdentifier>{9a5be897-4933-5a4b-c9ed-16f74a7db90a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\RemoteDesktop">
+      <UniqueIdentifier>{819d8b58-f2f2-be63-679b-bf77431738bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Share">
+      <UniqueIdentifier>{2d718494-3975-b169-ba95-7766a1beba6c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Voice">
+      <UniqueIdentifier>{db83bb79-d187-2fd7-77ce-bc3dc2e143e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoOcr">
+      <UniqueIdentifier>{3292e601-c71c-0923-6433-c5e1d1705d98}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoOcr\Core">
+      <UniqueIdentifier>{81170ce6-462d-9c2a-b1d4-61edcf162c53}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoOcr\Tests">
+      <UniqueIdentifier>{a768e249-d6f2-5d6e-4445-62faf862bbfd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoOcr\WinOcr">
+      <UniqueIdentifier>{aa10b984-0af6-a169-79d3-1becec46d4bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P">
+      <UniqueIdentifier>{efdae02c-ad3b-745e-56c9-75211bb388e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\Chan">
+      <UniqueIdentifier>{17d8f45f-83a1-419b-6e7b-518a7f2c4dba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\Core">
+      <UniqueIdentifier>{05db841f-13c6-3d41-e6f5-bb1f197eea4c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\Ice">
+      <UniqueIdentifier>{f92148aa-f337-3c7a-20e2-fb287ed2771b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\Io">
+      <UniqueIdentifier>{163e93ca-0c27-1a65-0b03-797f5f2895d5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\Link">
+      <UniqueIdentifier>{1020bd21-af27-9cdc-e293-d82130c04b72}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\Tests">
+      <UniqueIdentifier>{ac706f9d-e486-abfc-bb0f-3151265fba1d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\third-party">
+      <UniqueIdentifier>{8f2f1f10-3730-7825-3cf0-63cf98b65712}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoP2P\third-party\kcp">
+      <UniqueIdentifier>{6dc4359d-476c-f395-5918-a2744487ec7b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoScreenshot">
+      <UniqueIdentifier>{06bb3d87-3054-a639-4696-6c8785879488}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoScreenshot\Capture">
+      <UniqueIdentifier>{f6838e11-ffd5-5bdd-e0a8-7836b75e15c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoScreenshot\Host">
+      <UniqueIdentifier>{85f57b30-8f68-1a3e-6a0a-a0723d83bc51}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoScreenshot\Tests">
+      <UniqueIdentifier>{d4b6013e-2b19-610d-0e50-0ab26cc3e965}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoSecretChat">
+      <UniqueIdentifier>{5c0dcfce-1643-51da-1d89-a85e98afc07c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoSecretChat\Core">
+      <UniqueIdentifier>{72203309-a29b-8f16-c42c-20f95df58184}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoSecretChat\Host">
+      <UniqueIdentifier>{9ba816f9-3efc-81c3-d57e-9b1a2706740e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoSecretChat\Tests">
+      <UniqueIdentifier>{7d72b1b6-1955-d480-284c-e3c69259ba96}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoThreadGroup">
+      <UniqueIdentifier>{6302c3d4-4dcf-7be4-3bd9-b01bde2f27e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoThreadGroup\Core">
+      <UniqueIdentifier>{74680190-290a-0cfe-409e-8263e33ef619}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoThreadGroup\Host">
+      <UniqueIdentifier>{9a1f74f9-b747-9853-ce6b-7bd93ac3b372}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoThreadGroup\Tests">
+      <UniqueIdentifier>{9e275fc6-39b2-6e56-8b41-8a3ef925a5d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoThreadGroup\UI">
+      <UniqueIdentifier>{253872a1-a21e-0184-4b5b-1bf7f4bf5011}</UniqueIdentifier>
     </Filter>
     <Filter Include="FlamingoUpdater">
       <UniqueIdentifier>{53124633-00b7-9cc8-0ade-e9a949c312c2}</UniqueIdentifier>
@@ -43,11 +277,17 @@
     <Filter Include="UI\BalloonAuth">
       <UniqueIdentifier>{0cf7cc5b-9a18-1d37-c4c0-3681d60c09bf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI\BalloonCard">
+      <UniqueIdentifier>{a0a390da-374e-c2d5-a7e4-833df489fe36}</UniqueIdentifier>
+    </Filter>
     <Filter Include="UI\BalloonChat">
       <UniqueIdentifier>{dd5fd32d-5e9d-0ccf-90de-01069bcd390e}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonChatWnd">
       <UniqueIdentifier>{95401c41-7b7e-fd6f-3dc4-31e308abc77d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonCode">
+      <UniqueIdentifier>{5fef5eb1-fa09-3b13-d8ac-f6e30986211e}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonContact">
       <UniqueIdentifier>{26c426fd-bb58-3351-efd4-9152b6693989}</UniqueIdentifier>
@@ -64,8 +304,23 @@
     <Filter Include="UI\BalloonMain">
       <UniqueIdentifier>{1250ceb6-7499-8a57-dafd-9641cc4f646e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI\BalloonMarkdown">
+      <UniqueIdentifier>{d468d91b-fc6c-7d27-93f5-6e48414ecc51}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonMemo">
+      <UniqueIdentifier>{8a202f5a-9557-62ad-9c3b-a81a487664e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonMsgBox">
+      <UniqueIdentifier>{f37f93cb-e6ff-40ef-b7ab-9434d769823d}</UniqueIdentifier>
+    </Filter>
     <Filter Include="UI\BalloonNetSettings">
       <UniqueIdentifier>{53ffcb6a-6b10-ae18-0133-5423706830f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonNotifyMode">
+      <UniqueIdentifier>{a6d3a19d-50aa-197b-6015-731608733593}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonOcr">
+      <UniqueIdentifier>{16a1a81f-43f7-0f3f-100d-0bd8aebedd48}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonProfile">
       <UniqueIdentifier>{9f41f8ab-2f7d-9f0e-1eab-6c97aac11b18}</UniqueIdentifier>
@@ -73,14 +328,14 @@
     <Filter Include="UI\BalloonRegister">
       <UniqueIdentifier>{3e8f5995-bf4a-7d2a-0708-25746b565a3c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="UI\BalloonScreenshot">
-      <UniqueIdentifier>{90e844ca-aeb1-33da-ca05-6a738c69c218}</UniqueIdentifier>
-    </Filter>
     <Filter Include="UI\BalloonSearch">
       <UniqueIdentifier>{c0f404cd-799b-88d4-dd56-1e90f22dd3d8}</UniqueIdentifier>
     </Filter>
     <Filter Include="UI\BalloonSettings">
       <UniqueIdentifier>{c83478b9-6203-187d-58b2-0af402839dcd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\BalloonSubtitle">
+      <UniqueIdentifier>{dda1ead6-49b3-d36b-5493-1ab0e1f9ced8}</UniqueIdentifier>
     </Filter>
     <Filter Include="flamingoserver">
       <UniqueIdentifier>{143b2980-1031-1a65-253d-de900eb499cb}</UniqueIdentifier>
@@ -96,6 +351,12 @@
     </Filter>
     <Filter Include="third-party\jsoncpp-1.9.0">
       <UniqueIdentifier>{0cb59d3f-ad9f-3e89-bc6a-5ffb851a6942}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\md4c-0.6.0">
+      <UniqueIdentifier>{7b4b95d6-0033-a76f-e176-07b471f881d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\md4c-0.6.0\src">
+      <UniqueIdentifier>{fcd4ddeb-9c25-2a48-8436-92c4d6bf9559}</UniqueIdentifier>
     </Filter>
     <Filter Include="third-party\sqlite-src-3530100">
       <UniqueIdentifier>{ce8dc9cb-5369-de65-6682-55191740cd7b}</UniqueIdentifier>
@@ -204,6 +465,12 @@
     <ClCompile Include="AnnounceStoreTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="BrandTextTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="BrandTextFitTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="AnnounceBoxLayoutTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -237,9 +504,6 @@
     <ClCompile Include="BalloonMainLayoutTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
-    <ClCompile Include="BalloonProfileLayoutTests.cpp">
-      <Filter>Tests</Filter>
-    </ClCompile>
     <ClCompile Include="CallActionBarModelTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -248,6 +512,1113 @@
     </ClCompile>
     <ClCompile Include="CallMediaFramingTests.cpp">
       <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaModuleLoaderTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaSignalPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\MediaSignalPolicy.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaLogFormatTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaDllSourceGuardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\App\MediaModuleLoader.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="PluginModuleLoaderTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\App\PluginModuleLoader.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareChannelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\FileShare\ShareChannel.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="P2PChannelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="P2PHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="P2PSignalLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="P2PRelayLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="P2PEngineLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderP2PTransportTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderP2PLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderRelayLateJoinTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="P2PBadgeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectFileTransferTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectFileManagerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatDirectFileTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="TestCrashDialogSetup.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\P2P\FolderP2PTransport.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\P2P\P2PLinkBroker.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\P2P\P2PChannel.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\P2P\P2PHost.cpp">
+      <Filter>Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareMemberInfoTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\FileShare\ShareMemberInfo.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\FileShare\ShareNoticePolicy.cpp">
+      <Filter>Feature\FileShare</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareNoticePolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\FileShareModuleTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\SharePathGuardTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\SharePathGuard.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\SharePermissionTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\SharePermission.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareControlFramingTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareControlFraming.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareProtocolCodecTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareProtocolCodec.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareLocalStoreTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareLocalStore.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareFileOpsTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareReconcileTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareFileOps.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareReconcile.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareProviderTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareService.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareBrowserWindow.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareCreateDialog.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareConversationPopup.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareCenterWindow.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareLocalOpen.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareNoticePopup.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareNoticeCenter.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareAvatar.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareWindowPlacement.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareWindowPlacementTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\SharePickDialog.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareNameDialog.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareFolderPickDialog.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareDragData.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\UI\ShareFileList.cpp">
+      <Filter>FlamingoFileShare\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareProviderSession.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareProvider.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareBrowseModelTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareProviderLiveTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareBrowseModel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareVisitorTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareVisitorChannel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareVisitor.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareTransferPlanTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareBrowseLiveTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareCardSyncLiveTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareTransferPlan.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareTransferHooksTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareTransferSession.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareTransferHooks.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareCreateModelTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareTransferLiveTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareCreateModel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareConversationModelTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareManageTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareConversationModel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareConversationCounter.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareCenterModelTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareNoticeTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareBackgroundTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareCenterModel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareNoticeModel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareWriteOpsTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareRecycleTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareRecycleShell.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareWriteOps.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareRecycle.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareSearchTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareWriteUiTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareWorkerPool.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareSearch.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareThumbnailTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareWorkerPoolTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareThumbnail.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareDragModelTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Engine\ShareDragModel.cpp">
+      <Filter>FlamingoFileShare\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareFileListTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\ShareDragDataTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoFileShare\Tests\FileShareSourceGuardTests.cpp">
+      <Filter>FlamingoFileShare\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\PoParser.cpp">
+      <Filter>FlamingoLang</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\LangTable.cpp">
+      <Filter>FlamingoLang</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\PseudoLang.cpp">
+      <Filter>FlamingoLang</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\LangModule.cpp">
+      <Filter>FlamingoLang</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\Tests\LangParserTableTests.cpp">
+      <Filter>FlamingoLang\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\Tests\LangModuleTests.cpp">
+      <Filter>FlamingoLang\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\I18n\I18n.cpp">
+      <Filter>Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\I18n\I18nXml.cpp">
+      <Filter>Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="I18nTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="I18nXmlTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\I18n\LanguageSetting.cpp">
+      <Filter>Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\App\AppRestart.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="LanguageSettingTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="LanguagePromptTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AppRestartTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="I18nSourceScanner.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="I18nGuardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLang\Tests\LangSourceGuardTests.cpp">
+      <Filter>FlamingoLang\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\OcrApiTable.cpp">
+      <Filter>FlamingoOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\Core\OcrHostLog.cpp">
+      <Filter>FlamingoOcr\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\Core\OcrResultBuilder.cpp">
+      <Filter>FlamingoOcr\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\Tests\OcrApiTests.cpp">
+      <Filter>FlamingoOcr\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\Tests\OcrSourceGuardTests.cpp">
+      <Filter>FlamingoOcr\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\WinOcr\OcrScalePolicy.cpp">
+      <Filter>FlamingoOcr\WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\WinOcr\OcrLineAssembler.cpp">
+      <Filter>FlamingoOcr\WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\WinOcr\OcrLanguagePolicy.cpp">
+      <Filter>FlamingoOcr\WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\WinOcr\OcrBitmapScaler.cpp">
+      <Filter>FlamingoOcr\WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\WinOcr\WinRtRuntime.cpp">
+      <Filter>FlamingoOcr\WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\WinOcr\WinOcrEngine.cpp">
+      <Filter>FlamingoOcr\WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\Tests\OcrTextLayoutTests.cpp">
+      <Filter>FlamingoOcr\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoOcr\Tests\OcrEngineTests.cpp">
+      <Filter>FlamingoOcr\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Ocr\OcrModuleHost.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Markdown\MarkdownModuleHost.cpp">
+      <Filter>Feature\Markdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Markdown\MarkdownDocument.cpp">
+      <Filter>Feature\Markdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMarkdown.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMarkdownCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMarkdownCardControl.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\MarkdownEditCommands.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMarkdownPreview.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMarkdownFormatBar.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMarkdown\MarkdownEditorModel.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMarkdown\MarkdownFindReplace.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMarkdown\MarkdownEditorLayout.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMarkdown\MarkdownExport.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMarkdown\MarkdownClipboard.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMarkdown\MarkdownPdf.cpp">
+      <Filter>UI\BalloonMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\MdApiTable.cpp">
+      <Filter>FlamingoMarkdown</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdBuilder.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdAlert.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdCodeColor.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdFontCache.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdDocx.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdHostLog.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdHtml.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdOutline.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdPaginate.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdLayout.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdPaint.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdSelection.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Core\MdText.cpp">
+      <Filter>FlamingoMarkdown\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\third-party\md4c-0.6.0\src\md4c.c">
+      <Filter>third-party\md4c-0.6.0\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Tests\MdModelTests.cpp">
+      <Filter>FlamingoMarkdown\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Tests\MdLayoutTests.cpp">
+      <Filter>FlamingoMarkdown\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Tests\MdApiTests.cpp">
+      <Filter>FlamingoMarkdown\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Tests\MdExportTests.cpp">
+      <Filter>FlamingoMarkdown\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Tests\MdDocxTests.cpp">
+      <Filter>FlamingoMarkdown\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMarkdown\Tests\MdSourceGuardTests.cpp">
+      <Filter>FlamingoMarkdown\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Ocr\OcrPrompt.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Ocr\OcrRecognizer.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Ocr\OcrLauncher.cpp">
+      <Filter>Feature\Ocr</Filter>
+    </ClCompile>
+    <ClCompile Include="OcrHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MarkdownHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatBubbleMarkdownTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MarkdownEditCommandsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MarkdownFindReplaceTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatMarkdownToolbarTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MarkdownEditorTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MarkdownHistoryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonOcr\OcrResultLayout.cpp">
+      <Filter>UI\BalloonOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="OcrResultLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="OcrEntryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\Code\CodeLexer.cpp">
+      <Filter>Common\Code</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\Code\CodeFormatter.cpp">
+      <Filter>Common\Code</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\Code\CodeNotes.cpp">
+      <Filter>Common\Code</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCodeBlock.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCodeMessage.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCode\CodeViewerModel.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCode\CodeViewerLayout.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCode\CodeComposeLayout.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCode\CodeNotesPane.cpp">
+      <Filter>UI\BalloonCode</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeViewerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeComposeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeSendTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RecallEditTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="QuickReplyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoPrefillTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="NotifyOnlyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupMustReadTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupQaTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupLinkTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeDigestTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatBubbleCodeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeFormatTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeNotesTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeNotesLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeNotesPaneTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeSnippetTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeMessageTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PModuleTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PSourceGuardTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PCoreTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Core\P2PPacket.cpp">
+      <Filter>FlamingoP2P\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Core\P2PReplayWindow.cpp">
+      <Filter>FlamingoP2P\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Core\P2PCrypto.cpp">
+      <Filter>FlamingoP2P\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PIceTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Ice\P2PCandidate.cpp">
+      <Filter>FlamingoP2P\Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Ice\P2PStunClient.cpp">
+      <Filter>FlamingoP2P\Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Ice\P2PAddressProber.cpp">
+      <Filter>FlamingoP2P\Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Ice\P2PConnectivityChecker.cpp">
+      <Filter>FlamingoP2P\Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PSimNet.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PSimTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Core\LockPassword.cpp">
+      <Filter>FlamingoLock\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Core\LockUiState.cpp">
+      <Filter>FlamingoLock\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Core\LockAnimationChoice.cpp">
+      <Filter>FlamingoLock\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Core\LockOverlayLayout.cpp">
+      <Filter>FlamingoLock\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Core\LockPreviewState.cpp">
+      <Filter>FlamingoLock\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Render\LockD2D.cpp">
+      <Filter>FlamingoLock\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Render\LockOverlayRenderer.cpp">
+      <Filter>FlamingoLock\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\SceneModels.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\SceneUtil.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\SceneFactory.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\HonorScene.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\FlamingoScene.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\ParticleClockScene.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\BounceScene.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Scene\GlyphRainScene.cpp">
+      <Filter>FlamingoLock\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Tests\LockCoreTests.cpp">
+      <Filter>FlamingoLock\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Tests\LockSceneTests.cpp">
+      <Filter>FlamingoLock\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoLock\Tests\LockSourceGuardTests.cpp">
+      <Filter>FlamingoLock\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Host\ScreenshotModule.cpp">
+      <Filter>FlamingoScreenshot\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Host\ShotLog.cpp">
+      <Filter>FlamingoScreenshot\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Host\ShotHostServices.cpp">
+      <Filter>FlamingoScreenshot\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\AnnotationModel.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\CaptureCanvas.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\CaptureExclusion.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\ScreenCaptureOverlay.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\ScreenshotActions.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\ScreenshotGeometry.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\ScreenshotToolbar.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Capture\ShotBgra.cpp">
+      <Filter>FlamingoScreenshot\Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoScreenshot\Tests\ScreenshotDllTests.cpp">
+      <Filter>FlamingoScreenshot\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Screenshot\ScreenshotHost.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Screenshot\ScreenshotRequestBuilder.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenshotHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatPasteImageTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Core\SecretCrypto.cpp">
+      <Filter>FlamingoSecretChat\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Core\SecretEnvelope.cpp">
+      <Filter>FlamingoSecretChat\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Core\SecretProtocol.cpp">
+      <Filter>FlamingoSecretChat\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Core\CaptureProtect.cpp">
+      <Filter>FlamingoSecretChat\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Host\SecretChatModule.cpp">
+      <Filter>FlamingoSecretChat\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Host\SecretLog.cpp">
+      <Filter>FlamingoSecretChat\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Tests\SecretCoreTests.cpp">
+      <Filter>FlamingoSecretChat\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Tests\SecretModuleTests.cpp">
+      <Filter>FlamingoSecretChat\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoSecretChat\Tests\SecretSourceGuardTests.cpp">
+      <Filter>FlamingoSecretChat\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadCodec.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadComposeModel.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadDetailModel.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadFeedModel.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadMembers.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadMention.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadReactions.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadRules.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadSession.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadText.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Core\ThreadTime.cpp">
+      <Filter>FlamingoThreadGroup\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Host\ThreadGroupModule.cpp">
+      <Filter>FlamingoThreadGroup\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Host\ThreadLog.cpp">
+      <Filter>FlamingoThreadGroup\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\UI\ThreadCardMetrics.cpp">
+      <Filter>FlamingoThreadGroup\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\UI\ThreadCommentEdit.cpp">
+      <Filter>FlamingoThreadGroup\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\UI\ThreadComposeLayout.cpp">
+      <Filter>FlamingoThreadGroup\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\UI\ThreadRichText.cpp">
+      <Filter>FlamingoThreadGroup\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\UI\ThreadUiText.cpp">
+      <Filter>FlamingoThreadGroup\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\UI\ThreadWidgets.cpp">
+      <Filter>FlamingoThreadGroup\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadAtClickTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadCardTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadComposeLayoutTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadComposeTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadCoreTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadParityTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadSessionTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoThreadGroup\Tests\ThreadSourceGuardTests.cpp">
+      <Filter>FlamingoThreadGroup\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Core\BotCodec.cpp">
+      <Filter>FlamingoBot\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Core\BotRequestBook.cpp">
+      <Filter>FlamingoBot\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Core\BotRuleForm.cpp">
+      <Filter>FlamingoBot\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Core\BotRules.cpp">
+      <Filter>FlamingoBot\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Core\BotStrings.cpp">
+      <Filter>FlamingoBot\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Core\BotText.cpp">
+      <Filter>FlamingoBot\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Host\BotModule.cpp">
+      <Filter>FlamingoBot\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Host\BotLog.cpp">
+      <Filter>FlamingoBot\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\UI\BotWidgets.cpp">
+      <Filter>FlamingoBot\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\UI\BotRuleLayout.cpp">
+      <Filter>FlamingoBot\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\UI\BotEditLayout.cpp">
+      <Filter>FlamingoBot\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\UI\BotListLayout.cpp">
+      <Filter>FlamingoBot\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Tests\BotCoreTests.cpp">
+      <Filter>FlamingoBot\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Tests\BotModuleTests.cpp">
+      <Filter>FlamingoBot\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Tests\BotLayoutTests.cpp">
+      <Filter>FlamingoBot\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoBot\Tests\BotSourceGuardTests.cpp">
+      <Filter>FlamingoBot\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Bot\BotHostConvert.cpp">
+      <Filter>Feature\Bot</Filter>
+    </ClCompile>
+    <ClCompile Include="BotHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Lock\LockSuppressPolicy.cpp">
+      <Filter>Feature\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="LockSuppressPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Link\P2PSignalCodec.cpp">
+      <Filter>FlamingoP2P\Link</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionText.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionTime.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionTrack.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionJson.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionSegmenter.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionDraft.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionFiles.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Tests\CaptionModelTests.cpp">
+      <Filter>FlamingoCaption\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionSettings.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Model\CaptionLayout.cpp">
+      <Filter>FlamingoCaption\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Engine\CaptionAudio.cpp">
+      <Filter>FlamingoCaption\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Tests\CaptionEngineTests.cpp">
+      <Filter>FlamingoCaption\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Tests\CaptionDllTests.cpp">
+      <Filter>FlamingoCaption\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Export\CaptionTimedText.cpp">
+      <Filter>FlamingoCaption\Export</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Export\Mp4TextTrack.cpp">
+      <Filter>FlamingoCaption\Export</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Export\CaptionMediaIo.cpp">
+      <Filter>FlamingoCaption\Export</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Export\CaptionExportJob.cpp">
+      <Filter>FlamingoCaption\Export</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Render\CaptionRenderer.cpp">
+      <Filter>FlamingoCaption\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Editor\CaptionEditorModel.cpp">
+      <Filter>FlamingoCaption\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Editor\CaptionTimelineMath.cpp">
+      <Filter>FlamingoCaption\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Tests\CaptionExportTests.cpp">
+      <Filter>FlamingoCaption\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Tests\CaptionAudioOnlyTests.cpp">
+      <Filter>FlamingoCaption\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoCaption\Tests\CaptionEditorTests.cpp">
+      <Filter>FlamingoCaption\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Caption\CaptionHostPolicy.cpp">
+      <Filter>Feature\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="CaptionHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Caption\RecordCaptionTap.cpp">
+      <Filter>FlamingoMedia\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="CaptionRecordTapTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Caption\ShareCaptionFrame.cpp">
+      <Filter>FlamingoMedia\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Caption\ShareCaptionBoard.cpp">
+      <Filter>FlamingoMedia\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCaptionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Caption\RecordCaptionLiveRules.cpp">
+      <Filter>FlamingoMedia\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordCaptionLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Caption\ShareCaptionOverlay.cpp">
+      <Filter>FlamingoMedia\Caption</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCaptionOverlayTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Link\P2PLinkSession.cpp">
+      <Filter>FlamingoP2P\Link</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PLinkTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Io\P2PUdpPort.cpp">
+      <Filter>FlamingoP2P\Io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Io\P2PAdapters.cpp">
+      <Filter>FlamingoP2P\Io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Io\P2PEngine.cpp">
+      <Filter>FlamingoP2P\Io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Io\P2PRelayConn.cpp">
+      <Filter>FlamingoP2P\Io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Chan\P2PDatagramFrag.cpp">
+      <Filter>FlamingoP2P\Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Chan\P2PChannelMux.cpp">
+      <Filter>FlamingoP2P\Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Chan\P2PReliableChannel.cpp">
+      <Filter>FlamingoP2P\Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Chan\P2PBbrCc.cpp">
+      <Filter>FlamingoP2P\Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PCcTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\third-party\kcp\ikcp.c">
+      <Filter>FlamingoP2P\third-party\kcp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PChanTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoP2P\Tests\P2PIoTests.cpp">
+      <Filter>FlamingoP2P\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Common\OsVersionPolicy.cpp">
+      <Filter>FlamingoMedia\Common</Filter>
     </ClCompile>
     <ClCompile Include="CallProtocolTests.cpp">
       <Filter>Tests</Filter>
@@ -289,6 +1660,9 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ForwardTargetModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ForwardDirectFileTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ForwardDispatcherTests.cpp">
@@ -378,6 +1752,12 @@
     <ClCompile Include="ChatBubbleSelectionRepaintTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ChatBubbleTallSliceTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatLayoutReuseTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="ChatQuoteModelTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -387,7 +1767,34 @@
     <ClCompile Include="ChatSendLimitTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="SensitiveSendFailTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="SendLimitLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenShareLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenShareRelayLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SharePipelineLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareVideoPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareSourcePolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareRelayClientLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareProtocolClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareFramingTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ChatTextSelectionTests.cpp">
@@ -397,6 +1804,12 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ChatWindowLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatIconButtonBadgeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MainPanelBottomActionTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ClosePromptDecisionTests.cpp">
@@ -423,6 +1836,15 @@
     <ClCompile Include="WindowPlacementPrefsTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="MainPanelPlacementConfigTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="PanelDockGeometryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="PanelDockPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="HistorySelectionTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -430,6 +1852,33 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="HistoryImageGridTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryWildcardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistorySearchSyntaxTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryLibraryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryLibraryTextTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryStorageTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryExportJobTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryTimelineTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryWildcardBenchTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupFileCacheSyncTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ContactTests.cpp">
@@ -441,13 +1890,34 @@
     <ClCompile Include="ConversationsProtocolTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="SystemTipTextTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="InviteHistoryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SystemTipLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="NotifyModeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MarkUnreadTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupFollowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="NotifyManageLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MsgBoxLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="DuiButtonFocusRectTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="FavoritesModelTests.cpp">
-      <Filter>Tests</Filter>
-    </ClCompile>
-    <ClCompile Include="StarredModelTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="StarredPopupTests.cpp">
@@ -474,6 +1944,9 @@
     <ClCompile Include="FileStreamTransferTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="FileVersionInfoTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="FrameCodecTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -483,10 +1956,40 @@
     <ClCompile Include="GroupChatWindowLayoutTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="GlobalSearchStoreTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GlobalSearchRowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GlobalSearchTextTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="V2MsgSearchWorkerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupFileSearchStateTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SearchKeyboardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="FullTextSearchTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RecentSearchListTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SearchResultScrollViewTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="GroupFileLibraryTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="GroupFileProtocolClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GlobalSearchProtocolClientTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="GroupFileUploadTrackerTests.cpp">
@@ -511,6 +2014,12 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="GroupMemberSearchTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupMemberDeptTreeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupMemberSelectTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="InlineRestyleTests.cpp">
@@ -585,6 +2094,9 @@
     <ClCompile Include="LoginAccountListTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="LoginAccountAvatarTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="LoginProtocolTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -609,6 +2121,9 @@
     <ClCompile Include="GroupExitFlowTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ClearHistoryFlowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="MainPanelRowMarkTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -621,10 +2136,19 @@
     <ClCompile Include="MainPanelTrayMenuTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ChatScrollFadeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MainPanelHeaderMsgBoxTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="MainPanelUserDataTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="MemberPickerTreeModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="DeptPickModelTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="MessageIdRegistryTests.cpp">
@@ -687,10 +2211,28 @@
     <ClCompile Include="ConversationRowSyncTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="PresenceTreeMarksTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ConversationRowLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="OfflineAvatarGrayTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AvatarAntialiasTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AvatarGlyphCenterTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="SearchCandidateCacheTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="MainPanelWheelRepaintTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HoverRepaintTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="PanelDragZoneTests.cpp">
@@ -720,6 +2262,9 @@
     <ClCompile Include="ProfileProtocolClientTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ProfileFieldsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="ProfileTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -744,6 +2289,9 @@
     <ClCompile Include="FolderRelayClientTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="FolderRelayConnectTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="FolderRecvSessionTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -751,6 +2299,24 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="FolderProtocolClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CardProtocolClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatRelayCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RelayNotifyApplyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RelayDetailModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RelayComposeLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RecallOperatorLiveTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="FolderInviteNotifyPolicyTests.cpp">
@@ -771,10 +2337,28 @@
     <ClCompile Include="RemoteDesktopProtocolTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="RdTransportTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CallP2PFramingTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareP2PRouteTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="ReplyQuoteProtocolTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ScreenshotGeometryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenshotActionsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenshotHotkeyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenshotPrefsTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="SettingsBindingTests.cpp">
@@ -819,6 +2403,51 @@
     <ClCompile Include="TrayFlashControllerTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="AutoReplyPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoRuleTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoViewModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AutoReplyProtocolTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="BotClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupBotSectionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupManageBotsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="BotCardLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AutoReplyConfigTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AutoReplySettingsRowsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="AutoReplyLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="TrayConnectingBlinkTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="TreeLocateTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -832,6 +2461,21 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="HistoryCoverageTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryManagerStoreTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryConversationListTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryManagerLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryLibraryLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryTimelineLayoutTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="HistoryWindowKeysTests.cpp">
@@ -852,7 +2496,25 @@
     <ClCompile Include="..\Session\WindowPlacementPrefs.cpp">
       <Filter>Session</Filter>
     </ClCompile>
+    <ClCompile Include="..\Session\WindowPlacementResolve.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Session\UserConfig.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Screenshot\ScreenshotHotkey.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Screenshot\ScreenshotPrefs.cpp">
+      <Filter>Feature\Screenshot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Session\ConfigTextCodec.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
     <ClCompile Include="..\Session\GroupRoleRules.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Session\ProfileFields.cpp">
       <Filter>Session</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\Log\IULog.cpp">
@@ -870,6 +2532,9 @@
     <ClCompile Include="..\UI\BalloonAuth\AuthBanner.cpp">
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonAuth\BrandTextFit.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonAuth\AuthButtons.cpp">
       <Filter>UI\BalloonAuth</Filter>
     </ClCompile>
@@ -878,6 +2543,18 @@
     </ClCompile>
     <ClCompile Include="..\UI\BalloonAuth\BalloonLoginLayout.cpp">
       <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonAuth\LoginAccountAvatar.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonAuth\WindowFlipFrame.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonAuth\WindowFlipTransition.cpp">
+      <Filter>UI\BalloonAuth</Filter>
+    </ClCompile>
+    <ClCompile Include="WindowFlipTests.cpp">
+      <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChat\BalloonChatMsgFormat.cpp">
       <Filter>UI\BalloonChat</Filter>
@@ -892,6 +2569,9 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFileCardControl.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCodeCardControl.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatPaintUtil.cpp">
@@ -918,6 +2598,9 @@
     <ClCompile Include="..\Common\Log\LogCleanupPolicy.cpp">
       <Filter>Common\Log</Filter>
     </ClCompile>
+    <ClCompile Include="..\App\BrandText.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
     <ClCompile Include="..\Common\Util\IniFile.cpp">
       <Filter>Common\Util</Filter>
     </ClCompile>
@@ -931,6 +2614,9 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFileStateModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatDirectFileModel.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFolderStateModel.cpp">
@@ -981,6 +2667,18 @@
     <ClCompile Include="..\UI\BalloonChatWnd\ChatIcons.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMarkdownIcons.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatScreenshotMenu.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatRecordMenu.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatRecordMenuTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatImageCache.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
@@ -999,7 +2697,61 @@
     <ClCompile Include="..\UI\BalloonChatWnd\ChatMergedCard.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatFileShareCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatFileShareCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="FileShareGateTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatRelayCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatGroupInviteCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSecretMode.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="SecretChatHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\RewrittenSync\RewrittenSync.cpp">
+      <Filter>Feature\RewrittenSync</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\ThreadGroup\ThreadCardSync.cpp">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\ThreadGroup\ThreadGroupFilter.cpp">
+      <Filter>Feature\ThreadGroup</Filter>
+    </ClCompile>
+    <ClCompile Include="RewrittenSyncTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadGroupHostTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadGroupCreateTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\RelayNotifyApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCard\RelayDetailModel.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCard\RelayComposeModel.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonCard\RelayComposeLayout.cpp">
+      <Filter>UI\BalloonCard</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatRichContentSplit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatScrollFade.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatScrollThumb.cpp">
@@ -1007,6 +2759,69 @@
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatSendLimit.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatReedit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\RecallEdit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSendMenu.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSendMode.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMemoPrefill.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupNotifyOnly.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\GroupQaProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\GroupLinkProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\BotProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupMustRead.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupQaCardList.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupQaModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupBotModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\BotCardLayout.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupBotSection.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupQaEditLayout.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\GroupLinkFlow.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\GroupLinkLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSendBumpQueue.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatEarlyTips.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\SensitiveWordTips.cpp">
+      <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatRootPanel.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
@@ -1021,6 +2836,9 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatInputRichEdit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatPasteImage.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\FileBubbleFormat.cpp">
@@ -1050,7 +2868,16 @@
     <ClCompile Include="..\UI\BalloonChatWnd\GroupMemberItem.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatTitleIcon.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\GroupMemberList.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupMemberDeptTree.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupDeptHeaderItem.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\GroupMemberOrder.cpp">
@@ -1089,7 +2916,22 @@
     <ClCompile Include="..\UI\BalloonContact\TagChip.cpp">
       <Filter>UI\BalloonContact</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonContact\TagEditPopup.cpp">
+      <Filter>UI\BalloonContact</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonContact\BalloonContactWindow.cpp">
+      <Filter>UI\BalloonContact</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonContact\ContactWindowSet.cpp">
+      <Filter>UI\BalloonContact</Filter>
+    </ClCompile>
+    <ClCompile Include="ContactWindowSetTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonGroupManage\AnnouncePopupPolicy.cpp">
+      <Filter>UI\BalloonGroupManage</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonGroupManage\BalloonAnnouncePopupDlg.cpp">
       <Filter>UI\BalloonGroupManage</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonGroupManage\GroupManageButton.cpp">
@@ -1149,6 +2991,54 @@
     <ClCompile Include="..\UI\BalloonHistory\HistoryImageGrid.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryWildcard.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistorySearchSyntax.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryLibraryLinks.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryStorageStats.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryStorageLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryZipWriter.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryExportJob.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryExportLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryTipSearchBox.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSettings\CacheCleanExecutor.cpp">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryLibraryQuery.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\GroupFileCacheSync.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryLibraryLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryLibraryModel.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryTimeline.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryTimelineLayout.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\HistoryRow.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
@@ -1176,10 +3066,16 @@
     <ClCompile Include="..\UI\BalloonHistory\HistoryCoverage.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryConversationList.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\HistoryWindowKeys.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\V2MsgStore.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\V2MsgSearchWorker.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonImageViewer\ImageViewerGeometry.cpp">
@@ -1191,6 +3087,12 @@
     <ClCompile Include="..\UI\BalloonImageViewer\ImageViewerToolbar.cpp">
       <Filter>UI\BalloonImageViewer</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\SecretImageOverlay.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonImageViewer\BalloonImageViewerWindow.cpp">
+      <Filter>UI\BalloonImageViewer</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\AboutDlgModel.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -1198,6 +3100,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\AvatarImageUtil.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\AvatarGlyph.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\AvatarPickerTile.cpp">
@@ -1215,9 +3120,6 @@
     <ClCompile Include="..\UI\BalloonMain\BalloonMainLayout.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
-    <ClCompile Include="..\UI\BalloonMain\BalloonProfileLayout.cpp">
-      <Filter>UI\BalloonMain</Filter>
-    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\ClosePromptDecision.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -1233,10 +3135,31 @@
     <ClCompile Include="..\UI\BalloonMain\FolderInviteNotifyPolicy.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
-    <ClCompile Include="..\UI\BalloonMain\FavoritesModel.cpp">
+    <ClCompile Include="..\UI\BalloonMain\NotifyModeModel.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
-    <ClCompile Include="..\UI\BalloonMain\StarredModel.cpp">
+    <ClCompile Include="..\UI\BalloonMain\NotifyModePolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonNotifyMode\NotifyManageLayout.cpp">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonNotifyMode\NotifyManageModel.cpp">
+      <Filter>UI\BalloonNotifyMode</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMsgBox\MsgBoxLayout.cpp">
+      <Filter>UI\BalloonMsgBox</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\MsgBoxModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\GroupFollowModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\NotifyModeMenu.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\FavoritesModel.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\StarredPopupModel.cpp">
@@ -1266,6 +3189,9 @@
     <ClCompile Include="..\UI\BalloonMain\GroupExitFlow.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ClearHistoryFlow.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelConversationMenu.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -1273,6 +3199,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelIcons.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\MainPanelAvatar.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelListItem.cpp">
@@ -1296,6 +3225,18 @@
     <ClCompile Include="..\UI\BalloonMain\AutoAwayPolicy.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\PanelDockGeometry.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\PanelDockPolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\PanelShortcutPolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="PanelShortcutPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\KeepAwakePolicy.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -1317,6 +3258,12 @@
     <ClCompile Include="..\UI\BalloonMain\ConversationRowSync.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\PresenceTreeMarks.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ConversationRowLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelSystemMenu.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -1335,7 +3282,16 @@
     <ClCompile Include="..\UI\BalloonMain\MemberPickerRow.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\MemberPickerLayout.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MemberPickerTreeModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\DeptPickModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\DeptPickLayout.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\ForwardRequest.cpp">
@@ -1351,6 +3307,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\NotificationSound.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\NotificationSoundPlayer.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\OnlineCapability.cpp">
@@ -1386,6 +3345,48 @@
     <ClCompile Include="..\UI\BalloonMain\TrayFlashController.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\AutoReplyPolicy.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\AutoReplySync.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Bot\BotUiBridge.cpp">
+      <Filter>Feature\Bot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMemo\MemoCardList.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMemo\MemoEditLayout.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMemo\MemoWindowLayout.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMemo\MemoCalendarControls.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Memo\MemoRule.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Memo\MemoScheduler.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Memo\MemoBook.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Memo\MemoClock.cpp">
+      <Filter>Feature\Memo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\MemoProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMemo\MemoViewModel.cpp">
+      <Filter>UI\BalloonMemo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\TrayConnectingBlink.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonNetSettings\NetServerCard.cpp">
       <Filter>UI\BalloonNetSettings</Filter>
     </ClCompile>
@@ -1410,12 +3411,6 @@
     <ClCompile Include="..\UI\BalloonRegister\RegisterModel.cpp">
       <Filter>UI\BalloonRegister</Filter>
     </ClCompile>
-    <ClCompile Include="..\UI\BalloonScreenshot\AnnotationModel.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
-    <ClCompile Include="..\UI\BalloonScreenshot\ScreenshotGeometry.cpp">
-      <Filter>UI\BalloonScreenshot</Filter>
-    </ClCompile>
     <ClCompile Include="..\UI\BalloonSearch\ContactMatch.cpp">
       <Filter>UI\BalloonSearch</Filter>
     </ClCompile>
@@ -1428,10 +3423,31 @@
     <ClCompile Include="..\UI\BalloonSearch\SearchCandidateCache.cpp">
       <Filter>UI\BalloonSearch</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\GlobalSearchText.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\GroupFileSearchState.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\SearchKeyboard.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\RecentSearchList.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\SearchResultScrollView.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\SearchFilterTab.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonSettings\ChatFontPreview.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonSettings\SettingsBinding.cpp">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSettings\AutoReplySettingsRows.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonSettings\SettingsPageModel.cpp">
@@ -1446,29 +3462,98 @@
     <ClCompile Include="..\UI\BalloonSettings\ChatCleanFlow.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\AudioPcmUtils.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\Call\AudioPcmUtils.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\CallDlgLayout.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallDlgLayout.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\CallMediaFraming.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdDialogLayout.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\CallRelayTestFrame.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="RdDialogLayoutTests.cpp">
+      <Filter>Tests</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\OpusAudioCodec.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallMediaFraming.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\SpeexAudioProcessor.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallP2PFraming.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\SpeexResampler.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallNetStats.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\Call\VideoFrameConvert.cpp">
-      <Filter>Feature\Call</Filter>
+    <ClCompile Include="CallNetStatsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallNetQuality.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallNetQualityTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CallSystemAudioTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallEchoReference.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallSystemAudioSender.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\SystemAudioExclusive.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallSignalArt.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallBarAutoHide.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallOverlayBar.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallBarAutoHideTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="DuiWindowClassTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallJitterBuffer.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallJitterBufferTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallMediaSession.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallRelayClient.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallRelaySelfTest.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallReportLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallRelayTestFrame.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\OpusAudioCodec.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\SpeexAudioProcessor.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\SpeexResampler.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\VideoFrameConvert.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\MfH264Codec.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
     </ClCompile>
     <ClCompile Include="..\third-party\jsoncpp-1.9.0\json_reader.cpp">
       <Filter>third-party\jsoncpp-1.9.0</Filter>
@@ -1485,8 +3570,59 @@
     <ClCompile Include="..\net\AnnounceProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\net\CallProtocolClient.cpp">
-      <Filter>net</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallProtocolClient.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareHostStreamer.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareViewerReceiver.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\GroupCall\GroupCallWindow.cpp">
+      <Filter>FlamingoMedia\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareViewerWindow.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareInfoPopup.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdViewerToolbar.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaMenuDestroyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareVideoEncoder.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\DxgiOutputCapturer.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\WgcWindowCapturer.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareSources.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareVideoPolicy.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareSourcePolicy.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareRelayClient.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareProtocolClient.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareFraming.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareP2PRoute.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
     </ClCompile>
     <ClCompile Include="..\net\ChatTransferCancelRegistry.cpp">
       <Filter>net</Filter>
@@ -1497,16 +3633,19 @@
     <ClCompile Include="..\net\ConversationsProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\net\FavoriteProtocolClient.cpp">
+    <ClCompile Include="..\net\SystemTipText.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\net\StarredProtocolClient.cpp">
+    <ClCompile Include="..\net\FavoriteProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\ContactTagProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="ContactTagProtocolClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ImageViewerNavigatorTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="..\net\FileProtocolClient.cpp">
@@ -1524,6 +3663,9 @@
     <ClCompile Include="..\net\GroupFileProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
+    <ClCompile Include="..\net\GlobalSearchProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="..\net\GroupProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -1537,6 +3679,12 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\LoginProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\LoginResultFill.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\IUProtocolData.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\UpdateProtocolClient.cpp">
@@ -1563,10 +3711,13 @@
     <ClCompile Include="..\net\RegisterProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\net\RemoteDesktopProtocolClient.cpp">
-      <Filter>net</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RemoteDesktopProtocolClient.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="..\net\FolderProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\CardProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\Sha256.cpp">
@@ -1575,17 +3726,23 @@
     <ClCompile Include="..\net\TransferOwnerRegistry.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\RemoteDesktop\CaptureFallbackPolicy.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\CaptureFallbackPolicy.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\RemoteDesktop\RdInputEncoder.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdInputEncoder.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\RemoteDesktop\RdInputInjector.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdInputInjector.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\RemoteDesktop\RdRelayFraming.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdRelayFraming.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdRelayClient.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdTransport.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="..\Feature\FolderTransfer\FolderManifest.cpp">
       <Filter>Feature\FolderTransfer</Filter>
@@ -1593,14 +3750,709 @@
     <ClCompile Include="..\Feature\FolderTransfer\FolderRelayFraming.cpp">
       <Filter>Feature\FolderTransfer</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\RemoteDesktop\RdScreenDecoder.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
+    <ClCompile Include="..\Feature\FolderTransfer\DirectFileTransfer.cpp">
+      <Filter>Feature\FolderTransfer</Filter>
     </ClCompile>
-    <ClCompile Include="..\Feature\RemoteDesktop\ScreenFrameEncoder.cpp">
-      <Filter>Feature\RemoteDesktop</Filter>
+    <ClCompile Include="..\UI\BalloonMain\P2PBadge.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\FolderTransfer\FolderRelayClient.cpp">
+      <Filter>Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="ShellTypeIconTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\Graphics\ShellTypeIcon.cpp">
+      <Filter>Common\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="TitleBarIconTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="TaskbarIconTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\FolderTransfer\FolderSendSession.cpp">
+      <Filter>Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\FolderTransfer\FolderRecvSession.cpp">
+      <Filter>Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdScreenDecoder.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\ScreenFrameEncoder.cpp">
+      <Filter>FlamingoMedia\RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\third-party\sqlite-src-3530100\sqlite3.c">
       <Filter>third-party\sqlite-src-3530100</Filter>
     </ClCompile>
+    <ClCompile Include="..\Feature\ScreenShare\ScreenShareStatusCache.cpp">
+      <Filter>Feature\ScreenShare</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatScreenShareCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSystemTip.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenShareCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\GroupCall\GroupCallProtocolClient.cpp">
+      <Filter>FlamingoMedia\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\GroupCall\GroupCallLayout.cpp">
+      <Filter>FlamingoMedia\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\GroupCall\GroupCallMediaSession.cpp">
+      <Filter>FlamingoMedia\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\GroupCall\GroupCallStatusCache.cpp">
+      <Filter>Feature\GroupCall</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatGroupCallCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCallCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatAnnouncementCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMemoCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCloudRecordCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\AnnouncementCardApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupInfoCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCallProtocolClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCallCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCallDtxTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupCallBitrateTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Common\MediaAvatar.cpp">
+      <Filter>FlamingoMedia\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Common\WindowPin.cpp">
+      <Filter>FlamingoMedia\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Common\IncomingCallLayout.cpp">
+      <Filter>FlamingoMedia\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallVideoCanvas.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallingLayout.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallButtonArt.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallButtonArtTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\BalloonCallDlg.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallDlgIconBarTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallVideoEngine.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallUxTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupInviteCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="JoinRequestHandledTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareBorderWindow.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="RoomRelayTestKit.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenShareStressLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\AudioStreamMixer.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioStreamMixerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\CallAudioEngine.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\WasapiAudioIo.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="CallAudioEngineTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAudioSession.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareAudioSessionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareAudioLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareSystemAudioCapture.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareSystemAudioDeviceTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCameraSender.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCameraReceiver.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Call\MfCameraCapture.cpp">
+      <Filter>FlamingoMedia\Call</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCameraTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCameraPanel.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCameraPanelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotation.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationSession.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationRender.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareAnnotationTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordPolicy.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\CloudRecordReader.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\CloudRecordCompose.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\CloudRecordManagerModel.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\CloudRecordComposer.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\CloudRecordProtocolClient.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordAudioMixer.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordMp4Writer.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordFrameComposer.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordSession.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordPipelineTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordAudioOnlyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordStopStallTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\App\HangWatchdog.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="HangWatchdogTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordAudioOnlyBarTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareLinkInvite.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareLinkInviteTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CloudRecordClientTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CloudComposeBenchTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CloudRecordCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CloudRecordLiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCallPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBitrateTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareBitrateController.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareRoomPolicy.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\SharePickerPolicy.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareTopBarCollapse.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareHwH264Encoder.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareHwEncoderTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareTopBarCollapseTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareRoomPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SharePickerPolicyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareMouseEffectsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareMouseEffects.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ScreenShareInfoApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\GroupInviteStateApply.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="CornerPopupCountdownTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\CornerPopupCountdown.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCursorSampler.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordMouseEffects.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceMessageTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Voice\VoiceOggFile.cpp">
+      <Filter>FlamingoMedia\Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceRecorderTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Voice\VoiceRecorder.cpp">
+      <Filter>FlamingoMedia\Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="VoicePlayerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Voice\VoicePlayer.cpp">
+      <Filter>FlamingoMedia\Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceControllerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Voice\VoiceController.cpp">
+      <Filter>FlamingoMedia\Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceContentTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\VoiceContent.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceRecordBarTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Feature\Voice\VoiceHub.cpp">
+      <Filter>Feature\Voice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\VoiceRecordBarModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceBarLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\VoiceRecordBar.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceBubbleTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatVoiceBubble.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatReceivedVoice.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceReceiveTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceSendTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="VoicePlayTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceQuoteTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatVoicePaint.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatVoiceStrip.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceHistoryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\VoiceRecordFlow.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceRecordFlowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\VoiceRecordSession.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenShareMenuTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareRemoteControlTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareRemoteControl.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareDrawTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationGeometry.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationMenus.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareObjectTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="../../FlamingoMedia/Share/ShareAnnotationObjects.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="../../FlamingoMedia/Share/ShareAnnotationSessionSelect.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="../../FlamingoMedia/Share/ShareAnnotationIcons.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareRecordPenTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="../../FlamingoMedia/Share/ShareWhiteboard.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareMultiTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="../../FlamingoMedia/Share/ShareScreens.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="../../FlamingoMedia/Share/ShareScreenDecoders.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCanvasTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBoardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareImageExport.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationBar.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordDoneToast.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordDoneToastTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCornerToast.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCornerToastTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareCompositionLayerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationMenuIcons.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareMenuIconTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationOverlay.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareEndedSummary.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareEndedToast.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareEndedTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\SharePickerDialog.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="SharePickerWindowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordBar.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordBarTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareControlBar.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBarMenuTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareBarPopupGuard.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareRecordMutex.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareRecordMutexTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotModePolicy.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareAnnotModeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Common\MediaToast.cpp">
+      <Filter>FlamingoMedia\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaToastTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareBarButtonArt.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBarArtTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ToolbarHideTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBoardOwnerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareConfirmDialog.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareScreensWindow.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareHostTransferTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareLinkJoinDialogTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\CloudExitDialog.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="CloudExitDialogTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBoardRecordTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareSharerBar.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareSharerBoardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareRecordMergeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareAnnotPointerTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareAnnotSelectButtonTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBoardCloseTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareBarCaptureTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CallTipGuardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaWindowIconTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ModuleCryptoGuardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="Media7ShotTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareMouseEffectMenu.cpp">
+      <Filter>FlamingoMedia\Share</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ForwardTargetDlg.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="ForwardTargetWindowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordCameraWindow.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordPipTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupFileChatPoster.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupFileChatPosterTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Session\SubtitlePrefs.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\Graphics\CompositionLayer.cpp">
+      <Filter>Common\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleModel.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleTextFit.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleState.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleLayout.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleRenderer.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleSession.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSubtitle\SubtitleWindow.cpp">
+      <Filter>UI\BalloonSubtitle</Filter>
+    </ClCompile>
+    <ClCompile Include="SubtitleTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\RecordLocalStore.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordLocalStoreTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\App\MediaRecordingBridge.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="MediaRecordingBridgeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordManagerModel.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordManagerModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordManagerList.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\FlamingoMedia\Record\RecordManagerLayout.cpp">
+      <Filter>FlamingoMedia\Record</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordManagerLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="FileResendTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatEarlyTipTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="UploadInflightGateTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\UploadInflightGate.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordIconTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoUnitIcon.rc">
+      <Filter>Tests</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

@@ -27,7 +27,7 @@
 #include "RegisterProtocol.h"
 
 //企业处于"活跃"状态时 t_enterprise.f_status 的取值（0=待审核 1=活跃 2=已停用，
-//取值定义见 table.sql 的 t_enterprise.f_status 注释）。
+//取值定义见 table_mysql.sql 的 t_enterprise.f_status 注释）。
 //只有活跃企业允许新人注册加入：待审核的企业还没开通，已停用的企业进去也看不到东西。
 const int32_t ENTERPRISE_STATUS_ACTIVE = 1;
 
@@ -86,6 +86,13 @@ public:
      */
     virtual bool findEnterpriseByName(const std::string& name, RegisterEnterprise& out) = 0;
 
+    /**
+     *  企业是否允许用户自助注册（企业级开关 register.enabled，未设置时为允许）。
+     *  @param enterpriseId 企业ID
+     *  @return 允许返回 true；关闭时返回 false，doRegister 随即返回 error_code_register_closed、不建号
+     */
+    virtual bool isRegisterAllowed(int64_t enterpriseId) = 0;
+
     //判断手机号是否已被占用（一个手机号只能注册一个账号）；已占用返回 true。
     virtual bool isPhoneTaken(const std::string& phone) = 0;
 
@@ -100,6 +107,15 @@ public:
      */
     virtual bool createUser(const RegisterRequest& req, int64_t enterpriseId,
                             int64_t& outUserId, std::string& outUsername) = 0;
+
+    /**
+     *  按新账号将要加入的企业的敏感词库检查注册昵称（docs/敏感词方案.md 第 6.3 节）。
+     *  命中时由实现方写一条拦截记录：此时还没有账号，提交者 userid 记 0、名称记手机号。
+     *  @param enterpriseId 新账号将要加入的企业ID
+     *  @param req          注册请求，使用其 nickname 与 phone
+     *  @return 命中返回 true，doRegister 随即返回 error_code_profile_sensitive_word、不建号
+     */
+    virtual bool hitSensitiveNickname(int64_t enterpriseId, const RegisterRequest& req) = 0;
 
     /**
      *  把新账号挂进指定部门，作为其主部门。
@@ -122,14 +138,15 @@ public:
      *  @param out [出参] 仅在返回 0 时有效，填入自动生成的登录账号、企业归属与
      *             公司根部门ID。
      *  @return 0 表示注册成功；否则为 Protocol.h 中 enum error_code 的取值，
-     *          可能是 error_code_register_fail / error_code_already_registered /
+     *          可能是 error_code_bad_request（手机号不是 11 位以 1 开头的数字，2026-10-06 起）/
+     *          error_code_register_fail / error_code_already_registered /
      *          error_code_enterprise_not_exist / error_code_enterprise_disabled /
-     *          error_code_enterprise_no_root_dept。
+     *          error_code_enterprise_no_root_dept / error_code_profile_sensitive_word。
      *
      *  注意"挂进公司根部门"这一步失败时本函数**仍返回 0**：账号此时已经建出来并
      *  能登录，把整次注册判为失败会让用户拿同一个账号重试时撞上"账号已存在"，反而
      *  更糟。这种情况通过 out.departmentAttached 为 false 告知调用方，由调用方记录
-     *  错误日志，事后用 migrations 下的脚本把这类孤儿账号补挂回公司根部门。
+     *  错误日志，事后由运维手工把这类孤儿账号补挂回公司根部门。
      */
     static int32_t doRegister(IRegisterDataSource& ds, const RegisterRequest& req, RegisterOutcome& out);
 

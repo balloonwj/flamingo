@@ -13,6 +13,7 @@
  */
 #include "catch_amalgamated.hpp"
 #include "../net/MessageProtocolClient.h"
+#include "../net/CardProtocolClient.h"  // MP-RELAY2：解析出的接龙卡片内容再交给 parseRelayCardContent
 #include "../net/Protocol.h"            // conversation_single（撤回推送缺 ctype 时的缺省值断言）
 #include "../third-party/jsoncpp-1.9.0/json.h"
 
@@ -1694,4 +1695,242 @@ TEST_CASE("MP-SYS2 parseSyncMessagesResponse 拉历史时保留系统消息，�
     CHECK(out.m_messages[1].m_from == 0);
     CHECK(out.m_messages[1].m_msgtype == message_type_system);
     CHECK(out.m_messages[1].m_text == "tip");
+}
+
+// =====================================================================
+// MP-CLR：按会话清空本人的聊天记录（cmd_clear_conversation=1523，2026-10-02）
+// =====================================================================
+
+TEST_CASE("MP-CLR1 buildClearConversationRequest 会话类型按数字、会话ID按字符串写，非法时不构造", "[clearconv]")
+{
+    Json::Value root;
+    const std::string json = MessageProtocolClient::buildClearConversationRequest(2, 268435456LL);
+    REQUIRE_FALSE(json.empty());
+    REQUIRE(parseJsonText(json, root));
+    CHECK(root["ctype"].asInt() == 2);
+    CHECK(root["cid"].asString() == "268435456");
+
+    //只接受单聊与群聊，会话ID须为正
+    CHECK(MessageProtocolClient::buildClearConversationRequest(3, 100001).empty());
+    CHECK(MessageProtocolClient::buildClearConversationRequest(1, 0).empty());
+}
+
+TEST_CASE("MP-CLR2 parseClearConversationResponse 成功带回会话与锚点，失败应答只有 code", "[clearconv]")
+{
+    net::ClearConversationResponse ok;
+    REQUIRE(MessageProtocolClient::parseClearConversationResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"ctype\":1,\"cid\":\"100002\",\"clearedmsgid\":\"9007199254741001\"}", ok));
+    CHECK(ok.m_code == 0);
+    CHECK(ok.m_ctype == 1);
+    CHECK(ok.m_cid == 100002);
+    CHECK(ok.m_clearedMsgid == kDelBigMsgid);
+
+    //失败应答由服务端 buildSimpleResponse 构造，只有 code / msg：照样解析成功，其余为 0
+    net::ClearConversationResponse fail;
+    REQUIRE(MessageProtocolClient::parseClearConversationResponse(
+        "{\"code\":302,\"msg\":\"not a group member\"}", fail));
+    CHECK(fail.m_code == 302);
+    CHECK(fail.m_cid == 0);
+    CHECK(fail.m_clearedMsgid == 0);
+
+    net::ClearConversationResponse bad;
+    CHECK_FALSE(MessageProtocolClient::parseClearConversationResponse("{\"msg\":\"ok\"}", bad));
+    CHECK_FALSE(MessageProtocolClient::parseClearConversationResponse("", bad));
+}
+
+TEST_CASE("MP-CLR3 parseMessagesDeletedNotify 清空形式：会话与锚点，不当成单条或区间形式", "[clearconv]")
+{
+    net::MessagesDeletedNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessagesDeletedNotify(
+        "{\"ctype\":2,\"cid\":\"268435456\",\"clearedmsgid\":\"9007199254741001\"}", notify));
+    CHECK(notify.m_isClear);
+    CHECK_FALSE(notify.m_isRange);
+    CHECK(notify.m_ctype == 2);
+    CHECK(notify.m_cid == 268435456);
+    CHECK(notify.m_clearedMsgid == kDelBigMsgid);
+    CHECK(notify.m_msgids.empty());
+
+    //清空一个没有任何消息的会话时锚点为 0，照样是合法推送（本地什么都不用删）
+    REQUIRE(MessageProtocolClient::parseMessagesDeletedNotify(
+        "{\"ctype\":1,\"cid\":\"100002\",\"clearedmsgid\":\"0\"}", notify));
+    CHECK(notify.m_isClear);
+    CHECK(notify.m_clearedMsgid == 0);
+
+    //原有两种形式不受影响，也不会被误判成清空形式
+    REQUIRE(MessageProtocolClient::parseMessagesDeletedNotify(
+        "{\"ctype\":2,\"cid\":\"268435456\",\"msgids\":[\"501\"]}", notify));
+    CHECK_FALSE(notify.m_isClear);
+    REQUIRE(MessageProtocolClient::parseMessagesDeletedNotify(
+        "{\"begintime\":0,\"endtime\":1754399999999}", notify));
+    CHECK_FALSE(notify.m_isClear);
+    CHECK(notify.m_isRange);
+}
+
+TEST_CASE("MP-CLR4 parseMessagesDeletedNotify 清空形式的非法输入一律失败", "[clearconv]")
+{
+    const char* const kBad[] =
+    {
+        "{\"ctype\":2,\"cid\":\"0\",\"clearedmsgid\":\"5\"}",        //会话ID为 0
+        "{\"ctype\":3,\"cid\":\"100002\",\"clearedmsgid\":\"5\"}",   //会话类型不合法
+        "{\"cid\":\"100002\",\"clearedmsgid\":\"5\"}",                //缺会话类型
+        "{\"ctype\":1,\"cid\":\"100002\",\"clearedmsgid\":\"-1\"}"   //锚点为负
+    };
+    for (size_t i = 0; i < sizeof(kBad) / sizeof(kBad[0]); ++i)
+    {
+        INFO("case #" << i << ": " << kBad[i]);
+        net::MessagesDeletedNotify notify;
+        CHECK_FALSE(MessageProtocolClient::parseMessagesDeletedNotify(kBad[i], notify));
+    }
+}
+
+
+//群接龙 2a（docs/群接龙方案.md 第 2 期）：卡片消息的发送请求只套外层信封，content 由
+//CardProtocolClient 拼好，这里断言它作为 JSON 对象原样嵌入
+TEST_CASE("MP-RELAY1 buildSendCardRequest 外层信封字段齐全、content 作为对象嵌入", "[grouprelay]")
+{
+    const std::string content = "{\"title\":\"t\",\"note\":\"n\",\"deadline\":0}";
+    Json::Value root;
+    REQUIRE(parseJsonText(MessageProtocolClient::buildSendCardRequest(
+        conversation_group, 9007199254740993LL, "cmid-relay-1", message_type_relay, content), root));
+    CHECK(root.size() == 5);
+    CHECK(root["clientmsgid"].asString() == "cmid-relay-1");
+    CHECK(root["ctype"].asInt() == conversation_group);
+    REQUIRE(root["cid"].isString());
+    CHECK(root["cid"].asString() == "9007199254740993");
+    CHECK(root["msgtype"].asInt() == message_type_relay);
+    REQUIRE(root["content"].isObject());
+    CHECK(root["content"]["title"].asString() == "t");
+    CHECK(root["content"]["note"].asString() == "n");
+    CHECK(root["content"]["deadline"].asInt64() == 0);
+
+    //content 不是 JSON 对象、cid 非正、clientMsgId 为空：返回空串，调用方据此放弃发送
+    CHECK(MessageProtocolClient::buildSendCardRequest(conversation_group, 600001, "c", message_type_relay,
+                                                      "not json").empty());
+    CHECK(MessageProtocolClient::buildSendCardRequest(conversation_group, 600001, "c", message_type_relay,
+                                                      "[1,2]").empty());
+    CHECK(MessageProtocolClient::buildSendCardRequest(conversation_group, 0, "c", message_type_relay,
+                                                      content).empty());
+    CHECK(MessageProtocolClient::buildSendCardRequest(conversation_group, 600001, "", message_type_relay,
+                                                      content).empty());
+}
+
+//群接龙 2c：服务端下发的接龙卡片（msgtype=11）解析后，content 原文整体保留在 m_relayContent，
+//名单与状态不丢；其它类型的消息不填这个字段
+TEST_CASE("MP-RELAY2 parseMessageNotify 对接龙卡片保留 content 原文", "[grouprelay]")
+{
+    //照服务端 messageBodyValue + augmentRelayContent 的输出构造一条同步下发的接龙卡片
+    Json::Value item;
+    item["userid"] = "100008";
+    item["text"]   = u8"本人+1";
+    Json::Value content;
+    content["title"]     = u8"周五团建报名";
+    content["note"]      = "";
+    content["deadline"]  = static_cast<Json::Int64>(0);
+    content["items"]     = Json::Value(Json::arrayValue);
+    content["items"].append(item);
+    content["state"]     = relay_state_open;
+    content["closedby"]  = "0";
+    content["closetime"] = static_cast<Json::Int64>(0);
+    Json::Value msg;
+    msg["msgid"]       = "9007199254741011";
+    msg["clientmsgid"] = "relay-1";
+    msg["ctype"]       = conversation_group;
+    msg["cid"]         = "600001";
+    msg["from"]        = "100001";
+    msg["to"]          = "600001";
+    msg["msgtype"]     = message_type_relay;
+    msg["content"]     = content;
+    msg["timestamp"]   = static_cast<Json::Int64>(1759400000000LL);
+    msg["recalled"]    = false;
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+
+    MessageNotify n;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(Json::writeString(wb, msg), n));
+    CHECK(n.m_msgtype == message_type_relay);
+    CHECK(n.m_text.empty());
+    REQUIRE_FALSE(n.m_relayContent.empty());
+
+    RelayCardContent card;
+    REQUIRE(CardProtocolClient::parseRelayCardContent(n.m_relayContent, card));
+    CHECK(card.m_title == u8"周五团建报名");
+    REQUIRE(card.m_items.size() == 1);
+    CHECK(card.m_items[0].m_userid == 100008);
+    CHECK(card.m_items[0].m_text == u8"本人+1");
+    CHECK(card.m_state == relay_state_open);
+
+    //其它类型的消息不填 m_relayContent
+    MessageNotify other;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(kMergedNotifyJson, other));
+    CHECK(other.m_relayContent.empty());
+}
+
+//群接龙 2d：接龙相关的群系统提示在 content 里另带 cardmsgid，解析进 m_cardMsgId，正文照常
+TEST_CASE("MP-RELAY3 parseMessageNotify 解析系统提示里的 cardmsgid", "[grouprelay]")
+{
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+
+    //照服务端 sendGroupSystemMessage + CardProtocol::buildRelayTipContent 构造一条接龙提示
+    Json::Value content;
+    content["text"]      = u8"「张三」参与了接龙「周五团建报名」";
+    content["cardmsgid"] = "9007199254741011";
+    Json::Value msg;
+    msg["msgid"]     = "9007199254741012";
+    msg["ctype"]     = conversation_group;
+    msg["cid"]       = "600001";
+    msg["from"]      = "0";
+    msg["to"]        = "600001";
+    msg["msgtype"]   = message_type_system;
+    msg["content"]   = content;
+    msg["timestamp"] = static_cast<Json::Int64>(1759400000000LL);
+
+    MessageNotify tip;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(Json::writeString(wb, msg), tip));
+    CHECK(tip.m_msgtype == message_type_system);
+    CHECK(tip.m_text == u8"「张三」参与了接龙「周五团建报名」");
+    CHECK(tip.m_cardMsgId == 9007199254741011LL);
+
+    //不带 cardmsgid 的系统提示：为 0
+    msg["content"].removeMember("cardmsgid");
+    MessageNotify plainTip;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(Json::writeString(wb, msg), plainTip));
+    CHECK(plainTip.m_cardMsgId == 0);
+
+    //文字消息即便 content 里带了 cardmsgid 也不认：只有系统提示才有这个字段。
+    //文字消息的发送方必须是真实用户（解析时只对系统消息放行 from=0）
+    msg["msgtype"] = message_type_text;
+    msg["from"]    = "100001";
+    msg["content"]["cardmsgid"] = "9007199254741011";
+    MessageNotify text;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(Json::writeString(wb, msg), text));
+    CHECK(text.m_cardMsgId == 0);
+}
+
+TEST_CASE("MP-RC8 parseMessageNotify 取出撤回者，缺字段时为 0", "[recall]")
+{
+    //群主 5003 撤回了 5001 发的群消息：撤回者与发送方各取各的
+    std::string body =
+        "{\"msgid\":\"20001\",\"clientmsgid\":\"c1\",\"ctype\":2,\"cid\":\"268435463\","
+        "\"from\":\"5001\",\"to\":\"268435463\",\"msgtype\":1,\"content\":{\"text\":\"x\"},"
+        "\"timestamp\":1716268800001,\"recalled\":true,\"recalledby\":\"5003\"}";
+    MessageNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(body, notify));
+    CHECK(notify.m_recalled);
+    CHECK(notify.m_recalledBy == 5003);
+    CHECK(notify.m_from == 5001);
+
+    //撤回发生在服务端开始记录撤回者之前：不带 recalledby，取 0，由显示层按发送方处理
+    std::string oldBody =
+        "{\"msgid\":\"20002\",\"clientmsgid\":\"c2\",\"ctype\":2,\"cid\":\"268435463\","
+        "\"from\":\"5001\",\"to\":\"268435463\",\"msgtype\":1,\"content\":{\"text\":\"y\"},"
+        "\"timestamp\":1716268800002,\"recalled\":true}";
+    MessageNotify oldNotify;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(oldBody, oldNotify));
+    CHECK(oldNotify.m_recalled);
+    CHECK(oldNotify.m_recalledBy == 0);
+
+    //默认构造同样为 0
+    MessageNotify fresh;
+    CHECK(fresh.m_recalledBy == 0);
 }

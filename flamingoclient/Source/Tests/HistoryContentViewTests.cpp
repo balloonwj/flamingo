@@ -11,6 +11,8 @@
  *  断言尽量写成"相对关系 + 行高的整数倍"而不是具体像素值 —— 像素值会随系统字体
  *  版本变化，钉死它只会让用例变脆。
  *
+ *  HCV13（2026-10-10）例外地检查绘制结果：按控件高度截断时墨迹不越过控件下缘。
+ *
  *  balloonwj@qq.com   2026-08-05
  */
 #include "stdafx.h"
@@ -362,6 +364,31 @@ public:
         return hit;
     }
 
+    /**
+     *  最下面一行有墨迹的行号（从 0 起）：三个通道都低于 level 的像素算作墨迹。整张画布都是白底时返回 -1。
+     *    level：墨迹判定阈值（0～255），深灰正文取 160 足够把抗锯齿边缘也算进去。
+     */
+    int LastInkRow(int level) const
+    {
+        if (!Ok())
+        {
+            return -1;
+        }
+        for (int y = m_h - 1; y >= 0; --y)
+        {
+            for (int x = 0; x < m_w; ++x)
+            {
+                const int i = y * m_w + x;
+                //DIB 是 BGRA 排列。
+                if (m_bits[i * 4 + 0] < level && m_bits[i * 4 + 1] < level && m_bits[i * 4 + 2] < level)
+                {
+                    return y;
+                }
+            }
+        }
+        return -1;
+    }
+
 private:
     HDC      m_hdc;
     HBITMAP  m_bmp;
@@ -502,4 +529,69 @@ TEST_CASE("HCV7 空正文有一行的下限高度，不为 0", "[historycontent]
     //可用宽度非法（<= 0）时按 1 处理，不崩、也仍然有下限高度。
     CHECK(view.MeasureHeight(0) > 0);
     CHECK(view.MeasureHeight(-100) > 0);
+}
+
+//右下角「新公告」弹窗的正文区高度固定，正文用展开态画时不限行数，长正文画到下面的分隔线与按钮上。
+//开启按控件高度截断后，墨迹不越过控件下缘；不开时同一段正文确实越过（对照，说明用例能发现问题）。
+TEST_CASE("HCV13 按控件高度截断：长正文的墨迹不越过控件下缘", "[historycontent]")
+{
+    const int kWidth = 300;        //控件宽（像素）
+    const int kBoxHeight = 60;     //控件高（像素），只容得下两三行
+    const int kCanvasHeight = 300; //画布高，比控件高得多，越界画出的行能被看到
+    const int kInkLevel = 160;     //墨迹判定阈值
+    const CString text = _T("各位同事：本周六 22:00 至次日 02:00 进行机房电力检修，期间聊天、文件与音视频服务暂停。")
+                         _T("请提前保存工作内容，检修结束后客户端会自动重连。如有紧急事务请电话联系值班同事，")
+                         _T("值班表见公告附件。感谢大家的理解与配合！");
+    const RECT rc = { 0, 0, kWidth, kBoxHeight };
+
+    //按控件高度截断
+    {
+        RenderCanvas canvas(kWidth, kCanvasHeight);
+        REQUIRE(canvas.Ok());
+        HistoryContentView view;
+        view.SetExpanded(true);
+        view.SetFitToHeight(true);
+        view.SetPlainContent(text);
+        view.ForceLayout(rc);
+        view.OnPaint(canvas.Get(), rc);
+        const int last = canvas.LastInkRow(kInkLevel);
+        INFO("fit: last ink row = " << last);
+        REQUIRE(last >= 0);
+        CHECK(last < kBoxHeight);
+    }
+
+    //对照：只设展开态时同一段正文越过控件下缘
+    {
+        RenderCanvas canvas(kWidth, kCanvasHeight);
+        REQUIRE(canvas.Ok());
+        HistoryContentView view;
+        view.SetExpanded(true);
+        view.SetPlainContent(text);
+        view.ForceLayout(rc);
+        view.OnPaint(canvas.Get(), rc);
+        const int last = canvas.LastInkRow(kInkLevel);
+        INFO("expanded: last ink row = " << last);
+        CHECK(last >= kBoxHeight);
+    }
+
+    //短正文放得下时与展开态画得一样，不截断
+    {
+        RenderCanvas fit(kWidth, kCanvasHeight);
+        RenderCanvas expanded(kWidth, kCanvasHeight);
+        REQUIRE(fit.Ok());
+        REQUIRE(expanded.Ok());
+        HistoryContentView a;
+        a.SetExpanded(true);
+        a.SetFitToHeight(true);
+        a.SetPlainContent(_T("明天下午三点开会。"));
+        a.ForceLayout(rc);
+        a.OnPaint(fit.Get(), rc);
+        HistoryContentView b;
+        b.SetExpanded(true);
+        b.SetPlainContent(_T("明天下午三点开会。"));
+        b.ForceLayout(rc);
+        b.OnPaint(expanded.Get(), rc);
+        CHECK(fit.LastInkRow(kInkLevel) == expanded.LastInkRow(kInkLevel));
+        CHECK(fit.CountNear(RGB(0x33, 0x33, 0x33), 40) == expanded.CountNear(RGB(0x33, 0x33, 0x33), 40));
+    }
 }

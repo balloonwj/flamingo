@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 11 章：发送代码片段、格式化与行号、批注、代码卡片与代码查看窗。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>代码片段 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c11">
+<article class="doc">
+  <h1>代码片段</h1>
+  <p class="lead">把代码当普通文字发出去，缩进和格式容易乱，也不好阅读。用「发送代码」发出的代码片段会保留原样、按语言着色并带行号，还可以针对某几行写批注，适合讨论代码时使用。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>单聊、群聊通用</li>
+    <li>每段代码最多 50 条批注，每条最多 200 个字</li>
+  </ul>
+
+  <h2 id="compose">发送代码</h2>
+  <p>点聊天窗口输入工具栏的 <span class="ui">发送代码</span> 按钮（「&lt;/&gt;」图标），打开「发送代码」窗口：</p>
+  <figure class="shot center"><img src="../img/g_code_compose_empty.png" width="760" alt="空的发送代码窗口"><figcaption>刚打开的「发送代码」窗口</figcaption></figure>
+  <figure class="shot center"><img src="../img/g_code_compose.png" width="760" alt="粘贴代码后的发送代码窗口"><figcaption>粘贴代码后，右上方显示「自动识别为 JavaScript，共 12 行」</figcaption></figure>
+  <ol class="steps">
+    <li>在编辑区输入或粘贴代码。编辑区为空时显示提示「在这里输入或粘贴代码」，按 <kbd>Tab</kbd> 会插入制表符。</li>
+    <li>确认 <span class="ui">语言</span>。默认是 <span class="ui">自动识别</span>，识别结果显示在工具行右侧；识别不准时可以在下拉框里手动选择，可选纯文本、C/C++、C#、Java、Python、JavaScript、Go、Rust、SQL、Shell、JSON、XML/HTML、Lua、PHP。</li>
+    <li>按需使用工具行上的其他功能：<span class="ui">行号</span> 勾选框控制编辑区左侧是否显示行号；<span class="ui">格式化</span> 整理缩进（见下文）；<span class="ui">批注</span> 给选中的行添加说明（见下文<a href="#notes">「批注」</a>）。</li>
+    <li>点 <span class="ui">发送</span> 或按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发出。点 <span class="ui">取消</span> 或按 <kbd>Esc</kbd> 关闭窗口、不发送。</li>
+  </ol>
+  <div class="callout note"><b>格式化</b>点 <span class="ui">格式化</span>（或按 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>、在编辑区右键选「格式化」）会整理代码：去掉行尾空白和多余空行，C/C++、Java、JavaScript 等语言按括号层次重新缩进，JSON、SQL 会重新排版。选中了一部分代码时只处理选中的行。结果显示在工具行右侧（例如「已格式化，调整了 3 行」），不满意可以按 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销。</div>
+  <div class="callout tip"><b>其他发送方式</b>往空的聊天输入框里粘贴一段像代码的文字时，输入框上方会提示「看起来是一段代码」，点 <span class="ui">以代码片段发送</span> 就会把它移进「发送代码」窗口。另外，在输入框里输入一整条以 <code>```</code> 开头、以 <code>```</code> 结尾的消息（开头的 <code>```</code> 后面可以写语言名，如 <code>```python</code>），按 <kbd>Enter</kbd> 发出时也会作为代码片段发送。</div>
+
+  <h2 id="notes">批注</h2>
+  <p>批注是针对某几行代码的说明，显示在代码右侧的批注栏里，不会混进代码本身。</p>
+  <ol class="steps">
+    <li>在编辑区选中要说明的一行或几行（只放了光标时就是光标所在的那一行）。</li>
+    <li>点工具行的 <span class="ui">批注</span>，或在编辑区右键选 <span class="ui">添加批注…</span>。窗口右侧展开批注栏，出现一张标着「第 X～Y 行」的卡片和输入框。</li>
+    <li>写下说明，点 <span class="ui">确定</span>（或按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>）；点 <span class="ui">取消</span>（或按 <kbd>Esc</kbd>）放弃这条批注。</li>
+    <li>确定后，被批注的行在代码里显示浅黄色底色，行号左侧有一条橙色竖条。卡片上的 <span class="ui">修改</span>、<span class="ui">删除</span> 可以改动或删除这条批注。</li>
+  </ol>
+  <figure class="shot center"><img src="../img/g_code_note_open.png" width="880" alt="为第 4～5 行添加批注"><figcaption>选中第 4～5 行后点「批注」，右侧出现输入框</figcaption></figure>
+  <figure class="shot center"><img src="../img/g_code_note_done.png" width="880" alt="批注完成后"><figcaption>确定后，第 4～5 行被标出，卡片上可以「修改」「删除」</figcaption></figure>
+  <ul>
+    <li>批注栏顶部显示「批注 (N)」，点右端的 <b>»</b> 可以收起批注栏，这时工具行的按钮显示为「批注 (N)」，点它重新展开。</li>
+    <li>删除批注后，工具行右侧会出现「已删除 1 条批注」和 <span class="ui">撤销</span> 链接，点 <span class="ui">撤销</span> 可以恢复刚删掉的批注。</li>
+    <li>点批注卡片上的「第 X～Y 行」，会在代码里选中这几行。修改代码后，批注会跟着对应的行移动；所在的行被整段删除时，批注也会一并删除，工具行右侧会说明。</li>
+  </ul>
+
+  <h2 id="card">代码卡片</h2>
+  <p>发出的代码片段在聊天里显示为代码卡片：顶部写着语言、行数和批注条数（如「JavaScript　12 行 · 1 条批注」），右侧有 <span class="ui">复制</span>；正文按语言着色、带行号，被批注的行有浅黄底色和橙色竖条，但卡片里不显示批注的文字。</p>
+  <figure class="shot center">
+    <img src="../img/g_code_card.png" width="760" alt="聊天中的代码卡片">
+    <figcaption>聊天中的代码卡片</figcaption>
+  </figure>
+  <ul>
+    <li>点 <span class="ui">复制</span> 只复制代码（不含批注），复制后短暂显示「已复制」。</li>
+    <li>代码较长时，卡片只显示前面一部分，底部出现「查看全部（共 N 行）」。</li>
+    <li>点卡片的其他位置，或右键选 <span class="ui">在窗口中查看</span>，会打开代码查看窗口。</li>
+    <li>右键菜单还有 <span class="ui">复制代码</span>、<span class="ui">另存为…</span>（按语言给出文件扩展名）和 <span class="ui">添加批注…</span>，其他菜单项与普通消息相同，见<a href="07-message-actions.html">「消息的更多操作」</a>。</li>
+  </ul>
+
+  <h2 id="viewer">代码查看窗口</h2>
+  <figure class="shot">
+    <img src="../img/g_code_viewer.png" width="880" alt="代码查看窗口">
+    <figcaption>代码查看窗口，右侧批注栏显示罗俊辉写的批注</figcaption>
+  </figure>
+  <p>窗口标题显示语言和行数（如「代码 · JavaScript · 12 行」），工具条上有：</p>
+  <table>
+    <tr><th>控件</th><th>作用</th></tr>
+    <tr><td>语言</td><td>换一种语言着色，只影响这个窗口的显示，不改变消息</td></tr>
+    <tr><td>自动换行</td><td>勾选后长行自动折行，不勾选时可以左右滚动</td></tr>
+    <tr><td>批注 (N)</td><td>展开或收起右侧的批注栏</td></tr>
+    <tr><td>添加批注</td><td>给选中的行追加批注，见下文</td></tr>
+    <tr><td>复制全部</td><td>复制全部代码，不含批注</td></tr>
+    <tr><td>另存为…</td><td>把代码保存为文件</td></tr>
+  </table>
+  <p>批注栏里每条批注都写明作者，点「第 X～Y 行」会在代码里选中这几行；把光标放到被批注的行上，对应的批注卡片也会高亮。</p>
+
+  <h3 id="add-notes">在收到的代码上追加批注</h3>
+  <p>收到的代码片段，你也可以针对某几行写批注再发回去，双方都能这样一轮轮讨论：</p>
+  <ol class="steps">
+    <li>在代码查看窗口里选中几行，点 <span class="ui">添加批注</span>（或在正文右键选 <span class="ui">添加批注…</span>），在批注栏里写下说明并确定。也可以在聊天中的代码卡片上右键选 <span class="ui">添加批注…</span> 打开查看窗口。</li>
+    <li>窗口底部显示「已新增或修改 N 条批注」，<span class="ui">发送</span> 按钮变为可用。没有新增或修改批注时，<span class="ui">发送</span> 不能点，底部提示「添加或修改批注后才能发送」。</li>
+    <li>点 <span class="ui">发送</span>。查看窗口关闭，聊天里出现一张新的代码卡片，带着全部批注并引用原来那条消息；原来的卡片保持不变。对方的卡片顶部会写「N 条批注，其中 M 条是新的」，打开后新的批注带「新」字标记。</li>
+  </ol>
+  <div class="callout note"><b>谁能修改哪条批注</b>每个人只能修改、删除自己写的批注，别人的批注只能查看。同一行可以有多人各写一条批注。有还没发出的批注时关闭查看窗口，会询问「有 N 条批注还没发出，关闭后会丢弃。要关闭吗？」。从消息记录窗口或聊天记录查看窗里打开的代码查看窗口只能查看，不能追加批注。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "ForwardRequest.h"   // ForwardRequest：BuildForwardPreviewText 的入参
+
 namespace balloonmain {
 
 //一次转发最多选择的目标数。每个目标一次请求，逐条转发时每条消息在服务端各落一次库；
@@ -135,5 +137,54 @@ std::vector<size_t> FilterForwardTargets(const std::vector<ForwardTarget>& candi
  */
 std::vector<ForwardTarget> BuildRecentForwardTargets(const std::vector<ForwardTarget>& conversations,
                                                      int64_t selfUserId);
+
+/**
+ *  选会话窗口用来发送本地文件时（录屏完成后的「发送到会话…」）顶部的预览文字：「[文件] 文件名」。
+ *  @param path 文件完整路径；为空时只有「[文件]」
+ */
+std::wstring MakeFileForwardPreview(const std::wstring& path);
+
+/**
+ *  选会话窗口顶部的预览文字（原先写在 CForwardTargetDlg::PreviewText 里，2026-10-05 移到这里以便单测）。
+ *  第一行：发送本地文件时为「[文件] 文件名」；合并转发为「[聊天记录] 标题」；逐条转发为「逐条转发 N 条消息」，
+ *  N 含要以离线文件重新发送的在线直传文件，只发一个重新上传的文件、没有别的消息时改为「[文件] 文件名」。
+ *  其后按需追加几行说明：跳过的不能转发的消息条数；本机已没有、无法转发的在线直传文件个数（「在线直传的文件
+ *  无法转发」）；将以离线文件重新发送的在线直传文件个数；合并转发时不随记录发出的在线直传文件个数。
+ *  @param request 转发请求
+ *  @return 预览文字，行之间用 '\n' 分隔
+ */
+std::wstring BuildForwardPreviewText(const ForwardRequest& request);
+
+/**
+ *  目标选择窗的标题：转发为「转发」，发送本地文件为「发送到会话」，主菜单发起通话为「发起语音通话」「发起视频通话」，
+ *  主菜单发起屏幕共享为「发起屏幕共享」。
+ *  @param request 打开选择窗时的请求
+ */
+std::wstring ForwardPickerTitle(const ForwardRequest& request);
+
+/**
+ *  目标选择窗确认按钮的文字：转发与发送文件为「发送」，发起通话为「呼叫」，发起屏幕共享为「共享」。
+ *  @param request 打开选择窗时的请求
+ */
+std::wstring ForwardPickerConfirmText(const ForwardRequest& request);
+
+/**
+ *  目标选择窗右侧说明区的小标题：转发与发送文件为「转发内容」，发起通话与发起屏幕共享为「说明」。
+ *  @param request 打开选择窗时的请求
+ */
+std::wstring ForwardPickerContentTitle(const ForwardRequest& request);
+
+/**
+ *  目标选择窗右侧已选列表上方的小标题：发起通话为「通话对象」，其余（转发、发送文件、发起屏幕共享）为「发送给」。
+ *  @param request 打开选择窗时的请求
+ */
+std::wstring ForwardPickerTargetTitle(const ForwardRequest& request);
+
+/**
+ *  发起通话、发起屏幕共享时只能选一个目标：选择窗据此把「勾选一个新目标」处理成替换原先的那个。
+ *  @param request 打开选择窗时的请求
+ *  @return 主菜单发起通话（m_callMedia 不为 0）或发起屏幕共享（m_screenShare）时返回 true
+ */
+bool ForwardPickerSingleSelect(const ForwardRequest& request);
 
 } // namespace balloonmain

@@ -161,6 +161,54 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson);
 //        与 PreviewFromContent 完全相同
 std::string FullTextFromContent(int msgtype, const std::string& contentJson);
 
+//会话列表、「与我有关」等只显示一行摘要的地方用的文字（docs/Markdown消息方案.md 第 12 节）：Markdown 消息为
+//「[Markdown] 标题」，与主面板会话列表一致（FlamingoMarkdown.dll 不可用时为去掉表情标记的正文）；其余消息与
+//PreviewFromContent 完全相同。导出与搜索命中片段仍用 PreviewFromContent，保留 Markdown 源文本。
+//@param msgtype      内容类型（取值见 net::message_type）
+//@param contentJson  归一化内容JSON（UTF-8）
+//@return 一行摘要文字（UTF-8）
+std::string DigestFromContent(int msgtype, const std::string& contentJson);
+
+//帖子卡片（25）或补充卡片（26，kind 3）带的一张图片（docs/帖子群方案.md 14.5），取自本地库 content 的
+//threadcard.images[]，字段与帖子正文里的图片相同
+struct HistoryCardImage
+{
+    std::string m_fileId;       //原图的文件ID（服务端下发的原样字符串）；看图时下载原图用。缺字段时为空串
+    std::string m_md5;          //原图的内容MD5（小写十六进制），也是本机缓存文件名；缺字段时为空串
+    std::string m_thumbFileId;  //缩略图的文件ID；为空时缩略图直接用原图
+    int         m_width;        //原图像素宽；未知为 0
+    int         m_height;       //原图像素高；未知为 0
+    int64_t     m_size;         //原图字节数；未知为 0。只报给传输层做日志与校验
+
+    HistoryCardImage()
+        : m_width(0)
+        , m_height(0)
+        , m_size(0)
+    {
+    }
+};
+
+//消息记录里卡片下那一排缩略图的张数（docs/帖子群方案.md 14.5，与帖子群左栏卡片一致）
+struct HistoryThumbStrip
+{
+    size_t m_shown;   //显示几张：最多 kHistoryCardMaxThumbs
+    size_t m_extra;   //没显示出来的张数；大于 0 时在最后一张上写「+N」
+
+    HistoryThumbStrip()
+        : m_shown(0)
+        , m_extra(0)
+    {
+    }
+};
+
+//卡片下最多显示几张缩略图
+const size_t kHistoryCardMaxThumbs = 3;
+
+//按图片张数算出缩略图排几张、最后一张上写「+N」的 N
+//@param count  卡片带的图片张数
+//@return 显示的张数与多出的张数
+HistoryThumbStrip ComputeThumbStrip(size_t count);
+
 //一条消息里可用于"行内视觉预览"的附加信息（从归一化 content JSON 里取）。
 //列表行据它决定左侧那一小块画什么：图片画缩略图、文件画类型色块；文件行还据其中的
 //fileid / md5 发起下载（见方案 §5 F4）。
@@ -178,6 +226,9 @@ struct HistoryContentBrief
     //注意与 m_imageMd5 不是一回事：那个取自 content 的 image 子对象，这个取自 file
     //子对象，两者在 JSON 里恰好同名（都叫 "md5"）但分属不同消息类型。
     std::string m_fileMd5;
+    //文件消息是不是在线直传留下的（本地库 file 子对象的 direct 为 1，2026-10-05 起写入）：服务器上没有副本，
+    //m_fileId 为空、下载不了，转发时按 balloonmain::DecideDirectFileForward 单独处理。非文件或老数据为 false
+    bool        m_fileDirect;
     //图片消息的文件ID（服务端下发的原样字符串）。本地缓存里没有原图时，拿它向服务端
     //发起下载（见 net::ImageTransfer::EnqueueDownload 的 fileid 形参）。非图片消息或
     //缺字段时为空串 —— 空串意味着这一行的原图拉不回来。
@@ -215,8 +266,20 @@ struct HistoryContentBrief
     //文字。打开聊天记录查看窗时原样交给它；非合并记录、或 merged 子对象缺失时为空串。
     std::string m_mergedContent;
 
+    //==== 语音消息（::message_type_voice）专用，取自 voice 子对象（语音消息第 4b 步） ====
+    std::string m_voiceFileId;    //语音文件ID；本地没有文件时拿它下载。缺字段时为空串
+    std::string m_voiceMd5;       //文件内容MD5，也是本机缓存文件名 ChatVoice\<md5>.ogg。缺字段时为空串
+    int         m_voiceDuration;  //时长（整秒）；未知为 0
+    int64_t     m_voiceSize;      //文件字节数；未知为 0
+    std::string m_voiceWave;      //波形值的 Base64；缺字段时为空串（画均匀波形）
+
+    //==== 帖子卡片与补充卡片（::message_type_thread_post / ::message_type_thread_reply）专用 ====
+    //卡片带的图片，按卡片里的顺序；没有图片、不是这两种卡片、或卡片已是已删除形态时为空
+    std::vector<HistoryCardImage> m_threadImages;
+
     HistoryContentBrief()
         : m_fileSize(0)
+        , m_fileDirect(false)
         , m_imageSize(0)
         , m_imageWidth(0)
         , m_imageHeight(0)
@@ -224,6 +287,8 @@ struct HistoryContentBrief
         , m_folderTotalSize(0)
         , m_folderResult(0)
         , m_mergedCount(0)
+        , m_voiceDuration(0)
+        , m_voiceSize(0)
     {
     }
 };

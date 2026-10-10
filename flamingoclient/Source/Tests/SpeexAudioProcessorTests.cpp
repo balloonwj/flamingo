@@ -9,7 +9,7 @@
  *  balloonwj@qq.com   2026-06-12
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/Call/SpeexAudioProcessor.h"
+#include "../../FlamingoMedia/Call/SpeexAudioProcessor.h"
 
 #include <vector>
 #include <cmath>

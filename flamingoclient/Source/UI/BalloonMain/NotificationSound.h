@@ -23,7 +23,7 @@
 namespace balloonmain {
 
 /**
- *  NotifySoundKind —— 通知提示音的种类，决定播放 Bin\Sound\ 下哪个 wav 文件。
+ *  NotifySoundKind —— 通知提示音的种类，决定播放 程序目录\Sound\ 下哪个 wav 文件。
  */
 enum NotifySoundKind
 {
@@ -35,7 +35,7 @@ enum NotifySoundKind
     // 前两种是<u>循环</u>播放（响到状态改变为止），须用 StartLoopSound / StopLoopSound；
     // 后三种是一次性的，用 PlayNotifySound 即可。
     //
-    // 素材为正弦合成，见 Bin\\Sound\\call_*.wav。回铃与忙音取 450Hz 中国电信标准音。
+    // 素材为正弦合成，见 程序目录\\Sound\\call_*.wav。回铃与忙音取 450Hz 中国电信标准音。
     kNotifySoundCallOutgoing  = 3,  // 本端呼出、等对方接听的回铃音（循环）→ Sound\\call_outgoing.wav
     kNotifySoundCallIncoming  = 4,  // 收到来电的铃声（循环）→ Sound\\call_incoming.wav
     kNotifySoundCallConnected = 5,  // 通话接通的提示（一次性）→ Sound\\call_connected.wav
@@ -131,5 +131,16 @@ void StartLoopSound(NotifySoundKind kind, bool muted);
  *  也可在各条收尾路径上都兜一次（推荐这么做：铃声停不下来比多调一次糟得多）。
  */
 void StopLoopSound();
+
+//提示音的全局拦截判定：返回 true 时 PlayNotifySound / StartLoopSound 一律不响
+typedef bool (*NotifySoundSuppressorFn)();
+
+/**
+ *  登记提示音的全局拦截判定（与「关闭所有声音」相互独立）。exe 在启动时登记 balloonlock::IsScreenLocked，
+ *  锁屏期间一律不响（docs/锁屏方案.md 第 4.9 节）；FlamingoMedia 编译的那份不登记，它的声音经宿主的
+ *  IsSoundMuted 在锁屏期间返回「静音」。须在界面线程上、播放任何声音之前调用。
+ *    fn：判定函数；传 NULL 表示取消登记
+ */
+void SetNotifySoundSuppressor(NotifySoundSuppressorFn fn);
 
 } // namespace balloonmain

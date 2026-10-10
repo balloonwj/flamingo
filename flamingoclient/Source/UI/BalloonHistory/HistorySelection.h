@@ -23,7 +23,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <map>
+#include <string>
 #include <vector>
+
+#include "../BalloonMain/ForwardRequest.h"   // balloonmain::ForwardRequest：按转发模式组装的结果
 
 namespace balloonhistory {
 
@@ -42,6 +45,15 @@ public:
      *  @return 切换之后这条是否处于选中状态
      */
     bool Toggle(int64_t msgid, int msgType, bool* outFull);
+
+    /**
+     *  同上，另外记下这条是不是在线直传的文件及其本机路径（2026-10-05 起，组装转发时按
+     *  balloonmain::DecideDirectFileForward 单独处理）。上面那个版本等同于 direct 为 false。
+     *    direct：是不是在线直传的文件（服务器上没有副本）。
+     *    localPath：本机可用的那份文件的完整路径，由调用方按 ResolveRecordLocalPath 查好；本机没有时为空。
+     *               direct 为 false 时忽略。
+     */
+    bool Toggle(int64_t msgid, int msgType, bool direct, const std::wstring& localPath, bool* outFull);
 
     //这条消息是否已选中
     bool IsSelected(int64_t msgid) const;
@@ -63,9 +75,20 @@ public:
      */
     void BuildForward(std::vector<int64_t>& outMsgids, size_t& outSkipped) const;
 
+    /**
+     *  按转发模式组装转发请求（2026-10-05 起把在线直传的文件单独处理）。不能转发的条数计入 m_skipped；
+     *  在线直传的文件：合并转发照常进入 m_msgids、计入 m_directPlaceholders；逐条转发本机有文件时路径记进
+     *  m_reuploadFiles（同一路径只记一次），没有时计入 m_skippedDirect。只填这几项与 m_merge，其余字段不动。
+     *    merge：true 合并转发，false 逐条转发。
+     *    out：[出参] 转发请求；上面几项先清空再写入，m_msgids 升序、不重复。
+     */
+    void BuildForward(bool merge, balloonmain::ForwardRequest& out) const;
+
 private:
     //已选中的消息：msgid → 消息内容类型。用 map 自然按 msgid 升序、不重复
     std::map<int64_t, int> m_items;
+    //已选中的消息里在线直传的文件：msgid → 本机路径（本机没有时为空串）。是 m_items 的子集，随它增删
+    std::map<int64_t, std::wstring> m_directPaths;
     //最多能选几条；0 表示不限
     size_t                 m_maxCount;
 };

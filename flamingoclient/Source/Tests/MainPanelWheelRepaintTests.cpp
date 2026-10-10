@@ -8,13 +8,13 @@
  *
  *  覆盖：
  *    MPW1 滚一格之后宿主窗口没有剩余的待重绘区域，滚动位置确实变了；
- *    MPW2 已在顶端时再往上滚，不产生待重绘区域，但滚动条照样被唤出；
- *    MPW3 滚动条已处于显现态时再滚轮，不会把淡入动画定时器的计时清零；
- *    MPW4 滚动条隐藏、宿主停掉定时器之后再滚轮，定时器会被重新启动。
+ *    MPW2 已在顶端时再往上滚，不产生待重绘区域，但滚动条照样被唤出（淡入到完全显示）；
+ *    MPW3 连续滚轮期间滚动条一直显示：每一格都重新开始空闲计时，停手之后才淡出；
+ *    MPW4 HideScrollBarNow 立即隐藏滚动条，之后再滚轮又会淡入。
  *
- *  MPW3 的背景：同一窗口上以同一 id 再次调用 SetTimer 会替换原定时器并把计时清零。
- *  原先每条滚轮消息都调一次 SetTimer，滚轮消息间隔小于定时器周期（16 ms）时——快速
- *  拨动滚轮、触摸板连续滑动——定时器永远等不到触发，滚动条要等停下来才会淡入。
+ *  2026-10-04 起视口直接使用 balloonui 统一的滚动条，淡入淡出由 DuiAnimMgr 推进（此前由宿主的
+ *  WM_TIMER 推进，原 MPW3、MPW4 测的是那套定时器的计时，已随之改写）。用例用 DuiAnimMgr::TickAll
+ *  指定时间推进动画，不依赖真实时钟。
  *
  *  做法：宿主是放在屏幕外的可见弹出窗口（不可见窗口不维护待重绘区域），滚轮消息
  *  直接 SendMessage 给宿主，返回后向系统询问待重绘区域。框架 Catch2 v3。
@@ -29,6 +29,7 @@
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../UI/BalloonMain/MainPanelScrollView.h"
+#include "../../../third-party/balloonui/balloonui/DuiAnimation.h"   // MPW2～MPW4：推进淡入淡出
 
 #include <memory>
 
@@ -44,9 +45,10 @@ const int kMpwHostSize  = 300;      // 宿主客户区边长（像素）
 const int kMpwRowH      = 100;      // 内容每行高度（像素）
 const int kMpwRows      = 20;       // 内容行数，总高 2000，远超视口
 const int kMpwOffscreen = -32000;   // 宿主窗口左上角坐标：放到屏幕外，测试时不在眼前闪烁
-// 等定时器到期的时长（毫秒）：大于定时器周期 16 ms 加上系统定时器约 15.6 ms 的精度，
-// 保证等完之后定时器一定已经到期
-const DWORD kMpwTimerDueWaitMs = 40;
+// 动画时间轴的起点（毫秒，任取）
+const DWORD kMpwT0 = 400000;
+// 两格滚轮之间的间隔（毫秒）：比空闲计时短，滚动条不应在两格之间淡出
+const DWORD kMpwWheelGapMs = 500;
 
 // 屏幕外的可见宿主窗口，内容是一个装满长内容的 MainPanelScrollView。析构时销毁窗口。
 class MpwFixture
@@ -129,20 +131,10 @@ public:
         return m_host.m_hWnd;
     }
 
-    // 从宿主窗口的消息队列里取出全部 WM_TIMER，返回其中是否有滚动条淡入动画的定时器。
-    // 定时器到期后 WM_TIMER 才会出现在队列里；计时被清零的话就取不到。
-    bool TakeScrollBarTimer()
+    // 视口滚动条当前的不透明度（0 看不见，1 完全显示）。
+    float BarAlpha()
     {
-        bool found = false;
-        MSG msg;
-        while (::PeekMessage(&msg, m_host.m_hWnd, WM_TIMER, WM_TIMER, PM_REMOVE))
-        {
-            if (msg.wParam == balloonmain::kScrollbarAnimTimerId)
-            {
-                found = true;
-            }
-        }
-        return found;
+        return m_view->GetScrollBar()->GetAlpha();
     }
 
 private:
@@ -171,6 +163,8 @@ TEST_CASE("MPW1 滚一格之后宿主没有剩余的待重绘区域", "[wheel][r
 
 TEST_CASE("MPW2 已在顶端时再往上滚不产生重绘，但滚动条被唤出", "[wheel][repaint]")
 {
+    // 先清掉前面用例残留的动画，下面按指定时间推进时只推进本用例的
+    balloonwjui::DuiAnimMgr::Inst().Clear();
     MpwFixture fx;
     REQUIRE(fx.Ready());
     REQUIRE(fx.View()->GetScrollPos() == 0);
@@ -185,39 +179,66 @@ TEST_CASE("MPW2 已在顶端时再往上滚不产生重绘，但滚动条被唤�
     INFO("dirty (" << dirty.left << "," << dirty.top << ")-(" << dirty.right << "," << dirty.bottom << ")");
     CHECK_FALSE(any);
 
-    // 滚动条被唤出：推进零毫秒的一帧，仍报告需要后续帧（淡入动画与空闲计时开始了）
-    CHECK(fx.View()->TickScrollBarFade(0));
+    // 滚动条被唤出：推进完淡入，完全显示
+    balloonwjui::DuiAnimMgr& m = balloonwjui::DuiAnimMgr::Inst();
+    m.TickAll(kMpwT0);
+    m.TickAll(kMpwT0 + balloonwjui::DuiScrollBar::kFadeInMs);
+    CHECK(fx.BarAlpha() > 0.99f);
+    m.Clear();
 }
 
-TEST_CASE("MPW3 滚动条已显现时再滚轮不会把淡入定时器的计时清零", "[wheel][scrollbar]")
+TEST_CASE("MPW3 连续滚轮期间滚动条一直显示，停手之后才淡出", "[wheel][scrollbar]")
 {
-    MpwFixture fx;
-    REQUIRE(fx.Ready());
-
-    // 第一格：唤出滚动条，启动淡入动画定时器
-    fx.Wheel((short)-WHEEL_DELTA);
-    // 等到定时器一定已经到期，期间不取消息（模拟两条滚轮消息之间界面线程正忙）
-    ::Sleep(kMpwTimerDueWaitMs);
-    // 第二格：滚动条已在显现态，不应再重设定时器
-    fx.Wheel((short)-WHEEL_DELTA);
-
-    // 定时器的计时没有被清零，到期的 WM_TIMER 应当已在队列里
-    CHECK(fx.TakeScrollBarTimer());
-}
-
-TEST_CASE("MPW4 滚动条隐藏且定时器停掉之后再滚轮会重新启动定时器", "[wheel][scrollbar]")
-{
+    balloonwjui::DuiAnimMgr& m = balloonwjui::DuiAnimMgr::Inst();
+    m.Clear();
     MpwFixture fx;
     REQUIRE(fx.Ready());
 
     fx.Wheel((short)-WHEEL_DELTA);
-    // 进入隐藏态（切换页签等场景），宿主在全部面板稳定后停掉定时器
+    m.TickAll(kMpwT0);
+    m.TickAll(kMpwT0 + balloonwjui::DuiScrollBar::kFadeInMs);
+    REQUIRE(fx.BarAlpha() > 0.99f);
+
+    // 第二格在空闲计时到期之前到来：重新开始计时，原先的到期时刻过去之后仍然显示
+    const DWORD second = kMpwT0 + kMpwWheelGapMs;
+    m.TickAll(second);
+    fx.Wheel((short)-WHEEL_DELTA);
+    m.TickAll(second + 1);
+    m.TickAll(kMpwT0 + balloonwjui::DuiScrollBar::kIdleHideMs + balloonwjui::DuiScrollBar::kFadeOutMs);
+    CHECK(fx.BarAlpha() > 0.99f);
+
+    // 停手：从第二格起空闲计时到期，再走完淡出，看不见了
+    const DWORD due = second + 1 + balloonwjui::DuiScrollBar::kIdleHideMs;
+    m.TickAll(due);
+    m.TickAll(due + 1);
+    m.TickAll(due + 1 + balloonwjui::DuiScrollBar::kFadeOutMs);
+    CHECK(fx.BarAlpha() < 0.01f);
+    m.Clear();
+}
+
+TEST_CASE("MPW4 HideScrollBarNow 立即隐藏，之后再滚轮又会淡入","[wheel][scrollbar]")
+{
+    balloonwjui::DuiAnimMgr& m = balloonwjui::DuiAnimMgr::Inst();
+    m.Clear();
+    MpwFixture fx;
+    REQUIRE(fx.Ready());
+
+    fx.Wheel((short)-WHEEL_DELTA);
+    m.TickAll(kMpwT0);
+    m.TickAll(kMpwT0 + balloonwjui::DuiScrollBar::kFadeInMs);
+    REQUIRE(fx.BarAlpha() > 0.99f);
+
+    // 切换页签一类场景：立即看不见，排着的淡入淡出与空闲计时都作废
     fx.View()->HideScrollBarNow();
-    ::KillTimer(fx.Hwnd(), balloonmain::kScrollbarAnimTimerId);
-    fx.TakeScrollBarTimer();   // 丢掉停掉之前已经排进队列的 WM_TIMER
+    CHECK(fx.BarAlpha() < 0.01f);
+    m.TickAll(kMpwT0 + balloonwjui::DuiScrollBar::kIdleHideMs);
+    CHECK(fx.BarAlpha() < 0.01f);
 
-    // 再次滚轮：滚动条从隐藏变为显现，必须重新启动定时器
+    // 再次滚轮：重新淡入
+    const DWORD again = kMpwT0 + balloonwjui::DuiScrollBar::kIdleHideMs + 1;
     fx.Wheel((short)-WHEEL_DELTA);
-    ::Sleep(kMpwTimerDueWaitMs);
-    CHECK(fx.TakeScrollBarTimer());
+    m.TickAll(again);
+    m.TickAll(again + balloonwjui::DuiScrollBar::kFadeInMs);
+    CHECK(fx.BarAlpha() > 0.99f);
+    m.Clear();
 }

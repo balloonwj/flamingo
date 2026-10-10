@@ -1,0 +1,12 @@
+#pragma code_page(65001)
+// FlamingoUnitIcon.rc
+//
+// 测试程序的资源：只有程序主图标，编号与主程序相同（IDR_MAINFRAME，见 ../resource.h），图标文件也与主程序共用。
+// TitleBarIcon 的 ProgramWindowIcons 从 exe 模块加载这个图标；测试程序带上它，单元测试才能在真实图标上验证
+// 标题栏位图与任务栏图标（Tests/TitleBarIconTests.cpp 的 PWI 系列、文件共享各窗口的图标用例）。
+//
+// balloonwj@qq.com   2026-10-03
+
+#include "../resource.h"
+
+IDR_MAINFRAME           ICON                    "../res/flamingo.ico"

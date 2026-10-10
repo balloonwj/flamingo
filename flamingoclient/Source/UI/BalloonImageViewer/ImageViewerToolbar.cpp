@@ -21,6 +21,7 @@
 #include "ImageCanvas.h"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"                         // GetHost()->m_hWnd（ClientToScreen）
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"    // DuiToolTipMgr（按钮 tooltip）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonimageviewer {
 
@@ -75,13 +76,41 @@ const TbItemDef kItemDefs[] =
 
 const int kItemCount = (int)(sizeof(kItemDefs) / sizeof(kItemDefs[0]));
 
+// 「只看不存」模式（密聊图片的大图浮层，docs/密聊方案.md 4.10）只取上表的前 8 个元素：缩小、比例、放大、分隔线、
+// 1:1、适应窗口、两个旋转；之后的分隔线、复制、另存与「图片文字识别」都不出现
+const int kViewOnlyItemCount = 8;
+
+// 「图片文字识别」按钮：只在图片文字识别模块可用时出现，接在上表之后
+const TbItemDef kOcrItemDef = { kTbOcr, kIconCellW };
+
+// 元素个数：带「图片文字识别」按钮时多一个；「只看不存」模式固定为前 kViewOnlyItemCount 个。
+int CountFor(bool withOcr, bool viewOnly)
+{
+    if (viewOnly)
+    {
+        return kViewOnlyItemCount;
+    }
+    return kItemCount + (withOcr ? 1 : 0);
+}
+
+// 第 index 个元素的定义；调用方保证 index 在 0 ~ CountFor(withOcr, viewOnly)-1 之内（只看不存模式下 index 不会到达
+// 「图片文字识别」按钮的位置）。
+const TbItemDef& DefAt(int index, bool withOcr)
+{
+    if (withOcr && index == kItemCount)
+    {
+        return kOcrItemDef;
+    }
+    return kItemDefs[index];
+}
+
 // 工具栏内容总宽（不含左右内边距）。
-int ContentWidth()
+int ContentWidth(bool withOcr, bool viewOnly)
 {
     int sum = 0;
-    for (int i = 0; i < kItemCount; ++i)
+    for (int i = 0; i < CountFor(withOcr, viewOnly); ++i)
     {
-        sum += kItemDefs[i].width;
+        sum += DefAt(i, withOcr).width;
     }
     return sum;
 }
@@ -213,11 +242,41 @@ void DrawCopy(Gdiplus::Graphics& g, Gdiplus::Pen& pen, float cx, float cy)
     g.DrawLines(&pen, back, (INT)(sizeof(back) / sizeof(back[0])));
 }
 
+// 「图片文字识别」图标的几何（相对按钮中心，逻辑像素）：四角取景框里一个「T」
+const float kOcrFrameHalf = 7.5f;   // 取景框半边长
+const float kOcrFrameArm  = 4.0f;   // 取景框每个角的角臂长
+const float kOcrTHalfW    = 3.5f;   // 「T」横笔半宽
+const float kOcrTTop      = -3.5f;  // 「T」横笔所在的纵坐标
+const float kOcrTBottom   = 4.0f;   // 「T」竖笔下端的纵坐标
+
+// 画「图片文字识别」图标：四个角的取景框（表示扫描），中间一个「T」（表示文字）。
+void DrawOcrGlyph(Gdiplus::Graphics& g, Gdiplus::Pen& pen, float cx, float cy)
+{
+    const float l = cx - kOcrFrameHalf;
+    const float t = cy - kOcrFrameHalf;
+    const float r = cx + kOcrFrameHalf;
+    const float b = cy + kOcrFrameHalf;
+    // 左上、右上、右下、左下四个角。
+    g.DrawLine(&pen, l, t + kOcrFrameArm, l, t);
+    g.DrawLine(&pen, l, t, l + kOcrFrameArm, t);
+    g.DrawLine(&pen, r - kOcrFrameArm, t, r, t);
+    g.DrawLine(&pen, r, t, r, t + kOcrFrameArm);
+    g.DrawLine(&pen, r, b - kOcrFrameArm, r, b);
+    g.DrawLine(&pen, r, b, r - kOcrFrameArm, b);
+    g.DrawLine(&pen, l + kOcrFrameArm, b, l, b);
+    g.DrawLine(&pen, l, b, l, b - kOcrFrameArm);
+    // 中间的「T」：一横一竖。
+    g.DrawLine(&pen, cx - kOcrTHalfW, cy + kOcrTTop, cx + kOcrTHalfW, cy + kOcrTTop);
+    g.DrawLine(&pen, cx, cy + kOcrTTop, cx, cy + kOcrTBottom);
+}
+
 } // anonymous namespace
 
-ImageViewerToolbar::ImageViewerToolbar(ImageCanvas* pCanvas)
+ImageViewerToolbar::ImageViewerToolbar(ImageCanvas* pCanvas, bool withOcr, bool viewOnly)
     : m_pCanvas(pCanvas)
     , m_hoverIndex(-1)
+    , m_withOcr(withOcr && !viewOnly)
+    , m_viewOnly(viewOnly)
 {
 }
 
@@ -231,9 +290,14 @@ ImageViewerToolbar::~ImageViewerToolbar()
 SIZE ImageViewerToolbar::GetBarSize() const
 {
     SIZE s;
-    s.cx = ContentWidth() + kBarPadX * 2;
+    s.cx = BarWidth(m_withOcr, m_viewOnly);
     s.cy = kBarHeight;
     return s;
+}
+
+int ImageViewerToolbar::BarWidth(bool withOcr, bool viewOnly)
+{
+    return ContentWidth(withOcr, viewOnly) + kBarPadX * 2;
 }
 
 void ImageViewerToolbar::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
@@ -268,9 +332,9 @@ void ImageViewerToolbar::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 
     // 逐元素绘制。
     float x = left + kBarPadX;
-    for (int i = 0; i < kItemCount; ++i)
+    for (int i = 0; i < CountFor(m_withOcr, m_viewOnly); ++i)
     {
-        const TbItemDef& def = kItemDefs[i];
+        const TbItemDef& def = DefAt(i, m_withOcr);
         const float cw = (float)def.width;
         const float cx = x + cw / 2.0f;
         const float cy = top + h / 2.0f;
@@ -327,6 +391,10 @@ void ImageViewerToolbar::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         //复制图片：两张叠放的纸
         case kTbCopyImage:
             DrawCopy(g, pen, cx, cy);
+            break;
+        //图片文字识别：取景框里一个「T」
+        case kTbOcr:
+            DrawOcrGlyph(g, pen, cx, cy);
             break;
         case kTbActual:
         {
@@ -416,29 +484,30 @@ int ImageViewerToolbar::HitItemIndex(POINT ptHost) const
     {
         return -1;
     }
-    for (int i = 0; i < kItemCount; ++i)
+    for (int i = 0; i < CountFor(m_withOcr, m_viewOnly); ++i)
     {
-        if (localX >= x && localX < x + kItemDefs[i].width)
+        const int w = DefAt(i, m_withOcr).width;
+        if (localX >= x && localX < x + w)
         {
             return i;
         }
-        x += kItemDefs[i].width;
+        x += w;
     }
     return -1;
 }
 
-int ImageViewerToolbar::ItemCount()
+int ImageViewerToolbar::ItemCount(bool withOcr, bool viewOnly)
 {
-    return kItemCount;
+    return CountFor(withOcr, viewOnly);
 }
 
-ToolbarItemKind ImageViewerToolbar::ItemKindAt(int index)
+ToolbarItemKind ImageViewerToolbar::ItemKindAt(int index, bool withOcr, bool viewOnly)
 {
-    if (index < 0 || index >= kItemCount)
+    if (index < 0 || index >= CountFor(withOcr, viewOnly))
     {
         return kTbSeparator;
     }
-    return kItemDefs[index].kind;
+    return DefAt(index, withOcr).kind;
 }
 
 bool ImageViewerToolbar::IsClickableKind(ToolbarItemKind kind)
@@ -448,20 +517,20 @@ bool ImageViewerToolbar::IsClickableKind(ToolbarItemKind kind)
 
 bool ImageViewerToolbar::IsClickable(int index) const
 {
-    if (index < 0 || index >= kItemCount)
+    if (index < 0 || index >= CountFor(m_withOcr, m_viewOnly))
     {
         return false;
     }
-    return IsClickableKind(kItemDefs[index].kind);
+    return IsClickableKind(DefAt(index, m_withOcr).kind);
 }
 
 void ImageViewerToolbar::TriggerItem(int index)
 {
-    if (m_pCanvas == NULL || index < 0 || index >= kItemCount)
+    if (m_pCanvas == NULL || index < 0 || index >= CountFor(m_withOcr, m_viewOnly))
     {
         return;
     }
-    switch (kItemDefs[index].kind)
+    switch (DefAt(index, m_withOcr).kind)
     {
     case kTbZoomOut:
         m_pCanvas->ZoomOut();
@@ -488,6 +557,10 @@ void ImageViewerToolbar::TriggerItem(int index)
     case kTbCopyImage:
         m_pCanvas->CopyImage();
         break;
+    //图片文字识别：按当前旋转方向识别图片里的文字，打开识别结果窗口
+    case kTbOcr:
+        m_pCanvas->RecognizeText();
+        break;
     default:
         break;
     }
@@ -495,11 +568,11 @@ void ImageViewerToolbar::TriggerItem(int index)
 
 LPCTSTR ImageViewerToolbar::TooltipFor(int index) const
 {
-    if (index < 0 || index >= kItemCount)
+    if (index < 0 || index >= CountFor(m_withOcr, m_viewOnly))
     {
         return _T("");
     }
-    return TooltipForKind(kItemDefs[index].kind);
+    return TooltipForKind(DefAt(index, m_withOcr).kind);
 }
 
 LPCTSTR ImageViewerToolbar::TooltipForKind(ToolbarItemKind kind)
@@ -508,28 +581,31 @@ LPCTSTR ImageViewerToolbar::TooltipForKind(ToolbarItemKind kind)
     {
     //缩小一档
     case kTbZoomOut:
-        return _T("缩小");
+        return TR(L"缩小");
     //放大一档
     case kTbZoomIn:
-        return _T("放大");
+        return TR(L"放大");
     //切到 100% 原始像素
     case kTbActual:
-        return _T("原始尺寸");
+        return TR(L"原始尺寸");
     //等比放进窗口
     case kTbFit:
-        return _T("适应窗口");
+        return TR(L"适应窗口");
     //逆时针旋转 90°
     case kTbRotateLeft:
-        return _T("向左旋转");
+        return TR(L"向左旋转");
     //顺时针旋转 90°
     case kTbRotate:
-        return _T("向右旋转");
+        return TR(L"向右旋转");
     //把源文件另存到别处
     case kTbSaveAs:
-        return _T("另存为");
+        return TR(L"另存为");
     //把图片放进剪贴板，可粘进聊天输入框发送
     case kTbCopyImage:
-        return _T("复制图片");
+        return TR(L"复制图片");
+    //识别图片里的文字
+    case kTbOcr:
+        return TR(L"图片文字识别");
     //比例读数、分隔线：不可点击，没有提示
     default:
         return _T("");

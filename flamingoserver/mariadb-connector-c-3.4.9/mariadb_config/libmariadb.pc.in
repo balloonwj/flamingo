@@ -1,0 +1,20 @@
+# 
+#  pkg_config.pc.in
+#
+#  pkg_config configuration file 
+#  For a detailed description of options, please visit
+#  Dan Nicholson’s Guide to pkg-config (http://www.freedesktop.org/wiki/Software/pkg-config/)
+#
+
+prefix=@CMAKE_INSTALL_PREFIX@
+includedir=${prefix}/@INSTALL_INCLUDEDIR@/@SUFFIX_INSTALL_DIR@
+libdir=${prefix}/@INSTALL_LIBDIR@/@SUFFIX_INSTALL_DIR@
+
+Name: libmariadb
+Version: @CPACK_PACKAGE_VERSION@
+Description: MariaDB Connector/C dynamic library
+Cflags: -I${includedir}
+Libs: -L${libdir} -lmariadb
+Libs.private: @extra_dynamic_LDFLAGS@
+
+

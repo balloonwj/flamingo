@@ -49,7 +49,7 @@ const int kBtnWPublish = 96;   // 「直接发布」按钮宽度
 const int kBtnWRescan  = 88;   // 「重新扫描」按钮宽度
 const int kCloseBtnSize = 28;  // 右上角关闭按钮边长
 
-const int kSbInset = 3;   // 悬浮滚动条距列表区右边缘的内缩
+const int kSbInset = 0;   // 悬浮滚动条距列表区右边缘的内缩；0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致
 
 } // namespace
 
@@ -209,6 +209,7 @@ void ClientVersionModal::SetPackages(const adminapi::ScanPackagesResult& scan)
 
     // 切回新建态：把编辑态藏起来的那几个控件恢复出来
     m_editingId = 0;
+    m_editingVersion.Empty();
     m_editInfo.Empty();
     if (m_editVersion != nullptr)
     {
@@ -238,6 +239,7 @@ void ClientVersionModal::SetPackages(const adminapi::ScanPackagesResult& scan)
 void ClientVersionModal::SetEditTarget(const adminapi::ClientVersionItem& item)
 {
     m_editingId = item.m_id;
+    m_editingVersion = item.m_version;
 
     // 编辑态不给换包、不给改版本号：这两样一旦发布就可能已被客户端下载。
     // 故候选包列表整块不显示，改为一行只读信息把它们摆出来给人看。

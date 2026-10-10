@@ -26,6 +26,7 @@
 #include <atltypes.h>
 
 #include "ProfileModel.h"
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonprofile {
 
@@ -34,9 +35,17 @@ namespace {
 // 三个在线状态的中文显示名，下标对应 ProfileStatus。
 const TCHAR* const kStatusText[kProfileStatusCount] =
 {
-    _T("在线"),   // kProfileStatusOnline
-    _T("离开"),   // kProfileStatusAway
-    _T("忙碌"),   // kProfileStatusBusy
+    TR_NOOP(L"在线"),   // kProfileStatusOnline
+    TR_NOOP(L"离开"),   // kProfileStatusAway
+    TR_NOOP(L"忙碌"),   // kProfileStatusBusy
+};
+
+// 性别的中文规范值（模型里存的就是它），下标即编辑态下拉框的序号；显示时经 TR 换成当前界面语言
+const TCHAR* const kGenderValues[kProfileGenderCount] =
+{
+    TR_NOOP(L"女"),
+    TR_NOOP(L"男"),
+    TR_NOOP(L"保密"),
 };
 
 // 三个在线状态的圆点颜色，下标对应 ProfileStatus。取自设计稿主题色板：
@@ -50,6 +59,7 @@ const COLORREF kStatusColor[kProfileStatusCount] =
 
 } // anonymous namespace
 
+// i18n-ignore-begin: 模型的模拟初始数据，打开资料窗时由真实资料覆盖，不显示给用户
 ProfileModel::ProfileModel()
     : m_strName(_T("林知夏"))
     , m_strAccount(_T("88234561"))
@@ -58,6 +68,7 @@ ProfileModel::ProfileModel()
     , m_strGender(_T("女"))
     , m_strBirthday(_T("1996-08-12"))
     , m_strRegion(_T("上海"))
+// i18n-ignore-end
     , m_strEmail(_T("lin.zhixia@flamingo.im"))
     , m_nStatus(kProfileStatusOnline)
 {
@@ -155,9 +166,40 @@ const TCHAR* ProfileStatusText(int status)
 {
     if (status >= 0 && status < kProfileStatusCount)
     {
-        return kStatusText[status];
+        return TR(kStatusText[status]);
     }
-    return kStatusText[kProfileStatusOnline];
+    return TR(kStatusText[kProfileStatusOnline]);
+}
+
+CString ProfileGenderText(const CString& value)
+{
+    const int index = ProfileGenderIndex(value);
+    if (index < 0)
+    {
+        return value;
+    }
+    return CString(TR(kGenderValues[index]));
+}
+
+int ProfileGenderIndex(const CString& value)
+{
+    for (int i = 0; i < kProfileGenderCount; ++i)
+    {
+        if (value == kGenderValues[i])
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+CString ProfileGenderValueAt(int index)
+{
+    if (index < 0 || index >= kProfileGenderCount)
+    {
+        return CString();
+    }
+    return CString(kGenderValues[index]);
 }
 
 COLORREF ProfileStatusColor(int status)

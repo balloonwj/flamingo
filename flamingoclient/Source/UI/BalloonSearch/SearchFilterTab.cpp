@@ -4,6 +4,7 @@
  */
 #include "stdafx.h"
 #include "SearchFilterTab.h"
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonsearch {
 
@@ -19,6 +20,41 @@ const COLORREF kNormalColor = RGB(0x4A, 0x4A, 0x4A);
 const COLORREF kGrayedColor = RGB(0xC0, 0xC0, 0xC0);
 // 下划线高度（逻辑像素）。
 const int kUnderlineH = 2;
+// 按文字排版时文字左右各留的空白（像素）。与宿主的标签间距合起来就是相邻两段文字的间隔；
+// 取 4 是按主面板默认宽度 338 算的：五个标签都带两位数计数时（约 282 像素）加上左内距与
+// 间距仍放得下。
+const int kTabPadX = 4;
+// 标签的最小宽度（像素）：两个字的标签不带计数时也不至于窄到不好点。
+const int kTabMinWidth = 40;
+
+// 用与绘制相同的字体（选中态的半粗体，比常规体略宽，按它量能保证切换选中时不必重排）
+// 量一段文字的宽度（像素）。取不到字体时返回 0。
+int MeasureTabText(const CString& text)
+{
+    if (text.IsEmpty())
+    {
+        return 0;
+    }
+    HDC hdc = ::CreateCompatibleDC(NULL);
+    if (hdc == NULL)
+    {
+        return 0;
+    }
+    HFONT hFont = ::CreateFontW(
+        -kTabTextPx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
+    SIZE sz = { 0, 0 };
+    if (hFont != NULL)
+    {
+        HFONT hOld = (HFONT)::SelectObject(hdc, hFont);
+        ::GetTextExtentPoint32W(hdc, (LPCWSTR)text, text.GetLength(), &sz);
+        ::SelectObject(hdc, hOld);
+        ::DeleteObject(hFont);
+    }
+    ::DeleteDC(hdc);
+    return sz.cx;
+}
 
 // 用 GDI 绘制单行文字（YaHei + ClearType），与主面板各控件口径一致。
 void DrawTabText(HDC hdc, LPCWSTR text, const RECT& rc, int px, bool bold,
@@ -31,7 +67,7 @@ void DrawTabText(HDC hdc, LPCWSTR text, const RECT& rc, int px, bool bold,
     HFONT hFont = ::CreateFontW(
         -px, 0, 0, 0, bold ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -54,13 +90,43 @@ SearchFilterTab::SearchFilterTab()
     , m_showCount(false)
     , m_count(0)
     , m_grayed(false)
+    , m_desiredWidth(kTabMinWidth)
 {
 }
 
 void SearchFilterTab::SetLabel(LPCTSTR text)
 {
     m_label = (text != NULL) ? text : _T("");
+    RecomputeDesiredWidth();
     Invalidate();
+}
+
+SIZE SearchFilterTab::GetDesiredSize() const
+{
+    SIZE sz = { m_desiredWidth, 0 };
+    return sz;
+}
+
+CString SearchFilterTab::DisplayText() const
+{
+    CString text = m_label;
+    if (m_showCount)
+    {
+        CString cnt;
+        cnt.Format(_T(" %d"), m_count);
+        text += cnt;
+    }
+    return text;
+}
+
+void SearchFilterTab::RecomputeDesiredWidth()
+{
+    int w = MeasureTabText(DisplayText()) + 2 * kTabPadX;
+    if (w < kTabMinWidth)
+    {
+        w = kTabMinWidth;
+    }
+    m_desiredWidth = w;
 }
 
 void SearchFilterTab::SetActive(bool active)
@@ -73,6 +139,7 @@ void SearchFilterTab::SetCount(bool show, int count)
 {
     m_showCount = show;
     m_count     = (count >= 0) ? count : 0;
+    RecomputeDesiredWidth();
     Invalidate();
 }
 
@@ -94,13 +161,7 @@ void SearchFilterTab::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     }
 
     // 组装显示文字："标签" 或 "标签 N"。
-    CString text = m_label;
-    if (m_showCount)
-    {
-        CString cnt;
-        cnt.Format(_T(" %d"), m_count);
-        text += cnt;
-    }
+    const CString text = DisplayText();
 
     // 文字色：置灰 > 选中 > 普通。
     COLORREF color = kNormalColor;
@@ -124,7 +185,7 @@ void SearchFilterTab::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         HFONT hFont = ::CreateFontW(
             -kTabTextPx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
         int underlineW = w / 2;
         if (hFont != NULL)
         {

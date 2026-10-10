@@ -12,7 +12,8 @@
  */
 
 #include "MainPanelConversationMenu.h"
-#include "StarredModel.h"     // GetMenuLabel（特别关注项文案，四处菜单共用同一份）
+#include "NotifyModeMenu.h"   // GetNotifyModeMenuTitle（「消息提醒设置」三处菜单共用同一份文字）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -47,50 +48,67 @@ std::vector<ConversationMenuEntry> BuildConversationMenuModel(const Conversation
 {
     std::vector<ConversationMenuEntry> items;
 
-    // 第一组：进入 / 读取这条会话的日常动作。
-    PushItem(items, kConvMenuOpen, L"打开会话", true);
-    // 未读为 0 时"标记已读"灰显——已经全读完了，点它不会有任何变化，给个可点的项
-    // 反而让人以为漏了什么没读。
-    PushItem(items, kConvMenuMarkRead, L"标记已读", state.m_unread > 0);
-    PushItem(items, kConvMenuHistory, L"查看历史消息", true);
-    // 单聊看的是联系人资料，群聊看的是群资料，两者打开的是不同对话框，文案必须区分。
+    // 分组规则与联系人、群两个右键菜单相同（2026-10-03 统一）：主操作 / 查看 / 标记与提醒 /
+    // 复制 / 清空 / 删除会话，组与组之间一条分隔条。
+
+    // 第一组：主操作。第二项在「标记已读」与「标为未读」之间二选一（docs/会话标为未读方案.md）：
+    // 有未读或已手动标为未读时是「标记已读」，否则是「标为未读」，位置不变，菜单形态不随未读数跳动。
+    PushItem(items, kConvMenuOpen, TR(L"打开会话"), true);
+    if (state.m_unread > 0 || state.m_unreadMarked)
+        PushItem(items, kConvMenuMarkRead, TR(L"标记已读"), true);
+    else
+        PushItem(items, kConvMenuMarkUnread, TR(L"标为未读"), true);
+    // 共享文件、共享屏幕：针对这个会话的协作动作，放在「标记已读」之后、仍在第一组（2026-10-03 与菜单会话商定）；
+    // 单聊写「给TA」，群聊写「到本群」；对应功能不可用时整项不出现
+    if (state.m_canShareFile)
+        PushItem(items, kConvMenuShareFile, state.m_isGroup ? TR(L"共享文件到本群") : TR(L"共享文件给TA"), true);
+    if (state.m_canShareScreen)
+        PushItem(items, kConvMenuShareScreen, state.m_isGroup ? TR(L"共享屏幕到本群") : TR(L"共享屏幕给TA"), true);
+    // 字幕模式：开关这个会话的桌面字幕，只弹出字幕、不打开聊天窗（docs/聊天字幕模式方案.md 第 1 节第 12 条）
+    if (state.m_canSubtitle)
+        PushItem(items, kConvMenuSubtitle, state.m_subtitleActive ? TR(L"关闭字幕模式") : TR(L"开启字幕模式"), true);
+    PushSeparator(items);
+
+    // 第二组：查看。
     PushItem(items, kConvMenuProfile,
-             state.m_isGroup ? L"查看群资料" : L"查看资料", true);
-    // 收藏项紧跟在"查看资料"之后，与联系人 / 群两个右键菜单同一位置。文案随当前
-    // 状态取反，与下面的置顶 / 免打扰同一套写法。
+             state.m_isGroup ? TR(L"查看群资料") : TR(L"查看资料"), true);
+    PushItem(items, kConvMenuHistory, TR(L"查看消息记录"), true);
+    PushSeparator(items);
+
+    // 第三组：标记与提醒。消息提醒设置是二级菜单（2026-10-03 起取代「消息免打扰」「特别关注」两项），
+    // 单聊与群聊都有，子菜单里屏蔽一项只给群聊。
     PushItem(items, kConvMenuFavorite,
-             state.m_favorite ? L"取消收藏" : L"添加到收藏", true);
-    // 特别关注紧跟收藏，与联系人右键菜单同一位置。<u>只在单聊会话上出现</u>：特别关注
-    // 关心的是"这个人上线 / 下线了"，群本身没有上下线可言，在群会话上摆这一项只会
-    // 让用户以为能关注整个群。故群会话这一项整项不出现，而不是灰显。
-    if (!state.m_isGroup)
-    {
-        PushItem(items, kConvMenuStarred,
-                 StarredModel::GetMenuLabel(state.m_starred), true);
-    }
-    // 复制项放在第一组末尾：单聊复制联系人名（备注优先），群聊复制群号与群名，与主面板
-    // 联系人 / 群列表两个右键菜单给出的复制项一致。
+             state.m_favorite ? TR(L"取消收藏") : TR(L"添加到收藏"), true);
+    PushItem(items, kConvMenuPin,
+             state.m_pinned ? TR(L"取消置顶") : TR(L"置顶会话"), true);
+    PushItem(items, kConvMenuNotifyMode, GetNotifyModeMenuTitle(), true);
+    items.back().m_hasNotifySubMenu = true;
+    PushSeparator(items);
+
+    // 第四组：复制。单聊复制列表上显示的名字，群聊复制群号与群名。
     if (state.m_isGroup)
     {
-        PushItem(items, kConvMenuCopyGroupNo,   L"复制群号", true);
-        PushItem(items, kConvMenuCopyGroupName, L"复制群名", true);
+        PushItem(items, kConvMenuCopyGroupNo,   TR(L"复制群号"), true);
+        PushItem(items, kConvMenuCopyGroupName, TR(L"复制群名"), true);
+        // 生成加群链接（docs/邀请入群方案.md §12）
+        if (state.m_canCreateLink)
+        {
+            PushItem(items, kConvMenuJoinLink, TR(L"生成加群链接"), true);
+        }
     }
     else
     {
-        PushItem(items, kConvMenuCopyName, L"复制联系人名", true);
+        PushItem(items, kConvMenuCopyName, TR(L"复制名字"), true);
     }
-
-    // 第二组：会话属性开关。文案随当前状态取反，用户一眼能看出点下去会变成什么。
     PushSeparator(items);
-    PushItem(items, kConvMenuPin,
-             state.m_pinned ? L"取消置顶" : L"置顶会话", true);
-    PushItem(items, kConvMenuMute,
-             state.m_muted ? L"取消免打扰" : L"消息免打扰", true);
 
-    // 第三组：删除。单独一组、放在最底下，与上面的日常动作拉开距离，减少误点。
+    // 第五组：清空聊天记录，只影响本人这一方的记录。
+    PushItem(items, kConvMenuClearHistory, TR(L"清空聊天记录"), true);
     PushSeparator(items);
-    PushItem(items, kConvMenuDelete, L"删除该会话", true);
-    PushItem(items, kConvMenuDeleteAll, L"删除全部会话", true);
+
+    // 第六组：把会话从列表拿掉，放在最后。
+    PushItem(items, kConvMenuDelete, TR(L"删除该会话"), true);
+    PushItem(items, kConvMenuDeleteAll, TR(L"删除全部会话"), true);
 
     return items;
 }

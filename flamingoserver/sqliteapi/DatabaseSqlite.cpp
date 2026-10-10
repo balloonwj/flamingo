@@ -19,6 +19,7 @@
 
 #include "../sqlite3/sqlite3.h"
 #include "../base/AsyncLog.h"
+#include "../base/Singleton.h"
 #include "SqliteFunctions.h"
 #include "SqliteQueryResult.h"
 #include "SqliteSqlTranslator.h"
@@ -27,6 +28,18 @@
 //SQLite 同一时刻只允许一个写事务，多个 IO 线程并发写会拿到 SQLITE_BUSY；
 //设了这个超时之后由 SQLite 内部自动退避重试，超过该时长才真正返回失败。
 #define SQLITE_BUSY_TIMEOUT_MS  5000
+
+//连接池的关闭函数：池中保存的句柄就是 sqlite3*。
+//连接上若还开着事务，sqlite3_close 会将其回滚
+static void closeSqliteHandle(void* handle)
+{
+    sqlite3_close(static_cast<sqlite3*>(handle));
+}
+
+CSqliteHandlePool::CSqliteHandlePool()
+    : DbHandlePool(closeSqliteHandle, NULL, DbHandlePool::Options())
+{
+}
 
 //进程内是否已经打过「连接就绪」的 INFO 日志。
 //业务层是「每次数据库调用新开一条连接、用完即弃」的用法，一次请求就可能开好几条；
@@ -177,17 +190,27 @@ static void readCell(sqlite3_stmt* stmt, int col, sqliteapi::SqliteCell& cell)
 
 CDatabaseSqlite::CDatabaseSqlite(void)
     : m_db(NULL)
+    , m_bPooled(false)
     , m_bInTransaction(false)
 {
 }
 
 CDatabaseSqlite::~CDatabaseSqlite(void)
 {
-    if (m_db != NULL)
+    if (m_db == NULL)
+        return;
+
+    //使用连接池且连接状态允许：放回池中，供下一次 DbFactory::createConnection() 直接使用
+    if (m_bPooled && canReturnToPool())
     {
-        sqlite3_close(m_db);
+        Singleton<CSqliteHandlePool>::Instance().release(m_strDbPath, m_db);
         m_db = NULL;
+        return;
     }
+
+    //连接上若还开着事务，sqlite3_close 会将其回滚
+    sqlite3_close(m_db);
+    m_db = NULL;
 }
 
 void CDatabaseSqlite::logDbError(const char* operation, const char* sql)
@@ -312,7 +335,7 @@ bool CDatabaseSqlite::applyConnectionSettings()
     return true;
 }
 
-bool CDatabaseSqlite::initialize(const std::string& dbPath)
+bool CDatabaseSqlite::initialize(const std::string& dbPath, bool usePool)
 {
     //重复初始化时先关掉旧连接
     if (m_db != NULL)
@@ -325,6 +348,20 @@ bool CDatabaseSqlite::initialize(const std::string& dbPath)
     m_bInTransaction = false;
 
     m_strDbPath = dbPath;
+    m_bPooled = usePool;
+
+    //使用连接池：先取一条连到同一个文件的空闲连接。取到就直接使用：busy_timeout、WAL 等 PRAGMA
+    //与 MySQL 兼容函数在它打开时都已设置过，库结构也已在它的首次查询时解析过
+    if (m_bPooled)
+    {
+        sqlite3* pooled = static_cast<sqlite3*>(Singleton<CSqliteHandlePool>::Instance().acquire(dbPath));
+        if (pooled != NULL)
+        {
+            m_db = pooled;
+            LOGD("reuse pooled sqlite connection, path: %s", dbPath.c_str());
+            return true;
+        }
+    }
 
     if (!ensureParentDirectory(dbPath))
     {
@@ -363,6 +400,20 @@ bool CDatabaseSqlite::initialize(const std::string& dbPath)
     //连接成功的信息在进程内第一条连接时已由 applyConnectionSettings 以 INFO 打过
     LOGD("open sqlite db ok, path: %s", dbPath.c_str());
     return true;
+}
+
+bool CDatabaseSqlite::canReturnToPool() const
+{
+    if (m_db == NULL)
+        return false;
+
+    //事务没有结束：放回池中的话，下一个使用者的语句会落进这个事务里
+    if (sqlite3_get_autocommit(m_db) == 0)
+        return false;
+
+    //还有没释放的语句。query / execute 返回前都会 finalize，正常情况下不会出现；
+    //一旦出现，语句会一直持有读快照，不能交给下一个使用者
+    return sqlite3_next_stmt(m_db, NULL) == NULL;
 }
 
 QueryResult* CDatabaseSqlite::query(const char* sql)

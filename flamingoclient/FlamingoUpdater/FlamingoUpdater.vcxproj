@@ -46,31 +46,34 @@
   <PropertyGroup>
     <_ProjectFileVersion>12.0.30501.0</_ProjectFileVersion>
   </PropertyGroup>
-  <!-- 输出目录与主客户端对齐：Debug|x64 是主配置，产物直接落在 Bin\ 与 Flamingo.exe 同处；
+  <!-- 输出目录与主客户端对齐：Debug|x64 是主配置，产物直接落在 Debug\ 与 Flamingo.exe 同处；
        其余三个配置各有独立目录，避免同名产物互相覆盖（客户端曾经踩过这个坑）。
        中间目录也按配置分开，否则同名 .obj 会串。 -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\Bin\</OutDir>
+    <OutDir>..\Debug\</OutDir>
     <IntDir>.\Debug_x64\</IntDir>
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\Bin\x64\Release\</OutDir>
+    <OutDir>..\Release\</OutDir>
     <IntDir>.\Release_x64\</IntDir>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>..\Bin\Win32\Debug\</OutDir>
+    <OutDir>..\Debug_Win32\</OutDir>
     <IntDir>.\Debug_Win32\</IntDir>
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <OutDir>..\Bin\Win32\Release\</OutDir>
+    <OutDir>..\Release_Win32\</OutDir>
     <IntDir>.\Release_Win32\</IntDir>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <!-- 四个配置共用的编译选项。源码含中文注释且为 UTF-8 无 BOM，必须传 /utf-8，
        否则 MSVC 按 GBK 读，一个被误解的字节会让 // 注释吞掉下一行真代码。 -->
+  <!-- CRT 与客户端主程序、各插件 DLL 一致，用静态版（Debug /MTd、Release /MT）：更新器要能在未安装
+       VC++ 运行库的机器上运行，动态 CRT（/MDd、/MD）会让它因缺少 VCRUNTIME140 等 DLL 而无法启动。
+       本工程的源码（含 zlib）全部直接编译进来，不链接任何外部静态库，因此不存在 CRT 不匹配的问题。 -->
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -79,7 +82,7 @@
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader />
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -96,7 +99,7 @@
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\Source\third-party\zlib1.2.11;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <PrecompiledHeader />
       <WarningLevel>Level3</WarningLevel>
@@ -117,6 +120,10 @@
     <ClCompile Include="ZipInflate.cpp" />
     <ClCompile Include="Installer.cpp" />
     <ClCompile Include="UpdateLog.cpp" />
+    <!-- 与主程序共用的产品名称读取：提示框标题与文字里的产品名称取 flamingo.ini 的 [ui] apptitle。 -->
+    <ClCompile Include="..\Source\App\BrandText.cpp" />
+    <!-- 多语言第 3c 步：TR / TRF 与 i18n::Init 的实现。更新器按命令行的 lang 参数加载语言包的临时复制品（见 Main.cpp）。 -->
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp" />
     <!-- zlib 1.2.11：解压只需要 inflate 这一路的六个文件。它们是 C 代码，
          带中文注释的 /utf-8 对纯 ASCII 的 C 源码无影响。 -->
     <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c" />
@@ -133,10 +140,17 @@
     <ClInclude Include="ZipInflate.h" />
     <ClInclude Include="Installer.h" />
     <ClInclude Include="UpdateLog.h" />
+    <ClInclude Include="..\Source\App\BrandText.h" />
+    <ClInclude Include="..\Source\Common\I18n\I18n.h" />
+    <ClInclude Include="..\FlamingoLang\FlamingoLangApi.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="FlamingoUpdater.rc" />
+    <!-- 版本信息（文件说明、版权）：UTF-8 编码，单独按 /c65001 编译 -->
+    <ResourceCompile Include="FlamingoUpdaterVersion.rc">
+      <AdditionalOptions>/c65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

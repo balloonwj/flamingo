@@ -11,8 +11,9 @@
  *
  *      <数据根>Users\<账号>\
  *        ├─ <账号>.ini        不清
- *        ├─ ChatLog\          不清（msg.db 聊天记录、announce.db 公告、filelocal.db 登记表）
+ *        ├─ ChatLog\          不清（msgv2.db 聊天记录、announce.db 公告、filelocal.db 登记表）
  *        ├─ ChatFile\         可清：聊天文件的下载缓存
+        ├─ ChatVoice\        可清：语音消息的缓存（本人录的与下载来的），与 ChatFile 同属「聊天文件」一类
  *        ├─ ChatImage\        可清：聊天图片缓存
  *        └─ Avatar\ UserThumb\ 可清：头像缓存
  *
@@ -31,7 +32,7 @@ namespace balloonsettings {
  */
 enum CacheCategory
 {
-    kCacheChatFile  = 0,   // 聊天文件的下载缓存（按内容 MD5 分目录）
+    kCacheChatFile  = 0,   // 聊天文件的下载缓存（按内容 MD5 分目录），连同语音消息的缓存 ChatVoice
     kCacheChatImage = 1,   // 聊天图片缓存
     kCacheAvatar    = 2,   // 头像缓存（Avatar 与 UserThumb 两个目录合成一项，用户不必区分）
 

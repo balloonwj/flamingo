@@ -20,6 +20,12 @@
 
 namespace balloonprofile {
 
+// 个人信息对话框的宽度（逻辑像素，设计稿 Modal width 420）。窗口与布局单测共用这一份。
+const int kProfileWindowWidth = 420;
+
+// 标题栏高度（逻辑像素，设计稿 Modal header 44）。
+const int kProfileTitleBarHeight = 44;
+
 /**
  *  个人信息对话框客户区控件的数字 id —— 窗口代码按这些 id 取回控件。
  *  全部落在 [900, 999] 区间，与本子项目其它窗口的 id 段不冲突。
@@ -28,6 +34,8 @@ enum ProfileCtrlId
 {
     // ---- 头部区 -------------------------------------------------------
     kIdAvatar       = 900,   // 头像（带铅笔角标的自绘控件 ProfileAvatar）
+    kIdHeaderName    = 901,  // 头部的姓名（ProfileText），由窗口按模型的 Name 填写
+    kIdHeaderAccount = 902,  // 头部的「账号 xxx」一行（ProfileText），由窗口按模型的 Account 填写
 
     // ---- 状态胶囊（三个，下标对应 ProfileStatus）---------------------
     // 编号 913 曾经是"隐身"胶囊，本产品不提供该功能，2026-08-13 去掉；

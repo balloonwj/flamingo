@@ -1,0 +1,17 @@
+# - Find Hogweed
+#
+#  HOGWEED_LIBRARIES      - List of libraries when using libhogweed.
+#  HOGWEED_FOUND          - True if libhogweed found.
+
+IF (HOGWEED_FOUND)
+  SET(HOGWEED_FIND_QUIETLY TRUE)
+ENDIF()
+
+FIND_LIBRARY(HOGWEED_LIBRARY NAMES hogweed libhogweed)
+
+INCLUDE(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(HOGWEED DEFAULT_MSG HOGWEED_LIBRARY)
+
+IF(HOGWEED_FOUND)
+  SET(HOGWEED_LIBRARIES ${HOGWEED_LIBRARY})
+ENDIF()

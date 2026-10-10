@@ -40,12 +40,27 @@ enum UiId
     // AdminFrame 的导航分发靠 kNavScreenBase + (ctrlId - kIdNavDashboard)
     // 映射到 Screen 枚举，跳号会把界面切错。
     kIdNavClientVersions = 206,  // 客户端版本
+    // 敏感词：平台超管与企业管理员都可见（企业管理员维护本企业的词库）。
+    // 数值同样必须紧接上一项，理由同上。
+    kIdNavSensitiveWords = 207,  // 敏感词
+    // 文件共享与共享审计（docs/文件共享方案.md 第 10 节）：平台超管与企业管理员都可见。
+    // 数值同样必须紧接上一项。2026-10-08 起「共享审计」并入文件共享页成为第二个页签，侧栏不再建这一项；
+    // 209 仍然保留（Screen::FileShareAudit 靠它的序号与后面的导航项对齐），不得挪作他用。
+    kIdNavFileShares     = 208,  // 文件共享（「文件共享」「共享审计」两个页签）
+    kIdNavFileShareAudit = 209,  // 保留编号：原为侧栏「共享审计」导航项，现不再创建
+    // 企业问答（docs/群问答方案.md）：平台超管与企业管理员都可见。数值同样必须紧接上一项；
+    // 210 原是登出按钮，2026-10-07 登出按钮改为 214，让出 210 给本项。再要加导航项时同样先把 211、212 之外的控件挪开
+    kIdNavEnterpriseQa   = 210,  // 企业问答
+    // 机器人（docs/机器人方案.md 第 7 节，2026-10-08）：平台超管与企业管理员都可见。数值同样必须紧接上一项。
+    // 211 历史为顶栏的「全局搜索框」，2026-08-12 删除后源码里已没有引用（2026-10-08 全工程搜索 211 与旧控件名核实），
+    // 故直接取用，不必挪开别的控件。再要加导航项时 212 也可直接取用，再往后须先把 213、214 挪开
+    kIdNavEnterpriseBot  = 211,  // 机器人
 
     // ---- 侧边栏 / 顶栏其它控件 ----
-    kIdLogout        = 210,   // 登出按钮（2026-08-12 起位于顶栏右上角，此前在侧边栏页脚）
+    kIdLogout        = 214,   // 登出按钮（2026-08-12 起位于顶栏右上角，此前在侧边栏页脚；2026-10-07 由 210 改为 214）
     // 211 / 212 历史为顶栏的「全局搜索框」与「通知铃铛」，2026-08-12 移除这两个
-    // 控件（搜索一直未接入实际跳转，铃铛也无通知源）。编号留空不复用，避免日后
-    // 新控件误用旧 ID 时与残留代码对上。
+    // 控件（搜索一直未接入实际跳转，铃铛也无通知源）。编号曾留空不复用，避免日后
+    // 新控件误用旧 ID 时与残留代码对上；2026-10-08 核实没有残留代码后，211 给了导航项「机器人」。
     kIdSidebarToggle = 213,   // 顶栏「折叠 / 展开侧边栏」按钮
 
     // ---- 仪表板（DashboardScreen）----
@@ -62,6 +77,12 @@ enum UiId
     kIdEntRefresh = 235,   // 「刷新」按钮
     kIdEntTable   = 236,   // 企业管理界面自身（EnterprisesScreen，承载行通知）
     kIdEntTableRows = 237, // 企业表格（DuiVirtualList）—— 行双击经此 ctrlId 上报 DUIN_DBLCLK
+    // 「更多筛选」条（点「更多筛选」后在筛选行下方展开的一行；本段只剩 238、239 两个空位，故从 250 起取号）
+    kIdEntMoreIndustry = 250, // 行业下拉框（第 0 项「不限行业」）
+    kIdEntMorePlan     = 251, // 套餐下拉框（第 0 项「不限套餐」，第 i 项为套餐编号 i - 1）
+    kIdEntMoreFrom     = 252, // 开通起始日期输入框（YYYY-MM-DD）
+    kIdEntMoreTo       = 253, // 开通截止日期输入框（YYYY-MM-DD）
+    kIdEntMoreClear    = 254, // 「清除」按钮：清空以上四项条件
 
     // ---- 新增企业弹窗（NewEnterpriseModal）----
     kIdModalClose    = 240,   // 关闭按钮（X）/ 点击遮罩关闭
@@ -92,7 +113,7 @@ enum UiId
     kIdNodeCancel   = 271,    // 「取消」按钮
     kIdNodeSubmit   = 272,    // 「创建」按钮
     kIdNodeDeptName = 273,    // 部门名称输入框
-    kIdNodeDeptLead = 274,    // 部门负责人输入框
+    kIdNodeDeptLead = 274,    // 部门负责人下拉框（可输入姓名筛选）
     kIdNodeUserName = 275,    // 员工姓名输入框
     kIdNodeUserTitle = 276,   // 员工职位输入框
     kIdNodeUserEmail = 277,   // 员工邮箱输入框
@@ -173,6 +194,7 @@ enum UiId
     kIdEmpEditLandline    = 369,   // 座机输入框
     kIdEmpEditWorkstation = 370,   // 工位地址输入框
     kIdEmpEditSignature   = 371,   // 个性签名输入框
+    kIdEmpEditGender      = 372,   // 性别下拉框（保密 / 男 / 女）
 
     // ---- 企业设置弹窗（EnterpriseSettingsModal）----
     kIdEntSettings     = 380,   // 弹窗自身（上报「移除管理员」动作）
@@ -182,7 +204,7 @@ enum UiId
     kIdEntSetAddAdmin  = 384,   // 「添加」管理员按钮
     kIdEntSetName      = 385,   // 企业全称输入框
     kIdEntSetShort     = 386,   // 企业简称输入框
-    kIdEntSetIndustry  = 387,   // 所属行业输入框
+    kIdEntSetIndustry  = 387,   // 所属行业下拉框（2026-10-04 起由输入框改为下拉框）
     kIdEntSetRegion    = 388,   // 主要地区输入框
     kIdEntSetPlan      = 389,   // 套餐下拉框
     // 下面两个跳到 395 起：本段 380-389 已用满，而 390-394 归新建群弹窗。
@@ -191,6 +213,7 @@ enum UiId
     // 另一个弹窗的分支上，故此处宁可跳号也不复用。
     kIdEntSetNewName   = 395,   // 新增管理员 - 姓名输入框
     kIdEntSetNewEmail  = 396,   // 新增管理员 - 邮箱输入框
+    kIdEntSetPrefix    = 397,   // 账号前缀输入框（2026-10-06，企业信息第三行右列）
 
     // ---- 新建群弹窗（GroupModal）----
     kIdGroupModal   = 390,   // 弹窗自身
@@ -221,6 +244,180 @@ enum UiId
     kIdCvModalNote      = 448,  // 更新说明输入框
     kIdCvModalPackage   = 449,  // 候选包下拉框
     kIdCvModalForced    = 450,  // 「强制升级」复选框
+
+    // ---- 敏感词界面（SensitiveWordsScreen，docs/敏感词方案.md 第 7 节）----
+    // 取 460 起，与上面客户端版本弹窗的 440-450 之间留出空档。
+    kIdSwTabs       = 460,   // 「词库 / 拦截记录」页签切换（SegControl）
+    kIdSwEnterprise = 461,   // 企业选择框（仅平台超管可见）
+    kIdSwSwitch     = 462,   // 敏感词过滤总开关（DuiSwitch）
+    kIdSwSearch     = 463,   // 搜索框（按词条模糊搜索）
+    kIdSwCategory   = 464,   // 分类筛选下拉框
+    kIdSwAdd        = 465,   // 「添加」按钮
+    kIdSwWordTable  = 466,   // 词库表格
+    kIdSwImport     = 467,   // 「批量导入」按钮
+    kIdSwExport     = 468,   // 「导出」按钮
+
+    // ---- 添加 / 编辑敏感词弹窗（SensitiveWordModal）----
+    kIdSwModal         = 470,   // 弹窗自身
+    kIdSwModalClose    = 471,   // 关闭按钮（X）
+    kIdSwModalCancel   = 472,   // 「取消」按钮
+    kIdSwModalSave     = 473,   // 「保存」按钮
+    kIdSwModalWord     = 474,   // 词条输入框
+    kIdSwModalCategory = 475,   // 分类下拉框
+    kIdSwModalRemark   = 476,   // 备注输入框
+
+    // ---- 批量导入敏感词弹窗（SensitiveImportModal）----
+    kIdSwImpModal      = 480,   // 弹窗自身
+    kIdSwImpClose      = 481,   // 关闭按钮（X）
+    kIdSwImpCancel     = 482,   // 「取消」按钮
+    kIdSwImpSubmit     = 483,   // 「开始导入」按钮；导入结束后变为「完成」
+    kIdSwImpReadFile   = 484,   // 「从文件读取」按钮
+    kIdSwImpText       = 485,   // 多行输入框（导入结束后显示汇总）
+    kIdSwImpCategory   = 486,   // 默认分类下拉框
+
+    // ---- 敏感词界面「拦截记录」页签 ----
+    kIdSwHitRange      = 490,   // 时间范围下拉框（近 7 天 / 近 30 天 / 近 180 天）
+    kIdSwHitSearch     = 491,   // 发送者搜索框
+    kIdSwHitSource     = 492,   // 来源筛选下拉框
+    kIdSwHitCategory   = 493,   // 分类筛选下拉框
+    kIdSwHitTable      = 494,   // 拦截记录表格
+
+    // ---- 功能开关面板（FeatureSwitchPanel，docs/文件共享方案.md 第 10 节）----
+    // 取 600 起：与并行开发的其它功能事先约定好编号段，避免各自新增控件时撞号。
+    // 2026-10-08 起全部功能开关集中到企业详情屏的「功能开关」子 tab（FeatureSwitchesPage），沿用原企业设置弹窗那一组
+    // 编号（名称去掉了 Modal）；原平台设置页「功能开关」卡那一组编号随卡片删除而作废，不得复用。
+    kIdFeatSwitchFileShare  = 600,   // 「功能开关」页里的「文件共享」开关（fileshare.enabled）
+    // 601 已作废：原为平台设置页里的「文件共享」开关
+    kIdFeatSwitchP2P        = 602,   // 「功能开关」页里的「客户端点对点直连」开关（p2p.enabled，docs/P2P通信方案.md 9.5）
+    // 603 已作废：原为平台设置页里的「客户端点对点直连」开关
+    kIdFeatSwitchInviteConfirm = 604,   // 「功能开关」页里的「邀请入群需被邀请人同意」开关（docs/邀请入群方案.md §3.5）
+    kIdFeatSwitchRegister   = 605,   // 「功能开关」页里的「允许用户自助注册」开关（register.enabled）
+    // 606 已作废：原为平台设置页里的「允许用户自助注册」开关
+    kIdFeatSwitchGroupCall  = 607,   // 「功能开关」页里的「群语音 / 群视频通话」开关（docs/群音视频通话方案.md 第 6 期）
+    // 608 已作废：原为平台设置页里的「群语音 / 群视频通话」开关
+
+    // ---- 文件共享页（FileSharesScreen）----
+    kIdFsEnterprise  = 610,   // 企业筛选框（仅平台超管可见，第一项为「全部企业」）
+    kIdFsSearch      = 611,   // 分享者搜索框
+    kIdFsState       = 612,   // 状态筛选下拉框（全部 / 有效 / 已取消）
+    kIdFsRefresh     = 613,   // 页头「刷新」按钮
+    kIdFsTable       = 614,   // 共享表格（选中行变化经 DUIN_VALUECHANGED 上报）
+    kIdFsMemberTable = 615,   // 详情卡里的成员表格
+    // 2026-10-08 起「共享审计」并入文件共享页成为它的第二个页签（FileShareCenterScreen）：页头与「刷新」属于外层页面，
+    // kIdFsRefresh 刷新当前页签；kIdFsTabs 是页头右侧（「刷新」左边）的页签切换
+    kIdFsTabs        = 616,   // 「文件共享 / 共享审计」页签切换（SegControl，DUIN_VALUECHANGED 的 extra 为页签下标）
+
+    // ---- 功能开关面板（续）：600～609 段的编号不够两个一组时，从 620 起接着分配 ----
+    kIdFeatSwitchCaption     = 620,   // 「功能开关」页里的「语音字幕」开关（docs/语音字幕方案.md 第 10 节）
+    // 621 已作废：原为平台设置页里的「语音字幕」开关
+    kIdFeatSwitchCloudRecord = 622,   // 「功能开关」页里的「云端录制」开关（docs/屏幕共享与录制方案.md 12.6.5）
+    // 623 已作废：原为平台设置页里的「云端录制」开关
+    kIdCloudQuotaSave        = 624,   // 「功能开关」页「云端录像空间」面板的「保存」按钮
+    kIdCloudQuotaQuota       = 625,   // 「功能开关」页「云端录像空间」面板的配额输入框（GB）
+    kIdCloudQuotaDays        = 626,   // 「功能开关」页「云端录像空间」面板的保留天数输入框
+    // 627～629 已作废：原为平台设置页「云端录像空间」面板的「保存」按钮、配额输入框与保留天数输入框
+
+    // ---- 共享审计页（FileShareAuditScreen）----
+    kIdFaEnterprise  = 630,   // 企业筛选框（仅平台超管可见，第一项为「全部企业」）
+    kIdFaRange       = 631,   // 时间范围下拉框
+    kIdFaSearch      = 632,   // 操作人搜索框
+    kIdFaAction      = 633,   // 动作筛选下拉框
+    kIdFaShareId     = 634,   // 共享 ID 输入框
+    // 635 已作废：原为共享审计页页头的「刷新」按钮，2026-10-08 页头移到外层页面后改用 kIdFsRefresh
+    kIdFaTable       = 636,   // 审计表格（选中行变化经 DUIN_VALUECHANGED 上报）
+
+    // ---- 功能开关面板（续二）：620～629 已用完、630 起是共享审计页，从 640 起接着分配 ----
+    kIdFeatSwitchSecretChat  = 640,   // 「功能开关」页里的「单聊密聊」开关（docs/密聊方案.md 4.9）
+    // 641 已作废：原为平台设置页里的「单聊密聊」开关
+    kIdFeatSwitchThreadGroup = 642,   // 「功能开关」页里的「帖子群」开关（docs/帖子群方案.md 4.7）
+    // 643 已作废：原为平台设置页里的「帖子群」开关
+    // 机器人的四个开关（docs/机器人方案.md 4.1，2026-10-08）；645、647、649、651 已作废，原为平台设置页里的同名开关
+    kIdFeatSwitchBot              = 644,   // 「功能开关」页里的「机器人」总开关（bot.enabled）
+    kIdFeatSwitchBotGroup         = 646,   // 「功能开关」页里的「允许群主添加群机器人」开关（bot.groupbot）
+    kIdFeatSwitchBotPersonal      = 648,   // 「功能开关」页里的「允许员工配置个人机器人」开关（bot.personal）
+    kIdFeatSwitchBotGroupExternal = 650,   // 「功能开关」页里的「允许群主给群机器人配置外部服务」开关（bot.groupexternal）
+
+    // ---- 企业问答页（EnterpriseQaScreen，docs/群问答方案.md）：取 660 起，与上面的功能开关段留出空档 ----
+    kIdQaEnterprise  = 660,   // 企业选择框（仅平台超管可见）
+    kIdQaSearch      = 661,   // 搜索框（按问题或答案筛选，只在本地筛选）
+    kIdQaRefresh     = 662,   // 「刷新」按钮
+    kIdQaAdd         = 663,   // 「新增问答」按钮
+    kIdQaTable       = 664,   // 问答表格
+
+    // ---- 新增 / 编辑企业问答弹窗（EnterpriseQaModal）----
+    kIdQaModal         = 670,   // 弹窗自身
+    kIdQaModalClose    = 671,   // 关闭按钮（X）
+    kIdQaModalCancel   = 672,   // 「取消」按钮
+    kIdQaModalSave     = 673,   // 「保存」按钮
+    kIdQaModalQuestion = 674,   // 问题输入框
+    kIdQaModalAnswer   = 675,   // 答案输入框（多行）
+    kIdQaModalScope    = 676,   // 应用范围下拉框（全部群 / 所选的群）
+    kIdQaModalGroups   = 677,   // 群列表（带勾选框，应用范围为「所选的群」时可用）
+
+    // ---- 机器人页（EnterpriseBotScreen，docs/机器人方案.md 第 7 节）：取 680 起 ----
+    kIdBotEnterprise = 680,   // 企业选择框（仅平台超管可见）
+    kIdBotRefresh    = 681,   // 「刷新」按钮
+    kIdBotAdd        = 682,   // 「新建机器人」按钮
+    kIdBotDomains    = 683,   // 「外部服务域名白名单」按钮
+    kIdBotTable      = 684,   // 机器人表格
+
+    // ---- 新建 / 编辑企业机器人的编辑窗（EnterpriseBotModal）：690～712 ----
+    kIdBotModal           = 690,   // 编辑窗自身
+    kIdBotModalClose      = 691,   // 关闭按钮（X）
+    kIdBotModalCancel     = 692,   // 「取消」按钮
+    kIdBotModalSave       = 693,   // 「保存」按钮
+    kIdBotModalName       = 694,   // 名称输入框
+    kIdBotModalGlyph      = 695,   // 头像文字输入框
+    kIdBotModalDesc       = 696,   // 简介输入框
+    kIdBotModalStatus     = 697,   // 状态下拉框（启用 / 停用）
+    kIdBotModalAllowOff   = 698,   // 「允许群主在本群关闭」勾选框
+    kIdBotModalScope      = 699,   // 应用范围下拉框（全部群 / 所选的群）
+    kIdBotModalGroups     = 700,   // 群列表（带勾选框，应用范围为「所选的群」时可用）
+    kIdBotModalRules      = 701,   // 规则列表（选中行变化经 DUIN_VALUECHANGED、双击经 DUIN_DBLCLK 上报）
+    kIdBotModalRuleAdd    = 702,   // 规则「添加」按钮
+    kIdBotModalRuleEdit   = 703,   // 规则「编辑」按钮
+    kIdBotModalRuleUp     = 704,   // 规则「上移」按钮
+    kIdBotModalRuleDown   = 705,   // 规则「下移」按钮
+    kIdBotModalRuleDelete = 706,   // 规则「删除」按钮
+    kIdBotModalCopy       = 707,   // Webhook「复制」按钮（地址、令牌、签名密钥放进剪贴板）
+    kIdBotModalResetToken = 708,   // Webhook「重新生成」按钮
+    kIdBotModalTryText    = 709,   // 「试一试」输入框
+    kIdBotModalTryAt      = 710,   // 「试一试」的「@ 机器人」勾选框
+    kIdBotModalTryGroup   = 711,   // 「试一试」的群下拉框
+    kIdBotModalTryRun     = 712,   // 「试一试」按钮
+
+    // ---- 添加 / 编辑规则的规则编辑窗（BotRuleModal）：720～748 ----
+    kIdBotRule            = 720,   // 规则编辑窗自身
+    kIdBotRuleClose       = 721,   // 关闭按钮（X）
+    kIdBotRuleCancel      = 722,   // 「取消」按钮
+    kIdBotRuleSave        = 723,   // 「确定」按钮
+    kIdBotRuleName        = 724,   // 规则名称输入框
+    kIdBotRuleEnabled     = 725,   // 「启用这条规则」勾选框
+    kIdBotRuleTrigger     = 726,   // 触发方式下拉框
+    kIdBotRuleKeywords    = 727,   // 关键词输入框
+    kIdBotRuleMatch       = 728,   // 匹配方式下拉框
+    kIdBotRuleNeedAt      = 729,   // 「必须同时 @ 机器人」勾选框
+    kIdBotRuleSchedKind   = 730,   // 定时种类下拉框（每天 / 工作日 / 每周 / 每月）
+    kIdBotRuleSchedTime   = 731,   // 定时时刻输入框（HH:MM）
+    kIdBotRuleSchedDay    = 732,   // 每月几号输入框
+    kIdBotRuleSchedGroups = 733,   // 定时发往的群（带勾选框）
+    kIdBotRuleWindowOn    = 734,   // 「只在以下时间段响应」勾选框
+    kIdBotRuleWindowDays  = 735,   // 时间段的日子下拉框（每天 / 工作日 / 周末）
+    kIdBotRuleWindowFrom  = 736,   // 时间段起始时刻输入框
+    kIdBotRuleWindowTo    = 737,   // 时间段结束时刻输入框
+    kIdBotRuleAction      = 738,   // 动作下拉框
+    kIdBotRuleText        = 739,   // 回复文字 / 兜底文字输入框（多行）
+    kIdBotRuleMarkdown    = 740,   // 「按 Markdown 显示」勾选框
+    kIdBotRuleUrl         = 741,   // 外部服务地址输入框
+    kIdBotRuleWeekdayFirst = 742,  // 每周定时的「一」勾选框；「二」～「日」依次为 743～748
+    kIdBotRuleWeekdayLast  = 748,  // 每周定时的「日」勾选框
+
+    // ---- 外部服务域名白名单窗（BotDomainsModal）：760～764 ----
+    kIdBotDomainsModal  = 760,   // 白名单窗自身
+    kIdBotDomainsClose  = 761,   // 关闭按钮（X）
+    kIdBotDomainsCancel = 762,   // 「取消」按钮
+    kIdBotDomainsSave   = 763,   // 「保存」按钮
+    kIdBotDomainsText   = 764,   // 白名单输入框（多行，一行一个域名）
 };
 
 } // namespace flamingoadmin

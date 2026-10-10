@@ -12,6 +12,7 @@
 #include "ChatAvatarBitmapCache.h"
 
 #include "../BalloonMain/AvatarImageUtil.h"   // MakeRoundedAvatarFromFile：解码 + 居中裁方 + 缩放 + 圆角
+#include "../BalloonMain/AvatarGray.h"        // MakeGrayAvatarBitmap：离线头像的灰度副本
 
 namespace balloonchatwnd {
 
@@ -33,6 +34,10 @@ bool ChatAvatarBitmapCache::Key::operator<(const Key& rhs) const
     if (m_radiusPx != rhs.m_radiusPx)
     {
         return m_radiusPx < rhs.m_radiusPx;
+    }
+    if (m_gray != rhs.m_gray)
+    {
+        return !m_gray;
     }
     return m_path < rhs.m_path;
 }
@@ -64,6 +69,7 @@ HBITMAP ChatAvatarBitmapCache::Get(const std::wstring& path, int sizePx, int rad
     key.m_path     = path;
     key.m_sizePx   = sizePx;
     key.m_radiusPx = radiusPx;
+    key.m_gray     = false;
     std::map<Key, HBITMAP>::const_iterator it = m_entries.find(key);
     if (it != m_entries.end())
     {
@@ -79,6 +85,32 @@ HBITMAP ChatAvatarBitmapCache::Get(const std::wstring& path, int sizePx, int rad
     HBITMAP bmp = balloonmain::MakeRoundedAvatarFromFile(path.c_str(), sizePx, radiusPx);
     m_entries[key] = bmp;
     return bmp;
+}
+
+HBITMAP ChatAvatarBitmapCache::GetGray(const std::wstring& path, int sizePx, int radiusPx)
+{
+    if (path.empty() || sizePx <= 0)
+    {
+        return NULL;
+    }
+
+    Key key;
+    key.m_path     = path;
+    key.m_sizePx   = sizePx;
+    key.m_radiusPx = radiusPx;
+    key.m_gray     = true;
+    std::map<Key, HBITMAP>::const_iterator it = m_entries.find(key);
+    if (it != m_entries.end())
+    {
+        return it->second;   //含生成失败记下的 NULL：不再重试
+    }
+
+    //先取彩色原图（必要时解码；容量满时 Get 内部会先清空整个缓存，故放在插入灰度项之前），
+    //再生成灰度副本。灰度副本是新建的位图，与彩色原图各自由缓存释放
+    HBITMAP color = Get(path, sizePx, radiusPx);
+    HBITMAP gray = (color != NULL) ? balloonmain::MakeGrayAvatarBitmap(color) : NULL;
+    m_entries[key] = gray;
+    return gray;
 }
 
 void ChatAvatarBitmapCache::Invalidate(const std::wstring& path)

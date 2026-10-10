@@ -7,9 +7,13 @@
 #include "Protocol.h"                   // enum error_code（switchMedia 的失败码）
 #include "../utils/RelayToken.h"
 
+//static const 整型成员被按引用使用（如测试里的 CHECK）时需要类外定义，否则 GCC 下链接失败
+const int64_t CallManager::kRingingTimeoutMs;
+
 CallManager::CallManager()
     : m_seqCounter(0)
     , m_relayPort(0)
+    , m_offlineGraceMs(kDefaultOfflineGraceMs)
 {
 }
 
@@ -75,6 +79,42 @@ bool CallManager::setState(const std::string& sessionid, int state)
         return false;
     it->second.state = state;
     return true;
+}
+
+bool CallManager::markConnected(const std::string& sessionid, int64_t now)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    std::map<std::string, CallSessionInfo>::iterator it = m_sessions.find(sessionid);
+    if (it == m_sessions.end())
+        return false;
+    it->second.state = call_state_connected;
+    it->second.connectTime = now;
+    return true;
+}
+
+bool CallManager::setCard(const std::string& sessionid, int64_t msgId, const std::string& content)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    std::map<std::string, CallSessionInfo>::iterator it = m_sessions.find(sessionid);
+    if (it == m_sessions.end())
+        return false;
+    it->second.cardMsgId = msgId;
+    it->second.cardContent = content;
+    return true;
+}
+
+int64_t CallManager::ringRemainingMs(const std::string& sessionid, int64_t now)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    std::map<std::string, CallSessionInfo>::const_iterator it = m_sessions.find(sessionid);
+    if (it == m_sessions.end() || it->second.state != call_state_ringing)
+        return -1;
+    //本机时钟回拨导致 now 早于创建时间时，按刚创建算
+    int64_t elapsed = now - it->second.createTime;
+    if (elapsed < 0)
+        elapsed = 0;
+    const int64_t remaining = kRingingTimeoutMs - elapsed;
+    return remaining > 0 ? remaining : 0;
 }
 
 int CallManager::switchMedia(const std::string& sessionid, int64_t requesterId, int media,
@@ -156,6 +196,81 @@ bool CallManager::isUserBusy(int64_t userId)
         //活跃会话表里只保留进行中的通话（结束即移除），故命中即视为忙
         if (it->second.callerId == userId || it->second.calleeId == userId)
             return true;
+    }
+    return false;
+}
+
+void CallManager::setOfflineGraceMs(int64_t graceMs)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    m_offlineGraceMs = (graceMs > 0) ? graceMs : kDefaultOfflineGraceMs;
+}
+
+int64_t CallManager::offlineGraceMs() const
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    return m_offlineGraceMs;
+}
+
+void CallManager::markUserOffline(int64_t userId, int64_t now)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (std::map<std::string, CallSessionInfo>::iterator it = m_sessions.begin(); it != m_sessions.end(); ++it)
+    {
+        //已记过的不改：宽限期从第一次掉线算起
+        if (it->second.callerId == userId && it->second.callerOfflineAt == 0)
+            it->second.callerOfflineAt = now;
+        if (it->second.calleeId == userId && it->second.calleeOfflineAt == 0)
+            it->second.calleeOfflineAt = now;
+    }
+}
+
+void CallManager::markUserOnline(int64_t userId)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (std::map<std::string, CallSessionInfo>::iterator it = m_sessions.begin(); it != m_sessions.end(); ++it)
+    {
+        if (it->second.callerId == userId)
+            it->second.callerOfflineAt = 0;
+        if (it->second.calleeId == userId)
+            it->second.calleeOfflineAt = 0;
+    }
+}
+
+void CallManager::reapOfflineSessions(int64_t now, std::vector<CallSessionInfo>& out)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    std::map<std::string, CallSessionInfo>::iterator it = m_sessions.begin();
+    while (it != m_sessions.end())
+    {
+        const CallSessionInfo& s = it->second;
+        const bool callerGone = s.callerOfflineAt != 0 && now - s.callerOfflineAt >= m_offlineGraceMs;
+        const bool calleeGone = s.calleeOfflineAt != 0 && now - s.calleeOfflineAt >= m_offlineGraceMs;
+        if (callerGone || calleeGone)
+        {
+            out.push_back(s);
+            //erase 返回下一个迭代器，避免失效
+            it = m_sessions.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+bool CallManager::getUserCall(int64_t userId, CallSessionInfo& out)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (std::map<std::string, CallSessionInfo>::const_iterator it = m_sessions.begin();
+         it != m_sessions.end(); ++it)
+    {
+        //同一用户同一时刻最多在一通会话里（发起呼叫前已做「对方忙」判断），命中第一条即返回
+        if (it->second.callerId == userId || it->second.calleeId == userId)
+        {
+            out = it->second;
+            return true;
+        }
     }
     return false;
 }

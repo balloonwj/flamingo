@@ -1,11 +1,11 @@
 /**
- *  「消息盒子」窗口（DuiFrameWindow 外壳），BalloonAnnounceBoxWindow.h
+ *  「公告中心」窗口（DuiFrameWindow 外壳），BalloonAnnounceBoxWindow.h
  *
  *  平台公告的收件箱 —— 公告由企业管理控制台(flamingoAdmin)发布、经 chatserver 投递，
  *  落进本地库 CAnnounceStore，本窗口把它们列出来给用户看。详见
- *  docs/消息盒子接入方案.md。
+ *  docs/公告中心接入方案.md。
  *
- *  入口只有一个：主面板 Banner 底部那一行（铃铛 + 「消息盒子」/「你有 N 条新公告」）。
+ *  入口只有一个：主面板 Banner 底部那一行（铃铛 + 「公告中心」/「你有 N 条新公告」）。
  *
  *  左右双栏：左栏公告列表（置顶优先、时间倒序），右栏当前选中那条的正文。客户区控件
  *  树由 AnnounceBoxLayout 构造，数据直接从 CAnnounceStore 查。
@@ -29,6 +29,7 @@
 #include "AnnounceBoxLayout.h"                 // balloonannounce::AnnounceBoxViewData / AnnounceRowView
 #include "../BalloonHistory/AnnounceStore.h"   // balloonhistory::CAnnounceStore
 #include "../../App/CustomMsgDef.h"                   // WM_CHAT_OPEN_LINK（消息映射里要用）
+#include "../BalloonMain/TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 class CFlamingoClient;
 class CBalloonMainPanel;
@@ -49,7 +50,7 @@ namespace balloonmain { class MainPanelScrollView; }
 #define WM_ANNBOX_SYNC_BODY_HEIGHT  (WM_APP + 0x013A)
 
 /**
- *  CBalloonAnnounceBoxWindow —— 消息盒子窗口。
+ *  CBalloonAnnounceBoxWindow —— 公告中心窗口。
  *
  *  继承 balloonwjui::DuiFrameWindow，由它提供无边框自绘窗体与标题栏。非模态，
  *  由主面板创建并持有；关闭只销毁本窗，不影响主程序。
@@ -65,7 +66,7 @@ public:
     ~CBalloonAnnounceBoxWindow();
 
     /**
-     *  打开（或前置）消息盒子窗口。主面板 OpenAnnounceBox 调用。
+     *  打开（或前置）公告中心窗口。主面板 OpenAnnounceBox 调用。
      *
      *  已打开则前置并刷新一遍（期间可能收到过新公告）；未打开则创建。
      *
@@ -99,9 +100,6 @@ public:
         //滚动范围还停在旧值（拉宽后本该变矮、却仍能滚出一大截空白）。
         //同样只旁听、不消费：DuiFrameWindow 还要靠它做客户区重排。
         MESSAGE_HANDLER(WM_SIZE, OnSizeMsg)
-        //两栏滚动条的淡入淡出由本窗口的定时器推进（滚动视口自己起定时器、由本窗口
-        //统一推进并在都稳定后停掉，理由见 MainPanelScrollView.h 的头注释）。
-        MESSAGE_HANDLER(WM_TIMER, OnScrollBarAnimTimer)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -171,13 +169,6 @@ private:
     LRESULT OnSyncBodyHeightMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  WM_TIMER：滚动条淡入淡出的 pulse 定时器到点，把左右两个滚动视口各推进一帧。
-     *  两个都不再需要下一帧时停掉定时器省电，下次滚动时视口会自己把它重新起起来。
-     *  不是本窗关心的定时器 id 时置 bHandled=FALSE 放行。
-     */
-    LRESULT OnScrollBarAnimTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-
-    /**
      *  WM_CHAT_OPEN_LINK 处理：右栏正文里的超链接被点击。lParam 为堆上的
      *  std::wstring*（规范化后的 URL），本函数负责 delete。打开前先过
      *  balloonchatwnd::IsSafeLinkUrl 的协议白名单 —— 只放行 http / https。
@@ -245,4 +236,6 @@ private:
 
     //标题栏左侧图标位图；本窗持有，析构时释放。
     HBITMAP m_hTitleIcon;
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 };

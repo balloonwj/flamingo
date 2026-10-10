@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "../../net/Protocol.h"   //group_join_mode：加群方式的默认值
+#include "../BalloonChatWnd/GroupBotSection.h"   //GroupBotSectionRow：「群机器人」页每个机器人一行的内容
 
 namespace balloongroupmanage {
 
@@ -99,6 +100,10 @@ struct GroupMember
 
     CString   muteReason;    // 禁言原因；未禁言时为空
 
+    // 是否尚未确认入群必读（docs/群公告接入方案.md §14）。true 时成员卡副标题显示「未确认必读」，
+    // 群主与管理员的右键菜单里多一项「代为确认入群必读」
+    bool      mustReadPending;
+
     GroupMember()
         : avatarColor(RGB(0xFF, 0x7A, 0x45))
         , role(kRoleMember)
@@ -106,6 +111,22 @@ struct GroupMember
         , userid(0)
         , muted(false)
         , muteUntil(0)
+        , mustReadPending(false)
+    {
+    }
+};
+
+// 「加群链接」页上的一条链接（docs/邀请入群方案.md §12）
+struct GroupLinkRow
+{
+    int64_t  id;            // 链接ID，作废时按它定位
+    CString  url;           // 完整链接文字
+    CString  creatorName;   // 生成者昵称
+    CString  createText;    // 生成时间的展示文本（如「今天 14:32」）
+    CString  expireText;    // 到期说明（「永久有效」或「有效期至 10-14 14:30」）
+
+    GroupLinkRow()
+        : id(0)
     {
     }
 };
@@ -199,19 +220,6 @@ struct GroupAnnouncement
     }
 };
 
-// 一条群敏感词。对照"管理词库"二级界面里的词条行。
-struct SensitiveWord
-{
-    int64_t id;        // 词条ID，删除时按它定位；0 表示假数据
-    CString word;      // 敏感词原文
-    CString timeText;  // 添加时间的展示文本（如「3 天前」）
-
-    SensitiveWord()
-        : id(0)
-    {
-    }
-};
-
 // 群权限设置项的当前取值。对照 design/群管理5.png。
 struct GroupPermissions
 {
@@ -223,7 +231,7 @@ struct GroupPermissions
     bool newMemberSeeHistory;   // 新成员查看历史消息
     bool memberInviteFriend;    // 成员邀请好友加群（无需审批）
     bool welcomeMessage;        // 入群欢迎语
-    bool sensitiveWordFilter;   // 消息敏感词过滤
+    // 原先还有一项「消息敏感词过滤」，随群级敏感词于 2026-10-02 删除（docs/敏感词方案.md）
 
     GroupPermissions()
         : joinMethodIndex(group_join_approval)
@@ -231,7 +239,6 @@ struct GroupPermissions
         , newMemberSeeHistory(true)
         , memberInviteFriend(false)
         , welcomeMessage(true)
-        , sensitiveWordFilter(true)
     {
     }
 };
@@ -278,6 +285,8 @@ public:
     CString  m_announcement;     // 群公告正文
     CString  m_intro;            // 群简介（可选）
     GroupRole m_myRole;          // 当前登录者在本群的角色，决定各页可见性与可操作项
+    bool     m_isThreadGroup;    // 本群是帖子群（docs/帖子群方案.md §15.1 第 3 条）：导航里没有「群公告」页，基本信息页没有
+                                 //「群公告」一行；由窗口层 CBalloonGroupManageWindow::SetThreadGroup 在建窗之前写入，之后不变
 
     // 入群欢迎语正文。它与 m_perms.welcomeMessage（开关）配套：开关关掉时
     // 正文仍保留在库里，下次打开还是这句，不必重打。
@@ -303,19 +312,11 @@ public:
     // 由 ApplyJoinRequests 置为 kLoadDone。「加群审批」页据此决定显示什么。
     LoadState m_requestsState;
 
-    // 群资料（群简介、入群欢迎语正文、七项群权限、全员禁言）的加载状态。开窗时为
+    // 群资料（群简介、入群欢迎语正文、六项群权限、全员禁言）的加载状态。开窗时为
     // kLoadPending，群资料应答（1303）或群资料变更推送到达后由 ApplyGroupInfo 置为
     // kLoadDone。「基本信息」「群权限」两页与禁言管理页的「全员禁言」开关据此决定
     // 显示提示还是表单：数据未到时模型里只有构造时的默认值，不能当作真实设置显示。
     LoadState m_groupInfoState;
-
-    // 本群敏感词库（"管理词库"二级界面用）。只有进入该界面时才会去拉，
-    // 平时为空 —— 主界面各页都不显示它。
-    std::vector<SensitiveWord> m_sensitiveWords;
-
-    // 敏感词库是否已经拉取过。用来区分"还没拉"与"拉过但是空的"：前者显示
-    // "加载中"，后者显示"还没有敏感词"。
-    bool m_sensitiveWordsLoaded;
 
     // 本群公告的<u>当前这一页</u>，按发布时间倒序，最新的在前。
     //
@@ -331,8 +332,8 @@ public:
     // 当前停在第几页（0 起）。翻页按钮增减，列表刷新后会夹回合法范围。
     int m_announcementPage;
 
-    // 公告是否已经拉取过。同 m_sensitiveWordsLoaded 的用途：区分"还没拉"
-    // （显示加载中）与"拉过但是一条都没有"（显示空状态提示）。
+    // 公告是否已经拉取过。用来区分"还没拉"（显示加载中）与"拉过但是一条都没有"
+    // （显示空状态提示），两者混成一句话的话，加载慢时用户会以为公告全没了。
     bool m_announcementsLoaded;
 
     // 「发布新公告」表单上当前选中的优先级，取值见 AnnounceSeverity。
@@ -341,8 +342,22 @@ public:
     // 靠"哪个按钮画成主色"表达，而每次点击都要整页重建才能换掉配色 —— 重建后
     // 控件是新造的，选中态只能从模型里取回来。标题与正文不放在模型里：它们是
     // 输入框，整页重建或切页时由窗口的 InputDraftTable（GroupManageInputCarry.h）
-    // 在重建前采集、重建后填回，群名称、群简介、新增敏感词三个输入框也一样。
+    // 在重建前采集、重建后填回，群名称、群简介两个输入框也一样。
     int m_draftSeverity;
+
+    // 被设为入群必读的公告ID；0 表示没有设置（docs/群公告接入方案.md §14）。由 ApplyGroupInfo 从群资料取来，
+    // 群公告页据此在那一条上标「入群必读」，按钮文字在「设为入群必读」「取消入群必读」之间切换
+    int64_t m_mustReadId;
+
+    // 「加群链接」页的链接列表（仍可用的，按生成时间倒序）与加载状态。切到这一页时才拉，作废成功后重拉
+    std::vector<GroupLinkRow> m_links;
+    LoadState                 m_linksState;
+
+    // 「群机器人」页（docs/机器人方案.md §14.9）。只对群主、且 m_botsAvailable 为 true 时出现在导航里（IsBotsPageVisible）；
+    // 三项都由窗口层 CBalloonGroupManageWindow::SetGroupBots 填写（主面板打开窗口时、2801 到达时、企业开关变化时调用）
+    bool                                            m_botsAvailable;  // 企业打开了机器人（features.bot）且 FlamingoBot.dll 已加载
+    LoadState                                       m_botsState;      // 本群的 2801 是否已到达：没到达时页面显示「正在加载」
+    std::vector<balloonchatwnd::GroupBotSectionRow> m_botRows;        // 本群的机器人（含企业机器人、停用的与在本群关闭了的），一个一行
 
     // ---- 权限 ----
 

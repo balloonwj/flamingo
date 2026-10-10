@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 24 章：聊天记录管理——打开方式、左栏会话与搜索、右侧消息列表与筛选、时间轴、文件与图片库、本机存储占用、导出。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>聊天记录管理 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c24">
+<article class="doc">
+  <h1>聊天记录管理</h1>
+  <p class="lead">聊天记录管理窗口集中管理本机保存的全部单聊和群聊记录：按会话浏览、跨会话搜索、按类型和时间筛选、查找文件与图片、清理缓存，以及把记录导出成网页或文本。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>搜索与统计的范围：本机已保存的聊天记录</li>
+  </ul>
+
+  <h2 id="open">打开聊天记录管理</h2>
+  <ul>
+    <li>在主面板的系统菜单里点 <span class="ui">聊天记录管理</span>，打开整个管理窗口。</li>
+    <li>在聊天窗口头部点时钟按钮（<span class="ui">消息记录</span>），直接打开这个会话的记录。</li>
+    <li>在会话列表、联系人或群上点右键，选 <span class="ui">查看消息记录</span>。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/o_history_mgr.png" width="880" alt="聊天记录管理窗口">
+    <figcaption>聊天记录管理窗口：左栏是会话列表，右侧是选中会话的消息</figcaption>
+  </figure>
+  <div class="callout note"><b>只包括本机保存的记录</b>搜索、文件与图片库、存储统计都只针对这台电脑上保存的聊天记录。某个会话较早的消息还没有同步到本机时，翻到列表最后一页会继续往前加载。</div>
+
+  <h2 id="left">左栏：会话与搜索</h2>
+  <ul>
+    <li><b>页签</b>：<span class="ui">聊天</span>、<span class="ui">文件</span>、<span class="ui">图片</span>、<span class="ui">链接</span>，分别按消息、文件、图片和含链接的消息来浏览。文件和图片见下文<a href="#library">「文件与图片库」</a>。</li>
+    <li><b>搜索框</b>（<span class="ui">搜索会话或聊天内容</span>）：输入关键字后，左栏同时列出名字匹配的会话和包含这个关键字的聊天记录（显示「N 条相关聊天记录」）。点 <span class="ui">范围：全部会话</span> 可以只在勾选的几个会话里搜索；勾选 <span class="ui">通配符</span> 后，关键字里的 <code>*</code> 和 <code>?</code> 按通配符匹配。</li>
+    <li><b>会话类型</b>：<span class="ui">全部</span>、<span class="ui">单聊</span>、<span class="ui">群聊</span>。</li>
+    <li><span class="ui">与我有关</span>：集中查看 @我的、回复我的和我发的消息，可以再用「@我的」「回复我的」「我发的」细分。</li>
+    <li><b>会话列表</b>：点一个会话，右侧显示它的消息。在会话上点右键可以 <span class="ui">打开聊天窗口</span>、<span class="ui">导出聊天记录</span> 或 <span class="ui">清空聊天记录</span>。</li>
+    <li>底部的 <span class="ui">本机存储占用</span>：见下文<a href="#storage">「本机存储占用」</a>。</li>
+    <li>搜索框右侧的 « 可以收起左栏，让右侧更宽；收起后点标题左边的 » 展开。</li>
+  </ul>
+
+  <h2 id="messages">右侧：浏览与筛选消息</h2>
+  <p>在左栏点一个会话，右侧按时间列出它的消息。Markdown 文档、代码片段等以卡片显示，群里的系统消息也会列出。</p>
+  <figure class="shot">
+    <img src="../img/o_history_single.png" width="880" alt="单聊的记录">
+    <figcaption>与赵卓轩的单聊记录，Markdown 文档和代码片段以卡片显示</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="../img/o_history_group.png" width="880" alt="群聊的记录">
+    <figcaption>「v2.1 版本发布」群的记录，其中有群公告、群备忘、问答和系统消息</figcaption>
+  </figure>
+  <p>右侧顶部是会话名和「共 N 条消息」，下面是两行筛选条件：</p>
+  <table>
+    <tr><th>控件</th><th>说明</th></tr>
+    <tr><td>搜索框</td><td>提示文字为「搜索消息内容、文件名、@某人」，支持下表中的搜索语法；勾选右侧的 <span class="ui">通配符</span> 后，<code>*</code> 匹配任意多个字符，<code>?</code> 匹配一个字符</td></tr>
+    <tr><td>全部成员</td><td>只看某位成员发的消息</td></tr>
+    <tr><td>列表 / 时间轴</td><td>切换两种显示方式，时间轴见下文</td></tr>
+    <tr><td>类型胶囊</td><td><span class="ui">全部</span>、<span class="ui">文字</span>、<span class="ui">图片</span>、<span class="ui">文件</span>、<span class="ui">语音</span>、<span class="ui">链接</span>、<span class="ui">Pin</span>。「Pin」列出这个会话里被钉住的消息</td></tr>
+    <tr><td>时间</td><td><span class="ui">全部时间</span>、<span class="ui">近 7 天</span>、<span class="ui">近 30 天</span>、<span class="ui">近 3 个月</span>、<span class="ui">近半年</span>、<span class="ui">近一年</span></td></tr>
+    <tr><td>选日期</td><td>选一个日期 <span class="ui">跳到这一天</span>，或用「从」「到」选一段日期 <span class="ui">只看这段时间</span></td></tr>
+  </table>
+  <h3>搜索语法</h3>
+  <table>
+    <tr><th>写法</th><th>含义</th></tr>
+    <tr><td>用空格分隔多个词</td><td>同时包含这几个词的消息才算命中</td></tr>
+    <tr><td><code>-词</code></td><td>排除含这个词的消息</td></tr>
+    <tr><td><code>“带 空格”</code></td><td>引号括起来的部分当作一个词</td></tr>
+    <tr><td><code>from:名字</code></td><td>只看这个人发的消息</td></tr>
+    <tr><td><code>type:图片</code></td><td>按类型筛选，可写图片、文件、语音、链接、文字、Pin</td></tr>
+    <tr><td><code>after:2026-10-01</code> <code>before:2026-10-31</code></td><td>按日期筛选，包含当天</td></tr>
+  </table>
+  <h3>翻页与底部按钮</h3>
+  <p>底部显示「共 N 条 · 第 X/Y 页」，用 <span class="ui">首页</span>、<span class="ui">&lt;</span>、<span class="ui">&gt;</span>、<span class="ui">末页</span> 翻页，或在 <span class="ui">跳至</span> 框里输入页码。右下角还有两个按钮：</p>
+  <ul>
+    <li><span class="ui">清空聊天记录</span>：清空这个会话中你这一方的记录，你登录的其他设备会同步清空，对方或其他群成员的记录不受影响，清空后无法恢复。</li>
+    <li><span class="ui">↓ 导出</span>：见下文<a href="#export">「导出聊天记录」</a>。</li>
+  </ul>
+  <h3>消息的右键菜单</h3>
+  <p>在一条消息上点右键，菜单会按消息类型列出可用的操作：</p>
+  <table>
+    <tr><th>分组</th><th>菜单项</th></tr>
+    <tr><td>处理内容</td><td>复制；图片消息有复制图片、图片另存为、打开所在文件夹；文件消息有打开文件、打开所在文件夹、另存为；没下载过的图片和文件显示「下载」</td></tr>
+    <tr><td>查看前后文</td><td><b>定位到聊天窗</b>：打开聊天窗口并跳到这条消息；<b>查看上下文</b>：设了筛选条件时出现，留在本窗口里查看这条消息的前后内容</td></tr>
+    <tr><td>转发与标记</td><td>转发、多选（进入多选后可以合并转发或逐条转发）、Pin / 取消 Pin</td></tr>
+    <tr><td>删除</td><td>删除这条消息。删除后，本机和你的其他设备都不再显示这条消息，对方不受影响</td></tr>
+  </table>
+  <p>转发、多选与 Pin 的详细说明见<a href="07-message-actions.html">「消息的更多操作」</a>。</p>
+
+  <h2 id="timeline">时间轴视图</h2>
+  <figure class="shot">
+    <img src="../img/o_history_timeline.png" width="880" alt="时间轴视图">
+    <figcaption>时间轴视图：消息按日期分组，右侧是年月导航</figcaption>
+  </figure>
+  <p>点右上角的 <span class="ui">时间轴</span>，消息按日期分组排列，每天的标题显示日期、星期和当天的条数，每条消息左侧标有时间。右侧的年月导航中：条形表示当月的消息量，黄色数字表示搜索命中的条数，点月份可以跳到该月。</p>
+  <p>在时间轴视图里搜索时，消息不会被过滤掉，而是保留上下文、只高亮命中的地方，用 <span class="ui">▲ 上一处</span>、<span class="ui">▼ 下一处</span> 在命中之间跳转。</p>
+
+  <h2 id="library">文件与图片库</h2>
+  <figure class="shot">
+    <img src="../img/o_history_files.png" width="880" alt="文件库">
+    <figcaption>「文件」页签：左栏按会话统计文件数，右侧列出全部文件</figcaption>
+  </figure>
+  <p>点左栏的 <span class="ui">文件</span> 页签，可以在一处找到聊天里收发过的文件和你所在群的群文件。左栏列出「全部会话」以及每个会话的文件数，右侧是文件列表：</p>
+  <ul>
+    <li>用 <span class="ui">搜索文件名</span> 查找文件。</li>
+    <li>用 <span class="ui">全部</span>、<span class="ui">我发送的</span>、<span class="ui">我接收的</span> 按收发方向筛选。</li>
+    <li>来源下拉框可选 <span class="ui">聊天文件和群文件</span>、<span class="ui">只看聊天文件</span> 或 <span class="ui">只看群文件</span>；类型下拉框可选文档、图片、视频、音频、压缩包、其它、文件夹；时间下拉框与消息列表相同。</li>
+    <li>每一行标出文件来自群文件还是聊天、发给了谁，以及「已下载」或「未下载」。</li>
+    <li>点右下角的 <span class="ui">下载本页全部</span>，可以一次下载本页还没下载的文件。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/o_history_images.png" width="880" alt="图片库">
+    <figcaption>「图片」页签：图片按日期以缩略图排列</figcaption>
+  </figure>
+  <p><span class="ui">图片</span> 页签以缩略图集中显示聊天里的图片，同样可以按 <span class="ui">我发送的</span>、<span class="ui">我接收的</span> 和时间筛选。<span class="ui">链接</span> 页签列出含链接的消息，每一行可以打开链接、复制链接或定位到聊天。</p>
+
+  <h2 id="storage">本机存储占用</h2>
+  <figure class="shot">
+    <img src="../img/o_history_storage.png" width="880" alt="本机存储占用">
+    <figcaption>本机存储占用：按会话统计图片、文件和语音缓存</figcaption>
+  </figure>
+  <p>点左栏底部的 <span class="ui">本机存储占用</span>，右侧显示聊天图片、文件和语音在本机的缓存大小，按会话从多到少列出。另存到别处的文件不计算在内；聊天记录库本身的大小也会显示，但不参与清理。</p>
+  <ul>
+    <li><span class="ui">重新统计</span>：重新计算占用。</li>
+    <li><span class="ui">清理缓存</span>：清理某一个会话的缓存；<span class="ui">清理全部会话的缓存</span>：一次清理全部。</li>
+  </ul>
+  <div class="callout tip"><b>清理缓存不会删除聊天记录</b>清理后聊天记录仍然保留，需要查看图片或文件时可以重新下载。同一个文件也发在别的会话里时，那边也需要重新下载。正在使用的文件不会被删除。</div>
+
+  <h2 id="export">导出聊天记录</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/o_history_export.png" width="409" alt="导出聊天记录"><figcaption>「导出聊天记录」面板</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <ol class="steps">
+        <li>点右下角的 <span class="ui">↓ 导出</span>，或在左栏的会话上点右键选 <span class="ui">导出聊天记录</span>。</li>
+        <li>选择 <span class="ui">范围</span>：<span class="ui">当前会话</span>（右侧正在查看的会话），或 <span class="ui">选择会话</span> 后勾选要导出的多个会话。</li>
+        <li>选择 <span class="ui">时间</span>：<span class="ui">按当前筛选条件</span>，或全部时间、近 7 天等固定范围。</li>
+        <li>选择 <span class="ui">格式</span>：<span class="ui">网页</span> 或 <span class="ui">纯文本</span>。</li>
+        <li>按需勾选 <span class="ui">包含图片</span>、<span class="ui">包含本机已有的文件</span> 和 <span class="ui">打包为 zip</span>。</li>
+        <li>点 <span class="ui">导出</span>，选择保存位置。完成后会提示导出了几个会话、共多少条消息，并询问是否打开所在的文件夹。</li>
+      </ol>
+    </div>
+  </div>
+  <div class="callout note"><b>导出的几点说明</b>只有本机已经存在的图片和文件才能带上，已经被移动、删除或正被占用的文件会在完成提示里列出数量。打包后的文件超过 4 GB 时无法打包成 zip，这时请取消「打包为 zip」，改为导出到文件夹。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

@@ -3,7 +3,8 @@
  *
  *  覆盖 FileStoreManager::findCompletedByMd5 的秒传命中规则：只命中**同一场景**、
  *  且已上传完成的记录（FSM1～FSM5）；以及 markCompletedByUploader 的标记规则：只有
- *  上传者本人引用时才把记录标记为已完成，重复标记无害（FSM6～FSM8）。
+ *  上传者本人引用时才把记录标记为已完成，重复标记无害（FSM6～FSM8）；getServerForScene 给每个场景下发的
+ *  服务器与 fileserver / imgserver 的场景门禁一致（FSM9）。
  *
  *  背景：2026-09-30 一张聊天图片（场景 4）按 MD5 命中了同内容
  *  群文件（场景 2）的记录，服务端直接复用了那条记录的 fileid。下载时令牌场景与
@@ -21,6 +22,7 @@
 #include "doctest.h"
 #include "../chatserversrc/FileStoreManager.h"
 #include "../chatserversrc/Protocol.h"          //file_scene
+#include "../utils/FileToken.h"                 //场景门禁（FSM9）
 #include "../dbapi/DbConfig.h"
 #include "../sqliteapi/SqliteManager.h"
 #include "../base/Singleton.h"
@@ -48,6 +50,24 @@ static const int FSM_UPLOAD_SCENES[] = {
 static const size_t FSM_UPLOAD_SCENE_COUNT =
     sizeof(FSM_UPLOAD_SCENES) / sizeof(FSM_UPLOAD_SCENES[0]);
 
+//全部文件场景（FSM9 检查下发地址用）
+static const int FSM_ALL_SCENES[] = {
+    file_scene_chat_file,
+    file_scene_group_file,
+    file_scene_avatar,
+    file_scene_image_msg,
+    file_scene_update,
+    file_scene_cloud_record,
+};
+static const size_t FSM_ALL_SCENE_COUNT =
+    sizeof(FSM_ALL_SCENES) / sizeof(FSM_ALL_SCENES[0]);
+
+//FSM9 配给 FileStoreManager 的两台服务器地址，取不同的主机与端口以便区分
+static const char* const FSM_IMG_HOST  = "img.fsm.test";
+static const int         FSM_IMG_PORT  = 30002;
+static const char* const FSM_FILE_HOST = "file.fsm.test";
+static const int         FSM_FILE_PORT = 30001;
+
 //删除测试库文件，连同 WAL 模式产生的两个附属文件一起清掉
 static void removeFsmDbFiles()
 {
@@ -63,7 +83,7 @@ static void resetFsmDb()
 {
     removeFsmDbFiles();
 
-    //CSqliteManager::init 会把空文件建成完整结构（建表 + 补列 + 建索引与触发器）
+    //CSqliteManager::init 会把空文件建成完整结构（建表 + 建索引与触发器）
     REQUIRE(Singleton<CSqliteManager>::Instance().init(FSM_DB_PATH));
 
     //DbFactory 按 CDbConfig 造连接；MySQL 那四个参数在 SQLite 模式下不参与连接
@@ -223,4 +243,35 @@ TEST_CASE("FSM8 对已完成的记录再标记一次，仍为已完成且返回�
     FileRecord rec;
     REQUIRE(mgr.getFileById(fileid, rec));
     CHECK(rec.status == file_status_completed);
+}
+
+TEST_CASE("FSM9 每个文件场景下发的服务器，都是场景门禁放行该场景的那一台")
+{
+    //2026-10-07 第 27 期联调：云端录像（场景 6）的令牌被指向 fileserver，fileserver 按门禁拒绝（scene not allowed）。
+    //本用例把下发地址与 fileserver / imgserver 的门禁（FileToken::isImageScene / isFileScene）对齐，新增场景时一并受约束。
+    FileStoreManager& mgr = Singleton<FileStoreManager>::Instance();
+    mgr.configure("fsm-key", FSM_IMG_HOST, FSM_IMG_PORT, false, FSM_FILE_HOST, FSM_FILE_PORT, false);
+
+    for (size_t i = 0; i < FSM_ALL_SCENE_COUNT; ++i)
+    {
+        const int scene = FSM_ALL_SCENES[i];
+        CAPTURE(scene);
+        std::string host;
+        int port = 0;
+        bool tls = true;
+        mgr.getServerForScene(scene, host, port, tls);
+        //每个场景恰好被一台服务器的门禁放行
+        REQUIRE(FileToken::isImageScene(scene) != FileToken::isFileScene(scene));
+        if (FileToken::isImageScene(scene))
+        {
+            CHECK(host == FSM_IMG_HOST);
+            CHECK(port == FSM_IMG_PORT);
+        }
+        else
+        {
+            CHECK(host == FSM_FILE_HOST);
+            CHECK(port == FSM_FILE_PORT);
+        }
+        CHECK_FALSE(tls);
+    }
 }

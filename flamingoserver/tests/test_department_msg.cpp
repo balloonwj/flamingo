@@ -160,3 +160,46 @@ TEST_CASE("B8 org-structure-changed notify 覆盖成员变更与无部门归属�
         dept::BuildOrgStructureNotify(dept::org_change_department, BIG_DEPT_ID));
     CHECK(big["deptid"].asInt64() == BIG_DEPT_ID);
 }
+
+//成员的账号状态（accountstatus，0 启用 / 1 停用）与在线状态（status）是两个独立字段，
+//管理控制台曾把在线状态 1 当成停用。两者取不同值时要各自编码、往返解析后保持不变。
+TEST_CASE("B9 1200 response carries accountstatus independent of presence status")
+{
+    std::vector<dept::DepartmentInfo> depts;
+    dept::DepartmentInfo tech;
+    tech.deptid = 1005;
+    tech.deptname = "技术部";
+
+    //在线、账号启用
+    dept::DepartmentMember online;
+    online.userid = 21;
+    online.status = 1;
+    online.accountstatus = 0;
+    tech.members.push_back(online);
+
+    //离线、账号已停用
+    dept::DepartmentMember disabled;
+    disabled.userid = 22;
+    disabled.status = 0;
+    disabled.accountstatus = 1;
+    tech.members.push_back(disabled);
+    depts.push_back(tech);
+
+    const std::string json = dept::BuildGetOrgStructureResp(0, "ok", depts);
+    Json::Value root = ParseToJson(json);
+    const Json::Value& members = root["departments"][0]["members"];
+    REQUIRE(members.size() == 2);
+    CHECK(members[0]["status"].asInt() == 1);
+    CHECK(members[0]["accountstatus"].asInt() == 0);
+    CHECK(members[1]["status"].asInt() == 0);
+    CHECK(members[1]["accountstatus"].asInt() == 1);
+
+    std::vector<dept::DepartmentInfo> parsed;
+    REQUIRE(dept::ParseGetOrgStructureResp(json, parsed));
+    REQUIRE(parsed.size() == 1);
+    REQUIRE(parsed[0].members.size() == 2);
+    CHECK(parsed[0].members[0].status == 1);
+    CHECK(parsed[0].members[0].accountstatus == 0);
+    CHECK(parsed[0].members[1].status == 0);
+    CHECK(parsed[0].members[1].accountstatus == 1);
+}

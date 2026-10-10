@@ -6,6 +6,7 @@
 #include "stdafx.h"
 #include "Screens/EmployeeEditDialog.h"
 #include "AdminFrame.h"
+#include "Util/AdminApi.h"            // IsValidPhoneNumber：员工手机号的本地校验
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/Widgets.h"          // SolidPanel / SolidHBox
@@ -15,6 +16,7 @@
 #include "Controls/Basic/DuiLabel.h"
 #include "Controls/Basic/DuiButton.h"
 #include "Controls/Input/DuiEdit.h"
+#include "Controls/Input/DuiComboBox.h"
 #include "DuiNotify.h"
 
 #include <memory>
@@ -126,6 +128,32 @@ std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
     return std::unique_ptr<DuiControl>(col.release());
 }
 
+// 第 1 行「性别」列的固定宽度：三个选项都只有两个字，不必与姓名、职位平分一行。
+const int kGenderColW = 96;
+
+// 造「性别」字段列：上标签、下 DuiComboBox（依次为「保密 / 男 / 女」，序号经
+// adminapi::GenderComboIndexToCode 换成编码）。
+//   borrowOutCombo：[出参] 下拉框裸指针，所有权在返回的控件树里。
+std::unique_ptr<DuiControl> MakeGenderColumn(DuiComboBox** borrowOutCombo)
+{
+    std::unique_ptr<DuiVBox> col(new DuiVBox());
+    col->SetGap(kFieldLabelGap);
+
+    col->AddChild(MakeLabel(_T("性别"), kFontSizeSmall, false, theme::kInk500),
+                  DuiLayout::Hint().Fixed(kFieldLabelH));
+
+    std::unique_ptr<DuiComboBox> cb(new DuiComboBox());
+    cb->SetCtrlId(kIdEmpEditGender);
+    cb->AddString(_T("保密"));
+    cb->AddString(_T("男"));
+    cb->AddString(_T("女"));
+    cb->SetCurSel(0, false);
+    *borrowOutCombo = cb.get();
+    col->AddChild(std::move(cb), DuiLayout::Hint().Fixed(kFieldCtrlH));
+
+    return std::unique_ptr<DuiControl>(col.release());
+}
+
 // 造一个按钮。
 std::unique_ptr<DuiButton> MakeButton(int ctrlId, LPCTSTR text,
                                        DuiButton::Variant variant)
@@ -159,6 +187,7 @@ EmployeeEditDialog::EmployeeEditDialog(AdminFrame* frame, HWND parentHwnd,
     , m_editLandline(nullptr)
     , m_editWorkstation(nullptr)
     , m_editSignature(nullptr)
+    , m_cbGender(nullptr)
     , m_btnSave(nullptr)
 {
 }
@@ -216,10 +245,21 @@ CString EmployeeEditDialog::GetTitle() const         { return m_editTitle       
 CString EmployeeEditDialog::GetEmployeeNo() const    { return m_editEmployeeNo  ? m_editEmployeeNo->GetText()  : CString(); }
 CString EmployeeEditDialog::GetJoinDate() const      { return m_editJoinDate    ? m_editJoinDate->GetText()    : CString(); }
 CString EmployeeEditDialog::GetEmail() const         { return m_editEmail       ? m_editEmail->GetText()       : CString(); }
-CString EmployeeEditDialog::GetPhone() const         { return m_editPhone       ? m_editPhone->GetText()       : CString(); }
+CString EmployeeEditDialog::GetPhone() const
+{
+    // 去掉首尾空白再交出去：复制粘贴进来的号码常带空格，服务端按原文校验格式
+    CString phone = m_editPhone ? m_editPhone->GetText() : CString();
+    phone.Trim();
+    return phone;
+}
 CString EmployeeEditDialog::GetLandline() const      { return m_editLandline    ? m_editLandline->GetText()    : CString(); }
 CString EmployeeEditDialog::GetWorkstation() const   { return m_editWorkstation ? m_editWorkstation->GetText() : CString(); }
 CString EmployeeEditDialog::GetSignature() const     { return m_editSignature   ? m_editSignature->GetText()   : CString(); }
+
+int EmployeeEditDialog::GetGenderCode() const
+{
+    return m_cbGender ? adminapi::GenderComboIndexToCode(m_cbGender->GetCurSel()) : 0;
+}
 
 void EmployeeEditDialog::SetBusy(bool busy)
 {
@@ -253,13 +293,15 @@ void EmployeeEditDialog::BuildClientContent()
     // 其它字段不指定 cue,留空即可)。姓名 + 邮箱后缀 * 表示客户端校验必填项,
     // 设计稿没标星但实际提交 user/update.do 要求二者非空,保留 * 让用户知情。
 
-    // 第 1 行:姓名* / 职位
+    // 第 1 行:姓名* / 性别(定宽窄列) / 职位。性别插在这一行里，对话框高度不变
     {
         std::unique_ptr<DuiHBox> row(new DuiHBox());
         row->SetGap(kColGap);
         row->AddChild(MakeFieldColumn(_T("姓名 *"), kIdEmpEditName,
                                       _T(""), false, &m_editName),
                       DuiLayout::Hint().Weight(1));
+        row->AddChild(MakeGenderColumn(&m_cbGender),
+                      DuiLayout::Hint().Fixed(kGenderColW));
         row->AddChild(MakeFieldColumn(_T("职位"), kIdEmpEditTitle,
                                       _T(""), false, &m_editTitle),
                       DuiLayout::Hint().Weight(1));
@@ -288,8 +330,8 @@ void EmployeeEditDialog::BuildClientContent()
         row->AddChild(MakeFieldColumn(_T("邮箱 *"), kIdEmpEditEmail,
                                       _T(""), false, &m_editEmail),
                       DuiLayout::Hint().Weight(1));
-        row->AddChild(MakeFieldColumn(_T("手机号"), kIdEmpEditPhone,
-                                      _T(""), false, &m_editPhone),
+        row->AddChild(MakeFieldColumn(_T("手机号 *"), kIdEmpEditPhone,
+                                      _T("11 位手机号，可用于登录"), false, &m_editPhone),
                       DuiLayout::Hint().Weight(1));
         root->AddChild(std::unique_ptr<DuiControl>(row.release()),
                        DuiLayout::Hint().Fixed(kFieldRowH));
@@ -368,6 +410,10 @@ void EmployeeEditDialog::LoadNodeIntoUi()
     if (m_editLandline    != nullptr) { m_editLandline->SetText(m_node.m_landline);       }
     if (m_editWorkstation != nullptr) { m_editWorkstation->SetText(m_node.m_workstation); }
     if (m_editSignature   != nullptr) { m_editSignature->SetText(m_node.m_signature);     }
+    if (m_cbGender != nullptr)
+    {
+        m_cbGender->SetCurSel(adminapi::GenderCodeToComboIndex(m_node.m_genderCode), false);
+    }
 }
 
 void EmployeeEditDialog::SubmitOrShake()
@@ -377,7 +423,7 @@ void EmployeeEditDialog::SubmitOrShake()
         return;
     }
 
-    // 校验:姓名 + 邮箱必填。
+    // 校验:姓名 + 邮箱必填,手机号必填且格式合法(见下)。
     CString name = GetName();
     CString mail = GetEmail();
     name.Trim();
@@ -391,6 +437,16 @@ void EmployeeEditDialog::SubmitOrShake()
         }
         return;
     }
+    // 手机号必填且格式合法（2026-10-06 起，手机号可用于登录，见 docs/登录账号与手机号登录方案.md）
+    if (!adminapi::IsValidPhoneNumber(GetPhone()))
+    {
+        if (m_frame != nullptr)
+        {
+            m_frame->ShowToast(_T("请填写正确的手机号（11 位，以 1 开头）"),
+                               AdminFrame::ToastKind::Warn);
+        }
+        return;
+    }
 
     // 调 AdminFrame 提交入口,本对话框等 HTTP reply 期间 Busy。
     if (m_frame != nullptr)
@@ -398,6 +454,22 @@ void EmployeeEditDialog::SubmitOrShake()
         SetBusy(true);
         m_frame->OnEmployeeEditDialogSubmit(this);
     }
+}
+
+// 单行输入框里按回车时是否等同点「保存」：只认本对话框里的这几个单行输入框。下拉框内嵌的
+// 输入框（如部门负责人）不在此列 —— 在那里按回车是为了选下拉项，不应提交。
+//   ctrlId：发出回车通知的控件 ID。
+static bool IsSubmitOnEnterEdit(UINT ctrlId)
+{
+    const UINT ids[] = { kIdEmpEditName, kIdEmpEditTitle, kIdEmpEditEmployeeNo, kIdEmpEditJoinDate, kIdEmpEditEmail, kIdEmpEditPhone, kIdEmpEditLandline, kIdEmpEditWorkstation };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        if (ids[i] == ctrlId)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 LRESULT EmployeeEditDialog::OnDuiNotify(UINT, WPARAM, LPARAM lParam,
@@ -408,6 +480,13 @@ LRESULT EmployeeEditDialog::OnDuiNotify(UINT, WPARAM, LPARAM lParam,
     // 这俩 LOWORD/HIWORD 编进 wParam —— admin AdminFrame::OnDuiNotify 也是
     // 这么解码的(AdminFrame.cpp:554)。
     const DuiNotify* n = reinterpret_cast<const DuiNotify*>(lParam);
+    // 单行输入框里按了回车：等同点「保存」。
+    if (n != nullptr && n->code == DuiEdit::DUIN_EDIT_ENTER && IsSubmitOnEnterEdit(n->ctrlId))
+    {
+        SubmitOrShake();
+        bHandled = TRUE;
+        return 0;
+    }
     if (n == nullptr || n->code != DUIN_CLICK)
     {
         bHandled = FALSE;
@@ -429,6 +508,18 @@ LRESULT EmployeeEditDialog::OnDuiNotify(UINT, WPARAM, LPARAM lParam,
         bHandled = FALSE;
         return 0;
     }
+}
+
+LRESULT EmployeeEditDialog::OnKeyDownMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
+{
+    if (wParam == VK_ESCAPE)
+    {
+        RequestClose();
+        bHandled = TRUE;
+        return 0;
+    }
+    bHandled = FALSE;
+    return 0;
 }
 
 LRESULT EmployeeEditDialog::OnCloseMsg(UINT, WPARAM, LPARAM, BOOL& bHandled)

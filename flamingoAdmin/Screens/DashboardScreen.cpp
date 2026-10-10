@@ -5,6 +5,7 @@
  */
 #include "stdafx.h"
 #include "Screens/DashboardScreen.h"
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/UiHelpers.h"
@@ -119,7 +120,47 @@ public:
         return false;
     }
 
+    // 设置加载状态并重绘。
+    void SetLoadState(DashboardScreen::CardState state)
+    {
+        m_loadState = state;
+        Invalidate();
+    }
+
+    // 取加载状态。
+    DashboardScreen::CardState GetLoadState() const { return m_loadState; }
+
 protected:
+    // 内容区还不能画数据时，在内容区居中画一行状态文字：加载中显示「加载中…」，加载失败
+    // 显示「加载失败」，已加载但没有数据显示「暂无数据」。
+    //   hdc：绘制设备；empty：已加载时数据是否为空。
+    //   返回：true 表示已画了状态文字，调用方不再画数据。
+    bool PaintPendingState(HDC hdc, bool empty)
+    {
+        LPCTSTR text = nullptr;
+        if (m_loadState == DashboardScreen::CardState::Loading)
+        {
+            text = _T("加载中…");
+        }
+        else if (m_loadState == DashboardScreen::CardState::Failed)
+        {
+            text = _T("加载失败");
+        }
+        else if (empty)
+        {
+            text = _T("暂无数据");
+        }
+        if (text == nullptr)
+        {
+            return false;
+        }
+        RECT rc = { m_rcItem.left, ContentTop(), m_rcItem.right, m_rcItem.bottom - kCardPadH };
+        ui::DrawTextLine(hdc, text, rc, theme::kInk400,
+                         ui::UiFont(theme::kFontSizeNormal, false),
+                         DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        return true;
+    }
+
     // 画卡片底 + 标题 + 链接。
     void PaintCardFrame(HDC hdc)
     {
@@ -159,8 +200,10 @@ protected:
     }
 
 private:
-    CString m_title;
-    CString m_link;
+    CString m_title;   // 卡片标题
+    CString m_link;    // 右上角链接文字，空表示无链接
+    // 加载状态：构造时为「加载中」，由 DashboardScreen::SetCardState 更新。
+    DashboardScreen::CardState m_loadState = DashboardScreen::CardState::Loading;
 };
 
 // ===========================================================================
@@ -184,14 +227,8 @@ public:
         {
             barCount = kChartBarCount;
         }
-        if (barCount == 0)
+        if (PaintPendingState(hdc, barCount == 0))
         {
-            // 数据未到 —— 内容区居中提示。
-            RECT rc = { m_rcItem.left, ContentTop(), m_rcItem.right,
-                        ContentTop() + kChartHeight };
-            ui::DrawTextLine(hdc, _T("加载中…"), rc, theme::kInk400,
-                             ui::UiFont(theme::kFontSizeNormal, false),
-                             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             return;
         }
 
@@ -267,7 +304,7 @@ public:
             return false;
         }
         const int contentTop = ContentTop();
-        if (pt.y < contentTop)
+        if (pt.y < contentTop || GetLoadState() != DashboardScreen::CardState::Loaded)
         {
             return false;
         }
@@ -292,6 +329,10 @@ public:
         PaintCardFrame(hdc);
 
         const std::vector<Enterprise>& list = DataStore::Instance().Enterprises();
+        if (PaintPendingState(hdc, list.empty()))
+        {
+            return;
+        }
         const int rows = (static_cast<int>(list.size()) < kListCount)
             ? static_cast<int>(list.size()) : kListCount;
 
@@ -358,6 +399,10 @@ public:
 
         const std::vector<Announcement>& list =
             DataStore::Instance().Announcements();
+        if (PaintPendingState(hdc, list.empty()))
+        {
+            return;
+        }
         const int rows = (static_cast<int>(list.size()) < kAnnCount)
             ? static_cast<int>(list.size()) : kAnnCount;
         const int left  = m_rcItem.left  + kCardPadH;
@@ -374,7 +419,8 @@ public:
             // 级别圆点 + 日期。
             ui::DrawSeverityDot(hdc, left + 4, top + 14, a.m_severity);
             RECT rcDate = { left + 14, top + 6, right, top + 22 };
-            ui::DrawTextLine(hdc, a.m_sentAt.Mid(5, 11), rcDate, theme::kInk400,
+            ui::DrawTextLine(hdc, timetext::FormatTimeText(a.m_sentAt, timetext::TimeStyle::Minute),
+                             rcDate, theme::kInk400,
                              ui::UiFont(theme::kFontSizeSmall, false),
                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
@@ -403,6 +449,10 @@ public:
         PaintCardFrame(hdc);
 
         const std::vector<AuditLog>& list = DataStore::Instance().AuditLogs();
+        if (PaintPendingState(hdc, list.empty()))
+        {
+            return;
+        }
         const int left  = m_rcItem.left  + kCardPadH;
         const int right = m_rcItem.right - kCardPadH;
 
@@ -433,7 +483,8 @@ public:
             // 时间 · 操作者。
             CString meta;
             meta.Format(_T("%s · %s"),
-                        static_cast<LPCTSTR>(l.m_ts.Mid(5, 11)),
+                        static_cast<LPCTSTR>(timetext::FormatTimeText(
+                            l.m_ts, timetext::TimeStyle::Minute)),
                         static_cast<LPCTSTR>(l.m_actor));
             RECT rcMeta = { left + 16, top + 23, right, top + 39 };
             ui::DrawTextLine(hdc, meta, rcMeta, theme::kInk400,
@@ -452,10 +503,11 @@ public:
 DashboardScreen::DashboardScreen()
 {
     // ---- 页头 ----
+    // 问候语按时段与当前管理员姓名生成，进入主界面时由 AdminFrame 调 SetGreeting 刷新。
     auto header = std::make_unique<ui::PageHeader>();
-    header->SetTexts(_T("平台总览"), _T("晚上好，李正阳"),
-                     _T("平台运行状态、近期活动与待处理事项"));
+    m_header = header.get();
     AddChild(std::move(header), Hint().Fixed(kHeaderH));
+    SetGreeting(CString());
 
     // ---- 内容区：双列网格 ----
     auto body = std::make_unique<DuiHBox>();
@@ -482,10 +534,12 @@ DashboardScreen::DashboardScreen()
     leftCol->AddChild(std::move(statRow), Hint().Fixed(kStatRowH));
 
     auto chart = std::make_unique<ChartCard>();
+    m_cards[static_cast<int>(Card::Trend)] = chart.get();
     chart->SetTitle(_T("近 14 天消息量"));
     leftCol->AddChild(std::move(chart), Hint().Fixed(kChartCardH));
 
     auto active = std::make_unique<ActiveEnterprisesCard>();
+    m_cards[static_cast<int>(Card::Enterprises)] = active.get();
     active->SetTitle(_T("活跃企业"));
     active->SetLink(_T("查看全部 →"));
     active->SetCtrlId(kIdDashViewEnterprises);
@@ -498,12 +552,14 @@ DashboardScreen::DashboardScreen()
     rightCol->SetGap(kBodyGap);
 
     auto announce = std::make_unique<LatestAnnouncementsCard>();
+    m_cards[static_cast<int>(Card::Announcements)] = announce.get();
     announce->SetTitle(_T("最新公告"));
     announce->SetLink(_T("查看全部 →"));
     announce->SetCtrlId(kIdDashViewAnnouncements);
     rightCol->AddChild(std::move(announce), Hint().Fixed(kAnnounceCardH));
 
     auto audit = std::make_unique<RecentAuditCard>();
+    m_cards[static_cast<int>(Card::Audit)] = audit.get();
     audit->SetTitle(_T("近期审计"));
     audit->SetLink(_T("查看全部 →"));
     audit->SetCtrlId(kIdDashViewAudit);
@@ -552,7 +608,8 @@ void DashboardScreen::SetStats(const DashboardStatsResult& stats)
     {
         m_tileUsers->SetContent(_T("总用户"),
                                 FormatThousands(stats.m_usersTotal),
-                                _T("全平台员工"), ui::Accent::Info);
+                                m_platformAdmin ? _T("全平台员工") : _T("本企业员工"),
+                                ui::Accent::Info);
     }
     if (m_tileAudit != nullptr)
     {
@@ -564,6 +621,103 @@ void DashboardScreen::SetStats(const DashboardStatsResult& stats)
         m_tileAudit->SetContent(_T("今日审计"), value, sub,
                                 stats.m_auditTodayWarn > 0 ? ui::Accent::Warn
                                                            : ui::Accent::None);
+    }
+}
+
+void DashboardScreen::SetStatsFailed()
+{
+    const LPCTSTR kFailed = _T("加载失败");
+    if (m_tileEnterprises != nullptr)
+    {
+        m_tileEnterprises->SetContent(_T("企业总数"), _T("—"), kFailed, ui::Accent::None);
+    }
+    if (m_tileUsers != nullptr)
+    {
+        m_tileUsers->SetContent(_T("总用户"), _T("—"), kFailed, ui::Accent::None);
+    }
+    if (m_tileAudit != nullptr)
+    {
+        m_tileAudit->SetContent(_T("今日审计"), _T("—"), kFailed, ui::Accent::None);
+    }
+}
+
+void DashboardScreen::SetCardState(Card card, CardState state)
+{
+    CardControl* c = static_cast<CardControl*>(m_cards[static_cast<int>(card)]);
+    if (c != nullptr)
+    {
+        c->SetLoadState(state);
+    }
+}
+
+DashboardScreen::CardState DashboardScreen::GetCardState(Card card) const
+{
+    const CardControl* c = static_cast<const CardControl*>(m_cards[static_cast<int>(card)]);
+    return (c != nullptr) ? c->GetLoadState() : CardState::Loading;
+}
+
+void DashboardScreen::SetGreeting(const CString& adminName)
+{
+    SYSTEMTIME now = {};
+    ::GetLocalTime(&now);
+    m_greeting = ui::GreetingForHour(static_cast<int>(now.wHour), adminName);
+    UpdateHeaderTexts();
+}
+
+void DashboardScreen::SetPlatformAdminMode(bool platformAdmin)
+{
+    m_platformAdmin = platformAdmin;
+    SetVisibleAndRelayout(m_cards[static_cast<int>(Card::Enterprises)], platformAdmin);
+    SetVisibleAndRelayout(m_cards[static_cast<int>(Card::Announcements)], platformAdmin);
+    SetVisibleAndRelayout(m_tileEnterprises, platformAdmin);
+    UpdateHeaderTexts();
+}
+
+bool DashboardScreen::IsCardVisible(Card card) const
+{
+    const DuiControl* c = m_cards[static_cast<int>(card)];
+    return (c != nullptr) && c->IsVisible();
+}
+
+bool DashboardScreen::IsEnterpriseTileVisible() const
+{
+    return (m_tileEnterprises != nullptr) && m_tileEnterprises->IsVisible();
+}
+
+void DashboardScreen::UpdateHeaderTexts()
+{
+    if (m_header == nullptr)
+    {
+        return;
+    }
+    if (m_platformAdmin)
+    {
+        m_header->SetTexts(_T("平台总览"), m_greeting, _T("平台运行状态、近期活动与待处理事项"));
+    }
+    else
+    {
+        m_header->SetTexts(_T("企业总览"), m_greeting, _T("本企业的消息量与近期管理操作"));
+    }
+    m_header->Invalidate();
+}
+
+void DashboardScreen::SetVisibleAndRelayout(DuiControl* c, bool visible)
+{
+    if (c == nullptr || c->IsVisible() == visible)
+    {
+        return;
+    }
+    c->SetVisible(visible);
+    // 卡片所在的行或列按可见子控件分配空间；只调 SetVisible 不会重排，须对父容器强制布局一次。
+    // 尚未布局过（矩形为空）时不必处理，第一次布局自然会跳过不可见的卡片。
+    DuiControl* parent = c->GetParent();
+    if (parent != nullptr)
+    {
+        const RECT rcParent = parent->GetRect();
+        if (!::IsRectEmpty(&rcParent))
+        {
+            parent->ForceLayout(rcParent);
+        }
     }
 }
 

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 17 章：远程桌面（请求控制对方电脑、接受与拒绝、远程桌面窗口、结束控制）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>远程桌面 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c17">
+<article class="doc">
+  <h1>远程桌面</h1>
+  <p class="lead">远程桌面让你在征得同事同意后，用自己的鼠标和键盘直接操作同事的电脑，适合远程协助排查问题、帮同事完成设置。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：双方都在线；被控制的一方必须点「接受」</li>
+    <li>入口：单聊窗头部的「远程桌面」按钮</li>
+  </ul>
+
+  <h2 id="request">发起远程控制请求</h2>
+  <ol class="steps">
+    <li>打开与对方的单聊窗，点头部右侧的显示器图标（鼠标停在上面提示 <span class="ui">远程桌面</span>）。它位于电话、摄像机两个图标的右边。</li>
+    <li>屏幕上出现等待窗口「正在呼叫 某某，等待对方接受…」。对方回应之前，可以点 <span class="ui">取消</span> 撤回请求。</li>
+    <li>对方点 <span class="ui">接受</span> 后，你的电脑上会打开远程桌面窗口，显示对方的屏幕。</li>
+  </ol>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/s_rd_request_a.png" width="340" alt="等待对方接受"><figcaption>发起方：等待对方接受</figcaption></figure>
+    <figure class="shot"><img src="../img/s_rd_request_b.png" width="340" alt="远程控制请求"><figcaption>被控方：收到远程控制请求</figcaption></figure>
+  </div>
+  <p>被控制的一方会收到「某某 请求远程控制你的电脑」窗口，点 <span class="ui">接受</span> 同意，点 <span class="ui">拒绝</span> 拒绝。对方拒绝、取消、不在线或长时间没有回应时，发起方会看到相应的提示，例如「对方拒绝了远程桌面请求。」「远程桌面请求超时。」</p>
+  <div class="callout warn"><b>只接受你信任的请求</b>接受之后，对方可以像坐在你电脑前一样操作鼠标和键盘，能看到你屏幕上的全部内容。处理敏感资料前请先结束控制。</div>
+
+  <h2 id="viewer">远程桌面窗口</h2>
+  <p>远程桌面窗口里显示的是对方的整个屏幕。在画面上移动鼠标、单击、拖动和打字，操作的都是对方的电脑。标题栏显示对方屏幕的分辨率、当前帧率和每帧的数据量，如「远程桌面 1920×1080 5 fps 帧 2 KB」；画面左上角显示「P2P」时，说明双方是直接连接，没有经过服务器中转。</p>
+  <figure class="shot">
+    <img src="../img/s_rd_viewer.png" width="880" alt="远程桌面窗口">
+    <figcaption>发起方的远程桌面窗口，显示赵卓轩的屏幕</figcaption>
+  </figure>
+  <div class="callout note"><b>截图里为什么有层层嵌套的画面</b>演示时两个账号登录在同一台电脑上，远程桌面窗口本身也出现在被控制的屏幕里，于是画面中又套着画面。两台不同的电脑之间不会出现这种情况。画面底部的深色条是截图后做的遮挡处理。</div>
+
+  <h3>全屏查看</h3>
+  <ul>
+    <li>点标题栏最小化按钮左侧的全屏图标，或按 <kbd>F11</kbd>，进入全屏；再按 <kbd>F11</kbd> 或 <kbd>Esc</kbd> 退出全屏。</li>
+    <li>全屏时屏幕顶部居中有一条工具条，显示连接状态，并提供 <span class="ui">退出全屏</span> 和 <span class="ui">断开</span> 两个按钮。</li>
+  </ul>
+
+  <h2 id="controlled">被控制的一方</h2>
+  <p>接受请求后，被控制一方的屏幕顶部会出现提示条「您的桌面正在被 某某 远程控制」，提示条右侧有红色的 <span class="ui">结束控制</span> 按钮，直连时还显示「P2P」。整个控制期间这条提示条置顶显示，方便随时查看和终止。</p>
+  <figure class="shot center">
+    <img src="../img/s_rd_bar_b.png" width="380" alt="被控方的提示条">
+    <figcaption>被控方屏幕顶部的提示条</figcaption>
+  </figure>
+
+  <h2 id="end">结束远程控制</h2>
+  <p>双方都可以随时结束：</p>
+  <ul>
+    <li>发起方关闭远程桌面窗口，或在全屏工具条上点 <span class="ui">断开</span>。</li>
+    <li>被控方点提示条上的 <span class="ui">结束控制</span>。</li>
+  </ul>
+  <p>任何一方结束后，这次远程控制即告结束，被控方屏幕顶部的提示条随之消失。被控方使用客户端的<a href="26-lock.html">「锁屏」</a>功能时，正在进行的远程控制也会立即结束。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

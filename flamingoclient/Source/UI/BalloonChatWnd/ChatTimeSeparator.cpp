@@ -11,6 +11,7 @@
 #include "ChatTimeSeparator.h"
 
 #include <time.h>
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -90,7 +91,7 @@ CString FormatChatSeparatorTime(long long timestampMs, long long nowMs)
         struct tm yesterdayTm;
         if (localtime_s(&yesterdayTm, &yesterdaySecs) == 0 && IsSameDay(msgTm, yesterdayTm))
         {
-            text.Format(_T("昨天 %02d:%02d"), msgTm.tm_hour, msgTm.tm_min);
+            text.Format(TR(L"昨天 %02d:%02d"), msgTm.tm_hour, msgTm.tm_min);
             return text;
         }
     }

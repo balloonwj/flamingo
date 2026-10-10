@@ -2,8 +2,7 @@
  *  SQLite 建库建表引导的集成测试（Suite SQM），test_sqlite_schema.cpp
  *  balloonwj@qq.com   2026-07-31
  *
- *  验证 CSqliteManager 能把一个空文件建成完整可用的库，重复执行安全，
- *  并且能给结构落后的存量库补上缺失的列。
+ *  验证 CSqliteManager 能把一个空文件建成完整可用的库，重复执行安全。
  *
  *  除此之外还盯住三条与 MySQL 对齐的关键行为，它们错了不会报错、只会静默出问题：
  *    - COLLATE NOCASE：MySQL 默认排序规则不区分大小写，不加的话 SQLite 上
@@ -49,36 +48,6 @@ static int64_t queryScalar(CDatabaseSqlite& db, const char* sql)
 
     delete pResult;
     return value;
-}
-
-//判断某张表里是否存在某个列
-static bool hasColumn(CDatabaseSqlite& db, const char* table, const char* column)
-{
-    std::string sql = std::string("PRAGMA table_info(") + table + ")";
-    QueryResult* pResult = db.query(sql.c_str());
-    if (pResult == NULL)
-        return false;
-
-    bool found = false;
-    while (true)
-    {
-        Field* pRow = pResult->fetch();
-        if (pRow == NULL)
-            break;
-
-        //PRAGMA table_info 每行依次是 cid、name、type、notnull、dflt_value、pk
-        if (pRow[1].getString() == column)
-        {
-            found = true;
-            break;
-        }
-
-        if (!pResult->nextRow())
-            break;
-    }
-
-    delete pResult;
-    return found;
 }
 
 TEST_CASE("SQM1 空库冷启动建出全部表、索引与触发器")
@@ -127,8 +96,8 @@ TEST_CASE("SQM2 重复执行引导是幂等的")
     {
         CDatabaseSqlite db;
         REQUIRE(db.initialize(SCHEMA_DB_PATH));
-        REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) "
-                           "VALUES(1001, 'zhangsan', '张三', '2026-07-31 10:00:00')"));
+        REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) "
+                           "VALUES(1001, 'zhangsan', '张三', '', '2026-07-31 10:00:00')"));
     }
 
     //第二次引导：不能报错，不能重建表，更不能丢数据
@@ -142,45 +111,6 @@ TEST_CASE("SQM2 重复执行引导是幂等的")
         == sqliteapi::SCHEMA_TABLE_COUNT);
     CHECK(queryScalar(db, "SELECT COUNT(*) FROM t_user") == 1);
     CHECK(queryScalar(db, "SELECT f_user_id FROM t_user") == 1001);
-}
-
-TEST_CASE("SQM3 存量库缺列时自动补齐且不丢数据")
-{
-    removeSchemaDbFiles();
-
-    //先手工造一个「结构落后」的库：t_user 只有自增主键和业务 ID 两列。
-    //自增主键列必须自己建好 —— 它不参与补列（SQLite 不允许 ADD COLUMN 时带 PRIMARY KEY）
-    {
-        CDatabaseSqlite db;
-        REQUIRE(db.initialize(SCHEMA_DB_PATH));
-        REQUIRE(db.execute("CREATE TABLE t_user(f_id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                           "f_user_id INTEGER NOT NULL)"));
-        REQUIRE(db.execute("INSERT INTO t_user(f_user_id) VALUES(2002)"));
-    }
-
-    CSqliteManager manager;
-    REQUIRE(manager.init(SCHEMA_DB_PATH));
-
-    CDatabaseSqlite db;
-    REQUIRE(db.initialize(SCHEMA_DB_PATH));
-
-    //缺的列都要补上
-    CHECK(hasColumn(db, "t_user", "f_username"));
-    CHECK(hasColumn(db, "t_user", "f_nickname"));
-    CHECK(hasColumn(db, "t_user", "f_usertype"));
-    CHECK(hasColumn(db, "t_user", "f_enterprise_id"));
-
-    //原有数据必须原样保留 —— 补列是 ALTER TABLE，不能变成重建表
-    CHECK(queryScalar(db, "SELECT COUNT(*) FROM t_user") == 1);
-    CHECK(queryScalar(db, "SELECT f_user_id FROM t_user") == 2002);
-
-    //补出来的列对存量行取默认值；有常量默认值的列要能读到该默认值
-    CHECK(queryScalar(db, "SELECT f_enterprise_id FROM t_user WHERE f_user_id = 2002") == 0);
-
-    //补完之后应当能按完整结构正常写入
-    REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) "
-                       "VALUES(2003, 'lisi', '李四', '2026-07-31 10:00:00')"));
-    CHECK(queryScalar(db, "SELECT COUNT(*) FROM t_user") == 2);
 }
 
 TEST_CASE("SQM4 关键索引确实建出来了")
@@ -225,15 +155,17 @@ TEST_CASE("SQM5 用户名的大小写不敏感唯一约束")
     CDatabaseSqlite db;
     REQUIRE(db.initialize(SCHEMA_DB_PATH));
 
-    REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) "
-                       "VALUES(1, 'Alice', 'A', '2026-07-31 10:00:00')"));
+    REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) "
+                       "VALUES(1, 'Alice', 'A', '', '2026-07-31 10:00:00')"));
 
+    //下面两条预期失败的 INSERT 也给全了非空列（含 f_password），确保失败的原因是唯一约束，
+    //而不是缺列；否则即使唯一约束失效，它们也会因为缺列而失败，用例照样通过。
     //MySQL 的 utf8_general_ci 不区分大小写，SQLite 默认区分。
     //给 f_username 加了 COLLATE NOCASE 才能对齐：大小写不同的同名账号必须被拒
     uint32_t affected = 0;
     int errcode = 0;
-    CHECK_FALSE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) "
-                           "VALUES(2, 'alice', 'B', '2026-07-31 10:00:00')", affected, errcode));
+    CHECK_FALSE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) "
+                           "VALUES(2, 'alice', 'B', '', '2026-07-31 10:00:00')", affected, errcode));
     CHECK(errcode != 0);
     CHECK(queryScalar(db, "SELECT COUNT(*) FROM t_user") == 1);
 
@@ -241,8 +173,8 @@ TEST_CASE("SQM5 用户名的大小写不敏感唯一约束")
     CHECK(queryScalar(db, "SELECT f_user_id FROM t_user WHERE f_username = 'ALICE'") == 1);
 
     //降级成唯一索引的原主键（f_user_id）也必须仍然唯一
-    CHECK_FALSE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) "
-                           "VALUES(1, 'bob', 'B', '2026-07-31 10:00:00')", affected, errcode));
+    CHECK_FALSE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) "
+                           "VALUES(1, 'bob', 'B', '', '2026-07-31 10:00:00')", affected, errcode));
 }
 
 TEST_CASE("SQM6 消息ID单调递增且删除后不复用")
@@ -279,8 +211,8 @@ TEST_CASE("SQM7 更新时间触发器等价于 ON UPDATE CURRENT_TIMESTAMP")
 
     CDatabaseSqlite db;
     REQUIRE(db.initialize(SCHEMA_DB_PATH));
-    REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) "
-                       "VALUES(1, 'alice', 'A', '2026-07-31 10:00:00')"));
+    REQUIRE(db.execute("INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) "
+                       "VALUES(1, 'alice', 'A', '', '2026-07-31 10:00:00')"));
 
     //插入时默认值要填上当前时间，不能是空
     QueryResult* pResult = db.query("SELECT f_update_time FROM t_user WHERE f_user_id = 1");

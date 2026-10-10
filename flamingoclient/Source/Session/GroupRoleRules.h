@@ -136,4 +136,38 @@ const int kMemberChangeRole = 4;
 bool ShouldRefetchMyRoleOnMemberChange(int changetype, const std::vector<int64_t>& userids,
                                        int64_t selfId);
 
+//群成员变更推送里"成员加入"的 changetype 取值，须与 net/Protocol.h 的 group_member_change_join 一致，
+//在此复制一份的理由同 NetGroupRole
+const int kMemberChangeJoin = 1;
+
+/**
+ *  收到群成员变更推送后，判断要不要补拉一次"本人的群列表"（cmd_get_user_groups）。
+ *
+ *  被邀请入群、自由加群、申请经审批、建群时被拉进来，本人都会收到一条名单里有自己的「加入」推送；
+ *  主面板「群聊」页的群列表只在登录时拉一次，不补拉的话要等重新登录才出现这个群
+ *  （docs/邀请入群方案.md §2.2、§3.1）。会话列表不靠它：群里随后插入的入群提示会让会话行自然出现。
+ *
+ *    changetype：推送的变更类型，成员加入为 kMemberChangeJoin。
+ *    userids：   推送里本次加入的成员 userid 名单。
+ *    selfId：    当前登录者的 userid；0 表示未登录，此时一律返回 false。
+ *  @return 需要补拉返回 true。纯函数，无副作用。
+ */
+bool ShouldRefetchGroupListOnMemberChange(int changetype, const std::vector<int64_t>& userids,
+                                          int64_t selfId);
+
+/**
+ *  收到群成员变更推送后，判断要不要为刷新人数补拉一次该群的资料（cmd_get_group_info）。
+ *
+ *  主面板「群聊」页每个群的人数取自登录时拉的群列表，别人入群、退群、被移出后不会自己变；补拉群资料后由
+ *  主面板把应答里的人数同步进群列表（2026-10-08 实测：群主移出一人后列表仍显示原人数）。名单里有本人的
+ *  不在此列：本人入群另有补拉群列表（ShouldRefetchGroupListOnMemberChange），本人退群、被移出另有清理流程。
+ *
+ *    changetype：推送的变更类型；加入、主动退出、被移出三种会改变人数（取值见协议的 changetype）。
+ *    userids：   推送里本次变动的成员 userid 名单。
+ *    selfId：    当前登录者的 userid；0 表示未登录，此时一律返回 false。
+ *  @return 需要补拉返回 true。纯函数，无副作用。
+ */
+bool ShouldRefetchGroupInfoForMemberCount(int changetype, const std::vector<int64_t>& userids,
+                                          int64_t selfId);
+
 } // namespace grouprole

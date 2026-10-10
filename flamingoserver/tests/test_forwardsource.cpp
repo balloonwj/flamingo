@@ -4,7 +4,7 @@
  *  cmd_forward_message 经 MessageManager::getMessagesByIds 按 msgid 取转发源。
  *  本套钉住它的过滤口径：转发人本人已删除的消息（单条删除记在 t_message_deleted，
  *  按时间范围清理记在 t_message_deleted_range）不得进入转发源，口径与同步、搜索、
- *  会话列表所用的 notDeletedClause 一致；删除只对本人生效，另一方照样取得到。
+ *  会话列表所用的 visibleToUserClause 一致；删除只对本人生效，另一方照样取得到。
  *  对应 docs/聊天消息转发方案.md 的 FWD-S3（修复前服务端允许转发本人已删除的消息）。
  *
  *  用例会真的打开一个临时 .db 文件跑 SQL：MessageManager 经 DbFactory 取连接，

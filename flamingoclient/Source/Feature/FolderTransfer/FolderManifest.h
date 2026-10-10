@@ -162,9 +162,12 @@ struct FolderManifestFile
 {
     std::string m_relativePath;   // 相对根目录的路径（UTF-8，正斜杠分隔，不以分隔符开头），例如 "sub/a.txt"
     int64_t     m_sizeBytes;      // 文件字节数（0 字节文件合法，照样进清单）
+    int64_t     m_mtimeMs;        // 最后修改时间（Unix 毫秒），扫描时填写；0 表示未知。单聊文件夹传输不使用，
+                                  // 文件共享的下载据它与字节数判断半截文件能否续传
 
     FolderManifestFile()
         : m_sizeBytes(0)
+        , m_mtimeMs(0)
     {
     }
 };

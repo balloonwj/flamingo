@@ -1,0 +1,243 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoLink.vcxproj — 管理控制台（flamingoAdmin）专用 DLL：与 chatserver 管理端口的长连接，以及企业详情页的「在线用户」页签
+  balloonwj@qq.com   2026-10-04
+  产出 FlamingoLink.dll，由 flamingoAdmin.exe 启动时用 LoadLibraryExW 按完整路径动态加载（不链接导入库）；
+  加载失败时控制台没有「在线用户」页签，其余功能不受影响。接口见 FlamingoLinkApi.h，方案见 docs/FlamingoLink方案.md。
+  PC 客户端将来另有一个同名、但完全独立的 FlamingoLink.dll，与本工程无关。
+  关键约束：
+   · CharacterSet=Unicode、CRT 静态（Debug /MTd、Release /MT），与 flamingoAdmin.exe 及 balloonui_static 一致。
+     exe 与 DLL 各有独立的堆，接口只用纯虚类、POD 结构与基本类型。
+   · 四个配置的 OutDir 与 flamingoAdmin.exe 相同（..\Bin\x64\ 或 ..\Bin\），中间目录放在本工程目录下。
+   · 每个配置都定义 WIN32 与 SODIUM_STATIC：前者是全仓判定 Windows 的宏，后者让 libsodium 头文件按静态库声明函数。
+     flamingoAdminTests 的 FLK9 守卫检查这两项与静态 CRT。
+   · 导出名由 FlamingoLink.def 固定；导入库放进中间目录。
+   · 界面在本 DLL 里：静态链接自己的一份 balloonui_static，并直接编译控制台的 Widgets/ActionTable、ColumnHeader、
+     UiHelpers 与 Theme/AdminTheme.h。这些文件里的 #include "stdafx.h" 借助包含路径里排在最前的 $(ProjectDir)
+     找到本工程的 stdafx.h。
+   · 加密握手与帧编解码直接编译 PC 客户端 Source/net 下的源文件，jsoncpp 与 zlib 也用客户端那份（FrameCrypto.cpp
+     按相对路径包含客户端的 jsoncpp 头文件，本 DLL 的代码用 #include "json.h"，两者因此取同一份）。
+   · 所有配置都带 /utf-8：源文件为 UTF-8。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}</ProjectGuid>
+    <RootNamespace>FlamingoLink</RootNamespace>
+    <ProjectName>FlamingoLink</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\Bin\x64\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <TargetName>FlamingoLink</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\Bin\x64\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <TargetName>FlamingoLink</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\Bin\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <TargetName>FlamingoLink</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\Bin\</OutDir>
+    <IntDir>Release\</IntDir>
+    <TargetName>FlamingoLink</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..;..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_WINDOWS;_USRDLL;WINVER=0x0601;_WIN32_WINNT=0x0601;_WIN32_IE=0x0601;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoLink.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..;..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_WINDOWS;_USRDLL;WINVER=0x0601;_WIN32_WINNT=0x0601;_WIN32_IE=0x0601;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoLink.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..;..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_WINDOWS;_USRDLL;WINVER=0x0601;_WIN32_WINNT=0x0601;_WIN32_IE=0x0601;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoLink.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..;..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_WINDOWS;_USRDLL;WINVER=0x0601;_WIN32_WINNT=0x0601;_WIN32_IE=0x0601;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoLink.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="FlamingoLinkApi.h" />
+    <ClInclude Include="LinkLog.h" />
+    <ClInclude Include="LinkModule.h" />
+    <ClInclude Include="Core\LinkProtocol.h" />
+    <ClInclude Include="Core\OnlineTable.h" />
+    <ClInclude Include="Core\LinkText.h" />
+    <ClInclude Include="Net\LinkConnection.h" />
+    <ClInclude Include="Net\LinkClient.h" />
+    <ClInclude Include="Ui\OnlinePage.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="LinkLog.cpp" />
+    <ClCompile Include="LinkModule.cpp" />
+    <ClCompile Include="Core\LinkProtocol.cpp" />
+    <ClCompile Include="Core\OnlineTable.cpp" />
+    <ClCompile Include="Core\LinkText.cpp" />
+    <ClCompile Include="Net\LinkConnection.cpp" />
+    <ClCompile Include="Net\LinkClient.cpp" />
+    <ClCompile Include="Ui\OnlinePage.cpp" />
+    <ClCompile Include="..\Widgets\ActionTable.cpp" />
+    <ClCompile Include="..\Widgets\ColumnHeader.cpp" />
+    <ClCompile Include="..\Widgets\UiHelpers.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\net\FrameCodec.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\net\FramePayload.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\net\HandshakeRunner.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\Common\Util\ZlibUtil.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\compress.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\deflate.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzclose.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzlib.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\infback.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\trees.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\uncompr.c" />
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\zutil.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoLink.def" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

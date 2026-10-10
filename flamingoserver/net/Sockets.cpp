@@ -400,3 +400,93 @@ bool sockets::isSelfConnect(SOCKET sockfd)
     struct sockaddr_in peeraddr = getPeerAddr(sockfd);
     return localaddr.sin_port == peeraddr.sin_port && localaddr.sin_addr.s_addr == peeraddr.sin_addr.s_addr;
 }
+
+//==================== UDP（docs/P2P通信方案.md 第 2 期 2e） ====================
+
+#ifdef WIN32
+//SIO_UDP_CONNRESET 定义在 mstcpip.h 里；为了不在这里引入那个头文件，按它的定义（_WSAIOW(IOC_VENDOR, 12)）给出
+#ifndef SIO_UDP_CONNRESET
+#define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
+#endif
+#endif
+
+SOCKET sockets::createUdpNonblocking()
+{
+#ifdef WIN32
+    SOCKET sockfd = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sockfd == INVALID_SOCKET)
+    {
+        LOGE("sockets::createUdpNonblocking socket failed, error: %d", ::WSAGetLastError());
+        return INVALID_SOCKET;
+    }
+    //关闭「ICMP 端口不可达转成 WSAECONNRESET」的行为，原因见 Sockets.h 的说明
+    BOOL reportConnReset = FALSE;
+    DWORD bytesReturned = 0;
+    if (::WSAIoctl(sockfd, SIO_UDP_CONNRESET, &reportConnReset, sizeof(reportConnReset), NULL, 0, &bytesReturned,
+                   NULL, NULL) == SOCKET_ERROR)
+    {
+        LOGW("sockets::createUdpNonblocking disable SIO_UDP_CONNRESET failed, error: %d", ::WSAGetLastError());
+    }
+#else
+    SOCKET sockfd = ::socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_UDP);
+    if (sockfd == INVALID_SOCKET)
+    {
+        LOGE("sockets::createUdpNonblocking socket failed, errno: %d", errno);
+        return INVALID_SOCKET;
+    }
+#endif
+    setNonBlockAndCloseOnExec(sockfd);
+    return sockfd;
+}
+
+bool sockets::bindUdp(SOCKET sockfd, const struct sockaddr_in& addr)
+{
+    if (::bind(sockfd, sockaddr_cast(&addr), static_cast<socklen_t>(sizeof addr)) == SOCKET_ERROR)
+    {
+        char ipPort[64] = { 0 };
+        toIpPort(ipPort, sizeof(ipPort), addr);
+#ifdef WIN32
+        LOGE("sockets::bindUdp failed, addr: %s, error: %d", ipPort, ::WSAGetLastError());
+#else
+        LOGE("sockets::bindUdp failed, addr: %s, errno: %d", ipPort, errno);
+#endif
+        return false;
+    }
+    return true;
+}
+
+int32_t sockets::recvFrom(SOCKET sockfd, void* buf, int32_t count, struct sockaddr_in* from)
+{
+    memset(from, 0, sizeof(*from));
+    socklen_t addrlen = static_cast<socklen_t>(sizeof(*from));
+#ifdef WIN32
+    const int n = ::recvfrom(sockfd, (char*)buf, count, 0, sockaddr_cast(from), &addrlen);
+    //报文长于缓冲：Windows 返回 SOCKET_ERROR 并置 WSAEMSGSIZE，但缓冲里已经填好截断后的数据。
+    //按截断处理，与 Linux（直接返回截断后的长度）保持一致
+    if (n == SOCKET_ERROR && ::WSAGetLastError() == WSAEMSGSIZE)
+        return count;
+    return n;
+#else
+    const ssize_t n = ::recvfrom(sockfd, buf, static_cast<size_t>(count), 0, sockaddr_cast(from), &addrlen);
+    return static_cast<int32_t>(n);
+#endif
+}
+
+int32_t sockets::sendTo(SOCKET sockfd, const void* buf, int32_t count, const struct sockaddr_in& to)
+{
+#ifdef WIN32
+    return ::sendto(sockfd, (const char*)buf, count, 0, sockaddr_cast(&to), static_cast<socklen_t>(sizeof to));
+#else
+    return static_cast<int32_t>(::sendto(sockfd, buf, static_cast<size_t>(count), 0, sockaddr_cast(&to),
+                                         static_cast<socklen_t>(sizeof to)));
+#endif
+}
+
+bool sockets::lastErrorIsWouldBlock()
+{
+#ifdef WIN32
+    return ::WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    return errno == EAGAIN || errno == EWOULDBLOCK;
+#endif
+}

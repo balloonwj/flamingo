@@ -11,11 +11,14 @@
  *  压缩字节当 JSON 解析。本测试复现该现场（解码后的 body 仍是压缩字节、不等
  *  于原文），并固化正确的往返行为（按 originlen 解压后与原文逐字节一致）。
  *
+ *  另有 ZLB1（2026-10-09）：守卫链接进来的 zlib 版本，见 docs/服务端依赖库源码编译方案.md 第 6 节。
+ *
  *  balloonwj@qq.com   2026-06-02
  */
 #include "doctest.h"
 #include "../net/FrameCodec.h"
-#include "../zlib1.2.11/ZlibUtil.h"
+#include "../zlib1.3.2/ZlibUtil.h"
+#include "../zlib1.3.2/zlib.h"
 #include <string>
 
 using namespace net;
@@ -103,4 +106,16 @@ TEST_CASE("FC2 未压缩短包体的 body 即原文，无需解压")
     CHECK((header.flags & frame_flag_compressed) == 0);
     CHECK(header.originlen == header.bodylen);
     CHECK(body == original);
+}
+
+//随仓库提交的 zlib 版本号。升级 zlib（整体替换 zlib1.x.y/ 下的官方文件）时同步修改此处
+static const char* const kBundledZlibVersion = "1.3.2";
+
+//ZLB1：链接进来的 zlib 必须是随仓库提交的那一份。zlibVersion() 返回库实现里编进去的版本串，
+//ZLIB_VERSION 是头文件里的版本串：两者一致，说明头文件与实现出自同一份源码；再等于
+//kBundledZlibVersion，说明链接的不是系统里的 libz 或 MariaDB 连接器自带的另一份 zlib
+TEST_CASE("ZLB1 链接的 zlib 为随仓库提交的版本，且与头文件版本一致")
+{
+    CHECK(std::string(zlibVersion()) == std::string(ZLIB_VERSION));
+    CHECK(std::string(zlibVersion()) == std::string(kBundledZlibVersion));
 }

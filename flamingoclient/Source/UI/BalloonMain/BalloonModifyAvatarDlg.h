@@ -31,6 +31,7 @@
 
 #include <string>
 #include <vector>
+#include "TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 class CFlamingoClient;
 
@@ -245,4 +246,6 @@ private:
 
     // 标题栏图标位图（程序图标合成到标题栏底色上的 HBITMAP）；本类持有、析构释放。
     HBITMAP m_titleIconBmp;
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 };

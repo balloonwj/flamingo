@@ -6,6 +6,7 @@
 #include "stdafx.h"
 #include "Screens/NodeModal.h"
 #include "AdminFrame.h"
+#include "Util/AdminApi.h"        // IsValidPhoneNumber：员工手机号的本地校验
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/Widgets.h"      // SolidPanel / SolidHBox
@@ -123,8 +124,46 @@ std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
     return std::unique_ptr<DuiControl>(col.release());
 }
 
+// 负责人下拉框展开后最多同时显示的项数，超出时在列表内滚动。
+const int kLeaderMaxVisibleItems = 8;
+
+// 造「部门负责人」字段列：上标签、下可输入的 DuiComboBox。第 0 项是「不设置」，其后
+// 依次是候选人（主文字为姓名、副文字为「部门 · 职务」）；输入文字时按子串筛选。
+//   candidates：候选人列表；borrowOutCombo：[出参] 下拉框裸指针，所有权在返回的控件树里。
+std::unique_ptr<DuiControl> MakeLeaderColumn(
+    const std::vector<orgtree::LeaderCandidate>& candidates, DuiComboBox** borrowOutCombo)
+{
+    std::unique_ptr<DuiVBox> col(new DuiVBox());
+    col->SetGap(kFieldLabelGap);
+
+    // 输入框初始为空（可输入下拉框里 SetCurSel 不会把文字写进内嵌输入框），留空即「不设置」；
+    // 标签注明「可选」，免得空白看起来像没加载出来。不预填「不设置」三个字，是为了让人能直接
+    // 输入姓名筛选，而不必先删掉它们。
+    col->AddChild(MakeLabel(_T("部门负责人（可选）"), kFontSizeSmall, false, theme::kInk500),
+                  DuiLayout::Hint().Fixed(kFieldLabelH));
+
+    std::unique_ptr<DuiComboBox> cb(new DuiComboBox());
+    cb->SetCtrlId(kIdNodeDeptLead);
+    cb->SetEditable(true);
+    cb->SetIncrementalSearch(true);
+    cb->SetIncrementalSearchSubstring(true);
+    cb->SetMaxVisibleItems(kLeaderMaxVisibleItems);
+    cb->AddString(orgtree::kLeaderNoneText);
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        const int index = cb->AddString(candidates[i].m_name);
+        cb->SetItemSubText(index, candidates[i].m_subText);
+    }
+    cb->SetCurSel(0, false);
+    *borrowOutCombo = cb.get();
+    col->AddChild(std::move(cb), DuiLayout::Hint().Fixed(kFieldCtrlH));
+
+    return std::unique_ptr<DuiControl>(col.release());
+}
+
 // 造「性别」字段列：上标签、下 DuiComboBox。与 MakeFieldColumn 同形，只是
 // 底部控件换成下拉框（自绘主体 + 独立 popup 窗口承载展开后的列表）。
+// 三项依次为「保密 / 男 / 女」，序号经 adminapi::GenderComboIndexToCode 换成编码。
 std::unique_ptr<DuiControl> MakeGenderColumn(DuiComboBox** borrowOutCombo)
 {
     std::unique_ptr<DuiVBox> col(new DuiVBox());
@@ -135,9 +174,9 @@ std::unique_ptr<DuiControl> MakeGenderColumn(DuiComboBox** borrowOutCombo)
 
     std::unique_ptr<DuiComboBox> cb(new DuiComboBox());
     cb->SetCtrlId(kIdNodeUserGender);
+    cb->AddString(_T("保密"));
     cb->AddString(_T("男"));
     cb->AddString(_T("女"));
-    cb->AddString(_T("其他"));
     cb->SetCurSel(0, false);
     *borrowOutCombo = cb.get();
     col->AddChild(std::move(cb), DuiLayout::Hint().Fixed(kFieldCtrlH));
@@ -170,7 +209,7 @@ NodeModal::NodeModal(AdminFrame* frame, HWND parentHwnd, Mode mode,
     , m_parentName(parentName)
     , m_busy(false)
     , m_editDeptName(nullptr)
-    , m_editDeptLeader(nullptr)
+    , m_cbDeptLeader(nullptr)
     , m_editUserName(nullptr)
     , m_editUserTitle(nullptr)
     , m_editUserEmail(nullptr)
@@ -224,29 +263,52 @@ void NodeModal::RequestClose()
     }
 }
 
+void NodeModal::SetLeaderCandidates(const std::vector<orgtree::LeaderCandidate>& candidates)
+{
+    m_leaderCandidates = candidates;
+}
+
 bool NodeModal::Validate() const
 {
     if (m_mode == Mode::AddDept)
     {
         CString n = GetDeptName();
         n.Trim();
-        return !n.IsEmpty();
+        return !n.IsEmpty() && GetDeptLeaderUserId() != orgtree::kLeaderInvalid;
     }
 
     CString name = GetUserName();
     CString mail = GetUserEmail();
     name.Trim();
     mail.Trim();
-    return !name.IsEmpty() && !mail.IsEmpty();
+    // 手机号必填且格式合法（2026-10-06 起，手机号可用于登录，见 docs/登录账号与手机号登录方案.md）
+    return !name.IsEmpty() && !mail.IsEmpty() && adminapi::IsValidPhoneNumber(GetUserPhone());
 }
 
 CString NodeModal::GetDeptName() const   { return m_editDeptName   ? m_editDeptName->GetText()   : CString(); }
-CString NodeModal::GetDeptLeader() const { return m_editDeptLeader ? m_editDeptLeader->GetText() : CString(); }
+long long NodeModal::GetDeptLeaderUserId() const
+{
+    if (m_cbDeptLeader == nullptr)
+    {
+        return 0;
+    }
+    return orgtree::ResolveLeaderChoice(m_leaderCandidates, m_cbDeptLeader->GetCurSel(),
+                                        m_cbDeptLeader->GetText());
+}
 CString NodeModal::GetUserName() const   { return m_editUserName   ? m_editUserName->GetText()   : CString(); }
 CString NodeModal::GetUserTitle() const  { return m_editUserTitle  ? m_editUserTitle->GetText()  : CString(); }
 CString NodeModal::GetUserEmail() const  { return m_editUserEmail  ? m_editUserEmail->GetText()  : CString(); }
-CString NodeModal::GetUserPhone() const  { return m_editUserPhone  ? m_editUserPhone->GetText()  : CString(); }
-CString NodeModal::GetUserGender() const { return m_cbUserGender   ? m_cbUserGender->GetText()   : CString(); }
+CString NodeModal::GetUserPhone() const
+{
+    // 去掉首尾空白再交出去：复制粘贴进来的号码常带空格，服务端按原文校验格式
+    CString phone = m_editUserPhone ? m_editUserPhone->GetText() : CString();
+    phone.Trim();
+    return phone;
+}
+int NodeModal::GetUserGenderCode() const
+{
+    return m_cbUserGender ? adminapi::GenderComboIndexToCode(m_cbUserGender->GetCurSel()) : 0;
+}
 
 void NodeModal::SetBusy(bool busy)
 {
@@ -307,9 +369,8 @@ void NodeModal::BuildClientContent()
                                        _T("例如：增长团队"), &m_editDeptName),
                        DuiLayout::Hint().Fixed(kFieldRowH));
 
-        // 第 2 行：部门负责人（整行）
-        root->AddChild(MakeFieldColumn(_T("部门负责人"), kIdNodeDeptLead,
-                                       _T("负责人姓名（可选）"), &m_editDeptLeader),
+        // 第 2 行：部门负责人（整行）：从本企业员工里选，可输入姓名筛选，默认「不设置」
+        root->AddChild(MakeLeaderColumn(m_leaderCandidates, &m_cbDeptLeader),
                        DuiLayout::Hint().Fixed(kFieldRowH));
     }
     else
@@ -335,8 +396,8 @@ void NodeModal::BuildClientContent()
             row->AddChild(MakeFieldColumn(_T("邮箱 *"), kIdNodeUserEmail,
                                           _T("name@company.com"), &m_editUserEmail),
                           DuiLayout::Hint().Weight(1));
-            row->AddChild(MakeFieldColumn(_T("手机号"), kIdNodeUserPhone,
-                                          _T("手机号（可选）"), &m_editUserPhone),
+            row->AddChild(MakeFieldColumn(_T("手机号 *"), kIdNodeUserPhone,
+                                          _T("11 位手机号，可用于登录"), &m_editUserPhone),
                           DuiLayout::Hint().Weight(1));
             root->AddChild(std::unique_ptr<DuiControl>(row.release()),
                            DuiLayout::Hint().Fixed(kFieldRowH));
@@ -397,10 +458,25 @@ void NodeModal::SubmitOrShake()
     {
         if (m_frame != nullptr)
         {
-            m_frame->ShowToast(m_mode == Mode::AddDept
-                                   ? _T("请填写部门名称")
-                                   : _T("请填写员工姓名与邮箱"),
-                               AdminFrame::ToastKind::Warn);
+            LPCTSTR tip = _T("请填写员工姓名与邮箱");
+            // 姓名与邮箱都填了仍未通过，说明是手机号为空或格式不对
+            CString name = GetUserName();
+            CString mail = GetUserEmail();
+            name.Trim();
+            mail.Trim();
+            if (m_mode != Mode::AddDept && !name.IsEmpty() && !mail.IsEmpty())
+            {
+                tip = _T("请填写正确的手机号（11 位，以 1 开头）");
+            }
+            if (m_mode == Mode::AddDept)
+            {
+                // 部门名已填却仍未通过，说明是负责人对不上任何一名员工。
+                CString n = GetDeptName();
+                n.Trim();
+                tip = n.IsEmpty() ? _T("请填写部门名称")
+                                  : _T("请从列表中选择部门负责人，或清空该项");
+            }
+            m_frame->ShowToast(tip, AdminFrame::ToastKind::Warn);
         }
         return;
     }
@@ -413,11 +489,34 @@ void NodeModal::SubmitOrShake()
     }
 }
 
+// 单行输入框里按回车时是否等同点「创建」：只认本对话框里的这几个单行输入框。下拉框内嵌的
+// 输入框（如部门负责人）不在此列 —— 在那里按回车是为了选下拉项，不应提交。
+//   ctrlId：发出回车通知的控件 ID。
+static bool IsSubmitOnEnterEdit(UINT ctrlId)
+{
+    const UINT ids[] = { kIdNodeDeptName, kIdNodeUserName, kIdNodeUserTitle, kIdNodeUserEmail, kIdNodeUserPhone };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        if (ids[i] == ctrlId)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 LRESULT NodeModal::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
 {
     // balloonui 的 WM_DUI_NOTIFY：lParam = const DuiNotify*，结构里带
     // code（通知码）+ ctrlId（控件 ID）+ extra。
     const DuiNotify* n = reinterpret_cast<const DuiNotify*>(lParam);
+    // 单行输入框里按了回车：等同点「创建」。
+    if (n != nullptr && n->code == DuiEdit::DUIN_EDIT_ENTER && IsSubmitOnEnterEdit(n->ctrlId))
+    {
+        SubmitOrShake();
+        bHandled = TRUE;
+        return 0;
+    }
     if (n == nullptr || n->code != DUIN_CLICK)
     {
         bHandled = FALSE;
@@ -439,6 +538,18 @@ LRESULT NodeModal::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
         bHandled = FALSE;
         return 0;
     }
+}
+
+LRESULT NodeModal::OnKeyDownMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
+{
+    if (wParam == VK_ESCAPE)
+    {
+        RequestClose();
+        bHandled = TRUE;
+        return 0;
+    }
+    bHandled = FALSE;
+    return 0;
 }
 
 LRESULT NodeModal::OnCloseMsg(UINT, WPARAM, LPARAM, BOOL& bHandled)

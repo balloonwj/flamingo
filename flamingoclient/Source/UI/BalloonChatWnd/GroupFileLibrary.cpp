@@ -153,6 +153,37 @@ bool GroupFileLibrary::CanDeleteGroupFile(int myGroupRole, bool isOwnUpload)
     return (myGroupRole >= group_role_admin) || isOwnUpload;
 }
 
+int GroupFileLibrary::PageOfEntry(int category, const std::string& search, const std::string& entryid,
+                                  int pageSize) const
+{
+    if (entryid.empty())
+    {
+        return -1;
+    }
+    const int size = (pageSize <= 0) ? 1 : pageSize;
+
+    // 与 Query 相同的过滤顺序：数到目标条目时，它前面有几条通过筛选，就决定了它的页码。
+    int passed = 0;
+    for (size_t i = 0; i < m_all.size(); ++i)
+    {
+        const net::GroupFileEntry& e = m_all[i];
+        if (!ExtMatchesCategory(EffectiveExtLower(e), category))
+        {
+            continue;
+        }
+        if (!NameMatchesSearch(e.m_name, search))
+        {
+            continue;
+        }
+        if (e.m_entryid == entryid)
+        {
+            return passed / size;
+        }
+        ++passed;
+    }
+    return -1;
+}
+
 void GroupFileLibrary::Query(int category, const std::string& search, int page, int pageSize,
                              std::vector<net::GroupFileEntry>& outItems,
                              int& outTotalFiltered, int& outPageCount, int& outCurPage) const

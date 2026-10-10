@@ -20,10 +20,29 @@
 #pragma once
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../BalloonMain/TitleBarIcon.h"   // m_programIcons：标题栏与任务栏的程序图标
 
 namespace balloonimageviewer {
 class ImageCanvas;
 }
+
+/**
+ *  看图窗的翻页回调（可选）：由打开看图窗的一方实现。看图窗里按 ← / → 时调用；没有设置时这两个键不做任何事。
+ *  文件共享的图片预览用它翻到共享目录里的上一张 / 下一张（图片要先从分享者那里取来，取到后再经 OpenShared 换图）。
+ */
+class IImageViewerNavigator
+{
+public:
+    virtual ~IImageViewerNavigator()
+    {
+    }
+
+    /**
+     *  看图窗里按了 ← 或 →。
+     *  @param delta -1 上一张，1 下一张
+     */
+    virtual void OnImageViewerNavigate(int delta) = 0;
+};
 
 /**
  *  CBalloonImageViewerWindow
@@ -55,6 +74,12 @@ public:
     void ShowImage(HWND hOwner, LPCTSTR imagePath);
 
     /**
+     *  设置翻页回调；传 NULL 取消。看图窗关闭时自动取消。
+     *    navigator：翻页回调（不拥有，须在看图窗关闭或换成别的回调之前一直有效）。
+     */
+    void SetNavigator(IImageViewerNavigator* navigator);
+
+    /**
      *  进程内共享看图窗入口：聊天气泡双击图片时调用。懒创建一个全局单例看图窗
      *  并显示指定图片（已打开则复用换图、置前）。非模态，关闭仅销毁看图窗本身、
      *  不影响应用。供单聊 / 群聊窗共用同一个看图窗实例。
@@ -62,6 +87,12 @@ public:
      *    imagePath：图片本地完整路径（UTF-16，非空）。
      */
     static void OpenShared(HWND hOwner, LPCTSTR imagePath);
+
+    /**
+     *  同 OpenShared，另外设置翻页回调（文件共享的图片预览用）。聊天图片经上面的 OpenShared 打开时回调被取消。
+     *    navigator：翻页回调；可为 NULL（等同于 OpenShared）。
+     */
+    static void OpenSharedWithNavigator(HWND hOwner, LPCTSTR imagePath, IImageViewerNavigator* navigator);
 
     BEGIN_MSG_MAP(CBalloonImageViewerWindow)
         MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDownMsg)
@@ -85,5 +116,8 @@ private:
 private:
     balloonimageviewer::ImageCanvas* m_pCanvas;   // 图片画布（裸指针，所有权在控件树）
     HWND     m_hMainDlg;                           // 调试入口下 主面板句柄；NULL=正式使用（关闭只销毁本窗）
+    IImageViewerNavigator* m_navigator;            // 翻页回调（不拥有）；NULL 时 ← / → 不做任何事，关闭窗口时清空
     HBITMAP  m_hBgBitmap;                          // 深色背景位图（caller-owned，本类持有，析构释放）
+    // 标题栏左侧与任务栏的程序图标（2026-10-07 起，开发约定文档 UI 约定第 10 条），随本对象释放，关窗再开时复用
+    balloonmain::ProgramWindowIcons m_programIcons;
 };

@@ -56,9 +56,12 @@ enum CtrlId : UINT
     // ---- 底部链接 ----
     kIdLinkRegister  = 130,   // “注册账号”链接：点击打开注册对话框
     kIdLinkNetwork   = 131,   // “网络设置”链接：点击打开网络设置对话框
-    kIdLinkForgotPwd = 132,   // “忘记密码”链接：暂为占位（服务端无找回密码接口）
+    kIdLinkForgotPwd = 132,   // “忘记密码”链接：提示联系企业管理员重置密码（企业版由管理员在
+                              // FlamingoAdmin 里重置，见 ChooseForgotPasswordHintPlace）
     // 133 曾是“扫码登录”链接，因服务端始终没有该接口、点了只弹“暂未开放”，
     // 已从登录页移除。此处保留空号不再复用，免得与老版本布局的 id 撞上。
+    kIdLinkLanguage  = 134,   // 界面语言链接：文字为当前语言的名称，点击弹出语言菜单；
+                              // 语言包 FlamingoLang.dll 不存在时隐藏（docs/多语言方案.md 第 7.2 节）
 };
 
 /**
@@ -141,6 +144,24 @@ enum LoginStatusView
  *  说明：进度条 marquee 的启停由调用方负责（它要配合对话框的定时器）。
  */
 void ApplyLoginStatusView(balloonwjui::DuiControl* root, LoginStatusView view, LPCTSTR text);
+
+/**
+ *  点「忘记密码？」时，「请联系企业管理员重置密码。」这句提示显示在哪里（2026-10-07）。
+ */
+enum ForgotPasswordHintPlace
+{
+    kForgotPwdHintInStatusArea = 0,   // 登录按钮下方的状态区（不弹窗）：平时，以及登录失败之后
+    kForgotPwdHintMessageBox   = 1,   // 弹出提示框（标题「忘记密码」）：正在登录时状态区显示着「正在登录…」
+                                      // 与进度条，提示不能把它们换掉
+};
+
+/**
+ *  决定「忘记密码？」的提示显示在哪里。企业版没有自助找回密码：密码由企业管理员在 FlamingoAdmin 里重置，
+ *  登录窗只告诉用户去找管理员。优先用状态区就地显示，只有正在登录时才弹提示框。
+ *    logining：登录窗是否正处于「登录中」（状态区显示着进度条）。
+ *  返回：见 ForgotPasswordHintPlace。纯函数，无副作用，便于单元测试。
+ */
+ForgotPasswordHintPlace ChooseForgotPasswordHintPlace(bool logining);
 
 /**
  *  ValidateLoginInput 的判定结果。

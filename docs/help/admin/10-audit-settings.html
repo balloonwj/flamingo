@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 10 章：审计日志的筛选、详情与导出，以及平台设置（个人资料与修改密码）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审计日志与平台设置 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a10">
+<article class="doc">
+  <h1>审计日志与平台设置</h1>
+  <p class="lead">在管理控制台里做的每一项管理操作都会记入审计日志，方便事后追查「谁在什么时候做了什么」。本章介绍如何筛选、查看和导出审计日志，以及如何在平台设置里修改自己的姓名和登录密码。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：左侧导航「审计日志」「平台设置」</li>
+  </ul>
+
+  <h2 id="audit">审计日志</h2>
+  <p>点左侧导航的 <span class="ui">审计日志</span>。页面标题下方写明「所有管理动作均被完整记录并不可篡改」：审计记录只能查看和导出，不能修改或删除。</p>
+  <figure class="shot">
+    <img src="../img/ad_audit.png" width="880" alt="审计日志页面">
+    <figcaption>审计日志页面，右侧显示选中的「管理员登录成功」记录的详情</figcaption>
+  </figure>
+  <h3>统计与筛选</h3>
+  <ul>
+    <li><b>统计卡</b>：<span class="ui">今日事件</span>、<span class="ui">累计事件</span>、<span class="ui">警告级</span>、<span class="ui">危险级</span>。</li>
+    <li><b>级别</b>：<span class="ui">全部</span>、<span class="ui">普通</span>、<span class="ui">警告</span>、<span class="ui">危险</span>。只想看删除员工这类高风险操作时，选「危险」。</li>
+    <li><b>操作者</b>：<span class="ui">全部</span>、<span class="ui">管理员</span>、<span class="ui">系统</span>，区分管理员手动做的操作和系统自动产生的记录。</li>
+    <li>筛选栏右侧显示符合条件的记录总数，例如「共 31 条」；列表底部用 <span class="ui">上一页</span>、<span class="ui">下一页</span> 翻页。</li>
+  </ul>
+  <h3>记录列表与详情</h3>
+  <p>列表各列依次是 <span class="ui">时间</span>、<span class="ui">级别</span>（圆点颜色：蓝色为普通，橙色为警告，红色为危险）、<span class="ui">操作码</span>、<span class="ui">操作者</span> 和 <span class="ui">说明</span>。操作码是这类操作的英文编号，下表列出几个常见的例子：</p>
+  <table>
+    <tr><th>操作码</th><th>说明</th></tr>
+    <tr><td><code>login.success</code></td><td>管理员登录成功</td></tr>
+    <tr><td><code>user.create</code> / <code>user.delete</code></td><td>新增员工 / 删除员工</td></tr>
+    <tr><td><code>user.setrole</code></td><td>设置员工角色</td></tr>
+    <tr><td><code>group.create</code></td><td>新建群</td></tr>
+    <tr><td><code>sensitive.add</code></td><td>添加敏感词</td></tr>
+    <tr><td><code>qa.add</code></td><td>添加企业问答</td></tr>
+  </table>
+  <p>点选一条记录，右侧显示它的详情：顶部是级别标记（如「信息」「警告」）和事件编号（如 <code>EVT-000250</code>），下面是 <span class="ui">时间</span>、<span class="ui">操作者</span>、<span class="ui">IP 地址</span>、<span class="ui">目标</span>，以及 <span class="ui">事件载荷</span>，即这条记录的原始内容（JSON 格式）。</p>
+  <h3>刷新与导出</h3>
+  <p>点右上角的 <span class="ui">刷新</span> 重新读取最新记录。点 <span class="ui">导出</span>，会按当前选择的级别和操作者筛选条件，把记录保存为 CSV 文件（默认文件名「审计日志.csv」），可以用 Excel 打开。</p>
+  <div class="callout tip"><b>从仪表板快速进入</b>仪表板「近期审计」右上角的「查看全部 →」也会跳到这个页面；顶栏中间轮流显示的「最新审计 · …」则是最近几条记录的摘要。</div>
+
+  <h2 id="settings">平台设置</h2>
+  <p>点左侧导航的 <span class="ui">平台设置</span>，管理你自己的管理员资料与登录密码：</p>
+  <figure class="shot">
+    <img src="../img/ad_settings.png" width="880" alt="平台设置页面">
+    <figcaption>平台设置页面</figcaption>
+  </figure>
+  <h3>个人资料</h3>
+  <p><span class="ui">姓名</span> 可以修改，改好后点 <span class="ui">保存</span>。<span class="ui">邮箱</span>（即登录账户）和 <span class="ui">管辖范围</span> 只能查看：企业管理员的管辖范围显示「企业级管理员」，平台超级管理员显示「平台超级管理员」。</p>
+  <h3>修改密码</h3>
+  <ol class="steps">
+    <li>在 <span class="ui">当前密码</span> 中输入现在的登录密码。</li>
+    <li>在 <span class="ui">新密码</span> 和 <span class="ui">确认新密码</span> 中输入两次相同的新密码。</li>
+    <li>点 <span class="ui">修改密码</span>，成功后提示「登录密码已修改」。</li>
+  </ol>
+  <p>三项都必须填写，两次输入的新密码不一致时不能提交。如果登录时勾选了「记住密码」，保存的密码会自动换成新密码，下次打开控制台不需要重新输入。</p>
+  <div class="callout note"><b>第一次登录后请修改密码</b>你的初始密码是平台超级管理员创建账户时生成的，建议第一次登录后立即改成只有自己知道的密码。忘记密码时，请联系平台超级管理员处理。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

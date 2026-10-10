@@ -12,6 +12,7 @@
 
 #include <windows.h>
 #include <string>
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -186,8 +187,7 @@ std::wstring DescribeDropSkipped(const std::vector<DropSkippedItem>& skipped)
     std::wstring text;
     if (missingCount > 0)
     {
-        text += std::to_wstring((long long)missingCount);
-        text += L" 个文件已不存在";
+        text += TRF(L"{0} 个文件已不存在", missingCount);
     }
     if (emptyCount > 0)
     {
@@ -195,8 +195,7 @@ std::wstring DescribeDropSkipped(const std::vector<DropSkippedItem>& skipped)
         {
             text += L"、";
         }
-        text += std::to_wstring((long long)emptyCount);
-        text += L" 个空文件未发送";
+        text += TRF(L"{0} 个空文件未发送", emptyCount);
     }
     return text;
 }

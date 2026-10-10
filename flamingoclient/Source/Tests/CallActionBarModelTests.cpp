@@ -8,7 +8,7 @@
  *  balloonwj@qq.com   2026-07-31
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/Call/CallActionBarModel.h"
+#include "../../FlamingoMedia/Call/CallActionBarModel.h"
 
 #include <algorithm>
 
@@ -51,17 +51,19 @@ bool Contains(const std::vector<CallActionItem>& items, int id)
 // AB. BuildActionBar —— 按钮集合、顺序、激活态、危险态
 // =====================================================================
 
-TEST_CASE("AB1 通话中视频态：静音 / 音量 / 摄像头 / 切换 / 挂断 五项，顺序固定", "[callbar]")
+TEST_CASE("AB1 通话中视频态：静音 / 音量 / 摄像头 / 切换 / 共享屏幕 / 共享电脑声音 / 挂断 七项，顺序固定", "[callbar]")
 {
     std::vector<CallActionItem> items = BuildActionBar(kBarConnected, true, true, false);
-    REQUIRE(items.size() == 5);
+    REQUIRE(items.size() == 7);
 
     std::vector<int> ids = IdsOf(items);
     CHECK(ids[0] == kActionMute);
     CHECK(ids[1] == kActionVolume);
     CHECK(ids[2] == kActionCamera);
     CHECK(ids[3] == kActionSwitchMedia);
-    CHECK(ids[4] == kActionHangup);
+    CHECK(ids[4] == kActionShare);
+    CHECK(ids[5] == kActionSystemAudio);   //2026-10-06 起
+    CHECK(ids[6] == kActionHangup);
 
     //挂断是本形态下唯一的危险操作
     int dangerCount = 0;
@@ -73,18 +75,20 @@ TEST_CASE("AB1 通话中视频态：静音 / 音量 / 摄像头 / 切换 / 挂�
         }
     }
     CHECK(dangerCount == 1);
-    CHECK(items[4].m_danger);
+    CHECK(items[6].m_danger);
 }
 
-TEST_CASE("AB2 通话中语音态：不含摄像头，其余四项在位", "[callbar]")
+TEST_CASE("AB2 通话中语音态：不含摄像头，其余六项在位", "[callbar]")
 {
     std::vector<CallActionItem> items = BuildActionBar(kBarConnected, false, false, false);
-    REQUIRE(items.size() == 4);
+    REQUIRE(items.size() == 6);
 
     CHECK_FALSE(Contains(items, kActionCamera));   //语音态没有本端画面可开关
     CHECK(Contains(items, kActionMute));
     CHECK(Contains(items, kActionVolume));
     CHECK(Contains(items, kActionSwitchMedia));
+    CHECK(Contains(items, kActionShare));
+    CHECK(Contains(items, kActionSystemAudio));
     CHECK(Contains(items, kActionHangup));
 }
 
@@ -170,6 +174,7 @@ TEST_CASE("AB7 任意组合下按钮 id 不重复，非接通态不出现通话�
                         CHECK_FALSE(Contains(items, kActionVolume));
                         CHECK_FALSE(Contains(items, kActionCamera));
                         CHECK_FALSE(Contains(items, kActionSwitchMedia));
+                        CHECK_FALSE(Contains(items, kActionShare));
                     }
                 }
             }
@@ -212,6 +217,33 @@ TEST_CASE("AB10 非接通态不含音量项", "[callbar][volume]")
 {
     CHECK_FALSE(Contains(BuildActionBar(kBarCalling, false, false, false), kActionVolume));
     CHECK_FALSE(Contains(BuildActionBar(kBarIncoming, false, false, false), kActionVolume));
+}
+
+TEST_CASE("AB11 共享屏幕项在切换之后、共享电脑声音之前，正在共享时呈激活态", "[callbar]")
+{
+    for (int v = 0; v < 2; ++v)
+    {
+        INFO("video=" << v);
+        std::vector<CallActionItem> idle = BuildActionBar(kBarConnected, v != 0, true, false, false);
+        const int idx = IndexOf(idle, kActionShare);
+        REQUIRE(idx >= 0);
+        CHECK(idx == IndexOf(idle, kActionSwitchMedia) + 1);
+        //2026-10-06 起共享屏幕与挂断之间多了「共享电脑声音」，其位置与状态见 CallSystemAudioTests 的 CSA8
+        CHECK(IndexOf(idle, kActionSystemAudio) == idx + 1);
+        CHECK_FALSE(idle[idx].m_active);
+        CHECK_FALSE(idle[idx].m_danger);
+
+        //正在共享：按钮集合不变，只有共享项变为激活态（图标显示「停止共享」）
+        std::vector<CallActionItem> sharing = BuildActionBar(kBarConnected, v != 0, true, false, true);
+        CHECK(IdsOf(sharing) == IdsOf(idle));
+        CHECK(sharing[IndexOf(sharing, kActionShare)].m_active);
+    }
+    //四参数版本等同于不在共享
+    std::vector<CallActionItem> legacy = BuildActionBar(kBarConnected, false, false, false);
+    CHECK_FALSE(legacy[IndexOf(legacy, kActionShare)].m_active);
+    //非接通态没有共享项
+    CHECK_FALSE(Contains(BuildActionBar(kBarCalling, false, false, false, true), kActionShare));
+    CHECK_FALSE(Contains(BuildActionBar(kBarIncoming, true, true, false, true), kActionShare));
 }
 
 // =====================================================================

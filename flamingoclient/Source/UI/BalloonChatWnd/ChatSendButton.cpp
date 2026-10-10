@@ -39,6 +39,7 @@ extern CAppModule _Module;
 #include "ChatSendButton.h"
 #include "ChatIcons.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -89,7 +90,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
     HFONT hFont = ::CreateFontW(
         -pixelHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -115,7 +116,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight)
     HFONT hFont = ::CreateFontW(
         -pixelHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;
@@ -132,7 +133,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight)
 
 ChatSendButton::ChatSendButton()
 {
-    SetText(_T("发送"));
+    SetText(TR(L"发送"));
 }
 
 ChatSendButton::~ChatSendButton()

@@ -54,6 +54,9 @@ std::wstring FreshTempDb(const wchar_t* name)
     path += prefix;
     path += name;
     ::DeleteFileW(path.c_str());
+    //本地库是 WAL 模式：上次异常退出残留的日志文件会被套用到同名新库上，一并删掉
+    ::DeleteFileW((path + L"-wal").c_str());
+    ::DeleteFileW((path + L"-shm").c_str());
     return path;
 }
 

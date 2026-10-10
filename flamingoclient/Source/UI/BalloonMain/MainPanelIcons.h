@@ -31,7 +31,7 @@ enum IconKind
     kIconChevron = 6,   // 右尖括号 —— 分组展开 / 折叠
 
     // 以下为"主面板系统菜单"（左下角汉堡按钮弹出菜单）各项左侧图标。
-    kIconLock    = 7,   // 挂锁 —— 系统菜单"修改密码"
+    kIconLock    = 7,   // 挂锁 —— 系统菜单与托盘菜单"锁屏"、修改密码对话框密码框左侧（2026-10-07 之前也是系统菜单"修改密码"）
     kIconSend    = 8,   // 纸飞机 —— 当前无使用方（原先挂在一个已下线的菜单项上），
                         // 绘制实现保留在 MainPanelIcons.cpp，新菜单项要用直接取即可
     kIconBell    = 9,   // 铃铛 —— 系统菜单"公告与通知"
@@ -83,6 +83,33 @@ enum IconKind
     // 画一个，排在特别关注星标之后。实心书签形（上沿平直、下沿中间有 V 形缺口），
     // 与五角星轮廓差别明显，两者并排也能一眼分开。实心的理由同 kIconStar。
     kIconBookmark = 26,         // 收藏：实心书签，底边 V 形缺口
+
+    // 系统菜单「文件共享」：文件夹外框 + 夹内三个相连的圆点（通用的「共享」符号），与聊天窗工具栏的
+    // 「文件共享」按钮同一外形（ChatIcons.h 的 kChatIconShare）
+    kIconShare = 27,            // 文件共享：文件夹 + 共享符号
+    kIconRecord = 28,           // 屏幕录制：场记板（带斜纹的打板 + 板身里的实心圆点），系统菜单与托盘菜单「屏幕录制」（2026-10-06 之前是圆环 + 圆点）
+
+    // 会话消息提醒模式的徽章（docs/消息提醒模式与消息盒子方案.md §4.3，样式 2026-10-03 与用户确认）：
+    // 画在会话行、联系人行、群行的右下角，12 像素、灰色描边。特别关注沿用 kIconStar，不在这里。
+    kIconBellSlash = 29,        // 接收消息但不提醒：铃铛 + 左上到右下一道斜线（取代此前会话行上的 kIconMute，
+                                // 后者与托盘「关闭所有声音」同一个图标，容易被误认成关掉了声音）
+    kIconDrawer    = 30,        // 收进消息盒子且不提醒：两格抽屉柜（外框 + 中间隔板 + 上下两个拉手）；
+                                // 同一造型也用作「消息盒子」那一行的头像
+    kIconBlock     = 31,        // 屏蔽消息（仅群聊）：禁止符（圆圈 + 左上到右下一道斜线）
+    kIconCalendar  = 32,        // 备忘与提醒：日历（外框 + 顶部两个挂环 + 表头横线 + 两个日期点），系统菜单「备忘与提醒」
+    kIconPhone     = 33,        // 发起语音通话：电话听筒（弯曲手柄 + 两端圆头），系统菜单「发起语音通话」
+    kIconVideoCall = 34,        // 发起视频通话：摄像机（机身方框 + 右侧镜头三角），系统菜单「发起视频通话」
+    kIconScreenShare = 35,      // 发起屏幕共享：显示器（屏幕方框 + 底座）+ 屏幕里向上的箭头，系统菜单与托盘菜单「发起屏幕共享」
+    kIconRecordList = 36,       // 录制管理：录像文件（方框 + 中间的实心播放三角），系统菜单「录制管理」（2026-10-05 起）
+    kIconOcr       = 37,        // 图片文字识别：四个角的取景框 + 中间一个「T」，系统菜单「图片文字识别」（2026-10-05 起）；
+                                // 与看图窗工具栏、截图操作栏的识别按钮同一造型
+    kIconMarkdown  = 38,        // Markdown 编辑器：圆角框 + 框内「M」与向下的箭头，系统菜单与托盘菜单「Markdown 编辑器」
+                                // （2026-10-06 起）；与聊天窗工具栏的 Markdown 编辑器按钮同一造型
+    kIconKey       = 39,        // 修改密码：钥匙（左侧圆形钥匙柄 + 向右的钥匙杆 + 杆上两个齿），系统菜单「修改密码」
+                                // （2026-10-07 起；系统菜单加了「锁屏」，挂锁图标让给它，与托盘菜单一致）
+    kIconScreenshot = 40,       // 截图：剪刀（两个圆环 + 两条交叉刀刃），托盘菜单「截图」（2026-10-07 起），
+                                // 与聊天窗工具栏的截图按钮同一造型（ChatIcons.cpp 的 kChatIconCut）
+    kIconBot       = 41,        // 机器人：圆角方头 + 两只眼睛 + 头顶天线，系统菜单「我的机器人」（2026-10-08 起，docs/机器人方案.md §4.3）
 };
 
 /**
@@ -98,5 +125,17 @@ enum IconKind
 void DrawLineIcon(Gdiplus::Graphics& g, int kind,
                   Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL size,
                   const Gdiplus::Color& color, Gdiplus::REAL strokeWidth);
+
+/**
+ *  生成一张「实心圆底 + 居中线性图标」的头像位图。会话列表里「消息盒子」那一行用它当头像
+ *  （蓝色圆底 + 白色抽屉柜）。
+ *    kind：     图标类型，取值见 IconKind。
+ *    sizePx：   位图边长（像素，> 0）。
+ *    bgColor：  圆底颜色。
+ *    fgColor：  图标描边颜色。
+ *  返回：32 位、自上而下、预乘 alpha 的 DIBSection（圆外透明），适合 AlphaBlend；调用方拥有，
+ *        用完 DeleteObject。sizePx 非法或创建失败时返回 NULL。
+ */
+HBITMAP CreateCircleIconBitmap(int kind, int sizePx, COLORREF bgColor, COLORREF fgColor);
 
 } // namespace balloonmain

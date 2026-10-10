@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 20 章：字幕模式（聊天消息的桌面字幕）、语音字幕（录屏与屏幕共享）、字幕编辑器与导出字幕。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>字幕模式与字幕编辑 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c20">
+<article class="doc">
+  <h1>字幕模式与字幕编辑</h1>
+  <p class="lead">客户端有两类字幕功能：「字幕模式」把某个会话收到的消息以大号字幕显示在屏幕下方；「语音字幕」把录屏和屏幕共享中的讲话识别成文字，录完后可以在字幕编辑器里修改，再导出成带字幕的视频或字幕文件。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>字幕模式：不需要企业开启任何开关</li>
+    <li>语音字幕：需要企业开启「语音字幕」开关；识别在你自己的电脑上完成，声音不会上传</li>
+  </ul>
+
+  <h2 id="subtitle-mode">字幕模式</h2>
+  <p>开启字幕模式后，这个会话里别人发来的新消息会以大号字幕显示在屏幕下方，格式为「某某说：……」。你在做别的事情时不必切回聊天窗，也能看到消息内容。还没有新消息时，字幕显示「等待新消息…」。</p>
+  <p>开启方式有两种：</p>
+  <ul>
+    <li>点单聊窗或群聊窗头部的字幕按钮。鼠标停在按钮上提示「字幕已关闭」，开启后提示「字幕已开启」，再点一次即关闭。</li>
+    <li>在主面板右键会话、联系人或群，选 <span class="ui">开启字幕模式</span>；开启后同一位置变为 <span class="ui">关闭字幕模式</span>。从右键菜单开启时只弹出字幕，不会打开聊天窗。</li>
+  </ul>
+  <figure class="shot">
+    <img src="../img/v_subtitle.png" width="880" alt="字幕模式">
+    <figcaption>与赵卓轩的会话开启了字幕模式，他发来的消息显示为大号字幕（他的备注名是「卓轩（桌面端）」）</figcaption>
+  </figure>
+
+  <h3>字幕上的工具按钮</h3>
+  <p>把鼠标移到字幕上，字幕背后会出现一块半透明的底板，上方显示会话名称和四个工具按钮：</p>
+  <figure class="shot">
+    <div class="annotated">
+      <img src="../img/v_subtitle_tools.png" width="880" alt="字幕的工具按钮">
+      <span class="pin" style="left:56.5%;top:40.4%">1</span>
+      <span class="pin" style="left:60.3%;top:40.4%">2</span>
+      <span class="pin" style="left:64.1%;top:40.4%">3</span>
+      <span class="pin" style="left:67.9%;top:40.4%">4</span>
+    </div>
+    <figcaption>鼠标移到字幕上时出现的工具按钮</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>设置</b>：弹出设置菜单，见下文</li>
+    <li><b>锁定字幕 / 解锁字幕</b>：锁定后字幕不再响应鼠标</li>
+    <li><b>回到聊天窗</b>：打开这个会话的聊天窗</li>
+    <li><b>退出字幕模式</b>：关闭字幕</li>
+  </ol>
+  <ul>
+    <li><b>移动与调宽</b>：没有锁定时，按住字幕的文字或空白处可以拖动位置，按住左右边缘可以调整宽度。</li>
+    <li><b>锁定</b>：锁定后鼠标点击会穿过字幕，落到下面的窗口上，不会误碰字幕。鼠标移到字幕上时会浮出一个小锁按钮，点它即可解锁。</li>
+    <li><b>设置菜单</b>：<span class="ui">字号</span>（小、中、大、特大）、<span class="ui">最多显示行数</span>，以及 <span class="ui">共享屏幕或录屏时隐藏字幕</span>。勾选最后一项后，字幕不会出现在你共享的画面和录像里；系统不支持时这一项显示为灰色。</li>
+  </ul>
+
+  <h2 id="voice-caption">语音字幕</h2>
+  <p>企业开启「语音字幕」开关后，录屏和屏幕共享时可以把讲话实时识别成字幕。第一次使用时客户端要先加载语音识别组件，可能需要稍等片刻。</p>
+  <ul>
+    <li><b>录屏</b>：在「选择要录制的内容」窗口勾选 <span class="ui">生成字幕</span>。录制时屏幕上会实时显示识别出的字幕，这层字幕本身不会录进视频；录制条上的字幕按钮可以随时开关，关闭期间的讲话不会生成字幕。录完后字幕草稿与录像保存在同一个文件夹里，详见<a href="19-recording.html">「屏幕录制」</a>。</li>
+    <li><b>屏幕共享</b>：在「选择要共享的内容」窗口勾选 <span class="ui">为我的发言生成字幕</span>，或在共享中点控制条上的字幕按钮，观看者就能看到你讲话的字幕。共享者在「更多」菜单、观看者在标题栏的字幕图标里可以设置 <span class="ui">为我的发言生成字幕</span> 和 <span class="ui">显示字幕</span>，详见<a href="18-screen-share.html">「屏幕共享」</a>。</li>
+  </ul>
+
+  <h2 id="editor">字幕编辑器</h2>
+  <p>在录制完成提示上点 <span class="ui">编辑字幕</span>，或在<a href="19-recording.html#manager">「录制管理」</a>里选中一段录像点 <span class="ui">编辑字幕</span>，即可打开字幕编辑器。窗口标题显示录像的文件名。</p>
+  <figure class="shot">
+    <img src="../img/v_caption_editor.png" width="880" alt="字幕编辑器">
+    <figcaption>字幕编辑器；截图中的字幕是为演示手动插入的一条示例</figcaption>
+  </figure>
+  <h3>窗口布局</h3>
+  <ul>
+    <li><b>视频预览</b>（左上）：单击画面播放或暂停，也可以点工具栏左端的 <span class="ui">播放</span>；旁边显示当前时间和总时长。</li>
+    <li><b>时间轴</b>（左下）：每条字幕显示为一个色块，色块的位置和长度对应它的开始和结束时间。</li>
+    <li><b>字幕列表</b>（右上）：列出全部字幕，选中一条后在下方编辑。</li>
+    <li><b>编辑区</b>（右下）：修改选中的那条字幕，见下文。</li>
+    <li><b>状态栏</b>（底部）：修改后约 2 秒自动保存，状态栏依次显示「有未保存的修改…」和「已保存。」，不需要手动保存。</li>
+  </ul>
+
+  <h3>编辑一条字幕</h3>
+  <ol class="steps">
+    <li>在字幕列表里选中一条字幕。</li>
+    <li>修改 <span class="ui">开始</span> 和 <span class="ui">结束</span> 时间，格式为「分:秒.十分之一秒」，如 <code>01:23.4</code>；右侧的 <span class="ui">-0.1</span>、<span class="ui">+0.1</span> 按钮每次微调 0.1 秒。结束时间至少要比开始时间晚 0.2 秒。</li>
+    <li>按需修改 <span class="ui">说话人</span> 和下方的字幕文字。</li>
+    <li>点 <span class="ui">应用</span> 保存这一条的修改。</li>
+  </ol>
+  <p>编辑区下方的其他按钮：</p>
+  <ul>
+    <li><span class="ui">拆分</span>：先把光标放在文字中要拆开的位置再点，一条字幕拆成两条，每半段都不能短于 0.2 秒。</li>
+    <li><span class="ui">合并下一条</span>：把这一条与后一条合并。</li>
+    <li><span class="ui">插入</span>：在当前播放位置插入一条新字幕，文字为「（新字幕）」；离下一条字幕太近时插不进去。</li>
+    <li><span class="ui">删除</span>：删除这一条字幕。</li>
+  </ul>
+
+  <h3>工具栏</h3>
+  <table>
+    <tr><th style="min-width:9em">按钮</th><th>作用</th></tr>
+    <tr><td>识别字幕 / 重新识别</td><td>对整段录像做一次语音识别。还没有字幕时按钮叫「识别字幕」；已有字幕时叫「重新识别」，会替换现有的全部字幕（可以撤销）。识别过程中按钮变为「取消识别」</td></tr>
+    <tr><td>查找替换</td><td>在全部字幕里查找文字，可以逐处查找，也可以全部替换</td></tr>
+    <tr><td>整体平移</td><td>把全部字幕整体前后移动，正数往后移，负数往前移，如 -1.5 表示全部提前 1.5 秒</td></tr>
+    <tr><td>改说话人</td><td>把某个说话人的名字统一改成另一个</td></tr>
+    <tr><td>外观</td><td>设置字号、离底边的距离、描边宽度、底框不透明度，以及是否显示说话人</td></tr>
+    <tr><td>替换表</td><td>维护一张「原文 → 替换为」的表，之后识别出的每一句先按这张表纠正常见的误识别</td></tr>
+    <tr><td>撤销 / 重做</td><td>撤销或恢复编辑操作</td></tr>
+    <tr><td>导出…</td><td>打开「导出字幕」窗口，见下文</td></tr>
+  </table>
+
+  <h2 id="export">导出字幕</h2>
+  <div class="shot-row">
+    <figure class="shot" style="flex:0 1 520px"><img src="../img/v_caption_export.png" width="520" alt="导出字幕"><figcaption>「导出字幕」窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>导出的文件与录像放在同一个文件夹里，原录像保留不变。可以同时勾选多种：</p>
+      <ul>
+        <li><b>硬字幕版（字幕画进画面）</b>：生成一个新视频，字幕直接画在画面上，任何播放器都能看到。</li>
+        <li><b>字幕轨版（可开关的字幕轨）</b>：生成一个带字幕轨的新视频，观看时可以开关字幕，需要播放器支持内嵌字幕。</li>
+        <li><b>SRT 字幕文件</b>：通用的字幕文件格式。</li>
+        <li><b>纯文本（每句一行，带时间）</b>：便于整理成文字稿。</li>
+      </ul>
+    </div>
+  </div>
+  <p>点 <span class="ui">开始导出</span> 后窗口显示进度，此时 <span class="ui">关闭</span> 变为 <span class="ui">取消</span>。同名文件已存在时会先询问是否覆盖。导出完成后，可以点 <span class="ui">打开所在文件夹</span> 查看，或点 <span class="ui">发送到会话…</span> 把导出的文件发给同事。只录声音的录音没有画面，只能导出 SRT 字幕文件和纯文本。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

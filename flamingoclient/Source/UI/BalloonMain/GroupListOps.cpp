@@ -44,6 +44,23 @@ bool SetUserGroupPinned(std::vector<net::UserGroupItem>& groups, int64_t groupId
     return false;
 }
 
+bool SetUserGroupMemberCount(std::vector<net::UserGroupItem>& groups, int64_t groupId, int memberCount)
+{
+    if (memberCount < 0)
+        return false;
+    for (size_t i = 0; i < groups.size(); ++i)
+    {
+        if (groups[i].m_groupid != groupId)
+            continue;
+
+        if (groups[i].m_membercount == memberCount)
+            return false;
+        groups[i].m_membercount = memberCount;
+        return true;
+    }
+    return false;
+}
+
 bool IsUserGroupPinned(const std::vector<net::UserGroupItem>& groups, int64_t groupId)
 {
     for (size_t i = 0; i < groups.size(); ++i)

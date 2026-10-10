@@ -26,18 +26,22 @@
  *          return;
  *
  *  本类不是窗口，只是一个带消息映射的普通对象，靠 CHAIN_MSG_MAP_MEMBER 搭在宿主窗口的
- *  消息派发链上。理由与其它几个协作类相同，见 MainPanelRdCoordinator.h。
+ *  消息派发链上。之所以不让它自建窗口：网络应答的收件窗口全局只有一个（见
+ *  CFlamingoClient::SetCallBackWnd），另开窗口就得多一次转发。
  *
  *  balloonwj@qq.com   2026-08-19
  */
 
 #pragma once
 
+#include <vector>
+
 #include "MainPanelSessionHost.h"               // balloonmain::ISessionStateHost（本类实现它）
 #include "../BalloonAuth/BalloonLoginDlg.h"     // CLoginDlg（本类按值持有登录窗）
 #include "../../Session/LoginAccountList.h"     // CLoginAccountList / LOGIN_ACCOUNT_INFO
 #include "../../Session/UserSessionData.h"      // FMG_MSG_* 消息号
 #include "ReconnectThrottle.h"                  // balloonmain::ReconnectThrottle（断线重连的登录请求节流）
+#include "SendModeConfigStore.h"                // CSendModeConfigStore（发送键存进本人账号配置，BUG-119）
 
 class CBalloonMainPanel;
 class CFlamingoClient;
@@ -172,6 +176,21 @@ public:
     // 用户选了「退出程序」。
     virtual void RequestExit();
 
+    /**
+     *  把当前登录账号的 userid 与头像同步进历史登录账号列表，与列表里存的不一致时才写入
+     *  并落盘（2026-10-04 起，登录窗的账号下拉列表与大头像据此画头像）。主面板在本人改
+     *  头像成功后调用；登录成功时由 OnLoginResult 直接写入，不经本函数。
+     *  当前账号不在列表里、或 userid 还是 0（尚未登录）时什么都不做。
+     */
+    void SyncAvatarToLoginAccountList();
+
+    /**
+     *  刚解锁（主面板调用，docs/锁屏方案.md 第 4.9 节）：把锁屏期间延后的消息（被挤下线的提示框、升级提示、
+     *  强制升级的退出）按到达顺序重新投给宿主窗口，处理函数照常执行；锁屏期间重连成功、尚未显示的主面板此时显示。
+     *  副作用：清空延后队列。
+     */
+    void ReplayDeferredAfterUnlock();
+
     BEGIN_MSG_MAP_EX(CSessionController)
         //网络故障（连接建立失败 / 连接断开）：据会话状态决定是否起自动重连
         MESSAGE_HANDLER_EX(FMG_MSG_NET_ERROR, OnNetError)
@@ -197,6 +216,8 @@ public:
         MESSAGE_HANDLER_EX(FMG_MSG_NETWORK_RESUMED, OnNetworkResumed)
         //系统设置「自动登录」开关：修改当前账号在本机历史账号列表里的标志并落盘
         MESSAGE_HANDLER_EX(FMG_MSG_SET_AUTO_LOGIN, OnSetAutoLogin)
+        //系统设置改了界面语言并选了「立即重启」：启动新进程后走正常的退出流程
+        MESSAGE_HANDLER_EX(FMG_MSG_RESTART_APP, OnRestartApp)
     END_MSG_MAP()
 
 private:
@@ -215,6 +236,7 @@ private:
     LRESULT OnV2Kickout(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnNetworkResumed(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnSetAutoLogin(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnRestartApp(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     /**
      *  发起一次登录：弹出登录窗（模态）。
@@ -259,8 +281,12 @@ private:
     // 用在服务端明确回了「密码错误」之后。
     void ForgetSavedPasswordForCurrentAccount();
 
-    // 把历史登录账号列表写回 Bin\Users\LoginAccountList.dat。写失败只记日志。
+    // 把历史登录账号列表写回 程序目录\Users\LoginAccountList.dat。写失败只记日志。
     void SaveLoginAccountListFile();
+
+    // 锁屏期间把一条消息记进延后队列，解锁时由 ReplayDeferredAfterUnlock 原样重新投递。
+    // lParam 上的堆对象此时不释放，归重新投递后的处理函数释放。
+    void DeferUntilUnlock(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     // 把当前登录账号的昵称同步进历史登录账号列表 —— 与列表里存的姓名不一致时才写入
     // 并落盘（用户刚改过昵称的情形）。
@@ -278,6 +304,7 @@ private:
 
     CLoginDlg m_LoginDlg;               // 登录窗，本类按值持有；登出后重新弹出的也是它
     CLoginAccountList m_LoginAccountList;   // 本机历史登录账号列表，来自 Users\LoginAccountList.dat
+    CSendModeConfigStore m_sendModeStore;   // 发送键存进本人账号配置（BUG-119）：登录加载配置后绑定给 ChatSendMode，登出时解绑
     LOGIN_ACCOUNT_INFO m_stAccountInfo;  // 当前即将登录 / 已登录的账号信息
 
     int m_nSessionStatus;               // 会话状态机，取值见 SessionStatus
@@ -291,13 +318,27 @@ private:
     DWORD m_dwReconnectTimerId;         // 自动重连定时器标识；0 表示未启动
     bool m_bEnableReconnect;            // 是否启用断线重连，来自 flamingo.ini
     UINT m_uReconnectInterval;          // 重连时间间隔，必须大于 0，单位毫秒
-    // 断线重连的登录请求节流：一轮重连里同一时刻只有一个登录请求在途，等到结果再发下一个
-    //（bugs.md 的 BUG-21）。每轮重连开始时重置，收到登录结果时清除等待状态。
+    // 断线重连的登录请求节流：一轮重连里同一时刻只有一个登录请求在途，等到结果再发下一个。
+    // 每轮重连开始时重置，收到登录结果时清除等待状态。
     balloonmain::ReconnectThrottle m_reconnectThrottle;
 
     //被踢下线提示框是否正在显示。它是模态框、跑嵌套消息循环，期间托盘点击与重复的
     //被踢下线通知都要挡掉，否则会重入「回到登录界面」的收尾序列。
     bool m_bKickoutNoticeShowing;
+
+    //锁屏期间延后的一条消息，解锁后原样重新投给宿主窗口
+    struct LockDeferredMsg
+    {
+        UINT   m_msg;      //消息号（FMG_MSG_V2_KICKOUT、FMG_MSG_UPDATE_RESULT、FMG_MSG_EXIT_FOR_UPDATE）
+        WPARAM m_wParam;   //原消息的 wParam
+        LPARAM m_lParam;   //原消息的 lParam；指向堆对象时由重新投递后的处理函数释放
+    };
+
+    //锁屏期间延后的消息，按到达顺序排列；解锁时重新投递后清空
+    std::vector<LockDeferredMsg> m_lockDeferredMsgs;
+
+    //锁屏期间登录或重连成功、显示主面板这一步是否被延后；解锁时据此显示主面板后清零
+    bool m_lockDeferredShowPanel;
 };
 
 } // namespace balloonmain

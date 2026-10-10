@@ -7,6 +7,7 @@
 #include <stdio.h>   // _snwprintf_s
 
 #include "../../net/Protocol.h"   // error_code_*
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -179,39 +180,42 @@ std::wstring ForwardErrorText(int code)
     {
     // 转发给单聊：对方把本人拉黑了
     case error_code_in_blacklist:
-        return L"已被对方拉黑";
+        return TR(L"已被对方拉黑");
     // 转发给单聊：对方账号不存在
     case error_code_not_found:
-        return L"对方账号不存在";
+        return TR(L"对方账号不存在");
     // 转发到群：本人已不在该群
     case error_code_not_group_member:
-        return L"你已不是该群成员";
+        return TR(L"你已不是该群成员");
     // 转发到群：群已解散
     case error_code_group_not_exist:
-        return L"群已解散";
+        return TR(L"群已解散");
     // 转发到群：本人被单独禁言，或群开启了全员禁言
     case error_code_member_muted:
-        return L"你在该群被禁言";
-    // 转发到群：内容命中该群的敏感词
+        return TR(L"你在该群被禁言");
+    // 转发到群：本人还没有确认该群的入群必读（docs/群公告接入方案.md §14）
+    case error_code_must_read_pending:
+        return TR(L"你还没有确认该群的入群必读");
+    // 转发的内容命中转发人所属企业的敏感词库（单聊、群聊都检查，见 docs/敏感词方案.md）
     case error_code_sensitive_word:
-        return L"内容包含该群设置的敏感词";
+        return TR(L"内容包含敏感词");
     // 源消息全部被跳过：已撤回、已删除或本人看不到
     case error_code_message_not_exist:
-        return L"消息已被撤回或删除";
+        return TR(L"消息已被撤回或删除");
     // 合并转发的聊天记录超过服务端的体积上限
     case error_code_msg_too_large:
-        return L"聊天记录过大，请减少条数后重试";
+        return TR(L"聊天记录过大，请减少条数后重试");
     // 请求没能发出
     case kForwardCodeNotSent:
-        return L"网络未连接";
+        return TR(L"网络未连接");
     // 请求发出后等不到应答
     case kForwardCodeTimeout:
-        return L"等待服务器应答超时";
+        return TR(L"等待服务器应答超时");
     // 其余错误码：没有专门文案，带上数值便于反馈问题
     default:
         {
             wchar_t buf[kFormatBufLen] = { 0 };
-            _snwprintf_s(buf, kFormatBufLen, _TRUNCATE, L"转发失败（错误码 %d）", code);
+            _snwprintf_s(buf, kFormatBufLen, _TRUNCATE, TR(L"转发失败（错误码 %d）"), code);
             return buf;
         }
     }
@@ -220,7 +224,7 @@ std::wstring ForwardErrorText(int code)
 std::wstring BuildForwardFailureText(const ForwardBatchOutcome& outcome)
 {
     wchar_t buf[kFormatBufLen] = { 0 };
-    _snwprintf_s(buf, kFormatBufLen, _TRUNCATE, L"以下 %u 个聊天转发失败：",
+    _snwprintf_s(buf, kFormatBufLen, _TRUNCATE, TR(L"以下 %u 个聊天转发失败："),
                  (unsigned)outcome.m_failed.size());
     std::wstring text = buf;
 
@@ -234,7 +238,7 @@ std::wstring BuildForwardFailureText(const ForwardBatchOutcome& outcome)
 
     if (!outcome.m_succeeded.empty())
     {
-        _snwprintf_s(buf, kFormatBufLen, _TRUNCATE, L"\n\n其余 %u 个已转发。",
+        _snwprintf_s(buf, kFormatBufLen, _TRUNCATE, TR(L"\n\n其余 %u 个已转发。"),
                      (unsigned)outcome.m_succeeded.size());
         text += buf;
     }

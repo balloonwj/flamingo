@@ -23,6 +23,7 @@
 #pragma comment(lib, "gdiplus.lib")
 
 #include "../../Common/Log/IULog.h"
+#include "../../App/BrandText.h"            // g_strAppTitle（标题与「退出」卡片里的产品名称）
 #include "../../resource.h"                 // IDR_MAINFRAME（标题栏程序图标）
 #include "../../App/FlamingoClient.h"           // CFlamingoClient::m_UserConfig / SaveUserConfig
 #include "../../App/CustomMsgDef.h"             // WM_CLOSE_MAINDLG（退出时投递给主面板）
@@ -30,6 +31,7 @@
 #include "ClosePromptDecision.h"         // DecideOnConfirm / DefaultSelection / CloseAction
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth     = 380;   // 客户区宽
@@ -137,7 +139,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -390,13 +392,15 @@ void CBalloonClosePromptDlg::OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlami
         // NULL（owner 须用 ::GetWindow(GW_OWNER) 取），所以通知照旧回到本框自己。
         // 守卫用例见 Tests/ClosePromptDecisionTests.cpp 的 CPD15；工程内 CBalloonKickoutDlg
         // 与 CBalloonRegisterWindow 也一直是带 owner 创建、控件通知正常。
-        if (Create(ownerPanel, CWindow::rcDefault, _T("关闭 FlamingoIM"),
+        // 标题「关闭 <产品名称>」，产品名称取 flamingo.ini 的 [ui] apptitle
+        const std::wstring caption = TRF(L"关闭 {0}", g_strAppTitle);
+        if (Create(ownerPanel, CWindow::rcDefault, caption.c_str(),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR("ClosePromptDlg: create window failed.");
             return;
         }
-        SetTitle(_T("关闭 FlamingoIM"));
+        SetTitle(caption.c_str());
         SetTitleBarHeight(kDlgTitleBarH);
         SetButtons(false, false, true);   // 只留关闭按钮
         SetResizable(false);
@@ -421,7 +425,8 @@ void CBalloonClosePromptDlg::OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlami
 
         m_built = false;
         BuildUiOnce();
-        ResizeClient(kDlgWidth, kDlgHeight);
+        //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+        ResizeClient(kDlgWidth, kDlgHeight + kDlgTitleBarH);
 
         // 居中到主面板。主面板若处于最小化或隐藏状态（例如从任务栏 / 托盘一侧触发
         // 关闭），ATL 的 CenterWindow 会自动改为按显示器工作区居中（见 atlwin.h 里
@@ -515,7 +520,7 @@ void CBalloonClosePromptDlg::BuildUiOnce()
     // ---- 副标题（设计稿表头副标题，因复用标题栏放到正文首行）----
     {
         std::unique_ptr<balloonwjui::DuiLabel> subtitle(new balloonwjui::DuiLabel());
-        subtitle->SetText(_T("请选择关闭方式"));
+        subtitle->SetText(TR(L"请选择关闭方式"));
         subtitle->SetTextColor(kCardSubColor);
         subtitle->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         root->AddChild(std::move(subtitle), balloonwjui::DuiLayout::Hint().Fixed(kSubtitleH));
@@ -527,20 +532,22 @@ void CBalloonClosePromptDlg::BuildUiOnce()
             new balloonmain::ClosePromptOptionCard());
         card->SetCtrlId(kIdCardMinimize);
         card->SetAccent(kAccentBlue);
-        card->SetCardContent(balloonmain::kIconPanel, _T("最小化到托盘"),
-                             _T("继续在后台运行，可从托盘图标重新打开"));
+        card->SetCardContent(balloonmain::kIconPanel, TR(L"最小化到托盘"),
+                             TR(L"继续在后台运行，可从托盘图标重新打开"));
         m_cardMinimize = card.get();
         root->AddChild(std::move(card), balloonwjui::DuiLayout::Hint().Fixed(kCardH));
     }
 
-    // ---- 卡片：退出 FlamingoIM（红）----
+    // ---- 卡片：退出 <产品名称>（红）----
     {
         std::unique_ptr<balloonmain::ClosePromptOptionCard> card(
             new balloonmain::ClosePromptOptionCard());
         card->SetCtrlId(kIdCardExit);
         card->SetAccent(kAccentRed);
-        card->SetCardContent(balloonmain::kIconExit, _T("退出 FlamingoIM"),
-                             _T("关闭应用，下次需要重新登录"));
+        // 产品名称过长时卡片标题以省略号截断（卡片绘制带 DT_END_ELLIPSIS）
+        const std::wstring exitTitle = TRF(L"退出 {0}", g_strAppTitle);
+        card->SetCardContent(balloonmain::kIconExit, exitTitle.c_str(),
+                             TR(L"关闭应用，下次需要重新登录"));
         m_cardExit = card.get();
         root->AddChild(std::move(card), balloonwjui::DuiLayout::Hint().Fixed(kCardH));
     }
@@ -553,7 +560,7 @@ void CBalloonClosePromptDlg::BuildUiOnce()
         std::unique_ptr<balloonwjui::DuiButton> remember(new balloonwjui::DuiButton());
         remember->SetButtonType(balloonwjui::DuiButton::StyleCheckbox);
         remember->SetVariant(balloonwjui::DuiButton::Variant::Ghost);   // 只画小勾选框，不铺整格浅底
-        remember->SetText(_T("记住我的选择"));
+        remember->SetText(TR(L"记住我的选择"));
         remember->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         remember->SetCtrlId(kIdRemember);
         remember->SetCheck(false, false);
@@ -567,14 +574,14 @@ void CBalloonClosePromptDlg::BuildUiOnce()
         cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         cancel->SetVariant(balloonwjui::DuiButton::Variant::Default);
         cancel->SetCtrlId(kIdCancel);
-        cancel->SetText(_T("取消"));
+        cancel->SetText(TR(L"取消"));
         bottom->AddChild(std::move(cancel), balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth));
 
         std::unique_ptr<balloonwjui::DuiButton> confirm(new balloonwjui::DuiButton());
         confirm->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         confirm->SetVariant(balloonwjui::DuiButton::Variant::Primary);   // 默认蓝，SelectAction 据选中项再调
         confirm->SetCtrlId(kIdConfirm);
-        confirm->SetText(_T("确认"));
+        confirm->SetText(TR(L"确认"));
         m_confirm = confirm.get();
         bottom->AddChild(std::move(confirm), balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth));
 

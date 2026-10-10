@@ -15,7 +15,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../UI/BalloonScreenshot/AnnotationModel.h"
+#include "../../FlamingoScreenshot/Capture/AnnotationModel.h"
 
 #include <math.h>
 

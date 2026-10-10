@@ -52,7 +52,7 @@ void resetDb(const char* sqliteFile, const char* mysqlDb)
     if (!useMysql())
     {
         //SQLite：删文件重建。CSqliteManager::init 会把空文件建成完整结构库
-        //（建表 + 补列 + 建索引与触发器）。
+        //（建表 + 建索引与触发器）。
         cleanupDb(sqliteFile);
         REQUIRE(Singleton<CSqliteManager>::Instance().init(sqliteFile));
         Singleton<CDbConfig>::Instance().init(DB_TYPE_NAME_SQLITE, NULL, NULL, NULL,
@@ -69,6 +69,10 @@ void resetDb(const char* sqliteFile, const char* mysqlDb)
     const char* host = envOr("FLAMINGO_TEST_MYSQL_HOST", "127.0.0.1");
     const char* user = envOr("FLAMINGO_TEST_MYSQL_USER", "root");
     const char* pwd  = envOr("FLAMINGO_TEST_MYSQL_PWD",  "123456");
+
+    //连接池里可能还留着连到旧测试库的空闲连接（Suite PM 会打开连接池）。这个库马上要被
+    //DROP 重建，那些连接留着只会在后面被当成可用连接取出来，所以先全部关闭
+    DbFactory::clearConnectionPools();
 
     //先把整个测试库 DROP 掉。连的是 MySQL 自带的 mysql 库 —— 要删的那个库此刻
     //可能不存在，连它自己会失败。
@@ -100,6 +104,9 @@ void cleanupDb(const char* sqliteFile)
         //MySQL 模式留着库便于事后排查，下次 resetDb 会整个重建。
         return;
     }
+
+    //连接池若开着，池里可能还有连到这个库文件的空闲连接；Windows 上被打开着的文件删不掉，先全部关闭
+    DbFactory::clearConnectionPools();
 
     std::string basePath(sqliteFile);
     remove(basePath.c_str());

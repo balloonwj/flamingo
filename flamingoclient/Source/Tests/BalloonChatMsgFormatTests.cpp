@@ -19,6 +19,8 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonChat/BalloonChatMsgFormat.h"
+#include "../UI/BalloonChatWnd/ChatSystemTip.h"   // RCT5~RCT8：历史里已撤回的消息构造成提示行、取撤回者
+#include "../net/Protocol.h"                      // message_type_*
 
 using namespace balloonchat;
 
@@ -343,6 +345,76 @@ TEST_CASE("RCT3 他人撤回但昵称为空时退化成\"对方撤回了一条�
           L"\x5bf9\x65b9\x64a4\x56de\x4e86\x4e00\x6761\x6d88\x606f");
 }
 
+// ---- 历史里已撤回的消息：构造成撤回提示行 ----
+// 服务端拉历史时照样下发已撤回的消息（带 recalled: true），聊天窗渲染前用 MakeRecalledTipRow 替换。
+
+namespace {
+
+//历史消息的 msgid 与时间（Unix 毫秒），取值无特殊含义
+const long long kRecalledMsgid = 880301;
+const long long kRecalledTimeMs = 1790953090000LL;
+
+//构造一条已撤回的历史消息
+net::MessageNotify MakeRecalledNotify(int msgtype)
+{
+    net::MessageNotify m;
+    m.m_msgid     = kRecalledMsgid;
+    m.m_timestamp = kRecalledTimeMs;
+    m.m_msgtype   = msgtype;
+    m.m_recalled  = true;
+    m.m_text      = "secret";
+    return m;
+}
+
+} // anonymous namespace
+
+TEST_CASE("RCT5 历史里本人撤回的消息：提示行写「你撤回了一条消息」，带原 msgid 与时间", "[recall][msgfmt]")
+{
+    const balloonchatwnd::ChatMessage tip =
+        balloonchatwnd::MakeRecalledTipRow(MakeRecalledNotify(message_type_text), true, CString(_T("\x5f20\x4e09")));
+    CHECK(tip.kind == (int)balloonchatwnd::kMsgTime);
+    CHECK(WS(tip.text) == L"\x4f60\x64a4\x56de\x4e86\x4e00\x6761\x6d88\x606f");
+    CHECK(tip.msgid == kRecalledMsgid);
+    CHECK(tip.timestampMs == kRecalledTimeMs);
+    CHECK(tip.relayCardMsgid == 0);   //撤回提示行不可点击
+}
+
+TEST_CASE("RCT6 历史里别人撤回的消息：写撤回者的名字，名字为空时写「对方」", "[recall][msgfmt]")
+{
+    const balloonchatwnd::ChatMessage named =
+        balloonchatwnd::MakeRecalledTipRow(MakeRecalledNotify(message_type_text), false, CString(_T("\x5f20\x4e09")));
+    CHECK(WS(named.text) == L"\x5f20\x4e09\x64a4\x56de\x4e86\x4e00\x6761\x6d88\x606f");
+
+    const balloonchatwnd::ChatMessage unnamed =
+        balloonchatwnd::MakeRecalledTipRow(MakeRecalledNotify(message_type_text), false, CString());
+    CHECK(WS(unnamed.text) == L"\x5bf9\x65b9\x64a4\x56de\x4e86\x4e00\x6761\x6d88\x606f");
+}
+
+TEST_CASE("RCT7 撤回的接龙卡片同样只剩一行提示，不再是卡片", "[recall][msgfmt]")
+{
+    net::MessageNotify card = MakeRecalledNotify(message_type_relay);
+    card.m_relayContent = "{\"title\":\"x\",\"note\":\"\",\"deadline\":\"0\"}";
+    const balloonchatwnd::ChatMessage tip = balloonchatwnd::MakeRecalledTipRow(card, false, CString());
+    CHECK(tip.kind == (int)balloonchatwnd::kMsgTime);
+    CHECK(tip.relayContent.empty());
+    CHECK(tip.relayButton == 0);
+}
+
+TEST_CASE("RCT8 历史里撤回者的取法：服务端记录了撤回者就用它，没有记录时按发送人", "[recall][msgfmt]")
+{
+    //群主 5003 撤回了 5001 发的消息：提示里要写群主，而不是发送人
+    net::MessageNotify byAdmin = MakeRecalledNotify(message_type_text);
+    byAdmin.m_from       = 5001;
+    byAdmin.m_recalledBy = 5003;
+    CHECK(balloonchatwnd::RecallOperatorOf(byAdmin) == 5003);
+
+    //服务端开始记录撤回者之前撤回的消息：撤回者为 0，按发送人处理（绝大多数撤回是本人操作的）
+    net::MessageNotify legacy = MakeRecalledNotify(message_type_text);
+    legacy.m_from       = 5001;
+    legacy.m_recalledBy = 0;
+    CHECK(balloonchatwnd::RecallOperatorOf(legacy) == 5001);
+}
+
 TEST_CASE("RCT4 三种文案两两不同，UI 上可区分是谁撤的", "[recall][msgfmt]")
 {
     CString self  = BuildRecallTipText(true,  CString());
@@ -357,4 +429,28 @@ TEST_CASE("RCT4 三种文案两两不同，UI 上可区分是谁撤的", "[recal
     CHECK_FALSE(self.IsEmpty());
     CHECK_FALSE(named.IsEmpty());
     CHECK_FALSE(anon.IsEmpty());
+}
+
+//历史里的窗口抖动（没有正文）曾落进「非文本用占位文字」分支，画成内容为「[抖一抖]」的文字气泡。
+//改为居中提示行，文字与实时收发时插入的提示相同，带原 msgid 与时间。
+TEST_CASE("SHK1 历史里的窗口抖动画成居中提示行：本人发出与对方发来各用各的文字", "[msgfmt]")
+{
+    net::MessageNotify m;
+    m.m_msgid     = 880401;
+    m.m_timestamp = 1790953190000LL;
+    m.m_msgtype   = message_type_shake;
+
+    const balloonchatwnd::ChatMessage mine = balloonchatwnd::MakeShakeTipRow(m, true);
+    CHECK(mine.kind == (int)balloonchatwnd::kMsgTime);
+    CHECK(WS(mine.text) == L"你向对方发送了窗口抖动");
+    CHECK(mine.msgid == 880401);
+    CHECK(mine.timestampMs == 1790953190000LL);
+
+    const balloonchatwnd::ChatMessage peer = balloonchatwnd::MakeShakeTipRow(m, false);
+    CHECK(peer.kind == (int)balloonchatwnd::kMsgTime);
+    CHECK(WS(peer.text) == L"对方向你发送了窗口抖动");
+
+    //与实时收发时插入的提示文字一致，首屏补回早到提示时才能据此去掉重复的那条
+    CHECK(WS(peer.text) == WS(balloonchatwnd::ShakeTipText(false)));
+    CHECK(WS(mine.text) == WS(balloonchatwnd::ShakeTipText(true)));
 }

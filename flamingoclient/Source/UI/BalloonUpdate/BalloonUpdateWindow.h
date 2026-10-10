@@ -32,6 +32,7 @@
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "../../Session/UserSessionData.h"    // FMG_MSG_UPDATE_PROGRESS / FMG_MSG_UPDATE_RESULT
 #include "../../Feature/Update/UpdateViewModel.h"
+#include "../BalloonMain/TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 namespace balloonwjui {
 class DuiLabel;
@@ -322,6 +323,8 @@ private:
     //标题栏左侧小图标（app 图标 16x16 合成到标题栏底色上）。DuiFrameWindow::SetIcon
     //只借用不持有，故由本类持有并在析构时 DeleteObject。只建一次，跨"关窗再打开"复用。
     HBITMAP m_titleIconBmp;
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 
     //以下控件由 balloonui 的控件树持有，本类只借用裸指针用于修改文本与显隐状态，
     //不负责释放。窗口销毁时控件树一并销毁，故须在 OnCloseMsg 中置空这些指针。

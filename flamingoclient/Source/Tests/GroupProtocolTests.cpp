@@ -749,3 +749,48 @@ TEST_CASE("GP58 parseUserGroupsResponse 取出本人置顶状态，老服务端�
     //老服务端没有 pinned 字段：按未置顶处理
     CHECK(out.m_groups[2].m_pinned == 0);
 }
+
+TEST_CASE("GP59 旧服务端的群资料仍带已删除的 sensitiveon 时照常解析，其余群设置逐个对上",
+          "[group][groupmanage]")
+{
+    //群级敏感词开关已于 2026-10-02 删除（docs/敏感词方案.md），新服务端不再下发
+    //sensitiveon；但连到未升级的服务端时群资料里仍会带着它。客户端解析不能因为多出
+    //一个不认识的字段而失败，群管理页用到的六项群设置也要照常取出。
+    const std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"groupid\":\"10000000001\",\"name\":\"team\",\"myrole\":2,"
+        "\"intro\":\"intro-text\",\"atallscope\":1,\"newseehistory\":0,\"memberinvite\":1,"
+        "\"welcomeon\":1,\"welcometext\":\"welcome-text\",\"sensitiveon\":1}";
+
+    GroupInfoResult out;
+    REQUIRE(GroupProtocolClient::parseGroupInfoResponse(body, out));
+    CHECK(out.m_code == 0);
+    CHECK(out.m_groupid == 10000000001LL);
+    CHECK(out.m_name == "team");
+    CHECK(out.m_myrole == 2);
+    CHECK(out.m_intro == "intro-text");
+    CHECK(out.m_atallscope == 1);
+    CHECK(out.m_newseehistory == 0);
+    CHECK(out.m_memberinvite == 1);
+    CHECK(out.m_welcomeon == 1);
+    CHECK(out.m_welcometext == "welcome-text");
+}
+
+TEST_CASE("GP60 parseUserGroupsResponse 取出群简介原文，老服务端不带时为空串", "[group][groupintro]")
+{
+    //群简介随群列表一起下发，主面板据此写群信息缓存，新开的群聊窗头部立即显示（2026-10-04）。
+    //解析只取原文：换行等字符原样保留，整理成一行是群聊窗头部显示时的事（见 MakeHeaderIntroLine）。
+    const std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"groups\":["
+        "{\"groupid\":\"10000000001\",\"name\":\"team\",\"membercount\":8,\"intro\":\"line1\\r\\nline2 & more\"},"
+        "{\"groupid\":\"10000000002\",\"name\":\"ops\",\"membercount\":3,\"intro\":\"\"},"
+        "{\"groupid\":\"10000000003\",\"name\":\"old\",\"membercount\":2}]}";
+
+    UserGroupsResult out;
+    REQUIRE(GroupProtocolClient::parseUserGroupsResponse(body, out));
+    REQUIRE(out.m_groups.size() == 3);
+    CHECK(out.m_groups[0].m_intro == "line1\r\nline2 & more");
+    //群主没填简介：空串
+    CHECK(out.m_groups[1].m_intro.empty());
+    //老服务端没有 intro 字段：空串
+    CHECK(out.m_groups[2].m_intro.empty());
+}

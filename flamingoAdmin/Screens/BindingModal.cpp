@@ -40,8 +40,8 @@ const int kUserRowH  = 44;   // 员工行高
 const int kBackdropAlpha = 112;
 const int kModalTitlePt  = 14;
 
-// 悬浮滚动条距部门 / 员工列表区右内缘的间距（像素）。
-const int kListSbInset = 3;
+// 悬浮滚动条距部门 / 员工列表区右内缘的间距（像素）。0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致。
+const int kListSbInset = 0;
 
 const TCHAR* const kModes[] = { _T("整个企业"), _T("按部门"), _T("按员工") };
 const int kModeCount = 3;

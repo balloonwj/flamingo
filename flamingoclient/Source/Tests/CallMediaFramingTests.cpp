@@ -6,12 +6,13 @@
  *    - 视频大帧分片→逐片解复用重组还原原帧；中间片返回 none、末片返回完整帧；
  *    - 音频帧夹在视频分片之间：音频即时交付、视频仍正确重组（互不干扰）；
  *    - 畸形 body（过短 / 非法标志）安全返回 error；
- *    - 时间戳 round-trip：音频 / 视频整帧 / 视频分片重组后都带出正确时间戳。
+ *    - 时间戳 round-trip：音频 / 视频整帧 / 视频分片重组后都带出正确时间戳；
+ *    - CMF8 质量报告（2026-10-05，网络状况标识第 2 期）round-trip，夹在视频分片之间不打乱重组。
  *  框架 Catch2 v3。纯逻辑，不触及 socket/设备。
  *  balloonwj@qq.com   2026-06-16
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/Call/CallMediaFraming.h"
+#include "../../FlamingoMedia/Call/CallMediaFraming.h"
 
 #include <vector>
 #include <stdint.h>
@@ -169,4 +170,33 @@ TEST_CASE("CMF7 时间戳大值 round-trip（64 位不截断）")
     uint64_t ts = 0;
     CHECK(demux.Feed(abody.data(), abody.size(), out, ts) == CallMediaDemux::call_demux_audio);
     CHECK(ts == bigTs);
+}
+
+TEST_CASE("CMF8 质量报告封装→解复用 round-trip；夹在视频分片之间不打乱重组（网络状况标识第 2 期）")
+{
+    std::vector<uint8_t> report = makeBytes(24, 3);
+    std::vector<uint8_t> sbody;
+    BuildStatsBody(report.data(), report.size(), 7000, sbody);
+    CHECK(sbody.size() == report.size() + kHdr);
+    CHECK(sbody[0] == call_media_kind_stats);
+
+    CallMediaDemux demux;
+    std::vector<uint8_t> out;
+    uint64_t ts = 0;
+    CHECK(demux.Feed(sbody.data(), sbody.size(), out, ts) == CallMediaDemux::call_demux_stats);
+    CHECK(out == report);
+    CHECK(ts == 7000u);
+
+    //视频分片中间插一份质量报告：报告即时交付，视频照常重组
+    std::vector<uint8_t> frame = makeBytes(700, 5);
+    std::vector<std::vector<uint8_t> > vbodies;
+    BuildVideoBodies(frame.data(), frame.size(), 300, 7100, vbodies);
+    REQUIRE(vbodies.size() == 3);
+    CHECK(demux.Feed(vbodies[0].data(), vbodies[0].size(), out, ts) == CallMediaDemux::call_demux_none);
+    CHECK(demux.Feed(sbody.data(), sbody.size(), out, ts) == CallMediaDemux::call_demux_stats);
+    CHECK(out == report);
+    CHECK(demux.Feed(vbodies[1].data(), vbodies[1].size(), out, ts) == CallMediaDemux::call_demux_none);
+    CHECK(demux.Feed(vbodies[2].data(), vbodies[2].size(), out, ts) == CallMediaDemux::call_demux_video);
+    CHECK(out == frame);
+    CHECK(ts == 7100u);
 }

@@ -3,6 +3,7 @@
  *  balloonwj@qq.com   2026-08-12
  */
 #include "UpdateViewModel.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace update {
 
@@ -40,10 +41,9 @@ std::wstring MakeVersionLine(const std::wstring& currentVersion,
 {
     if (currentVersion.empty())
     {
-        return std::wstring(L"最新版本 ") + latestVersion;
+        return TRF(L"最新版本 {0}", latestVersion);
     }
-    return std::wstring(L"当前版本 ") + currentVersion
-         + L" → 最新版本 " + latestVersion;
+    return TRF(L"当前版本 {0} → 最新版本 {1}", currentVersion, latestVersion);
 }
 
 } // namespace
@@ -62,7 +62,7 @@ UpdateViewState BuildUpdateViewState(const UpdateTaskResult& r,
         st.showLaterButton = true;
         st.closable        = true;
         st.canDownload     = false;
-        st.title           = L"检查更新失败，请稍后重试";
+        st.title           = TR(L"检查更新失败，请稍后重试");
         st.versionLine.clear();
         return st;
     }
@@ -78,8 +78,8 @@ UpdateViewState BuildUpdateViewState(const UpdateTaskResult& r,
         st.showLaterButton = true;
         st.closable        = true;
         st.canDownload     = false;
-        st.title           = latest.empty() ? std::wstring(L"当前已是最新版本")
-                                            : (std::wstring(L"当前已是最新版本 ") + latest);
+        st.title           = latest.empty() ? std::wstring(TR(L"当前已是最新版本"))
+                                            : TRF(L"当前已是最新版本 {0}", latest);
         st.versionLine.clear();
         return st;
     }
@@ -87,20 +87,21 @@ UpdateViewState BuildUpdateViewState(const UpdateTaskResult& r,
     //③ 有可用新版本。强制与否只差「稍后」按钮和能不能关窗。
     st.canDownload  = true;
     st.versionLine  = MakeVersionLine(currentVersion, latest);
+    st.releaseNoteUtf8 = r.m_releaseNote;
 
     if (r.m_forced)
     {
         st.kind            = update_view_forced;
         st.showLaterButton = false;
         st.closable        = false;
-        st.title           = std::wstring(L"必须升级到 ") + latest + L" 才能继续使用";
+        st.title           = TRF(L"必须升级到 {0} 才能继续使用", latest);
     }
     else
     {
         st.kind            = update_view_has_update;
         st.showLaterButton = true;
         st.closable        = true;
-        st.title           = std::wstring(L"发现新版本 ") + latest;
+        st.title           = TRF(L"发现新版本 {0}", latest);
     }
 
     return st;

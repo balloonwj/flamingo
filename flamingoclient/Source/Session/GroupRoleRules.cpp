@@ -125,4 +125,46 @@ bool ShouldRefetchMyRoleOnMemberChange(int changetype, const std::vector<int64_t
     return false;
 }
 
+bool ShouldRefetchGroupListOnMemberChange(int changetype, const std::vector<int64_t>& userids,
+                                          int64_t selfId)
+{
+    if (changetype != kMemberChangeJoin || selfId <= 0)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < userids.size(); ++i)
+    {
+        if (userids[i] == selfId)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ShouldRefetchGroupInfoForMemberCount(int changetype, const std::vector<int64_t>& userids,
+                                          int64_t selfId)
+{
+    //会改变人数的三种变更：加入、主动退出、被移出（与协议 changetype 的 1、2、3 一致）
+    const int kMemberChangeLeave = 2;
+    const int kMemberChangeKick  = 3;
+    if (selfId <= 0)
+    {
+        return false;
+    }
+    if (changetype != kMemberChangeJoin && changetype != kMemberChangeLeave && changetype != kMemberChangeKick)
+    {
+        return false;
+    }
+    //名单里有本人：本人进出群另有处理
+    for (size_t i = 0; i < userids.size(); ++i)
+    {
+        if (userids[i] == selfId)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace grouprole

@@ -9,7 +9,7 @@
 | `gen_pinyin_table.py` | 生成客户端联系人搜索所用的拼音索引表 |
 | `keepawake_probe.ps1` | 实测「禁止机器休眠」功能依赖的三项 Windows 行为 |
 
-> 另有 `flamingoserver/tools/gen_table_sqlite.py`，由 `flamingoserver/table.sql` 生成
+> 另有 `flamingoserver/tools/gen_table_sqlite.py`，由 `flamingoserver/table_mysql.sql` 生成
 > SQLite 版建表脚本，放在服务端子项目下，不在本目录。
 
 ---

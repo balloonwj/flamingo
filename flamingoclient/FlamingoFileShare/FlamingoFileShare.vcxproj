@@ -1,0 +1,397 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoFileShare.vcxproj — 客户端「文件共享」功能的 DLL 工程
+  balloonwj@qq.com   2026-10-02
+
+  产出 FlamingoFileShare.dll，由 Flamingo.exe 在登录成功后用 LoadLibrary 动态加载（不链接导入库）。
+  接口约定见 FileShareApi.h，方案见 docs/文件共享方案.md 第 7 节。
+
+  关键约束（与 FlamingoMedia.vcxproj 同一套）：
+   · CharacterSet=Unicode、CRT 静态（Debug /MTd、Release /MT），与 Flamingo.exe 及
+     balloonui_static 一致。exe 与 DLL 因此各有独立的堆，接口只用纯虚类与基本类型。
+   · 四个配置的 OutDir 与 Flamingo.exe 相同：Debug|x64 输出到资源齐全的 ..\Debug\，
+     其余三个分别输出到 ..\Release\、..\Debug_Win32\、..\Release_Win32\。中间目录放在本工程目录下（已列入 .gitignore）。
+   · 导出名由 FlamingoFileShare.def 固定；导入库与 .exp 放进中间目录，不污染输出目录。
+   · 所有配置都带 /utf-8：源文件为 UTF-8 无 BOM。
+   · 界面也在本 DLL 里：静态链接自己的一份 balloonui_static（docs/文件共享方案.md 2.6、3.11）。
+   · 与 exe 共用的源文件直接列在本工程里，与 exe 编译同一份源文件。这些文件里的
+     #include "stdafx.h" 借助包含路径里的 $(ProjectDir) 找到本工程的 stdafx.h。
+   · 日志：DLL 不编译 exe 的 IULog.cpp，由 Engine/HostLogBridge.cpp 实现 CIULog::Log，经宿主写日志；
+     行内格式化复用 FlamingoMedia/Host/LogFormat.cpp（编译同一份源文件）。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DCACF0DE-4119-4E38-9A91-922AEC58C084}</ProjectGuid>
+    <RootNamespace>FlamingoFileShare</RootNamespace>
+    <ProjectName>FlamingoFileShare</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\Debug_Win32\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <TargetName>FlamingoFileShare</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\Release_Win32\</OutDir>
+    <IntDir>Release\</IntDir>
+    <TargetName>FlamingoFileShare</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\Debug\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <TargetName>FlamingoFileShare</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\Release\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <TargetName>FlamingoFileShare</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\sqlite-src-3530100;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoFileShare.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\sqlite-src-3530100;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoFileShare.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\sqlite-src-3530100;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoFileShare.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\sqlite-src-3530100;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoFileShare.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="FileShareApi.h" />
+    <ClInclude Include="FileShareModule.h" />
+    <ClInclude Include="Engine\ShareLog.h" />
+    <ClInclude Include="Engine\SharePathGuard.h" />
+    <ClInclude Include="Engine\SharePermission.h" />
+    <ClInclude Include="Engine\ShareControlFraming.h" />
+    <ClInclude Include="Engine\ShareProtocolCodec.h" />
+    <ClInclude Include="Engine\ShareLocalStore.h" />
+    <ClInclude Include="Engine\ShareReconcile.h" />
+    <ClInclude Include="Engine\ShareFileOps.h" />
+    <ClInclude Include="Engine\ShareWinPath.h" />
+    <ClInclude Include="Engine\ShareProvider.h" />
+    <ClInclude Include="Engine\ShareProviderSession.h" />
+    <ClInclude Include="Engine\ShareService.h" />
+    <ClInclude Include="Engine\ShareBrowseModel.h" />
+    <ClInclude Include="Engine\ShareVisitor.h" />
+    <ClInclude Include="Engine\ShareVisitorChannel.h" />
+    <ClInclude Include="Engine\ShareTransferPlan.h" />
+    <ClInclude Include="Engine\ShareTransferHooks.h" />
+    <ClInclude Include="Engine\ShareTransferSession.h" />
+    <ClInclude Include="Engine\ShareCreateModel.h" />
+    <ClInclude Include="Engine\ShareConversationModel.h" />
+    <ClInclude Include="Engine\ShareConversationCounter.h" />
+    <ClInclude Include="Engine\ShareCenterModel.h" />
+    <ClInclude Include="Engine\ShareNoticeModel.h" />
+    <ClInclude Include="Engine\ShareRecycle.h" />
+    <ClInclude Include="Engine\ShareWriteOps.h" />
+    <ClInclude Include="Engine\ShareRecycleShell.h" />
+    <ClInclude Include="Engine\ShareSearch.h" />
+    <ClInclude Include="Engine\ShareWorkerPool.h" />
+    <ClInclude Include="Engine\ShareThumbnail.h" />
+    <ClInclude Include="Engine\ShareDragModel.h" />
+    <ClInclude Include="UI\ShareCenterWindow.h" />
+    <ClInclude Include="UI\ShareLocalOpen.h" />
+    <ClInclude Include="UI\ShareNoticePopup.h" />
+    <ClInclude Include="UI\ShareNoticeCenter.h" />
+    <ClInclude Include="UI\ShareBrowserWindow.h" />
+    <ClInclude Include="UI\ShareCreateDialog.h" />
+    <ClInclude Include="UI\ShareConversationPopup.h" />
+    <ClInclude Include="UI\ShareUiHost.h" />
+    <ClInclude Include="UI\SharePickDialog.h" />
+    <ClInclude Include="UI\ShareNameDialog.h" />
+    <ClInclude Include="UI\ShareFolderPickDialog.h" />
+    <ClInclude Include="UI\ShareDragData.h" />
+    <ClInclude Include="UI\ShareFileList.h" />
+    <ClInclude Include="UI\ShareAvatar.h" />
+    <ClInclude Include="UI\ShareWindowPlacement.h" />
+    <ClInclude Include="..\Source\Session\WindowPlacementPrefs.h" />
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h" />
+    <ClInclude Include="..\Source\Common\Graphics\ShellTypeIcon.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\CornerPopupPlacement.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\P2PBadge.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelAvatar.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelIcons.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\PresenceBadge.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarGlyph.h" />
+    <ClInclude Include="..\Source\Common\I18n\I18n.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarImageUtil.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarBitmapCache.h" />
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderManifest.h" />
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderRelayFraming.h" />
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderRelayClient.h" />
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderSendSession.h" />
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderRecvSession.h" />
+    <ClInclude Include="..\Source\net\FolderProtocolClient.h" />
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderLaneTransport.h" />
+    <ClInclude Include="..\Source\Feature\P2P\FolderP2PTransport.h" />
+    <ClInclude Include="..\Source\Feature\P2P\P2PLinkBroker.h" />
+    <ClInclude Include="..\Source\net\Protocol.h" />
+    <ClInclude Include="..\Source\net\FrameCodec.h" />
+    <ClInclude Include="..\Source\net\FrameCrypto.h" />
+    <ClInclude Include="..\Source\net\FramePayload.h" />
+    <ClInclude Include="..\Source\net\HandshakeRunner.h" />
+    <ClInclude Include="..\Source\Common\Util\MD5Core.h" />
+    <ClInclude Include="..\Source\Common\Util\ZlibUtil.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="FileShareModule.cpp" />
+    <ClCompile Include="Engine\HostLogBridge.cpp" />
+    <ClCompile Include="Engine\ShareLog.cpp" />
+    <ClCompile Include="Engine\SharePathGuard.cpp" />
+    <ClCompile Include="Engine\SharePermission.cpp" />
+    <ClCompile Include="Engine\ShareControlFraming.cpp" />
+    <ClCompile Include="Engine\ShareProtocolCodec.cpp" />
+    <ClCompile Include="Engine\ShareLocalStore.cpp" />
+    <ClCompile Include="Engine\ShareReconcile.cpp" />
+    <ClCompile Include="Engine\ShareFileOps.cpp" />
+    <ClCompile Include="Engine\ShareProvider.cpp" />
+    <ClCompile Include="Engine\ShareProviderSession.cpp" />
+    <ClCompile Include="Engine\ShareService.cpp" />
+    <ClCompile Include="Engine\ShareBrowseModel.cpp" />
+    <ClCompile Include="Engine\ShareVisitor.cpp" />
+    <ClCompile Include="Engine\ShareVisitorChannel.cpp" />
+    <ClCompile Include="Engine\ShareTransferPlan.cpp" />
+    <ClCompile Include="Engine\ShareTransferHooks.cpp" />
+    <ClCompile Include="Engine\ShareTransferSession.cpp" />
+    <ClCompile Include="Engine\ShareCreateModel.cpp" />
+    <ClCompile Include="Engine\ShareConversationModel.cpp" />
+    <ClCompile Include="Engine\ShareConversationCounter.cpp" />
+    <ClCompile Include="Engine\ShareCenterModel.cpp" />
+    <ClCompile Include="Engine\ShareNoticeModel.cpp" />
+    <ClCompile Include="Engine\ShareRecycle.cpp" />
+    <ClCompile Include="Engine\ShareWriteOps.cpp" />
+    <ClCompile Include="Engine\ShareRecycleShell.cpp" />
+    <ClCompile Include="Engine\ShareSearch.cpp" />
+    <ClCompile Include="Engine\ShareWorkerPool.cpp" />
+    <ClCompile Include="Engine\ShareThumbnail.cpp" />
+    <ClCompile Include="Engine\ShareDragModel.cpp" />
+    <ClCompile Include="..\..\third-party\sqlite-src-3530100\sqlite3.c" />
+    <ClCompile Include="UI\ShareCenterWindow.cpp" />
+    <ClCompile Include="UI\ShareLocalOpen.cpp" />
+    <ClCompile Include="UI\ShareNoticePopup.cpp" />
+    <ClCompile Include="UI\ShareNoticeCenter.cpp" />
+    <ClCompile Include="UI\ShareBrowserWindow.cpp" />
+    <ClCompile Include="UI\ShareCreateDialog.cpp" />
+    <ClCompile Include="UI\ShareConversationPopup.cpp" />
+    <ClCompile Include="UI\SharePickDialog.cpp" />
+    <ClCompile Include="UI\ShareNameDialog.cpp" />
+    <ClCompile Include="UI\ShareFolderPickDialog.cpp" />
+    <ClCompile Include="UI\ShareDragData.cpp" />
+    <ClCompile Include="UI\ShareFileList.cpp" />
+    <ClCompile Include="UI\ShareAvatar.cpp" />
+    <ClCompile Include="UI\ShareWindowPlacement.cpp" />
+    <ClCompile Include="..\Source\Session\WindowPlacementResolve.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp" />
+    <ClCompile Include="..\Source\Common\Graphics\ShellTypeIcon.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\CornerPopupPlacement.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelAvatar.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarGlyph.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelIcons.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\PresenceBadge.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarImageUtil.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarBitmapCache.cpp" />
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp" />
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderManifest.cpp" />
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderRelayFraming.cpp" />
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderRelayClient.cpp" />
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderSendSession.cpp" />
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderRecvSession.cpp" />
+    <ClCompile Include="..\Source\net\FolderProtocolClient.cpp" />
+    <ClCompile Include="..\Source\Feature\P2P\FolderP2PTransport.cpp" />
+    <ClCompile Include="..\Source\Feature\P2P\P2PLinkBroker.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\P2PBadge.cpp" />
+    <ClCompile Include="..\Source\net\FrameCodec.cpp" />
+    <ClCompile Include="..\Source\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\Source\net\FramePayload.cpp" />
+    <ClCompile Include="..\Source\net\HandshakeRunner.cpp" />
+    <ClCompile Include="..\Source\Common\Util\ZlibUtil.cpp" />
+    <ClCompile Include="..\Source\Common\Util\MD5Sum.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\compress.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\deflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzclose.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzlib.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\infback.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\trees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\uncompr.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoFileShare.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj">
+      <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 版本信息（文件说明、版权）：UTF-8 编码，单独按 /c65001 编译；由 tools/version_rc.py 生成 -->
+    <ResourceCompile Include="FlamingoFileShareVersion.rc">
+      <AdditionalOptions>/c65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

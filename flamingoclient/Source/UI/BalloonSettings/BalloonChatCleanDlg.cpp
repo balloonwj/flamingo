@@ -6,6 +6,7 @@
  */
 #include "stdafx.h"
 #include "BalloonChatCleanDlg.h"
+#include "../../App/BrandText.h"   // g_strAppTitle（窗口与弹窗标题用的产品名称）
 
 #include <memory>
 
@@ -16,6 +17,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using balloonsettings::LocalMinute;
 
@@ -46,7 +48,7 @@ const int kDefaultPreset = balloonsettings::kCleanBefore30Days;
 
 // ---- 尺寸（像素）----
 const int kDlgWidth     = 580;   // 窗口宽：够放"标签 + 年月日时分五个下拉框"一行
-const int kDlgHeight    = 310;   // 窗口高：三行下拉框 + 说明 + 提示 + 按钮行，下方不留大块空白
+const int kDlgHeight    = 310;   // 内容区高（标题栏以下）：三行下拉框 + 说明 + 提示 + 按钮行，下方不留大块空白
 const int kTitleBarH    = 38;    // 标题栏高
 const int kPadH         = 20;    // 客户区左右内边距
 const int kPadV         = 16;    // 客户区上下内边距
@@ -163,22 +165,26 @@ void CBalloonChatCleanDlg::OpenDialog(HWND owner, bool connected)
     m_flow.SetConnected(connected);
     m_timerOn = false;
 
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"), WS_OVERLAPPEDWINDOW, 0) == NULL)
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("Chat clean dialog: Create failed.");
         return;
     }
 
-    SetTitle(_T("清理聊天记录"));
+    SetTitle(TR(L"清理聊天记录"));
     SetTitleBarHeight(kTitleBarH);
     SetButtons(false, false, true);   // 只留关闭按钮
     SetResizable(false);
+    // 标题栏左侧的程序图标：标题栏不透明，底色用 kOpaqueTitleBarColor；本窗口没有所有者、会出现在任务栏，同时设好任务栏图标
+    SetIcon(m_programIcons.TitleBitmap(balloonmain::kProgramTitleIconSize, balloonmain::kOpaqueTitleBarColor));
+    m_programIcons.ApplyTaskIcons(m_hWnd);
 
     InitUi();
     ApplyPreset(kDefaultPreset);
     RefreshTexts();
 
-    ResizeClient(kDlgWidth, kDlgHeight);
+    //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+    ResizeClient(kDlgWidth, kDlgHeight + kTitleBarH);
     CenterWindow();
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -229,7 +235,7 @@ bool CBalloonChatCleanDlg::OnCleanResult(int code, int64_t beginTime, int64_t en
         LOG_INFO("Chat clean dialog: clean succeeded, range=[%lld, %lld].",
                  (long long)beginTime, (long long)endTime);
         const std::wstring done = balloonsettings::BuildCleanDoneText(beginTime, endTime);
-        ::MessageBox(m_hWnd, done.c_str(), _T("清理聊天记录"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, done.c_str(), TR(L"清理聊天记录"), MB_OK | MB_ICONINFORMATION);
         DestroyWindow();
         return true;
     }
@@ -250,7 +256,7 @@ void CBalloonChatCleanDlg::InitUi()
     {
         std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
         row->SetGap(kRowGap);
-        row->AddChild(MakeLabel(_T("时间范围"), kColorTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0),
+        row->AddChild(MakeLabel(TR(L"时间范围"), kColorTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0),
                       balloonwjui::DuiLayout::Hint().Fixed(kLabelW));
 
         std::unique_ptr<balloonwjui::DuiComboBox> preset(new balloonwjui::DuiComboBox());
@@ -273,7 +279,7 @@ void CBalloonChatCleanDlg::InitUi()
     {
         std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
         row->SetGap(kRowGap);
-        row->AddChild(MakeLabel(_T("开始"), kColorTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0),
+        row->AddChild(MakeLabel(TR(L"开始"), kColorTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0),
                       balloonwjui::DuiLayout::Hint().Fixed(kLabelW));
         AppendTimeCombos(row.get(), kIdStartBase);
         root->AddChild(std::move(row), balloonwjui::DuiLayout::Hint().Fixed(kRowH));
@@ -281,7 +287,7 @@ void CBalloonChatCleanDlg::InitUi()
     {
         std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
         row->SetGap(kRowGap);
-        row->AddChild(MakeLabel(_T("结束"), kColorTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0),
+        row->AddChild(MakeLabel(TR(L"结束"), kColorTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0),
                       balloonwjui::DuiLayout::Hint().Fixed(kLabelW));
         AppendTimeCombos(row.get(), kIdEndBase);
         root->AddChild(std::move(row), balloonwjui::DuiLayout::Hint().Fixed(kRowH));
@@ -310,7 +316,7 @@ void CBalloonChatCleanDlg::InitUi()
     std::unique_ptr<balloonwjui::DuiButton> cancel(new balloonwjui::DuiButton());
     cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
     cancel->SetVariant(balloonwjui::DuiButton::Variant::Default);
-    cancel->SetText(_T("取消"));
+    cancel->SetText(TR(L"取消"));
     cancel->SetCtrlId(kIdBtnCancel);
     footer->AddChild(std::move(cancel),
                      balloonwjui::DuiLayout::Hint().Fixed(kBtnW, kBtnH)
@@ -320,7 +326,7 @@ void CBalloonChatCleanDlg::InitUi()
     std::unique_ptr<balloonwjui::DuiButton> clean(new balloonwjui::DuiButton());
     clean->SetButtonType(balloonwjui::DuiButton::StylePushButton);
     clean->SetVariant(balloonwjui::DuiButton::Variant::Danger);
-    clean->SetText(_T("清理"));
+    clean->SetText(TR(L"清理"));
     clean->SetCtrlId(kIdBtnClean);
     footer->AddChild(std::move(clean),
                      balloonwjui::DuiLayout::Hint().Fixed(kBtnW, kBtnH)
@@ -353,12 +359,12 @@ void CBalloonChatCleanDlg::AppendTimeCombos(balloonwjui::DuiControl* row, UINT i
 
     box->AddChild(MakeNumberCombo(idBase + kOffYear, years.front(), (int)years.size(), kFourDigits),
                   comboHintYear);
-    box->AddChild(MakeLabel(_T("年"), kColorTitle, unitAlign, 0), balloonwjui::DuiLayout::Hint().Fixed(kUnitW));
+    box->AddChild(MakeLabel(TR(L"年"), kColorTitle, unitAlign, 0), balloonwjui::DuiLayout::Hint().Fixed(kUnitW));
     box->AddChild(MakeNumberCombo(idBase + kOffMonth, 1, kMonthsPerYear, kTwoDigits), comboHint);
-    box->AddChild(MakeLabel(_T("月"), kColorTitle, unitAlign, 0), balloonwjui::DuiLayout::Hint().Fixed(kUnitW));
+    box->AddChild(MakeLabel(TR(L"月"), kColorTitle, unitAlign, 0), balloonwjui::DuiLayout::Hint().Fixed(kUnitW));
     // 日的选项随年月变化，先按最多的 31 天建好，填值时再按实际年月重建
     box->AddChild(MakeNumberCombo(idBase + kOffDay, 1, kMaxDaysInMonth, kTwoDigits), comboHint);
-    box->AddChild(MakeLabel(_T("日"), kColorTitle, unitAlign, 0), balloonwjui::DuiLayout::Hint().Fixed(kUnitW));
+    box->AddChild(MakeLabel(TR(L"日"), kColorTitle, unitAlign, 0), balloonwjui::DuiLayout::Hint().Fixed(kUnitW));
     box->AddChild(std::unique_ptr<balloonwjui::DuiControl>(new balloonwjui::DuiControl()),
                   balloonwjui::DuiLayout::Hint().Fixed(kDateTimeGap));
     box->AddChild(MakeNumberCombo(idBase + kOffHour, 0, kHoursPerDay, kTwoDigits), comboHint);
@@ -549,8 +555,8 @@ void CBalloonChatCleanDlg::OnCleanClicked()
     }
 
     CString confirm(balloonsettings::BuildCleanSummaryText(beginMs, endMs).c_str());
-    confirm += _T("\n\n确定要清理吗？");
-    const int answer = ::MessageBox(m_hWnd, confirm, _T("清理聊天记录"),
+    confirm += TR(L"\n\n确定要清理吗？");
+    const int answer = ::MessageBox(m_hWnd, confirm, TR(L"清理聊天记录"),
                                     MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
     if (answer != IDOK || !IsWindow())
     {

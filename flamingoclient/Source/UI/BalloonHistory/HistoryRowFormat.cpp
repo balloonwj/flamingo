@@ -23,6 +23,8 @@
 #include <time.h>
 
 #include "HistoryRowFormat.h"
+#include "../../net/Protocol.h"   // ::message_type_system
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -78,6 +80,24 @@ COLORREF ColorForId(int64_t id)
     //先取模再加 n 再取模：负数 id 也落在 [0, n) 内
     const int idx = (int)(((id % n) + n) % n);
     return kPalette[idx];
+}
+
+CString HistorySenderName(int msgtype, const CString& resolvedName)
+{
+    if (msgtype == ::message_type_system)
+    {
+        return CString(TR(L"系统消息"));
+    }
+    return resolvedName;
+}
+
+COLORREF HistoryAvatarColor(int msgtype, int64_t fromid)
+{
+    if (msgtype == ::message_type_system)
+    {
+        return kHistorySystemAvatarColor;
+    }
+    return ColorForId(fromid);
 }
 
 } // namespace balloonhistory

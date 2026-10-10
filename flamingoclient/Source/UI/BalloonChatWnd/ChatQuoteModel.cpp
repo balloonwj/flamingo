@@ -25,11 +25,15 @@
 
 #include "ChatQuoteModel.h"
 #include "../BalloonChat/BalloonChatMsgFormat.h"   // BodyToDigest（内联表情→[表情]）
+#include "ChatMarkdown.h"                          // MarkdownDigestFromBody（Markdown 消息去掉标记）
+#include "ChatCodeMessage.h"                       // CodeDigestFromCode（代码片段写成「[代码] 第一行」）
 #include "../../Common/Util/EncodeUtil.h"                          // UTF-8 ↔ 宽字符
 #include "../../net/Protocol.h"
+#include "ChatVoiceBubble.h"   // FormatVoiceDuration：引用语音时摘要带时长
 
 #include <vector>
 #include <ctime>   // localtime_s（引用头部的时间格式化）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -37,9 +41,9 @@ namespace {
 
 // 非文本消息在引用块里的占位文案。与会话列表预览同口径 —— 用户在两处看到的
 // 说法一致，不必二次理解。
-const TCHAR* const kDigestImage = _T("[图片]");
-const TCHAR* const kDigestFile  = _T("[文件]");
-const TCHAR* const kDigestOther = _T("[消息]");
+const TCHAR* const kDigestImage = TR_NOOP(L"[图片]");
+const TCHAR* const kDigestFile  = TR_NOOP(L"[文件]");
+const TCHAR* const kDigestOther = TR_NOOP(L"[消息]");
 
 // 截断超长摘要并补省略号。按 UTF-16 字符截 —— 引用块只有一行，再长也显示不下，
 // 而快照要随每条消息落库，没必要把整段正文都塞进去。
@@ -120,6 +124,12 @@ int MsgKindToProtocolType(int kind)
         return message_type_image;
     case kMsgFile:
         return message_type_file;
+    case kMsgRelay:
+        // 群接龙卡片：引用块只显示摘要「[接龙] 标题」，类型如实写出
+        return message_type_relay;
+    case kMsgVoice:
+        // 语音：引用块只显示「[语音] 8″」，类型如实写出（收方据此还原为语音，不画缩略图）
+        return message_type_voice;
     default:
         // 时间分隔 / 撤回提示这类行根本不该被引用，真走到这里按文本处理，
         // 至少不会把类型写成别的东西。
@@ -137,6 +147,8 @@ int ProtocolTypeToMsgKind(int msgtype)
         return kMsgImage;
     case message_type_file:
         return kMsgFile;
+    case message_type_voice:
+        return kMsgVoice;
     default:
         return kMsgText;
     }
@@ -149,16 +161,32 @@ CString BuildQuoteDigest(const ChatMessage& src)
     case kMsgText:
         // 走 BodyToDigest：内联表情替换成 [表情]、"//" 还原成 "/"，不把
         // /f["5"] 这类协议转义原样暴露给用户。与会话列表预览同一个函数。
+        // Markdown 消息另外去掉 **、# 等标记（DLL 不可用时与 BodyToDigest 相同）
+        // 代码片段写成「[代码] 第一行」（docs/代码片段方案.md 第 3.4 节）
+        if (src.isCode)
+        {
+            return TruncateDigest(CString(CodeDigestFromCode(std::wstring((LPCWSTR)src.text), src.codeNotes).c_str()));
+        }
+        if (src.isMarkdown)
+        {
+            return TruncateDigest(MarkdownDigestFromBody(src.text));
+        }
         return TruncateDigest(balloonchat::BodyToDigest(src.text));
     case kMsgEmoji:
         return TruncateDigest(src.text);
     case kMsgImage:
-        return kDigestImage;
+        return TR(kDigestImage);
     case kMsgFile:
         // 文件给文件名比给 [文件] 有信息量得多 —— 一个会话里往往有好几个文件。
-        return src.fileName.IsEmpty() ? CString(kDigestFile) : TruncateDigest(src.fileName);
+        return src.fileName.IsEmpty() ? CString(TR(kDigestFile)) : TruncateDigest(src.fileName);
+    case kMsgRelay:
+        // 接龙卡片的 text 已由 ApplyRelayCard 写成「[接龙] 标题」（docs/群接龙方案.md §3.7）
+        return TruncateDigest(src.text);
+    case kMsgVoice:
+        // 语音：类型加时长，如「[语音] 8″」，与消息记录窗的预览同一写法
+        return CString(TR(L"[语音]")) + L" " + FormatVoiceDuration(src.voiceDuration).c_str();
     default:
-        return kDigestOther;
+        return TR(kDigestOther);
     }
 }
 
@@ -167,7 +195,7 @@ CString BuildQuotedReplyText(const CString& senderName, long long timestampMs,
 {
     // 头尾两条线用不同字符：头部用 ASCII 短横（与纯文本邮件的引用线一致，任何字体都画得出），
     // 结尾用制表线，视觉上比再来一遍短横更像"引用到此为止"。
-    const TCHAR* const kHeadRule = _T("------------------ 原消息 ------------------");
+    const TCHAR* const kHeadRule = TR(L"------------------ 原消息 ------------------");
     const TCHAR* const kTailRule = _T("───────────────────────");
 
     // 换行统一用 CRLF —— RichEdit 的 EM_REPLACESEL 认这一种；只给 LF 会被它当成
@@ -178,14 +206,14 @@ CString BuildQuotedReplyText(const CString& senderName, long long timestampMs,
     text += kHeadRule;
     text += kCrLf;
 
-    text += _T("发件人：");
+    text += TR(L"发件人：");
     text += senderName;
     text += kCrLf;
 
     // 时间未知（本端刚发出、回执未到）时整行不输出 —— 与其写一个假时间，不如不写。
     if (timestampMs > 0)
     {
-        text += _T("时间：");
+        text += TR(L"时间：");
         text += FormatQuoteTime(timestampMs);
         text += kCrLf;
     }

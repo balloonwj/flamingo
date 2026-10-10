@@ -109,40 +109,32 @@ bool SetConversationPinned(std::vector<net::ConversationItem>& items,
     return true;
 }
 
-bool SetConversationMuted(std::vector<net::ConversationItem>& items,
-                          int ctype, int64_t cid, bool muted)
+bool SetConversationUnreadMark(std::vector<net::ConversationItem>& items,
+                               int ctype, int64_t cid, bool mark)
 {
     net::ConversationItem* pConv = FindConversation(items, ctype, cid);
-    if (pConv == NULL)
+    if (pConv == NULL || pConv->m_unreadMark == mark)
     {
         return false;
     }
-
-    const int target = muted ? 1 : 0;
-    if (pConv->m_mute == target)
-    {
-        return false;
-    }
-    pConv->m_mute = target;
-
-    // 免打扰不参与排序（见 ConversationOrderLess），故这里不重排。
+    pConv->m_unreadMark = mark;
     return true;
 }
 
-bool IsConversationMuted(const std::vector<net::ConversationItem>& items,
-                         int ctype, int64_t cid)
+bool IsConversationUnreadMarked(const std::vector<net::ConversationItem>& items, int ctype, int64_t cid)
 {
     const net::ConversationItem* pConv = FindConversation(items, ctype, cid);
-    if (pConv == NULL)
-    {
-        return false;
-    }
-    return pConv->m_mute != 0;
+    return (pConv != NULL) ? pConv->m_unreadMark : false;
 }
 
 bool ShouldTreatAsReadOnArrival(bool windowExists, bool isWindow, bool isVisible,
-                                bool isIconic, bool isForeground)
+                                bool isIconic, bool isForeground, bool subtitleActive)
 {
+    // 字幕模式：消息会显示在桌面字幕上，用户确认「字幕上显示过就算已读」，不再要求
+    // 窗口可见、未最小化、在前台（docs/聊天字幕模式方案.md 第 1 节第 2 条）。字幕由主面板
+    // 持有、不随聊天窗关闭，所以聊天窗不存在时同样算已读（同一文档第 1 节第 10 条）。
+    if (subtitleActive)
+        return true;
     // 五项全中才算"用户正看着这个窗口"。任何一项不满足都按未读处理 —— 宁可多亮
     // 一个红点让用户自己去点掉，也不要把没看到的消息悄悄标成已读。
     if (!windowExists)
@@ -173,6 +165,25 @@ int NextUnreadCount(int oldUnread, bool countAsUnread, bool treatAsRead)
         return base + 1;
 
     return base;
+}
+
+RecalledDigestKind ClassifyRecalledDigest(const net::ConversationItem& item, uint32_t selfId)
+{
+    if (!item.m_lastRecalled)
+        return kRecalledDigestNone;
+
+    // 本端 userid 取不到（0）时不能拿它与撤回者比较，否则撤回者缺失（同为 0）会被误判为本人。
+    if (selfId != 0 && RecalledDigestOperator(item) == (int64_t)selfId)
+        return kRecalledDigestBySelf;
+
+    return kRecalledDigestByOther;
+}
+
+int64_t RecalledDigestOperator(const net::ConversationItem& item)
+{
+    if (item.m_lastRecalledBy > 0)
+        return item.m_lastRecalledBy;
+    return item.m_lastFrom;
 }
 
 } // namespace balloonmain

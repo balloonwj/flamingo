@@ -458,7 +458,8 @@ TEST_CASE("RS4 聊天气泡第一次绘制时整条排版的次数不随链接�
     const unsigned long few = ChatBubbleLayoutsOnFirstPaint(kFewLinkLines);
     const unsigned long many = ChatBubbleLayoutsOnFirstPaint(kLongLines);
     INFO("layouts with " << kFewLinkLines << " links: " << few << ", with " << kLongLines << " links: " << many);
-    CHECK(few > 0);
+    //2026-10-04 起气泡绘制时直接复用测量阶段的排版结果（Tests/ChatLayoutReuseTests.cpp 的 B1b），
+    //第一次绘制的整条排版次数通常为 0，所以不再要求它大于 0；不随链接数增长这一点照旧检查
     CHECK(many == few);
     CHECK(many <= kMaxLayoutsPerPaint);
 }

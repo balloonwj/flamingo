@@ -12,7 +12,10 @@
 #include "MessageProtocolClient.h"   // net::TextFont（发送文本可带字体设置）
 #include "TransferOwnerRegistry.h"   // net::TransferOwner / net::TransferOwnerRegistry（1801/1802 应答路由）
 #include "GroupProtocolClient.h"     // net::UpdateGroupInfoParams（SendUpdateGroupInfo 按值传引用，需完整类型）
+#include "ConversationsProtocolClient.h" // net::NotifyModeEntry（SendSetNotifyModes 按值传引用，需完整类型）
+#include "ProfileProtocolClient.h"   // net::ProfileUpdateFields（SendUpdateProfile 的参数）
 #include "FrameCrypto.h"             // net::IDENTITY_PUBLICKEY_BYTES（服务端公钥成员需完整尺寸）
+#include "BotProtocolClient.h"       // net::AutoReplyWire（SendSetAutoReply 的参数）
 
 
 //v2 协议帧头前置声明。本头文件被众多 .cpp 引用，故不直接包含 Protocol.h ——
@@ -24,6 +27,7 @@ struct frame_header;
 //注册请求参数前置声明。Register 只按 const 引用收它，无需完整类型；
 //完整定义在 net/RegisterProtocolClient.h，由 IUSocket.cpp 引入。
 namespace net { struct RegisterRequestParams; }
+namespace net { struct MemoItem; }   //备忘对象，定义在 MemoProtocolClient.h；此处仅按 const 引用传递
 
 //网络通信层只负责数据传输和接收
 class CIUSocket
@@ -88,8 +92,8 @@ public:
     /**
      *  取 flamingo.ini 里配置的服务端身份公钥，供各条链路发起握手时验签用。
      *
-     *  四条链路（主连接、文件传输、图片传输、中转通道）共用同一把公钥——服务端
-     *  三个服务也共用同一份身份密钥文件，见 docs/协议加密方案.md 第 6 节。文件传输
+     *  连到三个服务的各条链路（主连接、文件与图片传输、各类中转通道，见 docs/协议加密方案.md
+     *  9.1 节）共用同一把公钥——服务端三个服务也共用同一份身份密钥文件，见同一文档第 6 节。文件传输
      *  与中转通道的实现不在本类里，故以只读访问器的形式提供出去。
      *
      *  @return 指向 IDENTITY_PUBLICKEY_BYTES 字节公钥的指针；<u>未配置 serverpubkey
@@ -157,11 +161,29 @@ public:
      *  @param peerUserId  对端用户 userid（>0）
      *  @param clientMsgId 客户端消息ID（UUID，非空），用于回执回填与去重
      *  @param text        文本正文（UTF-8 字节）
+     *  @param textFormat  文本格式，取值见 net::text_format；Markdown 或代码片段时 content 带 format
+     *  @param codeLang    代码片段的语言标识（如 "cpp"）；代码片段且不为空时 content 带 lang
+     *  @param codeNotes   代码片段的批注；代码片段且不为空时 content 带 notes（docs/代码片段方案.md 第 10.5 节）
      */
     void    SendChatTextMessage(int64_t peerUserId, const std::string& clientMsgId,
                                 const std::string& text,
                                 const net::TextFont& font = net::TextFont(),
-                                const net::ReplyQuote& quote = net::ReplyQuote());
+                                const net::ReplyQuote& quote = net::ReplyQuote(),
+                                int textFormat = net::text_format_plain,
+                                const std::string& codeLang = std::string(),
+                                const std::vector<net::CodeNoteData>& codeNotes = std::vector<net::CodeNoteData>());
+
+    /**
+     *  发送一条单聊自动回复（v2，cmd_send_message=1503，msgtype=文本）。与普通文本相同，区别是
+     *  content 带 autoreply 标记、正文带「[自动回复] 」前缀（见 MessageProtocolClient::
+     *  buildSendAutoReplyRequest）。线程安全；回执同样经 FMG_MSG_V2_SEND_CHATMSG_ACK 回投，
+     *  由主面板按 clientMsgId 认出是自动回复。
+     *  @param peerUserId  对端用户 userid（>0）
+     *  @param clientMsgId 客户端消息ID（非空），主面板据此对回回执
+     *  @param replyText   回复文字（UTF-8，不含前缀）
+     */
+    void    SendAutoReplyMessage(int64_t peerUserId, const std::string& clientMsgId,
+                                 const std::string& replyText);
 
     /**
      *  发送一条单聊"窗口抖动"消息（v2，cmd_send_message=1503，msgtype=13）。线程
@@ -179,11 +201,17 @@ public:
      *  @param groupId     目标群 id（>0）
      *  @param clientMsgId 客户端消息ID（UUID，非空），用于回执回填与去重
      *  @param text        文本正文（UTF-8 字节）
+     *  @param textFormat  文本格式，取值见 net::text_format；Markdown 或代码片段时 content 带 format
+     *  @param codeLang    代码片段的语言标识（如 "cpp"）；代码片段且不为空时 content 带 lang
+     *  @param codeNotes   代码片段的批注；代码片段且不为空时 content 带 notes（docs/代码片段方案.md 第 10.5 节）
      */
     void    SendGroupTextMessage(int64_t groupId, const std::string& clientMsgId,
                                  const std::string& text,
                                  const net::TextFont& font = net::TextFont(),
-                                 const net::ReplyQuote& quote = net::ReplyQuote());
+                                 const net::ReplyQuote& quote = net::ReplyQuote(),
+                                 int textFormat = net::text_format_plain,
+                                 const std::string& codeLang = std::string(),
+                                 const std::vector<net::CodeNoteData>& codeNotes = std::vector<net::CodeNoteData>());
 
     /**
      *  发送一条<u>带 @提醒</u>的群聊文本消息（v2，cmd_send_message=1503）。线程安全。
@@ -197,6 +225,8 @@ public:
      *  @param atAll       是否 @所有人
      *  @param font        文本字体设置
      *  @param quote       引用回复快照；m_valid 为真时写入 content.quote
+     *  @param textFormat  文本格式，取值见 net::text_format；Markdown 或代码片段时 content 带 format
+     *  @param codeLang    代码片段的语言标识（如 "cpp"）；代码片段且不为空时 content 带 lang
      */
     void    SendGroupTextMessageWithMentions(
                 int64_t groupId, const std::string& clientMsgId,
@@ -204,34 +234,9 @@ public:
                 const std::vector<balloonchatwnd::MentionSpan>& ats,
                 bool atAll,
                 const net::TextFont& font = net::TextFont(),
-                const net::ReplyQuote& quote = net::ReplyQuote());
-
-    /**
-     *  发起一次远程桌面邀请（v2，cmd_rd_invite=1710）。线程安全。应答（成功带
-     *  sessionid，失败如对方离线 / 忙）经 cmd_rd_invite 异步回投 FMG_MSG_V2_RD_INVITE_ACK。
-     *  @param peerUserId 被控端用户 userid（>0）
-     */
-    void    SendRemoteDesktopInvite(int64_t peerUserId);
-
-    /**
-     *  被控端应答远程桌面邀请（v2，cmd_rd_response=1712）。线程安全。接受后双方收
-     *  cmd_rd_relay_info，拒绝时控制端收 cmd_rd_state_notify。
-     *  @param sessionId 邀请推送里带来的会话 id
-     *  @param accept    true 接受 / false 拒绝
-     */
-    void    SendRemoteDesktopResponse(const std::string& sessionId, bool accept);
-
-    /**
-     *  控制端在被控端应答前取消远程桌面邀请（v2，cmd_rd_cancel=1713）。线程安全。
-     *  @param sessionId 会话 id
-     */
-    void    SendRemoteDesktopCancel(const std::string& sessionId);
-
-    /**
-     *  结束远程桌面会话（v2，cmd_rd_close=1714），控制端 / 被控端均可调。线程安全。
-     *  @param sessionId 会话 id
-     */
-    void    SendRemoteDesktopClose(const std::string& sessionId);
+                const net::ReplyQuote& quote = net::ReplyQuote(),
+                int textFormat = net::text_format_plain,
+                const std::string& codeLang = std::string());
 
     /**
      *  发起一次文件夹传输邀请（v2，cmd_folder_invite=1810）。线程安全。组帧发出后立即
@@ -254,6 +259,16 @@ public:
                               int64_t totalDirs, int64_t totalFiles, int64_t totalSize);
 
     /**
+     *  发起单聊单文件 P2P 直传邀请（v2，cmd_folder_invite=1810 带 kind=1，2026-10-04 起）。线程安全。
+     *  应答与文件夹传输邀请走同一条路（FMG_MSG_V2_FOLDER_INVITE_ACK，wParam 为本次的帧 seq）。
+     *  @param peerUserId 接收方 userid，须为正
+     *  @param fileName   文件名（只有名字、不含路径，UTF-8），须非空
+     *  @param fileSize   文件字节数，须非负
+     *  @return 本次邀请所用的帧 seq；入参不合契约时返回 0 并只记一条错误日志、不发包
+     */
+    uint32_t SendFolderFileInvite(int64_t peerUserId, const std::string& fileName, int64_t fileSize);
+
+    /**
      *  接收方应答文件夹传输邀请（v2，cmd_folder_response=1812）。线程安全。同意后双方
      *  收 cmd_folder_relay_info，拒绝时发送方收 cmd_folder_state_notify。
      *  @param sessionId 邀请推送里带来的会话 id
@@ -270,6 +285,13 @@ public:
     void    SendFolderCancel(const std::string& sessionId);
 
     /**
+     *  单聊单文件直传的发送方在接收方应答前撤回邀请，并可声明改为上传服务器发离线文件（2026-10-04 起）。线程安全。
+     *  @param sessionId 会话 id
+     *  @param toOffline true 时服务端向接收方推「已改为离线发送」(9)、不留文件消息；false 时与 SendFolderCancel 相同
+     */
+    void    SendFolderCancel(const std::string& sessionId, bool toOffline);
+
+    /**
      *  结束一次文件夹传输（v2，cmd_folder_close=1814），收发两端均可调。线程安全。
      *  成功结束时服务端立即销毁会话；失败结束时会话保留 folderretrywindow（默认 10 分钟）
      *  供重试续传，失败原因由服务端原样透传给对端，两端因而看到同一条原因。
@@ -283,6 +305,14 @@ public:
                             int errCode, const std::string& errMsg);
 
     /**
+     *  结束一次传输并报上链路路径与文件 MD5（2026-10-04 起）。线程安全。其余语义同上一个重载。
+     *  @param linkPath 数据实际走的 P2P 链路路径（0 没走 P2P、1 局域网直连、2 打洞直连、3 中转），写进记录供「P2P」徽章
+     *  @param md5      单文件直传成功时文件的 MD5（32 位十六进制）；其余传空串
+     */
+    void    SendFolderClose(const std::string& sessionId, bool success, int errCode, const std::string& errMsg,
+                            int linkPath, const std::string& md5);
+
+    /**
      *  保留期内重试续传（v2，cmd_folder_retry=1817），由发送方发起。线程安全。
      *  服务端校验会话未过期、双方仍在线后重签令牌并向双方各再推一帧
      *  cmd_folder_relay_info，全程不再打扰接收方。
@@ -291,45 +321,85 @@ public:
     void    SendFolderRetry(const std::string& sessionId);
 
     /**
-     *  发起一次音视频通话邀请（v2，cmd_call_invite=1701）。线程安全。应答（成功带
-     *  sessionid，失败如对方离线 / 忙）经 cmd_call_invite 异步回投 FMG_MSG_V2_CALL_INVITE_ACK。
-     *  @param peerUserId 被叫用户 userid（>0）
-     *  @param media      媒体类型（net::call_media；第一期固定纯语音 call_media_audio）
+     *  替 FlamingoMedia.dll 经主连接发送一条音视频类信令（宿主接口 IMediaHost::SendSignal 的实现）。
+     *  一对一通话与远程桌面的信令（2026-10-02 起由 DLL 编好包体）都经本方法发出；收到的同类信令由 HandleV2Frame
+     *  原样转交 DLL（FMG_MSG_MEDIA_SIGNAL）。
+     *  线程安全。包体由 DLL 编好，本方法不解析，只按白名单（net::IsMediaSignalCmd）校验命令号。
+     *  @param cmd  命令号，须在白名单内
+     *  @param body 包体（UTF-8 JSON），不可为空
+     *  @return 已放入发送队列返回 true；命令号不在白名单或包体为空返回 false（并记警告日志）
      */
-    void    SendCallInvite(int64_t peerUserId, int media);
+    bool    SendMediaSignal(uint16_t cmd, const std::string& body);
 
     /**
-     *  被叫应答音视频通话邀请（v2，cmd_call_response=1703）。线程安全。接听后双方收
-     *  cmd_call_signaling 与接通态，拒绝时主叫收 cmd_call_state_notify。
-     *  @param sessionId 邀请推送里带来的会话 id
-     *  @param accept    true 接听 / false 拒绝
+     *  替 FlamingoFileShare.dll 经主连接发送一条文件共享信令（宿主接口 IFileShareHost::SendShareCommand 的实现）。
+     *  收到的 2200 段帧由 HandleV2Frame 在网络接收线程上原样交给 DLL（CFileShareHost::OnServerFrame）。
+     *  线程安全。包体由 DLL 编好，本方法不解析，只按 balloonfileshare::ShareChannelPolicy 校验：命令号须在
+     *  2200~2299 段内、包体非空、主连接已连上。
+     *  @param cmd  命令号
+     *  @param body 包体（UTF-8 JSON）
+     *  @return 已放入发送队列时返回所用的帧 seq（大于 0），DLL 据此对上应答；不放行时返回 0（并记警告日志）
      */
-    void    SendCallResponse(const std::string& sessionId, bool accept);
+    uint32_t SendShareCommand(uint16_t cmd, const std::string& body);
 
     /**
-     *  主叫在被叫应答前取消呼叫（v2，cmd_call_cancel=1704）。线程安全。
-     *  @param sessionId 会话 id
+     *  替 FlamingoP2P.dll 经主连接发送一条 P2P 信令（宿主接口 IP2PHost::SendP2PCommand 经 CP2PSocketNetwork 转到这里）。
+     *  收到的 2300 段帧由 HandleV2Frame 在网络接收线程上原样交给 DLL（CP2PHost::OnServerFrame）。
+     *  线程安全。包体由 DLL 编好，本方法不解析，只按 balloonp2p::P2PChannelPolicy 校验：命令号须在
+     *  2300~2399 段内、包体非空、主连接已连上。
+     *  @param cmd  命令号
+     *  @param body 包体（UTF-8 JSON）
+     *  @return 已放入发送队列时返回所用的帧 seq（大于 0），DLL 据此对上应答；不放行时返回 0（并记警告日志）
      */
-    void    SendCallCancel(const std::string& sessionId);
+    uint32_t SendP2PCommand(uint16_t cmd, const std::string& body);
 
     /**
-     *  挂断音视频通话（v2，cmd_call_hangup=1705），主叫 / 被叫均可调。线程安全。
-     *  @param sessionId 会话 id
+     *  替 FlamingoSecretChat.dll 经主连接发送一条密聊信令（宿主接口 ISecretChatHost::SendSecretCommand 的实现，
+     *  docs/密聊方案.md 6.2）。收到的 2600 段帧由 HandleV2Frame 在网络接收线程上原样交给 DLL（CSecretChatHost::OnServerFrame）。
+     *  线程安全。包体由 DLL 编好（里面是密文），本方法不解析、日志里也不记包体，只按 balloonsecret::CanSendSecretCommand
+     *  校验：命令号须在 2600~2699 段内、包体非空、主连接已连上。
+     *  @param cmd  命令号
+     *  @param body 包体（UTF-8 JSON）
+     *  @return 已放入发送队列时返回所用的帧 seq（大于 0）；不放行时返回 0（并记警告日志）
      */
-    void    SendCallHangup(const std::string& sessionId);
+    uint32_t SendSecretCommand(uint16_t cmd, const std::string& body);
 
     /**
-     *  通话中切换媒体类型（v2，cmd_call_switch_media=1708）。线程安全。
-     *
-     *  仅通话已接通时可用。应答经 FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT 回投 UI（失败时
-     *  据 code 提示原因）；服务端切换成功后还会向<u>双方（含本端）</u>推送
-     *  cmd_call_media_changed_notify，客户端统一在收到<u>推送</u>时才改界面与引擎 ——
-     *  这样本端与对端看到的媒体类型必然一致。
-     *
-     *  @param sessionId 本次会话 id；为空则本方法直接跳过不发包
-     *  @param media     目标媒体类型，取值见 net::call_media；非法值同样跳过不发包
+     *  替 FlamingoThreadGroup.dll 经主连接发送一条帖子群信令（宿主接口 IThreadGroupHost::SendThreadCommand 的实现，
+     *  docs/帖子群方案.md 7.2）。收到的 2700 段帧由 HandleV2Frame 在网络接收线程上原样交给 DLL（CThreadGroupHost::OnServerFrame）。
+     *  线程安全。包体由 DLL 编好，本方法不解析，只按 balloonthread::CanSendThreadCommand 校验：命令号须在 2700~2799 段内、
+     *  包体非空、主连接已连上。
+     *  @param cmd  命令号
+     *  @param body 包体（UTF-8 JSON）
+     *  @return 已放入发送队列时返回所用的帧 seq（大于 0），DLL 据此对上应答；不放行时返回 0（并记警告日志）
      */
-    void    SwitchCallMedia(const std::string& sessionId, int media);
+    uint32_t SendThreadCommand(uint16_t cmd, const std::string& body);
+
+    /**
+     *  替 FlamingoBot.dll 经主连接发送一条机器人命令（docs/机器人方案.md 8.2）。只放行 2802～2809
+     *  （net::BotProtocolClient::isDllFrame），包体非空、主连接已连上。线程安全，日志不记包体。
+     *  收到的 2802～2809 帧由 HandleV2Frame 在网络接收线程上交给 SetBotFrameSink 登记的回调。
+     *  @param cmd  命令号
+     *  @param body 包体（UTF-8 JSON）
+     *  @return 已放入发送队列时返回所用的帧 seq（大于 0）；不放行时返回 0（并记警告日志）
+     */
+    uint32_t SendBotCommand(uint16_t cmd, const std::string& body);
+
+    //机器人帧（2802～2809）的接收回调：在网络接收线程上调用；ctx 为登记时传入的指针
+    typedef void (*BotFrameSink)(void* ctx, uint16_t cmd, uint32_t seq, const std::string& body);
+
+    /**
+     *  登记或撤销机器人帧的接收回调。FlamingoBot.dll 的宿主在模块就绪后登记、卸载前撤销。线程安全。
+     *  没有登记回调时收到的 2802～2809 帧记一条警告后丢弃。
+     *  @param sink 回调；传 NULL 表示撤销
+     *  @param ctx  回调的上下文指针，不拥有
+     */
+    static void SetBotFrameSink(BotFrameSink sink, void* ctx);
+
+    /**
+     *  把一帧 2802～2809 交给登记的回调（网络接收线程上由 HandleV2Frame 调用）。
+     */
+    void DispatchBotFrame(uint16_t cmd, uint32_t seq, const std::string& body);
 
     /**
      *  申请上传一个文件（v2，cmd_request_upload=1801）。线程安全。组帧发出后立即
@@ -430,6 +500,23 @@ public:
                                 int64_t size, const std::string& md5);
 
     /**
+     *  发送一条语音消息（v2，cmd_send_message=1503，msgtype=4，语音消息第 3c 步）。线程安全。语音文件须已上传到
+     *  fileserver（先经 cmd_request_upload + cmd_file_upload 拿到 fileid）。回执沿用 cmd_send_message 应答路径
+     *  （FMG_MSG_V2_SEND_CHATMSG_ACK）。由 FileTransfer 工作线程在上传完成后调用。
+     *  @param ctype           会话类型（单聊=1、群聊=2）
+     *  @param cid             会话ID（单聊=对端 userid，群聊=群id）
+     *  @param clientMsgId     客户端消息ID（非空）
+     *  @param fileid          语音文件ID（字符串编码，来自 cmd_request_upload 应答）
+     *  @param md5             文件内容MD5（小写十六进制）
+     *  @param durationSeconds 时长（整秒，1~120）
+     *  @param size            文件字节数（>0）
+     *  @param waveBase64      40 个波形值的 Base64；空串表示不带 wave 字段
+     */
+    void    SendChatVoiceMessage(int ctype, int64_t cid, const std::string& clientMsgId,
+                                 const std::string& fileid, const std::string& md5,
+                                 int durationSeconds, int64_t size, const std::string& waveBase64);
+
+    /**
      *  取 UI 代理窗口句柄，供 ImageTransfer 把发图进度 / 结果异步回投到 UI。
      *  @return UI 代理窗口句柄；接收线程未就绪时返回 NULL。代理窗口销毁后本类保存的句柄
      *          不会被清零，调用方投递前必须用 ::IsWindow 判断，不能只判 NULL。
@@ -459,8 +546,29 @@ public:
      *  @param filetype 服务端类型筛选（见 group_file_type）；客户端全量缓存传 0=全部
      *  @param offset   分页偏移（>=0）
      *  @param count    本页期望条数（服务端上限 50）
+     *  @return 这次请求的序号；服务端在应答里原样带回，解析结果的 m_seq 就是它。主面板据此分辨一页应答是
+     *          聊天记录管理器的群文件缓存同步发出的，还是群聊窗发出的（docs/聊天记录管理器方案.md §11.5）
      */
-    void    RequestGroupFiles(int64_t groupId, int filetype, int offset, int count);
+    uint32_t RequestGroupFiles(int64_t groupId, int filetype, int offset, int count);
+
+    /**
+     *  按文件名在本人所在的全部群里搜群文件（v2，cmd_search_group_files=1807）。线程安全。
+     *  主面板搜索下拉的「文件」标签用；应答经 cmd_search_group_files 异步回投到 UI
+     *  （FMG_MSG_V2_SEARCH_GROUP_FILES），应答里回显关键字，下拉据此丢弃已经过期的应答。
+     *  @param keywordUtf8 文件名关键字（UTF-8），调用方须保证去掉首尾空白后非空
+     *  @param limit       最多返回几条（服务端上限 50）
+     */
+    void    SearchGroupFiles(const std::string& keywordUtf8, int limit);
+
+    /**
+     *  在服务器上本人能看到的全部聊天记录里按关键字搜索，并附带本人所在群的群公告命中（v2，
+     *  cmd_global_search=1904）。线程安全。主面板搜索下拉「消息」标签的「搜索服务器上的聊天记录」用；
+     *  应答经 FMG_MSG_V2_GLOBAL_SEARCH 异步回投到 UI，应答里回显关键字，下拉据此丢弃已经过期的应答。
+     *  @param keywordUtf8       关键字（UTF-8），调用方须保证去掉首尾空白后非空
+     *  @param limit             最多返回几个会话（服务端上限 50）
+     *  @param announcementLimit 最多返回几条群公告（服务端上限 30）；0 表示不搜群公告
+     */
+    void    GlobalSearch(const std::string& keywordUtf8, int limit, int announcementLimit);
 
     /**
      *  把一个已上传到 fileserver（scene=群文件）的文件登记进群文件库（v2，
@@ -503,13 +611,24 @@ public:
     void    RequestSyncMessages(int ctype, int64_t cid, int64_t beforeMsgId, int limit);
 
     /**
+     *  请求按改写序号同步离线期间被改写过或被撤回的消息（v2，cmd_sync_rewritten_messages=1526）。
+     *  线程安全。应答经网络线程解析后异步回投到 UI（FMG_MSG_V2_SYNC_REWRITTEN）。登录后由主面板按本地水位
+     *  逐页调用，应答带 more 时以应答的 rev 接着拉下一页。
+     *  @param since 本地已同步到的改写序号；首次为 0
+     *  @param limit 本页最多几条（服务端上限 200）
+     */
+    void    RequestSyncRewritten(int64_t since, int limit);
+
+    /**
      *  发送创建群聊请求（v2，cmd_create_group=1301）。线程安全，可在 UI 线程调用：
      *  内部组帧后追加进发送缓冲、唤醒发送线程。应答经 cmd_create_group 异步回投到
      *  UI（FMG_MSG_V2_CREATE_GROUP_RESULT）。
      *  @param groupName  群名称（UTF-8）；空串表示由服务端按成员昵称生成自动群名
      *  @param memberIds  初始成员 userid 列表（不含创建者；可为空）
+     *  @param groupType  群类型：0 普通群（缺省），1 帖子群（group_type_thread，请求里带 grouptype）
+     *  @return 本帧的 seq（应答的 CreateGroupResponse::m_seq 与它相同）
      */
-    void    SendCreateGroup(const std::string& groupName, const std::vector<int64_t>& memberIds);
+    uint32_t SendCreateGroup(const std::string& groupName, const std::vector<int64_t>& memberIds, int groupType = 0);
 
     /**
      *  发送"会话设置"请求（v2，cmd_set_conversation=1513）：改置顶 / 免打扰。线程安全，
@@ -520,12 +639,13 @@ public:
      *  @param cid       会话ID（群聊=群id）
      *  @param hasPinned true=本次要改置顶，按 pinned 写入；false 则不带 pinned 字段
      *  @param pinned    置顶目标值（hasPinned 为 true 时有效）
-     *  @param hasMute   true=本次要改免打扰，按 mute 写入；false 则不带 mute 字段
-     *  @param mute      免打扰目标值（hasMute 为 true 时有效）
+     *  @param hasNotifyMode true=本次要改消息提醒模式，按 notifyMode 写入；false 则不带该字段
+     *  @param notifyMode    提醒模式目标值，取值见 Protocol.h 的 enum conversation_notify_mode
+     *                       （hasNotifyMode 为 true 时有效）
      */
     void    SendSetConversation(int ctype, int64_t cid,
                                 bool hasPinned, bool pinned,
-                                bool hasMute, bool mute);
+                                bool hasNotifyMode, int notifyMode);
 
     /**
      *  发送"删除会话"请求（v2，复用 cmd_set_conversation=1513 的 deleted 字段）。线程
@@ -538,6 +658,36 @@ public:
     void    SendDeleteConversation(int ctype, int64_t cid);
 
     /**
+     *  发送「标为未读 / 清除标记」请求（v2，复用 cmd_set_conversation=1513 的 unreadmark 字段，
+     *  docs/会话标为未读方案.md）。线程安全，可在 UI 线程调用。只带 unreadmark 一个字段，置顶、
+     *  提醒模式与删除标记不受影响。应答走 FMG_MSG_V2_SET_CONVERSATION_RESULT，改完的完整状态另经
+     *  1514 推给本人全部在线设备。
+     *  @param ctype 会话类型（1单聊 2群聊）
+     *  @param cid   会话ID（单聊=对端userid，群聊=群id；>0）
+     *  @param mark  true 标为未读，false 清除标记
+     */
+    void    SendSetUnreadMark(int ctype, int64_t cid, bool mark);
+
+    /**
+     *  发送「设置本人在某个群里关注的成员」请求（v2，cmd_set_group_follow=1330，整份覆盖，
+     *  docs/消息提醒模式与消息盒子方案.md §12）。线程安全，可在 UI 线程调用。应答只带结果码，
+     *  失败时投 FMG_MSG_V2_SET_GROUP_FOLLOW_RESULT；成功后的名单以 1331 推送为准
+     *  （FMG_MSG_V2_GROUP_FOLLOW_CHANGED）。
+     *  @param groupid 群ID（>0）
+     *  @param targets 完整名单；空表示清空。条数不得超过 net::kGroupFollowMax
+     */
+    void    SendSetGroupFollow(int64_t groupid, const std::vector<uint32_t>& targets);
+
+    /**
+     *  批量设置多个会话的消息提醒模式（cmd_set_notify_modes=1524，批量管理窗口用）。
+     *  条目超过 net::kNotifyModeBatchMax 时按顺序拆成几批、每批发一帧；每一批各自有应答
+     *  （FMG_MSG_V2_SET_NOTIFY_MODES_RESULT），改成功的条目另经 1525 推送到本人全部在线设备
+     *  （FMG_MSG_V2_NOTIFY_MODES_CHANGED）。items 为空时什么都不发。
+     *  @param items 要设置的会话与目标模式（取值由服务端逐条校验）
+     */
+    void    SendSetNotifyModes(const std::vector<net::NotifyModeEntry>& items);
+
+    /**
      *  发送"加入 / 取消收藏"请求（v2，cmd_set_favorite=1215）。线程安全，可在 UI
      *  线程调用。收藏对象既可以是联系人也可以是群，用 (ctype, cid) 区分，口径与会话
      *  一致。应答经 cmd_set_favorite 异步回投到 UI（FMG_MSG_V2_SET_FAVORITE_RESULT，
@@ -548,18 +698,6 @@ public:
      *  @param favorite  true=加入收藏，false=移出收藏
      */
     void    SendSetFavorite(int ctype, int64_t cid, bool favorite);
-
-    /**
-     *  发送"特别关注 / 取消特别关注"请求（v2，cmd_set_starred=1216）。线程安全，可在
-     *  UI 线程调用。与收藏不同，特别关注<u>只能是人</u>（群没有上下线，关注它没有意义），
-     *  故没有 ctype 参数。应答经 cmd_set_starred 异步回投到 UI
-     *  （FMG_MSG_V2_SET_STARRED_RESULT，lParam 为堆上的 net::SetStarredResult*），
-     *  主面板据其中原样回带的 target/starred 判断是哪一条请求的结果，失败时回滚
-     *  对应的乐观更新。
-     *  @param target   被关注的联系人 userid（>0，须与本人同企业、且不能是自己）
-     *  @param starred  true=标记特别关注，false=取消
-     */
-    void    SendSetStarred(int64_t target, bool starred);
 
     /**
      *  发送"设置好友备注名"请求（v2，cmd_set_friend_remark=1209）。线程安全，可在
@@ -600,7 +738,7 @@ public:
      *  可在 UI 线程调用。应答经同一 cmd 异步回投到 UI（FMG_MSG_V2_ANNOUNCEMENTS，
      *  lParam 为堆上的 net::AnnouncementsResult*）。
      *
-     *  这是主面板「消息盒子」的数据来源：登录后全量拉一遍（sinceId 传 0）落本地库，
+     *  这是主面板「公告中心」的数据来源：登录后全量拉一遍（sinceId 传 0）落本地库，
      *  之后靠 cmd_announcement_notify 推送收增量；应答里 hasmore 为 true 时，应以本批
      *  最后一条的公告ID作新的 sinceId 再拉一次。
      *
@@ -614,12 +752,36 @@ public:
      *  可在 UI 线程调用。应答经同一 cmd 异步回投到 UI（FMG_MSG_V2_ANN_MARK_READ_RESULT，
      *  lParam 为堆上的 net::AnnounceMarkReadResult*，其中原样回带 announcementid）。
      *
-     *  用户在消息盒子里点开某条公告时调用。服务端据此写 t_announcement_read，管理控制台
+     *  用户在公告中心里点开某条公告时调用。服务端据此写 t_announcement_read，管理控制台
      *  的「已读进度」统计的就是这张表。重复上报是安全的，服务端靠唯一键吸收。
      *
      *  @param announcementId  被读的公告ID（>0）
      */
     void    SendMarkAnnouncementRead(int64_t announcementId);
+
+    /**
+     *  拉取本人可见的全部备忘（v2，cmd_memo_list=2401）。线程安全，可在 UI 线程调用。应答经同一 cmd
+     *  异步回投到 UI（FMG_MSG_V2_MEMO_LIST，lParam 为堆上的 net::MemoListResult*）。
+     *  登录成功、重连成功后各发一次，之后靠 cmd_memo_notify 推送增量更新。
+     *  @return 已排进发送队列返回 true；未连接时返回 false
+     */
+    bool    SendMemoList();
+
+    /**
+     *  新建或修改一条备忘（v2，cmd_memo_save=2402）。应答经 FMG_MSG_V2_MEMO_SAVE_RESULT 回投，
+     *  lParam 为堆上的 net::MemoSaveResult*。
+     *  @param memo 待保存的备忘；m_memoid 为 0 表示新建，文本字段为 UTF-8
+     *  @return 已排进发送队列返回 true；未连接时返回 false
+     */
+    bool    SendMemoSave(const net::MemoItem& memo);
+
+    /**
+     *  删除一条备忘（v2，cmd_memo_delete=2403）。应答经 FMG_MSG_V2_MEMO_DELETE_RESULT 回投，
+     *  lParam 为堆上的 net::MemoDeleteResult*。
+     *  @param memoid 备忘 ID（>0）
+     *  @return 已排进发送队列返回 true；未连接时返回 false
+     */
+    bool    SendMemoDelete(int64_t memoid);
 
     /**
      *  发送"修改本人群名片"请求（v2，cmd_set_member_card=1315）。线程安全，可在 UI
@@ -668,8 +830,17 @@ public:
      *  在群关闭"成员邀请免审批"时，邀请会被服务端转成待审批申请（仍回 ok）。
      *  @param groupId 目标群ID（>0）
      *  @param userIds 被邀请人 userid 列表，不可为空
+     *  @param historyLimit 新成员入群后可看的入群前消息条数（docs/邀请入群方案.md §4.2）：-1 全部（请求里不带），
+     *                      0 不同步，1 ~ 10000 最近 N 条
      */
-    void    SendInviteToGroup(int64_t groupId, const std::vector<int64_t>& userIds);
+    void    SendInviteToGroup(int64_t groupId, const std::vector<int64_t>& userIds, int historyLimit = -1);
+
+    /**
+     *  被邀请人点了入群邀请卡片上的「加入群聊」（cmd_accept_group_invite=1327，docs/邀请入群方案.md §4.4）。
+     *  应答经 FMG_MSG_V2_ACCEPT_GROUP_INVITE 投给主面板；卡片状态的变化另由 1328 推送通知双方。
+     *  @param inviteId 卡片上的邀请 id（>0）
+     */
+    void    SendAcceptGroupInvite(int64_t inviteId);
 
     /**
      *  移出群成员（cmd_kick_group_member=1310）。仅群主 / 管理员有权；管理员不能
@@ -744,27 +915,8 @@ public:
      */
     void    SendDismissGroup(int64_t groupId);
 
-    /**
-     *  拉取本群敏感词库（cmd_get_sensitive_words=1321）。仅群主 / 管理员有权。
-     *  应答经 FMG_MSG_V2_SENSITIVE_WORDS 回投。
-     *  @param groupId 目标群ID（>0）
-     */
-    void    SendGetSensitiveWords(int64_t groupId);
-
-    /**
-     *  新增一条敏感词（cmd_operate_sensitive_word=1322）。仅群主 / 管理员有权。
-     *  重复添加同一个词服务端会静默忽略并仍回 ok。
-     *  @param groupId 目标群ID（>0）
-     *  @param wordUtf8 敏感词（UTF-8），不可为空
-     */
-    void    SendAddSensitiveWord(int64_t groupId, const std::string& wordUtf8);
-
-    /**
-     *  删除一条敏感词（cmd_operate_sensitive_word=1322）。仅群主 / 管理员有权。
-     *  @param groupId 目标群ID（>0）
-     *  @param wordId  词条ID，来自 1321 应答
-     */
-    void    SendDeleteSensitiveWord(int64_t groupId, int64_t wordId);
+    //原先此处还有群敏感词库的拉取 / 新增 / 删除三个接口（cmd 1321 / 1322），随群级敏感词
+    //于 2026-10-02 删除，敏感词改为企业级词库、由管理端维护（docs/敏感词方案.md）。
 
     /**
      *  拉取本群公告列表（cmd_get_group_announcements=1323）。全体群成员都有权。
@@ -803,6 +955,108 @@ public:
      */
     void    SendDeleteGroupAnnouncement(int64_t groupId, int64_t announceId);
 
+    //---- 入群必读（docs/群公告接入方案.md §14），2026-10-07 起 ----
+
+    /**
+     *  设置或取消入群必读（cmd_set_must_read=1332）。仅群主 / 管理员有权。
+     *  应答走通用的 FMG_MSG_V2_GROUP_OP_RESULT；成功后服务端推 1318（带新的 mustreadid）。
+     *  @param groupId    目标群ID（>0）
+     *  @param announceId 设为必读的公告ID；0 表示取消
+     */
+    void    SendSetMustRead(int64_t groupId, int64_t announceId);
+
+    /**
+     *  本人确认已阅读入群必读（cmd_confirm_must_read=1333）。应答走 FMG_MSG_V2_GROUP_OP_RESULT；
+     *  成功后服务端推 1317（changetype 7），打开着的群聊窗据此恢复输入区。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendConfirmMustRead(int64_t groupId);
+
+    /**
+     *  群主 / 管理员代为确认入群必读（cmd_release_must_read=1334）。应答走 FMG_MSG_V2_GROUP_OP_RESULT。
+     *  @param groupId 目标群ID（>0）
+     *  @param userIds 要放行的成员，不可为空
+     */
+    void    SendReleaseMustRead(int64_t groupId, const std::vector<int64_t>& userIds);
+
+    /**
+     *  查询本群的入群必读与本人是否待确认（cmd_get_must_read=1335）。应答经 FMG_MSG_V2_MUST_READ 回投。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendGetMustRead(int64_t groupId);
+
+    //---- 群问答（docs/群问答方案.md），2026-10-07 起 ----
+
+    /**
+     *  拉取本群问答（cmd_get_group_qa=1336）。应答经 FMG_MSG_V2_GROUP_QA 回投。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendGetGroupQa(int64_t groupId);
+
+    //---- 机器人（docs/机器人方案.md），2026-10-08 起 ----
+
+    /**
+     *  拉取本群可用的机器人（cmd_get_group_bots=2801）。应答经 FMG_MSG_V2_GROUP_BOTS 回投。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendGetGroupBots(int64_t groupId);
+
+    /**
+     *  拉取本人的「离开 / 忙碌自动回复」设置（cmd_get_auto_reply=2810）。应答经 FMG_MSG_V2_AUTO_REPLY 回投。
+     */
+    void    SendGetAutoReply();
+
+    /**
+     *  保存本人的「离开 / 忙碌自动回复」设置（cmd_set_auto_reply=2811）。应答经 FMG_MSG_V2_SET_AUTO_REPLY_RESULT 回投。
+     *  @param s 设置；文字为 UTF-8
+     */
+    void    SendSetAutoReply(const net::AutoReplyWire& s);
+
+    /**
+     *  新增或修改一条本群问答（cmd_save_group_qa=1337）。仅群主 / 管理员有权。
+     *  应答走 FMG_MSG_V2_GROUP_OP_RESULT；成功后服务端推 1339，各端重拉。
+     *  @param groupId  目标群ID（>0）
+     *  @param id       要修改的问答ID；0 表示新增
+     *  @param question 问题（UTF-8），非空、不超过 128 个字符
+     *  @param answer   答案（UTF-8），非空、不超过 2048 个字符
+     */
+    void    SendSaveGroupQa(int64_t groupId, int64_t id, const std::string& question, const std::string& answer);
+
+    /**
+     *  删除一条本群问答（cmd_delete_group_qa=1338）。仅群主 / 管理员有权。应答走 FMG_MSG_V2_GROUP_OP_RESULT。
+     */
+    void    SendDeleteGroupQa(int64_t groupId, int64_t id);
+
+    //---- 加群链接（docs/邀请入群方案.md §12），2026-10-07 起 ----
+
+    /**
+     *  生成加群链接（cmd_create_group_link=1340）。任何群成员都可生成。应答经 FMG_MSG_V2_GROUP_LINK_CREATED 回投。
+     *  @param groupId 目标群ID（>0）
+     *  @param days    有效期：1 / 7 天，0 表示永久
+     */
+    void    SendCreateGroupLink(int64_t groupId, int days);
+
+    /**
+     *  列出本群仍可用的加群链接（cmd_get_group_links=1341）。应答经 FMG_MSG_V2_GROUP_LINKS 回投。
+     */
+    void    SendGetGroupLinks(int64_t groupId);
+
+    /**
+     *  作废一条加群链接（cmd_revoke_group_link=1342）。应答走 FMG_MSG_V2_GROUP_OP_RESULT。
+     */
+    void    SendRevokeGroupLink(int64_t groupId, int64_t linkId);
+
+    /**
+     *  按随机码查询链接对应的群（cmd_get_group_link_info=1343）。应答经 FMG_MSG_V2_GROUP_LINK_INFO 回投。
+     *  @param code 随机码（net::GroupLinkProtocolClient::parseJoinUrl 取出的）
+     */
+    void    SendGetGroupLinkInfo(const std::string& code);
+
+    /**
+     *  凭加群链接入群（cmd_join_group_by_link=1344）。应答经 FMG_MSG_V2_JOIN_GROUP_BY_LINK 回投。
+     */
+    void    SendJoinGroupByLink(const std::string& code);
+
     /**
      *  发送修改登录密码请求（v2，cmd_change_password=1105）。线程安全，可在 UI 线程
      *  调用：内部组帧后追加进发送缓冲、唤醒发送线程。应答经 cmd_change_password 异步
@@ -821,18 +1075,12 @@ public:
     void    SendUpdateSignature(const std::string& signatureUtf8);
 
     /**
-     *  发送"更新本人资料（全字段）"请求（v2，cmd_update_profile=1104）。线程安全，可在
-     *  UI 线程调用。应答同样经 cmd_update_profile 异步回投到 UI
-     *  （FMG_MSG_V2_UPDATE_PROFILE_RESULT）。各串均为 UTF-8。
-     *  @param nicknameUtf8  昵称   @param signatureUtf8 个性签名
-     *  @param gender        性别（0 男 / 1 女）  @param birthday YYYYMMDD 整数（0 未设）
-     *  @param addressUtf8   所在地  @param mailUtf8 邮箱
+     *  发送"更新本人资料"请求（v2，cmd_update_profile=1104），只带 fields 里标记要提交的项。
+     *  线程安全，可在 UI 线程调用。应答同样经 cmd_update_profile 异步回投到 UI
+     *  （FMG_MSG_V2_UPDATE_PROFILE_RESULT）。
+     *  @param fields 要提交的字段（文字均为 UTF-8），通常由 ProfileProtocolClient::diffProfileValues 得出
      */
-    void    SendUpdateProfile(const std::string& nicknameUtf8,
-                              const std::string& signatureUtf8,
-                              int gender, long birthday,
-                              const std::string& addressUtf8,
-                              const std::string& mailUtf8);
+    void    SendUpdateProfile(const net::ProfileUpdateFields& fields);
 
     /**
      *  发送"修改头像"请求（v2，cmd_change_avatar=1106）。线程安全，可在 UI 线程
@@ -958,6 +1206,21 @@ public:
     bool    DeleteMessagesByTime(int64_t begintime, int64_t endtime);
 
     /**
+     *  按会话清空本人的聊天记录（cmd_clear_conversation=1523）。线程安全。
+     *
+     *  本人视角：只对本人隐藏该会话目前为止的全部消息，对方与其他群成员不受影响，之后到达的新消息
+     *  照常可见。应答投 FMG_MSG_V2_CLEAR_CONVERSATION_RESULT，wParam 为本方法返回的帧 seq —— 失败
+     *  应答不带会话，调用方只能按 seq 对回请求。成功后服务端向本人全部在线设备（含本机）推送
+     *  cmd_messages_deleted_notify 的清空形式，本地删除与界面刷新统一在收到推送时做。
+     *
+     *  @param ctype 会话类型：1 单聊 2 群聊
+     *  @param cid   本人视角的会话ID（单聊为对方 userid，群聊为群ID），须 >0
+     *  @return 本次请求的帧 seq（>0）；参数非法、或当前离线 / 未连接而无法发出时返回 0，
+     *          此时不会有应答回投，调用方应立即按失败处理
+     */
+    uint32_t ClearConversation(int ctype, int64_t cid);
+
+    /**
      *  Pin / 取消 Pin 一条消息（v2，cmd_pin_message=1518）。线程安全。
      *
      *  Pin 是<u>会话内共享</u>的状态：单聊里对方也看得到，群里全体成员都看得到。
@@ -973,6 +1236,52 @@ public:
      *  @param pin   true 钉住、false 取消
      */
     void    PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin);
+
+    /**
+     *  发出一张接龙卡片（v2，cmd_send_message=1503，msgtype=11）。线程安全。
+     *  卡片 content 须先经 net::CardProtocolClient::buildRelayCardContent 校验并拼好；回执沿用
+     *  cmd_send_message 应答路径（FMG_MSG_V2_SEND_CHATMSG_ACK），按 clientmsgid 回填。
+     *  @param ctype       会话类型（见 enum conversation_type；客户端只在群聊里提供入口，取 2）
+     *  @param cid         会话ID（群聊=群id）；须 >0
+     *  @param clientMsgId 客户端消息ID（UUID，非空）
+     *  @param contentJson 卡片 content 的 JSON 文本（{ title, note, deadline }）
+     *  @return 已放进发送队列返回 true；请求拼不出来（入参非法）或当前离线、未连接时返回 false
+     *          并记日志，帧不入队，调用方应立即按发送失败处理，不要等待回执
+     */
+    bool    SendRelayCard(int ctype, int64_t cid, const std::string& clientMsgId,
+                          const std::string& contentJson);
+
+    /**
+     *  参与或修改本人在某张接龙卡片里的那一条（v2，cmd_join_relay=1603）。线程安全。
+     *  应答带回 ctype / cid / msgid，经代理窗送到主面板，再按 msgid 交给该卡片的详情窗；
+     *  名单的变化一律等 cmd_relay_changed_notify 推送再刷新界面。
+     *  @param ctype 卡片所在会话的类型
+     *  @param cid   会话ID；须 >0
+     *  @param msgid 接龙卡片所在消息的服务器 msgid；须 >0（本端刚发出、回执还没回填时为 0，不能参与）
+     *  @param text  接龙文本（UTF-8，建议先经 net::CardProtocolClient::normalizeRelayText）；不能为空
+     *  @return 已放进发送队列返回 true；入参非法、离线或未连接时返回 false 并记日志
+     */
+    bool    JoinRelay(int ctype, int64_t cid, int64_t msgid, const std::string& text);
+
+    /**
+     *  撤回本人在某张接龙卡片里的那一条（v2，cmd_withdraw_relay=1607）。线程安全。
+     *  应答与推送的处理同 JoinRelay。
+     *  @param ctype 卡片所在会话的类型
+     *  @param cid   会话ID；须 >0
+     *  @param msgid 接龙卡片所在消息的服务器 msgid；须 >0
+     *  @return 已放进发送队列返回 true；入参非法、离线或未连接时返回 false 并记日志
+     */
+    bool    WithdrawRelay(int ctype, int64_t cid, int64_t msgid);
+
+    /**
+     *  提前结束一张接龙（v2，cmd_close_relay=1608）。线程安全。只有发起人、群主、管理员可以
+     *  结束，权限由服务端判定（无权限回 6）；应答与推送的处理同 JoinRelay。
+     *  @param ctype 卡片所在会话的类型
+     *  @param cid   会话ID；须 >0
+     *  @param msgid 接龙卡片所在消息的服务器 msgid；须 >0
+     *  @return 已放进发送队列返回 true；入参非法、离线或未连接时返回 false 并记日志
+     */
+    bool    CloseRelay(int ctype, int64_t cid, int64_t msgid);
 
     /**
      *  把若干条消息转发到一个目标会话（v2，cmd_forward_message=1511）。线程安全。
@@ -1209,14 +1518,26 @@ private:
     //cmd 取值见 net/Protocol.h。
     void    EnqueueFrame(uint16_t cmd, uint32_t seq, const std::string& body);
 
+    //接龙三条请求（参与 1603 / 撤回本人那条 1607 / 提前结束 1608）共用的发送步骤：body 为空
+    //（入参非法）或当前离线、未连接时记日志并返回 false、帧不入队；否则分配 seq 并入队。
+    //opName 为日志里的操作名（英文），ctype / cid / msgid 只用于日志。
+    //@return 已放进发送队列返回 true
+    bool    EnqueueRelayRequest(uint16_t cmd, const char* opName, int ctype, int64_t cid,
+                                int64_t msgid, const std::string& body);
+
     //分发一个收到的 v2 帧（在接收线程中调用）。本期只处理心跳/被踢/
     //设备变更通知，其余 cmd 仅记日志（对应功能尚未迁移到 v2）。
     void    HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& body);
 
+public:
     //取得本机设备唯一标识：首次调用生成 GUID 写入 flamingo.ini，
     //之后调用直接读回。返回 ASCII 字符串（保证 flamingo.ini 仍为 ASCII）。
+    //登录请求的 deviceid 取它；文件共享宿主（CFileShareHost::GetSessionInfo）也取它告诉 DLL 本机是哪台设备，
+    //两处必须是同一个值，服务端才能把共享绑定的设备与本机对上，所以设为公有、不另外再读一份。
+    //只读写 flamingo.ini，不碰本对象的状态；应在 UI 线程上调用，避免首次生成时两个线程各写一个不同的值。
     std::string GetOrCreateDeviceId();
 
+private:
     //取得本机设备名称（计算机名），以 UTF-8 编码返回，供 v2 登录请求使用。
     std::string GetDeviceName();
 

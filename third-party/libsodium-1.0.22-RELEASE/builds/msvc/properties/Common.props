@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  
+  <PropertyGroup>
+    <_PropertySheetDisplayName>Common Settings</_PropertySheetDisplayName>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(Platform).props" />
+  </ImportGroup>  
+
+  <PropertyGroup>
+    <!-- VS 2026 toolsets may not define PlatformToolsetVersion. Derive it from PlatformToolset when needed. -->
+    <_SodiumToolsetVersion Condition="'$(PlatformToolsetVersion)' != ''">$(PlatformToolsetVersion)</_SodiumToolsetVersion>
+    <_SodiumToolsetVersion Condition="'$(PlatformToolsetVersion)' == '' and $(PlatformToolset.StartsWith('v'))">$(PlatformToolset.Substring(1))</_SodiumToolsetVersion>
+    <_SodiumToolsetVersion Condition="'$(_SodiumToolsetVersion)' == ''">0</_SodiumToolsetVersion>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="$(_SodiumToolsetVersion) &gt;= 143">
+    <ClCompile>
+      <AdditionalOptions>/UndefIntOverflow- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+</Project>

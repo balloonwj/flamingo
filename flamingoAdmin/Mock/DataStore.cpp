@@ -143,7 +143,25 @@ DataStore::DataStore()
     : m_nextAuditId(1)
     , m_nextNodeId(1000)   // 新建节点 id 从 1000 起，避开种子里的 d-xxx / u-xxx
 {
-    // 从种子数据装载全部内存态数据。
+    // 产品代码的数据全部来自服务端，这里不装种子，构造出来就是空的。
+    FA_LOGI(_T("DataStore created empty"));
+}
+
+void DataStore::Clear()
+{
+    m_enterprises.clear();
+    m_orgTrees.clear();
+    m_services.clear();
+    m_announcements.clear();
+    m_auditLogs.clear();
+    m_messageTrend.clear();
+    m_nextAuditId = 1;
+    FA_LOGI(_T("DataStore cleared"));
+}
+
+void DataStore::LoadSeedData()
+{
+    Clear();
     m_enterprises   = BuildSeedEnterprises();
     m_orgTrees      = BuildSeedOrgTrees();
     m_services      = BuildSeedServices();
@@ -159,7 +177,7 @@ DataStore::DataStore()
         }
     }
 
-    FA_LOGI(_T("DataStore 初始化完成：企业 %d 家、公告 %d 条、审计 %d 条"),
+    FA_LOGI(_T("DataStore seed loaded: enterprises=%d announcements=%d audits=%d"),
             static_cast<int>(m_enterprises.size()),
             static_cast<int>(m_announcements.size()),
             static_cast<int>(m_auditLogs.size()));
@@ -261,6 +279,20 @@ void DataStore::InjectEnterpriseDetail(const Enterprise& e,
     m_services[e.m_id] = services;
 
     FA_LOGI(_T("注入企业详情数据：%s"), e.m_id.GetString());
+}
+
+bool DataStore::UpdateEnterpriseRecord(const Enterprise& e)
+{
+    for (size_t i = 0; i < m_enterprises.size(); ++i)
+    {
+        if (m_enterprises[i].m_id == e.m_id)
+        {
+            m_enterprises[i] = e;
+            FA_LOGI(_T("更新企业记录：%s"), e.m_id.GetString());
+            return true;
+        }
+    }
+    return false;
 }
 
 void DataStore::SetOrgTree(const CString& enterpriseId, const OrgNode& orgTree)

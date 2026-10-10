@@ -34,11 +34,12 @@ extern CAppModule _Module;
 #include "ChatFontPreview.h"
 #include "../BalloonChatWnd/ChatFontUtil.h"   // ChatFontToLogFont：与聊天输入框同一套字体翻译
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonsettings {
 
-const TCHAR* const kChatFontPreviewText = _T("Aa 字体预览");
-const TCHAR* const kChatFontUnsetText   = _T("未设置");
+const TCHAR* const kChatFontPreviewText = TR_NOOP(L"Aa 字体预览");
+const TCHAR* const kChatFontUnsetText   = TR_NOOP(L"未设置");
 
 void ApplyChatFontPreview(balloonwjui::DuiLabel* label, const net::TextFont& font, HFONT& ioFont)
 {
@@ -55,14 +56,14 @@ void ApplyChatFontPreview(balloonwjui::DuiLabel* label, const net::TextFont& fon
     {
         if (newFont != NULL)
         {
-            label->SetText(kChatFontPreviewText);
+            label->SetText(TR(kChatFontPreviewText));
             label->SetFont(newFont);
             label->SetTextColor(color);
         }
         else
         {
             // 未设置（或字体建不出来）：退回标签默认字体，灰字提示未设置
-            label->SetText(kChatFontUnsetText);
+            label->SetText(TR(kChatFontUnsetText));
             label->SetFont(NULL);
             label->SetTextColor(kChatFontUnsetColor);
         }

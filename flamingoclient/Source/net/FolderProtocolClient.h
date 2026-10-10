@@ -13,11 +13,13 @@
  *
  *  真正的文件字节不经过本模块，走 fileserver 的中转通道（cmd_folder_relay_hello 1857 /
  *  cmd_folder_relay_data 1858），由 Source/FolderTransfer/FolderRelayClient 与
- *  FolderRelayFraming 负责；中转握手应答是 {code, msg}，与远程桌面同结构，仍由
- *  RemoteDesktopProtocolClient::parseRelayHelloAck 解析，本模块不重复一份。
+ *  FolderRelayFraming 负责；中转报到应答 {code, msg} 由本模块的 parseRelayHelloAck 解析。
+ *  它与远程桌面的同名函数解析的是同一种结构，2026-10-02 之前 FolderRelayClient 借用的是远程桌面
+ *  那一份；文件共享 DLL 要编译同一份 FolderRelayClient.cpp，不能把远程桌面的协议模块一起带进去，
+ *  故在本模块补了一份（docs/文件共享方案.md 第 1 期第 3 步）。
  *
- *  会话状态取值见 net/Protocol.h 的 enum folder_transfer_state（1~8），失败原因取值见同
- *  文件的 error_code_folder_*（606~620）。本头文件<u>不</u>包含 Protocol.h：原先是不想把
+ *  会话状态取值见 net/Protocol.h 的 enum folder_transfer_state（1~9），失败原因取值见同
+ *  文件的 error_code_folder_*（606~620 与 622）。本头文件<u>不</u>包含 Protocol.h：原先是不想把
  *  "不得与 v1 的 Msg.h 同处一个编译单元"这条约束传染给每一个使用本模块的 .cpp
  *  （v1 协议头已于 2026-08-14 删除，该约束已消失），现在的理由是使用方多半只需要
  *  本模块的解析函数、用不上协议头的其余定义。取值范围判定都在实现文件里；调用方
@@ -95,6 +97,22 @@ struct FolderSessionResponse
     }
 };
 
+//cmd_folder_invite(1810) 与 cmd_folder_invite_notify(1811) 的 kind 字段取值，与服务端 FolderTransferProtocol.h 同名同值：
+//同一套信令既承载文件夹传输，也承载单聊单文件 P2P 直传（2026-10-04，docs/单聊文件P2P直传与P2P徽章方案.md）
+enum folder_transfer_kind
+{
+    folder_kind_folder = 0,   //文件夹传输：缺省值，2026-10-04 之前的服务端与客户端不带 kind 字段即为本值
+    folder_kind_file   = 1,   //单文件直传：folderName 是文件名，目录数为 0、文件数为 1，数据只走 P2P 链路
+};
+
+//P2P 链路实际路径的取值范围（客户端在 cmd_folder_close 里报上去、记录里带回来），与 FlamingoP2PApi.h 的
+//p2p_link_path 一致：1 局域网直连、2 打洞直连、3 经 imgserver 一对一中转；0 表示没有走 P2P 链路
+const int kFolderLinkPathNone = 0;
+const int kFolderLinkPathMax  = 3;
+
+//文件 MD5 的十六进制串长度（字符）
+const size_t kFolderMd5HexLength = 32;
+
 //收到的文件夹传输邀请（cmd_folder_invite_notify=1811 推送）解析结果。接收端据此在会话内的
 //气泡上显示"谁要发一个多大的文件夹给你"，并给出「接收 / 拒绝」两个按钮，不弹独立授权窗。
 struct FolderInviteNotify
@@ -106,12 +124,14 @@ struct FolderInviteNotify
     int64_t     m_totalDirs;    //目录总数，含空目录、不含根目录本身；单位：个
     int64_t     m_totalFiles;   //文件总数；单位：个
     int64_t     m_totalSize;    //全部文件字节数合计；单位：字节，64 位（可超过 4 GiB）
+    int         m_kind;         //传输种类，取值见 enum folder_transfer_kind；推送里缺省时为文件夹传输（2026-10-04 起）
 
     FolderInviteNotify()
         : m_fromId(0)
         , m_totalDirs(0)
         , m_totalFiles(0)
         , m_totalSize(0)
+        , m_kind(folder_kind_folder)
     {
     }
 };
@@ -121,8 +141,8 @@ struct FolderInviteNotify
 struct FolderStateNotify
 {
     std::string m_sessionId;   //本次传输的会话 id
-    int         m_state;       //会话状态，取值见 net/Protocol.h 的 enum folder_transfer_state（1~8）
-    int         m_errCode;     //失败原因，取值见 error_code_folder_*（606~620）；仅 m_state 为 7 时有意义
+    int         m_state;       //会话状态，取值见 net/Protocol.h 的 enum folder_transfer_state（1~9）
+    int         m_errCode;     //失败原因，取值见 error_code_folder_*（606~620 与 622）；仅 m_state 为 7 时有意义
     std::string m_errMsg;      //面向开发者的英文诊断串，仅供排查；客户端按 m_errCode 本地化文案，不直接展示本串
 
     FolderStateNotify()
@@ -144,11 +164,25 @@ struct FolderRelayInfo
     int         m_relayPort;   //fileserver 的监听端口，本功能不新开端口
     std::string m_token;       //中转令牌，本端 N+1 条连接共用同一枚，作为报到帧 body 提交校验
     int         m_lanes;       //数据通道条数 N，不含 lane 0 那条控制通道；由服务端配置 folderlanes 决定
+    std::string m_p2pSessionId;//服务端为本次传输建的 P2P 会话号（P2P 方案第 5 期）；为空表示没建，各条通道都走中转
 
     FolderRelayInfo()
         : m_role(0)
         , m_relayPort(0)
         , m_lanes(0)
+    {
+    }
+};
+
+//中转报到应答（连上 fileserver 后发出 cmd_folder_relay_hello，服务端回的同一 cmd 帧）的解析结果。
+//包体为 {code, msg}，与远程桌面、音视频中转的报到应答同结构。
+struct FolderRelayHelloAck
+{
+    int         m_code;   //结果码：0 表示报到成功、配对已登记；非 0 表示令牌非法、角色不符等，连接随后被服务端断开
+    std::string m_msg;    //结果描述，仅用于日志；字段缺失时为空串
+
+    FolderRelayHelloAck()
+        : m_code(-1)      //-1 不是任何合法结果码，避免未解析出的值被误当作成功
     {
     }
 };
@@ -173,6 +207,8 @@ struct FolderRecordContent
     int         m_result;       //本次传输的结局，取值为 folder_transfer_state 的终态（3~8）
     int         m_errCode;      //失败原因，取值见 error_code_folder_*（606~620）；
                                 //仅 m_result 为 folder_state_failed(7) 时有意义，其余结局恒为 0
+    int         m_linkPath;     //P2P 链路实际路径（2026-10-04 起），取值 kFolderLinkPathNone ~ kFolderLinkPathMax；
+                                //记录里没有这个字段时为 0。界面据此决定是否显示「P2P」徽章
 
     FolderRecordContent()
         : m_totalDirs(0)
@@ -180,6 +216,27 @@ struct FolderRecordContent
         , m_totalSize(0)
         , m_result(0)           //0 不是合法结局（终态从 3 起），避免未解析出的值被误当作某种结局
         , m_errCode(0)
+        , m_linkPath(kFolderLinkPathNone)
+    {
+    }
+};
+
+//单聊单文件直传结束后留下的那条文件消息（msgtype = message_type_file = 3）content 的解析结果（2026-10-04 起）。
+//与服务端 FolderTransferProtocol.h 的 DirectFileRecord 字段逐一对应。与普通离线文件消息的区别是带 direct=1、没有 fileid：
+//直传不经服务器，服务器上没有这个文件，本机没有文件时不能下载（方案决定 1）。
+struct DirectFileContent
+{
+    std::string m_sessionId;   //本次直传的会话 id；客户端据它接管聊天窗里那条实时气泡
+    std::string m_fileName;    //文件名（只有名字、不含路径，UTF-8）
+    int64_t     m_fileSize;    //文件字节数，单位：字节
+    std::string m_md5;         //文件 MD5（32 位小写十六进制）；服务端没收到时为空
+    int         m_result;      //结局：folder_state_rejected(3) 或 folder_state_completed(8)
+    int         m_linkPath;    //P2P 链路实际路径，取值 kFolderLinkPathNone ~ kFolderLinkPathMax；没有时为 0
+
+    DirectFileContent()
+        : m_fileSize(0)
+        , m_result(0)
+        , m_linkPath(kFolderLinkPathNone)
     {
     }
 };
@@ -209,6 +266,16 @@ public:
                                           int64_t totalDirs, int64_t totalFiles, int64_t totalSize);
 
     /**
+     *  构造单聊单文件直传的邀请 JSON 包体（cmd_folder_invite=1810，kind=1，2026-10-04 起）：foldername 写文件名，
+     *  目录数 0、文件数 1、总字节数为文件大小。
+     *  @param peerUserId 接收方 userid（须 >0）
+     *  @param fileName   文件名（只有名字、不含路径，UTF-8，须非空）
+     *  @param fileSize   文件字节数（须 >=0）
+     *  @return 紧凑格式的请求 JSON 文本；入参不合法时返回空串
+     */
+    static std::string buildFileInviteRequest(int64_t peerUserId, const std::string& fileName, int64_t fileSize);
+
+    /**
      *  构造接收端应答邀请的请求 JSON 包体（cmd_folder_response=1812，紧凑 UTF-8）。
      *  @param sessionId 邀请推送里带来的会话 id（须非空）；原样回带
      *  @param accept    true 接收、false 拒绝；写入 accept 字段（1 / 0）
@@ -226,13 +293,23 @@ public:
     static std::string buildCancel(const std::string& sessionId);
 
     /**
+     *  构造撤回邀请的请求，可带「改为离线发送」（cmd_folder_cancel=1813，2026-10-04 起）。单文件直传的发送端在对方
+     *  接收之前改为上传服务器的离线文件时 toOffline 传 true，写入 tooffline=1，服务端据此把会话结束为
+     *  folder_state_to_offline、不写聊天记录；传 false 时与 buildCancel(sessionId) 产出相同。
+     *  @param sessionId 本次传输的会话 id（须非空）
+     *  @param toOffline 是否改为离线发送
+     *  @return 紧凑格式的请求 JSON 文本；sessionId 为空时返回空串
+     */
+    static std::string buildCancel(const std::string& sessionId, bool toOffline);
+
+    /**
      *  构造结束本次传输的请求 JSON 包体（cmd_folder_close=1814，紧凑 UTF-8）。
      *  成功与失败共用本函数：成功结束时服务端立即销毁会话，失败结束时会话保留
      *  folderretrywindow（默认 10 分钟）供 buildRetry 重试续传，且失败原因会被服务端原样
      *  透传给对端的状态推送，两端因而看到同一条原因。
      *  @param sessionId 本次传输的会话 id（须非空）
      *  @param success   true 成功结束、false 失败结束；写入 result 字段（0 / 1）
-     *  @param errCode   失败原因，取值须落在 error_code_folder_*（606~620）之内；success 为
+     *  @param errCode   失败原因，取值须落在 error_code_folder_*（606~620 与 622）之内；success 为
      *                   true 时本参数被忽略，一律写 0（服务端对"成功却带失败原因"判非法请求）
      *  @param errMsg    面向开发者的英文诊断串，可为空；success 为 true 时本参数被忽略，一律写空串
      *  @return 紧凑格式的请求 JSON 文本；sessionId 为空、或 success 为 false 而 errCode 越界时
@@ -240,6 +317,20 @@ public:
      */
     static std::string buildClose(const std::string& sessionId, bool success,
                                   int errCode, const std::string& errMsg);
+
+    /**
+     *  构造结束本次传输的请求，并报上本端看到的 P2P 链路路径与文件 MD5（cmd_folder_close=1814，2026-10-04 起）。
+     *  服务端把它们写进传输结束留下的记录，历史消息据此显示「P2P」徽章、接收端据 MD5 找到本地文件。
+     *  @param sessionId 本次传输的会话 id（须非空）
+     *  @param success   true 成功结束、false 失败结束
+     *  @param errCode   失败原因（规则同上一个重载）
+     *  @param errMsg    英文诊断串，可为空
+     *  @param linkPath  P2P 链路实际路径，取值 kFolderLinkPathNone ~ kFolderLinkPathMax；为 0 时不写
+     *  @param md5       文件 MD5（32 位十六进制，大小写均可，写入时统一为小写）；为空时不写
+     *  @return 紧凑格式的请求 JSON 文本；sessionId 为空、errCode 越界、linkPath 越界或 md5 格式不对时返回空串
+     */
+    static std::string buildClose(const std::string& sessionId, bool success, int errCode, const std::string& errMsg,
+                                  int linkPath, const std::string& md5);
 
     /**
      *  构造重试续传的请求 JSON 包体（cmd_folder_retry=1817，紧凑 UTF-8）。
@@ -276,7 +367,8 @@ public:
      *  @param jsonbody 推送包体（UTF-8 JSON 文本）
      *  @param out      [出参] 返回 true 时各字段有效
      *  @return 会话 id 非空、发送端 userid 为正、根目录名非空、三项规模统计均为非负的 JSON
-     *          整数时返回 true；否则 false。缺其中任何一项，接收端的气泡都无从显示与落地
+     *          整数时返回 true；否则 false。缺其中任何一项，接收端的气泡都无从显示与落地。
+     *          kind 可缺省（文件夹传输）；存在时须为 0 或 1，否则 false
      */
     static bool parseInviteNotify(const std::string& jsonbody, FolderInviteNotify& out);
 
@@ -284,7 +376,7 @@ public:
      *  解析会话状态推送 JSON 包体（cmd_folder_state_notify=1815）。
      *  @param jsonbody 推送包体（UTF-8 JSON 文本）
      *  @param out      [出参] 返回 true 时各字段有效
-     *  @return 会话 id 非空且状态取值落在 folder_transfer_state（1~8）之内返回 true，否则 false。
+     *  @return 会话 id 非空且状态取值落在 folder_transfer_state（1~9）之内返回 true，否则 false。
      *          越界的状态客户端无从映射成气泡样式，按非法推送丢弃
      */
     static bool parseStateNotify(const std::string& jsonbody, FolderStateNotify& out);
@@ -302,12 +394,21 @@ public:
      */
     static bool parseRelayInfo(const std::string& jsonbody, FolderRelayInfo& out);
 
+    /**
+     *  解析中转报到应答（fileserver 回的 cmd_folder_relay_hello 帧包体，已还原成明文）。
+     *  文件共享的访问会话与传输子会话复用同一套中转握手，也用本函数解析。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 返回 true 时各字段有效；msg 缺失时 m_msg 置为空串
+     *  @return 顶层是 JSON 对象且 code 为整数时返回 true；JSON 非法、code 缺失或不是整数返回 false
+     */
+    static bool parseRelayHelloAck(const std::string& jsonbody, FolderRelayHelloAck& out);
+
     //==== 取值校验（供界面层复用，避免各处各写一份范围判断）====
 
     /**
      *  判定一个会话状态取值是否合法。
      *  @param state 待判定的状态值
-     *  @return 落在 folder_state_ringing(1) ~ folder_state_completed(8) 之内返回 true。
+     *  @return 落在 folder_state_ringing(1) ~ folder_state_to_offline(9) 之内返回 true。
      *          该枚举取值连续，故按上下界判定即可
      */
     static bool isValidState(int state);
@@ -315,15 +416,15 @@ public:
     /**
      *  判定一个失败原因错误码是否属于文件夹传输这一组。
      *  @param errCode 待判定的错误码
-     *  @return 落在 error_code_folder_rejected(606) ~ error_code_folder_busy(620) 之内返回
-     *          true。该组错误码取值连续，故按上下界判定即可
+     *  @return 落在 error_code_folder_rejected(606) ~ error_code_folder_busy(620) 之内，或为
+     *          error_code_folder_direct_unavailable(622) 时返回 true（621 已被敏感词占用）
      */
     static bool isValidErrorCode(int errCode);
 
     /**
      *  判定一个会话状态取值是否为<u>终态</u>——即会话已成定局、可以据此落一条传输记录。
      *  @param state 待判定的状态值
-     *  @return 落在 folder_state_rejected(3) ~ folder_state_completed(8) 之内返回 true；
+     *  @return 落在 folder_state_rejected(3) ~ folder_state_to_offline(9) 之内返回 true；
      *          响铃中(1) 与传输中(2) 是过程状态，返回 false
      */
     static bool isTerminalState(int state);
@@ -362,6 +463,26 @@ public:
      *          取值越界一律返回 false（不抛异常）
      */
     static bool parseRecordContent(const std::string& jsonbody, FolderRecordContent& out);
+
+    //==== 单聊单文件直传留下的文件消息（msgtype=message_type_file=3，带 direct=1）的 content 编解码（2026-10-04 起）====
+    //与服务端 FolderTransferProtocol 的 buildDirectFileContent / parseDirectFileContent 互为镜像。
+
+    /**
+     *  构造直传文件消息的 content JSON（紧凑 UTF-8）：filename、filesize、direct=1、sessionid、result，md5 非空时写 md5，
+     *  linkPath 大于 0 时写 linkpath；不写 fileid。供写本地历史库与单元测试往返比对。
+     *  @param rec 内容；m_sessionId 与 m_fileName 须非空、m_fileSize 须非负、m_result 须为 3 或 8
+     *  @return 紧凑格式的 JSON 文本；入参不合法时返回空串
+     */
+    static std::string buildDirectFileContent(const DirectFileContent& rec);
+
+    /**
+     *  解析直传文件消息的 content JSON。
+     *  @param jsonbody content 包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 返回 true 时各字段有效
+     *  @return direct 为 1、sessionid 与 filename 非空、filesize 为非负整数、result 为 3 或 8、linkpath 缺省或为 0~3、
+     *          md5 缺省或为 32 位十六进制时返回 true；普通离线文件消息（没有 direct）返回 false
+     */
+    static bool parseDirectFileContent(const std::string& jsonbody, DirectFileContent& out);
 
 private:
     FolderProtocolClient() = delete;

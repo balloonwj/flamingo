@@ -12,7 +12,7 @@
  *  balloonwj@qq.com   2026-06-12
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/Call/OpusAudioCodec.h"
+#include "../../FlamingoMedia/Call/OpusAudioCodec.h"
 
 #include <vector>
 #include <cmath>

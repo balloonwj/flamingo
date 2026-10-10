@@ -17,6 +17,11 @@ namespace flamingoadmin { namespace ui {
 //   bold：true 取 SemiBold(600) 字重，false 取 Normal(400)。
 HFONT UiFont(int pointSize, bool bold = false);
 
+// 按当前小时生成问候语：5～10 点「早上好」、11～12 点「中午好」、13～17 点「下午好」，
+// 其余「晚上好」；有姓名时拼成「下午好，张三」，姓名为空时只有问候。
+//   hour：0～23 的小时数（超出范围按「晚上好」）；name：管理员姓名，可为空。
+CString GreetingForHour(int hour, const CString& name);
+
 // 用纯色填充一个矩形（普通 GDI，轴对齐无需抗锯齿）。
 void FillSolidRect(HDC hdc, const RECT& rc, COLORREF color);
 

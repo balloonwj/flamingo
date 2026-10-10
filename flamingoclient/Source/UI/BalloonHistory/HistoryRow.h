@@ -147,6 +147,40 @@ private:
 };
 
 /**
+ *  HistoryCardThumb —— 帖子卡片与补充卡片正文下面的一张缩略图（docs/帖子群方案.md 14.5）。
+ *
+ *  与图片消息的缩略图不同：无论本机有没有原图都可以点，单击以本控件的 ctrlId 发 DUIN_CLICK，窗口据此看图（本机
+ *  没有时先下载，下完再打开）；双击不再转交给所在的行（行的双击是「定位」，点一张图不该跳走）。卡片的图片比显示的
+ *  张数多时，最后一张上盖一层半透明深色并写「+N」。
+ */
+class HistoryCardThumb : public HistoryRowThumb
+{
+public:
+    HistoryCardThumb();
+
+    /**
+     *  设置最后一张上的「+N」。
+     *    extra：没显示出来的张数；0 表示不画。
+     */
+    void SetExtraCount(int extra);
+
+    //最后一张上写的「+N」的 N；0 表示不画
+    int GetExtraCount() const
+    {
+        return m_extra;
+    }
+
+    //DuiControl 覆写：先按基类画图片或占位，再按需要画「+N」
+    void OnPaint(HDC hdc, const RECT& rcDirty) override;
+
+    //DuiControl 覆写：拦下双击（单击已经打开了看图窗口），不转交给所在的行
+    bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
+
+private:
+    int m_extra;   //最后一张上写的「+N」的 N；0 表示不画
+};
+
+/**
  *  HistoryRow —— 带悬停态与双击的消息记录行。
  */
 class HistoryRow : public balloonwjui::DuiHBox

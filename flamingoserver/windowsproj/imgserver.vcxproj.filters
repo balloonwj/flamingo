@@ -22,7 +22,7 @@
     <Filter Include="third-party\jsoncpp1.9.0">
       <UniqueIdentifier>{e4584df0-048d-44a5-a37f-b55abd3cf2af}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third-party\zlib1.2.11">
+    <Filter Include="third-party\zlib1.3.2">
       <UniqueIdentifier>{ee7ec224-1a4e-48a0-8c02-e7343faa9dfc}</UniqueIdentifier>
     </Filter>
     <Filter Include="utils">
@@ -36,53 +36,53 @@
     <ClCompile Include="..\net\FramePayload.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\zutil.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\zutil.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\uncompr.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\uncompr.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\trees.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\trees.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\inftrees.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\inftrees.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\inflate.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\inflate.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\inffast.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\inffast.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\infback.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\infback.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\gzwrite.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\gzread.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\gzread.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\gzlib.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\gzlib.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\gzclose.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\gzclose.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\deflate.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\deflate.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\crc32.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\crc32.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\compress.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\compress.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\adler32.c">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\adler32.c">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
-    <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp">
-      <Filter>third-party\zlib1.2.11</Filter>
+    <ClCompile Include="..\zlib1.3.2\ZlibUtil.cpp">
+      <Filter>third-party\zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\base\AsyncLog.cpp">
       <Filter>base</Filter>
@@ -114,6 +114,12 @@
     <ClCompile Include="..\fileserversrc\FileSession.cpp">
       <Filter>fileserversrc</Filter>
     </ClCompile>
+    <ClCompile Include="..\fileserversrc\UploadPartPolicy.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\CloudRecordScene.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
     <ClCompile Include="..\fileserversrc\TcpSession.cpp">
       <Filter>fileserversrc</Filter>
     </ClCompile>
@@ -127,6 +133,33 @@
       <Filter>imgserversrc</Filter>
     </ClCompile>
     <ClCompile Include="..\imgserversrc\RelayHub.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RoomRelayFrame.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RoomForwardPolicy.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\ScreenShareRoomRelay.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\CloudRecordFile.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\CloudRecorder.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\CloudRecordControl.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\P2PProbeCore.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\P2PAddressProbe.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelayHelloPolicy.cpp">
       <Filter>imgserversrc</Filter>
     </ClCompile>
     <ClCompile Include="..\net\Acceptor.cpp">
@@ -216,6 +249,9 @@
     <ClCompile Include="..\utils\RelayToken.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\utils\CloudRecordCtlMsg.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
       <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
@@ -278,7 +314,34 @@
     <ClInclude Include="..\imgserversrc\RelayHub.h">
       <Filter>imgserversrc</Filter>
     </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelayRoomHub.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RoomRelayFrame.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RoomForwardPolicy.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\ScreenShareRoomRelay.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\CloudRecordFile.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\CloudRecorder.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\CloudRecordControl.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
     <ClInclude Include="..\fileserversrc\FileSession.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\UploadPartPolicy.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\CloudRecordScene.h">
       <Filter>fileserversrc</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\TcpSession.h">
@@ -378,6 +441,9 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\RelayToken.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\CloudRecordCtlMsg.h">
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\Protocol.h">

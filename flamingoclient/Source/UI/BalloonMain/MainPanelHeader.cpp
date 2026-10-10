@@ -47,6 +47,11 @@ extern CAppModule _Module;
                                     // ShouldGrayAvatar（按连接态渲染）
 #include "AvatarGray.h"             // MakeGrayColor / MakeGrayAvatarBitmap（离线头像置灰）
 #include "../../net/Protocol.h"        // presence_type（状态默认值 presence_online）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "AvatarGlyph.h"                // DrawCenteredGlyphGdi：头像字居中
+#include "MainPanelIcons.h"             // DrawLineIcon / kIconDrawer：消息盒子按钮里的抽屉柜图标
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"                      // DuiHost：悬停提示换算屏幕坐标
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // 底部两个按钮的悬停提示
 
 namespace balloonmain {
 
@@ -70,13 +75,21 @@ const Gdiplus::Color kBellBoxFill(38, 0, 0, 0);
 // 在线状态返回（绿/橙/红/灰），见 MainPanelStatusMenu.h。
 // 未读角标：黄底 #FFE066 + 深棕字 #5A3700。
 const Gdiplus::Color kBadgeFill(255, 0xFF, 0xE0, 0x66);
+// 消息盒子按钮的未读角标：灰底白字，与会话列表里「消息盒子」那一行的灰色未读胶囊同色
+// （MainPanelTreeView.cpp 的 kBadgeMutedGray），表示这些消息不提醒。
+const Gdiplus::Color kMsgBoxBadgeFill(255, 0x9A, 0xA0, 0xA6);
+// 角标的白色描边，把角标与下面的方块分开。
+const Gdiplus::Color kBadgeBorder(255, 255, 255, 255);
+// 按钮里的线性图标（铃铛 / 抽屉柜）的颜色：白。
+const Gdiplus::Color kBoxIconColor(255, 255, 255, 255);
 
 // 文字色。
 const COLORREF kNameColor   = RGB(255, 255, 255);          // 昵称：纯白
 const COLORREF kPillText    = RGB(255, 255, 255);          // 状态胶囊文字：白
 const COLORREF kSoftWhite   = RGB(255, 0xEC, 0xDF);        // 签名 / 通知：暖白
 const COLORREF kSignHint    = RGB(255, 0xD2, 0xBE);        // 签名为空时的占位提示：更淡的暖白
-const COLORREF kBadgeText   = RGB(0x5A, 0x37, 0x00);       // 角标文字：深棕
+const COLORREF kBadgeText   = RGB(0x5A, 0x37, 0x00);       // 公告角标文字：深棕
+const COLORREF kMsgBoxBadgeText = RGB(255, 255, 255);      // 消息盒子角标文字：白
 const COLORREF kInitialText = RGB(255, 255, 255);          // 头像字母：白
 
 // ---- 几何常量（逻辑像素，对照 design 的 padding:14/16/10、Banner 高 108）
@@ -88,6 +101,19 @@ const int kAvatarRingPad = 2;    // 头像外圈留白
 const int kAvatarTextGap = 12;   // 头像与右侧文字列的间距
 const int kBellBoxSize   = 24;   // 通知盒边长
 const int kBellBoxBottom = 10;   // 通知盒距 Banner 底边
+const int kBoxGap        = 8;    // 铃铛盒与消息盒子盒之间的间距（2026-10-04 起，原来铃铛右侧文字的左边距也是 8）
+
+// ---- 底部按钮的未读角标（叠在方块右上角，溢出方块 kBadgeOverflow 像素）----
+const int kBadgeHeight    = 15;   // 角标高；只有一位数时宽也是它，画成正圆
+const int kBadgeOverflow  = 3;    // 角标向右、向上溢出方块的像素
+const int kBadgePadX      = 3;    // 两位数以上时文字左右各留的空白，角标随之变宽成胶囊形
+const int kBadgeTextPx    = 9;    // 角标数字的字号（像素高）
+const int kBadgeMaxCount  = 99;   // 超过它就显示「99+」，避免角标被拉得太宽
+const Gdiplus::REAL kBadgeBorderW = 1.5f;   // 角标白色描边宽（像素）
+
+// ---- 按钮里的线性图标 ----
+const Gdiplus::REAL kBoxIconSize   = 14.0f;   // 图标显示尺寸（像素），与铃铛图形一致
+const Gdiplus::REAL kBoxIconStroke = 2.0f;    // 图标描边宽（以 viewBox 24 为单位，见 DrawLineIcon）
 
 const Gdiplus::REAL kAvatarRadius = 6.0f;   // 头像圆角
 const Gdiplus::REAL kRingRadius   = 8.0f;   // 头像外圈圆角
@@ -132,7 +158,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -159,7 +185,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;
@@ -172,6 +198,65 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
     return sz.cx;
 }
 
+// 角标里显示的数字：超过 kBadgeMaxCount 时显示「99+」。count <= 0 时返回空串（不画角标）。
+CString FormatBadgeCount(int count)
+{
+    CString text;
+    if (count > kBadgeMaxCount)
+    {
+        text.Format(_T("%d+"), kBadgeMaxCount);
+    }
+    else if (count > 0)
+    {
+        text.Format(_T("%d"), count);
+    }
+    return text;
+}
+
+// 角标矩形：右上角叠在方块右上角之外 kBadgeOverflow 像素处；文字宽时向左加宽成胶囊形。
+//   boxX / boxY：方块左上角；textW：角标文字的实测宽度（像素）。
+RECT ComputeBadgeRect(int boxX, int boxY, int textW)
+{
+    int w = textW + kBadgePadX * 2;
+    if (w < kBadgeHeight)
+    {
+        w = kBadgeHeight;
+    }
+    RECT rc;
+    rc.right  = boxX + kBellBoxSize + kBadgeOverflow;
+    rc.left   = rc.right - w;
+    rc.top    = boxY - kBadgeOverflow;
+    rc.bottom = rc.top + kBadgeHeight;
+    return rc;
+}
+
+// 画角标的形状（圆或胶囊 + 白色描边）。文字由调用方之后用 GDI 另画。
+void PaintBadgeShape(Gdiplus::Graphics& g, const RECT& rc, const Gdiplus::Color& fill)
+{
+    Gdiplus::GraphicsPath path;
+    AddRoundRectPath(path, (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top,
+                     (Gdiplus::REAL)(rc.right - rc.left), (Gdiplus::REAL)(rc.bottom - rc.top),
+                     (Gdiplus::REAL)kBadgeHeight / 2.0f);
+    Gdiplus::SolidBrush brush(fill);
+    g.FillPath(&brush, &path);
+    Gdiplus::Pen border(kBadgeBorder, kBadgeBorderW);
+    g.DrawPath(&border, &path);
+}
+
+// 画一个半透明黑底圆角方块（铃铛 / 消息盒子按钮的底）。
+void PaintButtonBox(Gdiplus::Graphics& g, int x, int y)
+{
+    Gdiplus::GraphicsPath path;
+    AddRoundRectPath(path, (Gdiplus::REAL)x, (Gdiplus::REAL)y,
+                     (Gdiplus::REAL)kBellBoxSize, (Gdiplus::REAL)kBellBoxSize, kBellRadius);
+    Gdiplus::SolidBrush brush(kBellBoxFill);
+    g.FillPath(&brush, &path);
+}
+
+// 悬停提示文字（文件作用域的字符串表在语言确定之前初始化，故只做标记，使用处再 TR）
+const wchar_t* const kBellTipIdle   = TR_NOOP(L"公告中心");
+const wchar_t* const kMsgBoxTipIdle = TR_NOOP(L"消息盒子");
+
 } // anonymous namespace
 
 MainPanelHeader::MainPanelHeader()
@@ -181,6 +266,8 @@ MainPanelHeader::MainPanelHeader()
     , m_avatarBitmapGray(NULL)
     , m_unreadTotal(0)
     , m_announceUnread(0)           // 未读公告数默认 0：登录后由主面板从本地公告库注入
+    , m_msgBoxUnread(0)             // 消息盒子未读数默认 0：会话列表到达后由主面板注入
+    , m_hoverZone(kHoverNone)
     , m_presence(presence_online)   // 默认在线（未注入数据时胶囊显示"在线"绿点）
     , m_connUiState(kConnUiOnline)  // 默认在线态（设计期 Mock 渲染不该一上来就是灰的）
 {
@@ -189,10 +276,12 @@ MainPanelHeader::MainPanelHeader()
     ::SetRectEmpty(&m_rcSignHit);
     ::SetRectEmpty(&m_rcStatusHit);
     ::SetRectEmpty(&m_rcBellHit);
+    ::SetRectEmpty(&m_rcMsgBoxHit);
 }
 
 MainPanelHeader::~MainPanelHeader()
 {
+    // 悬停提示的登记由基类 DuiControl 的析构注销，这里不必重复。
     if (m_avatarBitmap != NULL)
     {
         ::DeleteObject(m_avatarBitmap);
@@ -280,16 +369,118 @@ bool MainPanelHeader::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
         return true;
     }
 
-    // 命中底部"消息盒子"行（铃铛盒 + 文字 + 角标）：发 DUIN_HEADER_BELL_CLICK，
-    // 路由到"打开消息盒子窗口"。放在最后判：这一行在 Banner 底部，与上面几块不重叠。
+    // 命中底部"公告中心"铃铛按钮：发 DUIN_HEADER_BELL_CLICK，路由到"打开公告中心窗口"。
+    // 底部两个按钮放在最后判：它们在 Banner 底部，与上面几块不重叠，彼此之间也不重叠。
     if (::PtInRect(&m_rcBellHit, pt))
     {
         NotifyParent(DUIN_HEADER_BELL_CLICK);
         return true;
     }
 
+    // 命中底部"消息盒子"按钮：发 DUIN_HEADER_MSGBOX_CLICK，路由到"打开消息盒子窗口"。
+    if (::PtInRect(&m_rcMsgBoxHit, pt))
+    {
+        NotifyParent(DUIN_HEADER_MSGBOX_CLICK);
+        return true;
+    }
+
     // 空白渐变区：不触发，留给窗口拖动。
     return false;
+}
+
+void MainPanelHeader::SetAnnounceUnread(int count)
+{
+    m_announceUnread = (count > 0) ? count : 0;
+    // 鼠标正停在铃铛上：重新登记提示，覆盖旧的数字（Register 同一控件会覆盖文字）
+    if (m_hoverZone == kHoverBell)
+    {
+        balloonwjui::DuiToolTipMgr::Inst().Register(this, HoverTipText(kHoverBell));
+    }
+}
+
+void MainPanelHeader::SetMsgBoxUnread(int count)
+{
+    m_msgBoxUnread = (count > 0) ? count : 0;
+    if (m_hoverZone == kHoverMsgBox)
+    {
+        balloonwjui::DuiToolTipMgr::Inst().Register(this, HoverTipText(kHoverMsgBox));
+    }
+}
+
+bool MainPanelHeader::OnMouseMove(POINT pt, UINT mkFlags)
+{
+    int zone = kHoverNone;
+    if (::PtInRect(&m_rcBellHit, pt))
+    {
+        zone = kHoverBell;
+    }
+    else if (::PtInRect(&m_rcMsgBoxHit, pt))
+    {
+        zone = kHoverMsgBox;
+    }
+    SetHoverZone(zone, pt);
+    return DuiControl::OnMouseMove(pt, mkFlags);
+}
+
+bool MainPanelHeader::OnMouseLeave()
+{
+    const POINT none = { 0, 0 };
+    SetHoverZone(kHoverNone, none);
+    return DuiControl::OnMouseLeave();
+}
+
+void MainPanelHeader::SetHoverZone(int zone, POINT pt)
+{
+    if (zone == m_hoverZone)
+    {
+        return;
+    }
+    m_hoverZone = zone;
+    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
+    // 先收起并注销上一个按钮的提示：两个按钮挨着，从一个直接移到另一个时提示文字要换
+    tips.OnLeave(this);
+    tips.Unregister(this);
+    if (zone == kHoverNone)
+    {
+        return;
+    }
+    // 提示只在按钮上登记：本控件是整块 Banner，按控件登记会在整块 Banner 上都弹提示。
+    // 宿主只在鼠标进入本控件时通知提示管理器开始计时，进入按钮时由这里补一次通知。
+    tips.Register(this, HoverTipText(zone));
+    balloonwjui::DuiHost* host = GetHost();
+    if (host != NULL && ::IsWindow(host->m_hWnd))
+    {
+        POINT screen = pt;
+        ::ClientToScreen(host->m_hWnd, &screen);
+        tips.OnHover(this, screen);
+    }
+}
+
+CString MainPanelHeader::HoverTipText(int zone) const
+{
+    switch (zone)
+    {
+    //铃铛：有未读公告时报条数，没有时就是入口名称
+    case kHoverBell:
+        if (m_announceUnread > 0)
+        {
+            return CString(TRF(L"你有 {0} 条新公告", m_announceUnread).c_str());
+        }
+        return CString(TR(kBellTipIdle));
+
+    //消息盒子：有未读消息时报条数（不封顶，角标上才显示「99+」）
+    case kHoverMsgBox:
+        if (m_msgBoxUnread > 0)
+        {
+            return CString(TRF(L"消息盒子：{0} 条未读消息", m_msgBoxUnread).c_str());
+        }
+        return CString(TR(kMsgBoxTipIdle));
+
+    //不在任何按钮上
+    default:
+        break;
+    }
+    return CString();
 }
 
 void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
@@ -312,8 +503,8 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const CString  effSignature  = m_hasUserData ? m_signature  : me.signature;
     const CString  effAvatarText = m_hasUserData ? m_avatarText : me.avatarText;
     const COLORREF effAvatarClr  = m_hasUserData ? m_avatarColor : me.avatarColor;
-    // 底部那一行显示的是<u>未读公告</u>数，不是会话未读数：这一行就是「消息盒子」的入口，
-    // 而消息盒子装的是平台公告（见 docs/消息盒子接入方案.md）。注入模式下取
+    // 底部那一行显示的是<u>未读公告</u>数，不是会话未读数：这一行就是「公告中心」的入口，
+    // 而公告中心装的是平台公告（见 docs/公告中心接入方案.md）。注入模式下取
     // SetAnnounceUnread 推进来的值；Mock 模式（设计期截图核对 / 单元测试）仍用 mock 值，
     // 好让 --mainpanel 调试入口能看到带角标的样子。
     const int      effUnread     = m_hasUserData ? m_announceUnread
@@ -340,8 +531,17 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const int pillH   = 18;
     const int signY   = pillY + pillH + 5;                 // 签名行顶
 
-    const int bellY   = top + h - kBellBoxBottom - kBellBoxSize;  // 通知盒顶
-    const int bellX   = left + kPadLeft;
+    const int bellY   = top + h - kBellBoxBottom - kBellBoxSize;  // 底部两个按钮的顶
+    const int bellX   = left + kPadLeft;                          // 铃铛按钮左边界
+    const int msgBoxX = bellX + kBellBoxSize + kBoxGap;           // 消息盒子按钮左边界（铃铛右侧）
+
+    // 两个角标的文字与矩形：形状层、文字层与命中矩形共用。没有未读时文字为空、不画角标。
+    const CString bellBadgeStr = FormatBadgeCount(effUnread);
+    const CString boxBadgeStr  = FormatBadgeCount(m_msgBoxUnread);
+    const RECT bellBadgeRc = ComputeBadgeRect(bellX, bellY,
+        MeasureTextWidth(hdc, (LPCWSTR)bellBadgeStr, kBadgeTextPx, true));
+    const RECT boxBadgeRc  = ComputeBadgeRect(msgBoxX, bellY,
+        MeasureTextWidth(hdc, (LPCWSTR)boxBadgeStr, kBadgeTextPx, true));
 
     // 状态胶囊文字 + 圆点色。这里走的是<u>连接态</u>而不是只看 effPresence：掉线时
     // 用户选的仍是"在线"，照它渲染就会出现"托盘图标已经灰了、胶囊还写着在线"
@@ -383,7 +583,8 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         AddRoundRectPath(ringPath, (Gdiplus::REAL)ringX, (Gdiplus::REAL)ringY,
                          (Gdiplus::REAL)ringSz, (Gdiplus::REAL)ringSz, kRingRadius);
         Gdiplus::SolidBrush ringBrush(kAvatarRing);
-        g.FillPath(&ringBrush, &ringPath);
+        // 外圈与底色都按像素格对齐地填充，与头像字、照片头像对齐（见 AvatarGlyph.h）；只对齐底色会让外圈一侧厚、一侧薄
+        FillAvatarBackground(g, ringBrush, ringPath);
 
         // 有真实头像位图时不画底色方块（稍后用 AlphaBlend 画圆角真图）；否则画底色。
         if (m_avatarBitmap == NULL)
@@ -395,7 +596,7 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
             Gdiplus::SolidBrush avatarBrush(Gdiplus::Color(255,
                 GetRValue(drawAvatarClr), GetGValue(drawAvatarClr),
                 GetBValue(drawAvatarClr)));
-            g.FillPath(&avatarBrush, &avatarPath);
+            FillAvatarBackground(g, avatarBrush, avatarPath);
         }
 
         // 3. 状态胶囊底 + 描边 + 状态点（颜色随在线状态）+ 右侧下拉箭头。
@@ -437,12 +638,7 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                    (Gdiplus::REAL)(pillChevronX + kPillChevronW), chevTop);
 
         // 4. 通知盒（半透明黑圆角）+ 铃铛 + 未读角标。
-        Gdiplus::GraphicsPath bellBoxPath;
-        AddRoundRectPath(bellBoxPath, (Gdiplus::REAL)bellX, (Gdiplus::REAL)bellY,
-                         (Gdiplus::REAL)kBellBoxSize, (Gdiplus::REAL)kBellBoxSize,
-                         kBellRadius);
-        Gdiplus::SolidBrush bellBoxBrush(kBellBoxFill);
-        g.FillPath(&bellBoxBrush, &bellBoxPath);
+        PaintButtonBox(g, bellX, bellY);
 
         // 铃铛图形 —— 取自 design icons.jsx 的 bell（viewBox 24），白色填充。
         {
@@ -470,16 +666,20 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         }
 
         // 未读角标（黄底，叠在通知盒右上角）。
-        const int unread = effUnread;
-        if (unread > 0)
+        if (!bellBadgeStr.IsEmpty())
         {
-            const Gdiplus::REAL badgeD = 15.0f;
-            const Gdiplus::REAL badgeX = (Gdiplus::REAL)(bellX + kBellBoxSize) - badgeD + 3.0f;
-            const Gdiplus::REAL badgeY = (Gdiplus::REAL)bellY - 3.0f;
-            Gdiplus::SolidBrush badgeBrush(kBadgeFill);
-            g.FillEllipse(&badgeBrush, badgeX, badgeY, badgeD, badgeD);
-            Gdiplus::Pen badgeBorder(Gdiplus::Color(255, 255, 255, 255), 1.5f);
-            g.DrawEllipse(&badgeBorder, badgeX, badgeY, badgeD, badgeD);
+            PaintBadgeShape(g, bellBadgeRc, kBadgeFill);
+        }
+
+        // 5. 消息盒子按钮（2026-10-04 起）：同样的半透明黑圆角方块 + 白色抽屉柜 + 灰色未读角标。
+        PaintButtonBox(g, msgBoxX, bellY);
+        DrawLineIcon(g, kIconDrawer,
+                     (Gdiplus::REAL)msgBoxX + ((Gdiplus::REAL)kBellBoxSize - kBoxIconSize) / 2.0f,
+                     (Gdiplus::REAL)bellY + ((Gdiplus::REAL)kBellBoxSize - kBoxIconSize) / 2.0f,
+                     kBoxIconSize, kBoxIconColor, kBoxIconStroke);
+        if (!boxBadgeStr.IsEmpty())
+        {
+            PaintBadgeShape(g, boxBadgeRc, kMsgBoxBadgeFill);
         }
     }
 
@@ -525,8 +725,8 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     if (m_avatarBitmap == NULL && !effAvatarText.IsEmpty())
     {
         RECT avRc = { avX, avY, avX + kAvatarSize, avY + kAvatarSize };
-        DrawGdiText(hdc, (LPCWSTR)effAvatarText, avRc, 23, true, kInitialText,
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        // 按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低
+        DrawCenteredGlyphGdi(hdc, (LPCWSTR)effAvatarText, avRc, 23, true, kInitialText);
     }
 
     // 昵称。
@@ -542,7 +742,7 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 
     // 个性签名（空时画浅色占位提示，引导点击就地添加；占位与真签名都可点）。
     const bool    signIsHint = effSignature.IsEmpty();
-    const CString signDisplay = signIsHint ? CString(_T("点击添加个性签名")) : effSignature;
+    const CString signDisplay = signIsHint ? CString(TR(L"点击添加个性签名")) : effSignature;
     {
         RECT sigRc = { textX, signY, left + w - 12, signY + 18 };
         DrawGdiText(hdc, (LPCWSTR)signDisplay, sigRc, 12, false,
@@ -572,49 +772,30 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         ::SetRect(&m_rcSignHit, textX, signY, signRight, signY + 18);
     }
 
-    // 底部通知行文字。
-    const int unread = effUnread;
-    CString notice;
-    if (unread > 0)
+    // 底部两个按钮的角标数字。铃铛右侧原先的「你有 N 条新公告 / 公告中心」文字已于
+    // 2026-10-04 改为铃铛的悬停提示（见 HoverTipText），这里不再绘制。
+    if (!bellBadgeStr.IsEmpty())
     {
-        notice.Format(_T("你有 %d 条新公告"), unread);
+        DrawGdiText(hdc, (LPCWSTR)bellBadgeStr, bellBadgeRc, kBadgeTextPx, true, kBadgeText,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
     }
-    else
+    if (!boxBadgeStr.IsEmpty())
     {
-        notice = _T("消息盒子");
-    }
-    RECT noticeRc = { bellX + kBellBoxSize + 8, bellY,
-                      left + w - 8, bellY + kBellBoxSize };
-    DrawGdiText(hdc, (LPCWSTR)notice, noticeRc, 12, false, kSoftWhite,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-
-    // 角标数字。
-    RECT badgeRc = { bellX + kBellBoxSize - 12, bellY - 3,
-                     bellX + kBellBoxSize + 3, bellY + 12 };
-    if (unread > 0)
-    {
-        CString badgeStr;
-        badgeStr.Format(_T("%d"), unread);
-        DrawGdiText(hdc, (LPCWSTR)badgeStr, badgeRc, 9, true, kBadgeText,
+        DrawGdiText(hdc, (LPCWSTR)boxBadgeStr, boxBadgeRc, kBadgeTextPx, true, kMsgBoxBadgeText,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
     }
 
-    // ---- 缓存"消息盒子"行的命中矩形（供窗口拖动区把这一行让开）----
-    // 通知盒本身是定宽方块，右侧文字按实测宽度框定 —— 若直接取 noticeRc 的右界
-    // （一路顶到 Banner 右边距），文字之后那一大片空白渐变区就白白被划走、按住
-    // 拖不动窗口了。角标叠在通知盒右上角、会溢出方块 3 个像素，一并并进来。
+    // ---- 缓存底部两个按钮的命中矩形（点击判定、悬停提示与窗口拖动区排除共用）----
+    // 方块是定宽的；角标叠在方块右上角、会溢出方块几个像素，有角标时一并并进来。
+    ::SetRect(&m_rcBellHit, bellX, bellY, bellX + kBellBoxSize, bellY + kBellBoxSize);
+    if (!bellBadgeStr.IsEmpty())
     {
-        int noticeW = MeasureTextWidth(hdc, (LPCWSTR)notice, 12, false);
-        int noticeRight = noticeRc.left + noticeW;
-        if (noticeRight > noticeRc.right)
-        {
-            noticeRight = noticeRc.right;
-        }
-        ::SetRect(&m_rcBellHit, bellX, bellY, noticeRight, bellY + kBellBoxSize);
-        if (unread > 0)
-        {
-            ::UnionRect(&m_rcBellHit, &m_rcBellHit, &badgeRc);
-        }
+        ::UnionRect(&m_rcBellHit, &m_rcBellHit, &bellBadgeRc);
+    }
+    ::SetRect(&m_rcMsgBoxHit, msgBoxX, bellY, msgBoxX + kBellBoxSize, bellY + kBellBoxSize);
+    if (!boxBadgeStr.IsEmpty())
+    {
+        ::UnionRect(&m_rcMsgBoxHit, &m_rcMsgBoxHit, &boxBadgeRc);
     }
 }
 

@@ -12,12 +12,15 @@
 #include <shellapi.h>                          // ShellExecuteW（打开文件 / 打开所在文件夹）
 #include "ChatMessageList.h"                   // MarkFileDownloadStartedByMsgid
 #include "ChatFileLocation.h"                  // ResolveLocalFilePath（本地落点优先级与回退）
+#include "ChatDirectFileModel.h"               // DirectRecordBubble：历史里的在线直传文件画成什么状态（2026-10-04 起）
 #include "../../net/MessageProtocolClient.h"   // net::MessageNotify
 #include "../../net/FileTransfer.h"            // net::FileTransfer（下载队列与缓存路径）
 #include "../../net/CurrentUserAccount.h"      // net::CurrentUserAccount（缓存目录按登录账号区分）
 #include "../BalloonHistory/FileLocalStore.h"  // 文件本地落点登记库（按 md5 + 文件名查路径）
 #include "../../Common/Util/EncodeUtil.h"      // UTF-8 与 UTF-16 互转
 #include "../../Common/Log/IULog.h"            // LOG_INFO / LOG_ERROR
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/Util/FileDialogFilter.h"   // filedlg::MakeFilter：文件对话框过滤串的说明文字逐段翻译
 
 namespace balloonchatwnd {
 
@@ -102,6 +105,40 @@ ChatMessage BuildReceivedFileMessage(bool fromMe, const net::MessageNotify& noti
         registeredPath, registeredExists, cachePath, cacheExists);
     const bool hit = !localPath.empty();
 
+    //在线直传留下的文件消息：服务器上没有这个文件、不能下载。本机有文件（传完时按 MD5 登记过）就是完成态，
+    //没有就显示「在线直传，服务器未保存」；被拒绝的显示作废原因
+    if (notify.m_fileDirect)
+    {
+        int state = kFileDeleted;
+        int directEnd = 0;
+        DirectRecordBubble(notify.m_fileDirectResult, hit, state, directEnd);
+        ChatMessage direct;
+        if (state == kFileNormal)
+        {
+            direct = MakeFileMessage(fromMe, fileName, notify.m_fileSize, CString(localPath.c_str()),
+                                     std::string(), kFileNormal);
+        }
+        else
+        {
+            direct = MakeIncomingFileMessage(fromMe, fileName, notify.m_fileSize, (long long)notify.m_msgid,
+                                             std::string(), notify.m_fileMd5, state);
+        }
+        direct.fileMsgid           = (long long)notify.m_msgid;
+        direct.fileMd5             = notify.m_fileMd5;
+        direct.fileDirect          = true;
+        direct.fileDirectSessionId = notify.m_fileDirectSessionId;
+        direct.fileLinkPath        = notify.m_fileLinkPath;
+        direct.fileDirectEnd       = directEnd;
+        direct.fileDirectDownload  = directDownload;
+        //发送方：直传成功即对方已收到，状态行与实时传完时一样写「对方已接收」
+        direct.filePeerState       = DirectRecordPeerState(notify.m_fileDirectResult, fromMe, hit);
+        if (cached != NULL)
+        {
+            *cached = (state == kFileNormal);
+        }
+        return direct;
+    }
+
     ChatMessage msg;
     if (hit)
     {
@@ -166,7 +203,9 @@ bool HandleLocalFileAction(HWND owner, const ChatFileActionData& d)
             ZeroMemory(&ofn, sizeof(ofn));
             ofn.lStructSize = sizeof(ofn);
             ofn.hwndOwner   = owner;
-            ofn.lpstrFilter = L"所有文件\0*.*\0";
+            //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+            const std::wstring fileFilter = filedlg::MakeFilter(TR(L"所有文件"), L"*.*");
+            ofn.lpstrFilter = fileFilter.c_str();
             ofn.lpstrFile   = szSave;
             ofn.nMaxFile    = MAX_PATH;
             ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_EXPLORER;

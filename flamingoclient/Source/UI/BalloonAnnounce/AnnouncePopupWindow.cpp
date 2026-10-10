@@ -21,6 +21,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiBadge.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiLayout;
@@ -77,13 +78,13 @@ LPCTSTR SeverityText(int severity)
 {
     if (severity == 1)
     {
-        return _T("提醒");
+        return TR(L"提醒");
     }
     if (severity == 2)
     {
-        return _T("警告");
+        return TR(L"警告");
     }
-    return _T("通知");
+    return TR(L"通知");
 }
 
 } // namespace
@@ -119,15 +120,16 @@ void CAnnouncePopupWindow::ShowAnnouncement(HWND ownerPanel, int64_t announcemen
     if (!IsWindow())
     {
         //owner 传 NULL：让子控件通知自路由回本窗口（与群公告提示窗同处理）。
-        if (Create(NULL, CWindow::rcDefault, _T("新公告"),
+        if (Create(NULL, CWindow::rcDefault, TR(L"新公告"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR(_T("新公告提示窗 Create 失败。"));
             return;
         }
-        SetTitle(_T("新公告"));
+        SetTitle(TR(L"新公告"));
         SetTitleBarHeight(kDlgTitleBarH);
-        SetButtons(false, false, true);   //只留关闭按钮
+        //不会自动关闭：留最小化与关闭按钮，最小化后在任务栏上显示带程序图标的按钮（第 15 期）
+        SetButtons(true, false, true);
         SetResizable(false);
         SetMinSize(kDlgWidth, kDlgHeight + kDlgTitleBarH);
 
@@ -139,9 +141,11 @@ void CAnnouncePopupWindow::ShowAnnouncement(HWND ownerPanel, int64_t announcemen
         {
             SetIcon(m_titleIconBmp);
         }
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         BuildUiOnce();
-        ResizeClient(kDlgWidth, kDlgHeight);
+        //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+        ResizeClient(kDlgWidth, kDlgHeight + kDlgTitleBarH);
     }
 
     //改写内容。骨架只建一次，这里只换文本 —— 上一条还没关就来了新的，就地替换。
@@ -236,7 +240,7 @@ void CAnnouncePopupWindow::BuildUiOnce()
         row->SetGap(8);
 
         std::unique_ptr<DuiLabel> source(new DuiLabel());
-        source->SetText(_T("平台公告"));
+        source->SetText(TR(L"平台公告"));
         source->SetTextColor(kSourceColor);
         source->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         row->AddChild(std::move(source), Hint().Weight(1));
@@ -262,15 +266,17 @@ void CAnnouncePopupWindow::BuildUiOnce()
         root->AddChild(std::move(title), Hint().Fixed(kTitleH));
     }
 
-    // ---- 公告正文（占满中间，自动换行；放不下的部分去消息盒子看全文）----
+    // ---- 公告正文（占满中间，自动换行；放不下的部分去公告中心看全文）----
     {
         //正文用消息记录窗那个内联文本控件：它自带按宽度折行，并且能把网址画成
         //可点的链接（DuiLabel 做不到，没有字符级排版模型）。
         std::unique_ptr<balloonhistory::HistoryContentView> body(
             new balloonhistory::HistoryContentView());
         body->SetTextColor(kContentColor);
-        //弹窗里正文一律画全，不要消息记录窗那套"折叠成 5 行"。
+        //弹窗里正文不要消息记录窗那套"折叠成 5 行"，而是画满中间这块区域：放不下的行截掉、末行加省略号，
+        //全文去公告中心看。不能只设展开态 —— 展开态不限行数，正文一长就画到下面的分隔线与按钮上
         body->SetExpanded(true);
+        body->SetFitToHeight(true);
         m_body = body.get();
         root->AddChild(std::move(body), Hint().Weight(1));
     }
@@ -301,13 +307,13 @@ void CAnnouncePopupWindow::BuildUiOnce()
 
         std::unique_ptr<DuiButton> known(new DuiButton());
         known->SetButtonType(DuiButton::StylePushButton);
-        known->SetText(_T("知道了"));
+        known->SetText(TR(L"知道了"));
         known->SetCtrlId(kIdPopupKnown);
         row->AddChild(std::unique_ptr<DuiControl>(known.release()), Hint().Fixed(84));
 
         std::unique_ptr<DuiButton> viewAll(new DuiButton());
         viewAll->SetButtonType(DuiButton::StylePushButton);
-        viewAll->SetText(_T("查看全部"));
+        viewAll->SetText(TR(L"查看全部"));
         viewAll->SetCtrlId(kIdPopupViewAll);
         row->AddChild(std::unique_ptr<DuiControl>(viewAll.release()), Hint().Fixed(90));
 
@@ -362,7 +368,7 @@ LRESULT CAnnouncePopupWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
         if (pNotify->ctrlId == kIdPopupViewAll)
         {
-            //请主面板打开消息盒子。用 PostMessage 而不是直接调：本处仍在按钮的事件
+            //请主面板打开公告中心。用 PostMessage 而不是直接调：本处仍在按钮的事件
             //回调栈上，而打开窗口会走一串建窗 / 布局，投递出去更稳妥。
             if (::IsWindow(m_panelHwnd))
             {

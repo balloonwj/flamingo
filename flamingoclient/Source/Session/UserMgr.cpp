@@ -11,6 +11,17 @@ CUserMgr::CUserMgr(void)
 {
 	m_hProxyWnd = NULL;
 	m_hCallBackWnd = NULL;
+	m_bFileShareFeature = false;
+	m_bInviteConfirmFeature = false;
+	m_bGroupCallFeature = false;
+	m_bCaptionFeature = false;
+	m_bCloudRecordFeature = false;
+	m_bSecretChatFeature = false;
+	m_bThreadGroupFeature = false;
+	m_bBotFeature = false;
+	m_bBotGroupFeature = false;
+	m_bBotPersonalFeature = false;
+	m_bBotGroupExternalFeature = false;
 }
 
 CUserMgr::~CUserMgr(void)

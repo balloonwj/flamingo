@@ -5,6 +5,7 @@
  */
 #include "stdafx.h"
 #include "Screens/OrgDetailPanel.h"
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "Theme/AdminTheme.h"
 #include "Widgets/UiHelpers.h"
 #include "Widgets/IconRenderer.h"
@@ -462,10 +463,10 @@ void OrgDetailPanel::Layout(const RECT& rcAvail)
     m_rcItem = rcAvail;
     ClampScroll();
 
-    // 悬浮滚动条摆在面板右内缘的细竖条上：宽度取 kSuggestedWidth、距右缘
+    // 悬浮滚动条摆在面板右内缘的竖条上：宽度取 kSuggestedWidth、距右缘
     // kSbInset 像素，高度 = 可视区高度（与 ClampScroll 的 viewH 一致，即整个
     // 面板矩形的高），悬浮于内容之上、不挤占内容宽度。
-    const int kSbInset = 3;   // 滚动条距面板右内缘的间距（像素）
+    const int kSbInset = 0;   // 滚动条距面板右内缘的间距（像素）；0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致
     m_panelSb->ForceLayout(RECT{
         m_rcItem.right - kSbInset - OverlayScrollbar::kSuggestedWidth,
         m_rcItem.top,
@@ -880,7 +881,7 @@ int OrgDetailPanel::PaintUserBasic(HDC hdc, int y)
         { _T("职位"),     m_node->m_title },
         { _T("登录账号"), m_node->m_loginAccount },
         { _T("工号"),     m_node->m_employeeNo },
-        { _T("入职日期"), m_node->m_joined },
+        { _T("入职日期"), timetext::FormatTimeText(m_node->m_joined, timetext::TimeStyle::Date) },
         { _T("邮箱"),     m_node->m_email },
         { _T("手机号"),   m_node->m_phone },
         { _T("座机"),     m_node->m_landline },
@@ -1104,6 +1105,12 @@ int OrgDetailPanel::PaintUserRoles(HDC hdc, int y)
     // ---- 权限矩阵 ----
     DrawSectionTitle(hdc, left, y, w, _T("权限矩阵"), false);
     y += 24;
+    // 权限开关会保存到服务端，但 PC 客户端目前不读取它们，标题下如实说明，避免管理员以为已生效。
+    ui::DrawTextLine(hdc, _T("以下权限目前只作记录，尚未在客户端生效"),
+                     RECT{ left, y, right, y + 18 }, theme::kColorWarn,
+                     ui::UiFont(theme::kFontSizeSmall, false),
+                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    y += 24;
     const int permRowH = 38;
     const int groupH   = 30;
     int cardH = 0;
@@ -1156,25 +1163,8 @@ int OrgDetailPanel::PaintUserRoles(HDC hdc, int y)
             cy += permRowH;
         }
     }
-    y += cardH + kSectionGap;
-
-    // ---- 所属群组 ----
-    DrawSectionTitle(hdc, left, y, w, _T("所属群组"), false);
-    y += 24;
-    const TCHAR* const groups[] =
-    {
-        _T("全员"), _T("技术周会"), _T("前端组"),
-        _T("产品评审"), _T("OKR 同步"), _T("跨部门协同"),
-    };
-    int gx = left;
-    for (int i = 0; i < 6; ++i)
-    {
-        const int cw = ui::ChipWidth(hdc, groups[i], false) + 6;
-        RECT chip = { gx, y, gx + cw, y + 24 };
-        ui::DrawChip(hdc, chip, groups[i], theme::kInk600, theme::kInk50, false, 0);
-        gx += cw + 8;
-    }
-    y += 24;
+    // 原先矩阵下方还有「所属群组」，显示的是写死的示例群名；控制台没有按员工查群的接口，已去掉。
+    y += cardH;
     return y;
 }
 
@@ -1506,7 +1496,8 @@ int OrgDetailPanel::PaintUserDevices(HDC hdc, int y)
             ui::FillLine(hdc, left + 16, top, w - 32, 1, theme::kInk100);
         }
         HFONT rf = ui::UiFont(theme::kFontSizeSmall, false);
-        ui::DrawTextLine(hdc, rec.m_ts, RECT{ colTs, top, colDev, top + logH },
+        ui::DrawTextLine(hdc, timetext::FormatTimeText(rec.m_ts, timetext::TimeStyle::Second),
+                         RECT{ colTs, top, colDev, top + logH },
                          theme::kInk500, rf, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         ui::DrawTextLine(hdc, rec.m_device, RECT{ colDev, top, colIp, top + logH },
                          theme::kInk700, rf,
@@ -1581,7 +1572,8 @@ int OrgDetailPanel::PaintUserHistory(HDC hdc, int y)
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
         // 时间。
         RECT ts = { right - 134, top, right, top + rowH };
-        ui::DrawTextLine(hdc, a.m_ts, ts, theme::kInk400,
+        ui::DrawTextLine(hdc, timetext::FormatTimeText(a.m_ts, timetext::TimeStyle::Second), ts,
+                         theme::kInk400,
                          ui::UiFont(theme::kFontSizeSmall, false),
                          DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }

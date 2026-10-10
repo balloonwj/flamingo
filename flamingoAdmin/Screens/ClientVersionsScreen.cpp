@@ -5,6 +5,7 @@
  */
 #include "stdafx.h"
 #include "Screens/ClientVersionsScreen.h"
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/UiHelpers.h"
@@ -34,8 +35,8 @@ const int kTableHdrH = 38;   // 表头行高
 const int kEyebrowPt   = 8;   // 页头小标题字号（磅）
 const int kPageTitlePt = 17;  // 页头大标题字号（磅）
 
-// 悬浮滚动条距表格区右边缘的内缩间距（像素）。
-const int kSbInset = 3;
+// 悬浮滚动条距表格区右边缘的内缩间距（像素）。0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致。
+const int kSbInset = 0;
 
 // 页头按钮尺寸。
 const int kBtnW = 88;   // 按钮宽度
@@ -92,11 +93,16 @@ CString TimeText(long long unixMs)
         return CString(_T("—"));
     }
 
-    CString text;
-    text.Format(_T("%04d-%02d-%02d %02d:%02d"),
-                parts.tm_year + 1900, parts.tm_mon + 1, parts.tm_mday,
-                parts.tm_hour, parts.tm_min);
-    return text;
+    // 列表里的时间显示到分钟。struct tm 的年从 1900 起、月从 0 起。
+    const int kTmYearBase = 1900;
+    SYSTEMTIME st = {};
+    st.wYear   = static_cast<WORD>(parts.tm_year + kTmYearBase);
+    st.wMonth  = static_cast<WORD>(parts.tm_mon + 1);
+    st.wDay    = static_cast<WORD>(parts.tm_mday);
+    st.wHour   = static_cast<WORD>(parts.tm_hour);
+    st.wMinute = static_cast<WORD>(parts.tm_min);
+    st.wSecond = static_cast<WORD>(parts.tm_sec);
+    return timetext::FormatSystemTime(st, timetext::TimeStyle::Minute);
 }
 
 } // namespace

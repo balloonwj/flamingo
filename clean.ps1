@@ -51,29 +51,40 @@ $script:JunkFilePatterns = @(
     '_files_utf8bom.txt',
     '_files_utf8nobom.txt',
     '_flamingo_src_list.txt',
-    # DXGI 抓屏改造期间为了比对画面 dump 出来的位图
-    'flamingoclient\Bin\dxgicap.bmp',
-    'flamingoclient\Bin\dxgipipe.bmp',
-    'flamingoclient\Bin\dxgipipegdi.bmp',
+    # DXGI 抓屏改造期间为了比对画面 dump 出来的位图（只有 Debug 版的调试入口会生成，落在程序目录 Debug\）
+    'flamingoclient\Debug\dxgicap.bmp',
+    'flamingoclient\Debug\dxgipipe.bmp',
+    'flamingoclient\Debug\dxgipipegdi.bmp',
     # 联系人列表树形控件的调试输出
-    'flamingoclient\Bin\tree_diag.log',
-    # chatserver 在 Windows 下直接跑时的标准输出与标准错误重定向文件
-    'flamingoserver\windowsproj\chatserver_run.out',
-    'flamingoserver\windowsproj\chatserver_run.err',
-    # 三个服务在 Windows 下就地运行时落在工程目录里的日志。包括异步日志自己按
-    # "服务名.时间戳.进程号.log" 命名的文件，以及手工重定向出来的 stdout/stderr。
-    # 服务端正式的日志目录是 flamingoserver\logs，那个目录归第三类管，此处不涉及。
+    'flamingoclient\Debug\tree_diag.log',
+    # 三个服务在 Windows 下就地运行时落在工程目录里的日志与手工重定向出来的
+    # stdout / stderr。异步日志自己按"服务名.时间戳.进程号.log"命名。
+    # 服务端正式的日志目录（flamingoserver\logs 等）归第三类管，此处不涉及。
     'flamingoserver\windowsproj\*.log',
-    # 服务端单元测试工程编译出来的可执行文件（工程文件本身要保留）
-    'flamingoserver\windowsproj\Tests.exe',
+    'flamingoserver\windowsproj\*.out',
+    'flamingoserver\windowsproj\*.err',
     # 跑 SQLite 集成用例时落在各处的临时库文件（含 WAL 模式的 -wal / -shm 附属文件）。
     # 每个用例开头都会重建它们，纯粹是测试中间产物。测试程序的工作目录不固定，
-    # 所以仓库根、客户端目录、服务端 tools 目录下都可能留下一份。
+    # 所以仓库根、客户端目录、服务端的源码根 / chatserversrc / tools / windowsproj /
+    # WSL 构建目录下都可能留下一份。服务端用例的库名形如 flamingo_sqlite_xxx_test.db、
+    # flamingo_fileshare_schema_test.db，故服务端一侧按 flamingo_*_test.db* 匹配。
     'flamingo_sqlite_*.db*',
     'flamingoclient\flamingo_sqlite_*.db*',
-    'flamingoserver\flamingo_sqlite_*.db*',
+    'flamingoserver\flamingo_*_test.db*',
+    'flamingoserver\chatserversrc\flamingo_*_test.db*',
     'flamingoserver\tools\flamingo_sqlite_*.db*',
-    'flamingoserver\windowsproj\flamingo_sqlite_*.db*'
+    'flamingoserver\windowsproj\flamingo_*_test.db*',
+    'flamingoserver\windowsproj\x64\*\flamingo_*_test.db*',
+    'flamingoserver\build-linux\flamingo_*_test.db*',
+    # 服务端升级包用例（test_updatepackageindex / test_updatepackagescanner）在工作目录下
+    # 建的临时目录，落点同上
+    'flamingoserver\flamingo_update*_test',
+    'flamingoserver\chatserversrc\flamingo_update*_test',
+    'flamingoserver\windowsproj\flamingo_update*_test',
+    'flamingoserver\windowsproj\x64\*\flamingo_update*_test',
+    'flamingoserver\build-linux\flamingo_update*_test',
+    # 服务端 Python 脚本跑过之后生成的字节码缓存
+    'flamingoserver\tools\__pycache__'
 )
 
 # ---------------------------------------------------------------------------
@@ -94,14 +105,26 @@ $script:BuildOutputDirs = @(
     'flamingoclient\Source\Tests\Unit_Debug_Win32',
     'flamingoclient\Source\Tests\Unit_Debug_x64',
     'flamingoclient\Source\Tests\Unit_Release_x64',
-    'flamingoclient\Bin\Tests',
-    # PC 客户端 Win32 两个配置的输出目录，里面只有 exe 与 pdb，没有资源。
-    # 注意 x64 的 Bin\x64\Release 不在此列：那里是手工装配好的发布包（exe + 全套资源 +
-    # update 目录），还常带一个打好的 Release.zip，删掉要重新装配，不属于「重新编译即可恢复」。
-    'flamingoclient\Bin\Win32',
-    # 客户端两个辅助工程（截图工具、自动更新解压器）的输出
-    'flamingoclient\CatchScreen\debug',
-    'flamingoclient\iAutoUpdate\debug',
+    # PC 客户端的输出目录（2026-10-09 起取代原来的 Bin\）。Debug_Win32\、Release_Win32\ 只有 32 位版本的
+    # 编译产物（含单元测试程序），整个删除；Debug\、Release\ 是 x64 版本的运行目录，其中的资源与配置
+    # （config、Face、Image、Sound）入库，不能删，只删编译产物与单元测试程序。
+    'flamingoclient\Debug_Win32',
+    'flamingoclient\Release_Win32',
+    'flamingoclient\Debug\Tests',
+    'flamingoclient\Release\Tests',
+    'flamingoclient\Debug\*.exe',
+    'flamingoclient\Debug\*.dll',
+    'flamingoclient\Debug\*.pdb',
+    'flamingoclient\Debug\*.ilk',
+    'flamingoclient\Debug\*.lib',
+    'flamingoclient\Debug\*.exp',
+    'flamingoclient\Release\*.exe',
+    'flamingoclient\Release\*.dll',
+    'flamingoclient\Release\*.pdb',
+    'flamingoclient\Release\*.lib',
+    'flamingoclient\Release\*.exp',
+    'flamingoclient\Release\*.iobj',
+    'flamingoclient\Release\*.ipdb',
     # 管理端控制台的中间文件、输出目录及其单元测试输出
     'flamingoAdmin\Debug',
     'flamingoAdmin\Release',
@@ -112,11 +135,36 @@ $script:BuildOutputDirs = @(
     'flamingoAdmin\Tests\Release',
     'flamingoAdmin\Tests\Debug_x64',
     'flamingoAdmin\Tests\Release_x64',
-    # 服务端三个服务与单元测试工程在 Windows 下的输出目录
+    # 服务端三个服务、单元测试工程与 MariaDB 连接器静态库工程在 Windows 下的中间文件目录
     'flamingoserver\windowsproj\chatserver',
     'flamingoserver\windowsproj\fileserver',
     'flamingoserver\windowsproj\imgserver',
     'flamingoserver\windowsproj\Tests',
+    'flamingoserver\windowsproj\mariadbclient',
+    # 服务端在 Windows 下的可执行文件、静态库与调试符号。x64 两个配置输出到 x64\Debug、x64\Release，
+    # 只删 exe / lib / pdb / ilk，同目录下的 data、logs 等运行期数据归第三类管。
+    # windowsproj 根目录下的那几份是已停用的 32 位配置留下的旧产物。
+    'flamingoserver\windowsproj\*.exe',
+    'flamingoserver\windowsproj\*.pdb',
+    'flamingoserver\windowsproj\*.ilk',
+    'flamingoserver\windowsproj\x64\*\*.exe',
+    'flamingoserver\windowsproj\x64\*\*.lib',
+    'flamingoserver\windowsproj\x64\*\*.pdb',
+    'flamingoserver\windowsproj\x64\*\*.ilk',
+    # Linux（含 WSL）下在源码根目录就地 cmake 的生成物与编出的可执行文件。
+    # 注意 flamingoserver\chatserver 是可执行文件本身，不是目录（见 .gitignore 的说明）。
+    'flamingoserver\CMakeCache.txt',
+    'flamingoserver\CMakeFiles',
+    'flamingoserver\Makefile',
+    'flamingoserver\cmake_install.cmake',
+    'flamingoserver\chatserver',
+    'flamingoserver\fileserver',
+    'flamingoserver\imgserver',
+    'flamingoserver\flamingo_tests',
+    'flamingoserver\flamingo_tests_mysql',
+    # 带 MySQL 后端的旧 Linux 构建目录。WSL 开发服务器所在的 build-linux 不在此列：
+    # 其中有开发服务器正在使用的数据库与云端录像，重新编译它也要花较长时间。
+    'flamingoserver\build-mysql',
     # 第三方音频库的中间文件目录。生成的静态库放在各自的 Bin 子目录里，
     # 删掉 obj 不会导致这两个库需要重新编译。
     'third-party\opus-1.5.2\obj',
@@ -129,19 +177,40 @@ $script:BuildOutputDirs = @(
 # 聊天记录、收发过的文件等会一并丢失。
 # ---------------------------------------------------------------------------
 $script:RuntimeDataDirs = @(
-    # 文件服务器收到的文件缓存，是整个仓库里第二大的可清理目标
+    # 服务端在 Windows 下运行时落盘的数据：文件服务器收到的文件、图片服务器的图片、
+    # dbtype=sqlite 时的数据库、升级包投放目录、异步日志。windowsproj 根目录下的那几份
+    # 属于已停用的 32 位配置，x64\Debug、x64\Release 下的属于当前在用的 x64 配置。
+    #
+    # 不在此列的是 WSL 开发服务器的数据：build-linux 下的 data、cloudrecords，以及源码根
+    # 目录下的 filecache、imgcache（filecachedir / imgcachedir 按进程工作目录解析，开发服务器
+    # 在 flamingoserver 下启动，文件就落在这里）。删掉它们，开发服务器库里的文件与图片消息
+    # 就找不到对应文件了，需要时请手工处理。
     'flamingoserver\windowsproj\filecache',
-    # 图片服务器的图片缓存
     'flamingoserver\windowsproj\imgcache',
-    # 服务端异步日志的落盘目录
+    'flamingoserver\windowsproj\data',
+    'flamingoserver\windowsproj\updatecache',
+    'flamingoserver\windowsproj\logs',
+    'flamingoserver\windowsproj\x64\*\data',
+    'flamingoserver\windowsproj\x64\*\filecache',
+    'flamingoserver\windowsproj\x64\*\imgcache',
+    'flamingoserver\windowsproj\x64\*\logs',
+    # 早年在源码根目录就地运行 Linux 服务端时留下的数据库
+    'flamingoserver\data',
+    # 服务端异步日志的落盘目录（源码根目录就地运行，以及 WSL 开发服务器）
     'flamingoserver\logs',
-    # PC 客户端按账号存放的本地数据：聊天记录、头像、下载的文件、崩溃转储
-    'flamingoclient\Bin\Users',
+    'flamingoserver\build-linux\logs',
+    # PC 客户端按账号存放的本地数据：聊天记录、头像、下载的文件、崩溃转储（x64 Debug、Release 两个运行目录）
+    'flamingoclient\Debug\Users',
+    'flamingoclient\Release\Users',
     # PC 客户端的图片缓存
-    'flamingoclient\Bin\cache',
-    # PC 客户端 32 位与 64 位版本的日志目录
-    'flamingoclient\Bin\Logs',
-    'flamingoclient\Bin\x64\Logs'
+    'flamingoclient\Debug\cache',
+    'flamingoclient\Release\cache',
+    # PC 客户端的日志目录
+    'flamingoclient\Debug\Logs',
+    'flamingoclient\Release\Logs',
+    # PC 客户端下载的升级包与更新器日志
+    'flamingoclient\Debug\update',
+    'flamingoclient\Release\update'
 )
 
 <#

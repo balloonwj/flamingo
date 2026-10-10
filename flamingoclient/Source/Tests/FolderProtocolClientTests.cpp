@@ -410,13 +410,13 @@ TEST_CASE("FPC12 parseStateNotify 已失败态取回失败原因，其余状态�
             makeServerStateNotify(kSessionId, folder_state_completed, 0, ""), st));
         CHECK(st.m_state == folder_state_completed);
     }
-    //状态越界（协议只有 1~8）：客户端无从映射成气泡样式，按非法推送丢弃
+    //状态越界（协议只有 1~9，9 是 2026-10-04 起单文件直传的「已改为离线发送」）：客户端无从映射成气泡样式，按非法推送丢弃
     {
         FolderStateNotify st;
         CHECK_FALSE(FolderProtocolClient::parseStateNotify(
             makeServerStateNotify(kSessionId, 0, 0, ""), st));
         CHECK_FALSE(FolderProtocolClient::parseStateNotify(
-            makeServerStateNotify(kSessionId, 9, 0, ""), st));
+            makeServerStateNotify(kSessionId, folder_state_to_offline + 1, 0, ""), st));
     }
 }
 
@@ -660,12 +660,13 @@ TEST_CASE("FPC17 字段类型不对一律安全失败，且不抛异常")
 
 TEST_CASE("FPC18 isValidState / isValidErrorCode 的上下界与协议表一致")
 {
-    //会话状态 1~8
+    //会话状态 1~9（9 是 2026-10-04 起单文件直传的「已改为离线发送」）
     CHECK_FALSE(FolderProtocolClient::isValidState(0));
     CHECK(FolderProtocolClient::isValidState(folder_state_ringing));
     CHECK(FolderProtocolClient::isValidState(folder_state_transferring));
     CHECK(FolderProtocolClient::isValidState(folder_state_completed));
-    CHECK_FALSE(FolderProtocolClient::isValidState(folder_state_completed + 1));
+    CHECK(FolderProtocolClient::isValidState(folder_state_to_offline));
+    CHECK_FALSE(FolderProtocolClient::isValidState(folder_state_to_offline + 1));
 
     //文件域错误码 606~620
     CHECK_FALSE(FolderProtocolClient::isValidErrorCode(error_code_folder_rejected - 1));
@@ -709,23 +710,24 @@ static std::string makeServerRecordContent(const std::string& sessionId,
 
 } // namespace
 
-TEST_CASE("FPC19 isTerminalState 只认 3~8，不认响铃中与传输中")
+TEST_CASE("FPC19 isTerminalState 只认 3~9，不认响铃中与传输中")
 {
     //过程状态：会话还没有结局，不该据此落记录
     CHECK_FALSE(FolderProtocolClient::isTerminalState(0));
     CHECK_FALSE(FolderProtocolClient::isTerminalState(folder_state_ringing));
     CHECK_FALSE(FolderProtocolClient::isTerminalState(folder_state_transferring));
 
-    //六种终态
+    //七种终态（「已改为离线发送」是 2026-10-04 起单文件直传的）
     CHECK(FolderProtocolClient::isTerminalState(folder_state_rejected));
     CHECK(FolderProtocolClient::isTerminalState(folder_state_canceled));
     CHECK(FolderProtocolClient::isTerminalState(folder_state_peer_offline));
     CHECK(FolderProtocolClient::isTerminalState(folder_state_timeout));
     CHECK(FolderProtocolClient::isTerminalState(folder_state_failed));
     CHECK(FolderProtocolClient::isTerminalState(folder_state_completed));
+    CHECK(FolderProtocolClient::isTerminalState(folder_state_to_offline));
 
     //越界
-    CHECK_FALSE(FolderProtocolClient::isTerminalState(folder_state_completed + 1));
+    CHECK_FALSE(FolderProtocolClient::isTerminalState(folder_state_to_offline + 1));
 }
 
 TEST_CASE("FPC20 记录条 content 的构造：七个字段齐全、不含文件清单")
@@ -961,4 +963,206 @@ TEST_CASE("FPC26 记录条解析对服务端报文的字段名逐字对应")
         "{\"sessionid\":\"s\",\"name\":\"f\",\"totaldirs\":0,"
         "\"totalfiles\":0,\"totalsize\":0,\"result\":8,\"errcode\":0}", wrongName));
     CHECK(wrongName.m_folderName.empty());
+}
+
+// ---------------------------------------------------------------------------
+// FPC-HELLO：中转报到应答 {code, msg} 的解析（docs/文件共享方案.md 第 1 期第 3 步）。
+// 此前 FolderRelayClient 借用远程桌面的 RemoteDesktopProtocolClient::parseRelayHelloAck，
+// 文件共享 DLL 要编译同一份 FolderRelayClient.cpp，不能把远程桌面的协议模块一起带进去，
+// 故在本模块补一个同名函数。
+// ---------------------------------------------------------------------------
+
+TEST_CASE("FPC-HELLO1 报到应答：合法应答解析出 code 与 msg")
+{
+    FolderRelayHelloAck ok;
+    REQUIRE(FolderProtocolClient::parseRelayHelloAck("{\"code\":0,\"msg\":\"ok\"}", ok));
+    CHECK(ok.m_code == 0);
+    CHECK(ok.m_msg == "ok");
+
+    //服务端拒绝时的非零结果码同样能取出，交由调用方判失败
+    FolderRelayHelloAck denied;
+    REQUIRE(FolderProtocolClient::parseRelayHelloAck("{\"code\":6,\"msg\":\"denied\"}", denied));
+    CHECK(denied.m_code == error_code_permission_denied);
+    CHECK(denied.m_msg == "denied");
+}
+
+TEST_CASE("FPC-HELLO2 报到应答：code 缺失或不是整数、JSON 格式错误时解析失败")
+{
+    FolderRelayHelloAck out;
+    CHECK_FALSE(FolderProtocolClient::parseRelayHelloAck("{\"msg\":\"ok\"}", out));
+    CHECK_FALSE(FolderProtocolClient::parseRelayHelloAck("{\"code\":\"0\",\"msg\":\"ok\"}", out));
+    CHECK_FALSE(FolderProtocolClient::parseRelayHelloAck("{\"code\":0.5}", out));
+    CHECK_FALSE(FolderProtocolClient::parseRelayHelloAck("{\"code\":0", out));
+    CHECK_FALSE(FolderProtocolClient::parseRelayHelloAck("", out));
+    CHECK_FALSE(FolderProtocolClient::parseRelayHelloAck("[0]", out));
+}
+
+TEST_CASE("FPC-HELLO3 报到应答：msg 缺失时仍然成功，msg 为空串")
+{
+    FolderRelayHelloAck out;
+    out.m_msg = "stale";
+    REQUIRE(FolderProtocolClient::parseRelayHelloAck("{\"code\":0}", out));
+    CHECK(out.m_code == 0);
+    CHECK(out.m_msg.empty());
+}
+
+// ======================= 2026-10-04 单聊单文件 P2P 直传与链路路径 =======================
+// 方案见 docs/单聊文件P2P直传与P2P徽章方案.md；与服务端 tests/test_foldertransferprotocol.cpp 的 FTP30~FTP38 互为镜像。
+
+//一份合法的 32 位十六进制 MD5
+static const char* const kSampleMd5 = "0123456789abcdef0123456789abcdef";
+
+TEST_CASE("FPC27 buildFileInviteRequest：kind=1、foldername 是文件名、目录数 0、文件数 1、大小为文件大小")
+{
+    Json::Value root;
+    REQUIRE(parseJsonText(FolderProtocolClient::buildFileInviteRequest(100002, u8"报价单.xlsx", 53687091200LL), root));
+    CHECK(root["peerid"].asString() == "100002");
+    CHECK(root["foldername"].asString() == u8"报价单.xlsx");
+    CHECK(root["kind"].asInt() == folder_kind_file);
+    CHECK(root["totaldirs"].asInt64() == 0);
+    CHECK(root["totalfiles"].asInt64() == 1);
+    CHECK(root["totalsize"].asInt64() == 53687091200LL);
+    //0 字节文件是合法的
+    CHECK_FALSE(FolderProtocolClient::buildFileInviteRequest(7, "empty.txt", 0).empty());
+    //入参不合法：返回空串
+    CHECK(FolderProtocolClient::buildFileInviteRequest(0, "a.txt", 1).empty());
+    CHECK(FolderProtocolClient::buildFileInviteRequest(7, "", 1).empty());
+    CHECK(FolderProtocolClient::buildFileInviteRequest(7, "a.txt", -1).empty());
+}
+
+TEST_CASE("FPC28 parseInviteNotify 的 kind：缺省为文件夹传输，为 1 时是单文件直传，其余取值非法")
+{
+    FolderInviteNotify n;
+    REQUIRE(FolderProtocolClient::parseInviteNotify(
+        "{\"sessionid\":\"s-1\",\"from\":\"100001\",\"fromname\":\"a\",\"foldername\":\"d\","
+        "\"totaldirs\":1,\"totalfiles\":2,\"totalsize\":3}", n));
+    CHECK(n.m_kind == folder_kind_folder);
+    REQUIRE(FolderProtocolClient::parseInviteNotify(
+        "{\"sessionid\":\"s-1\",\"from\":\"100001\",\"fromname\":\"a\",\"foldername\":\"a.txt\","
+        "\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":3,\"kind\":1}", n));
+    CHECK(n.m_kind == folder_kind_file);
+    CHECK(n.m_folderName == "a.txt");
+    CHECK_FALSE(FolderProtocolClient::parseInviteNotify(
+        "{\"sessionid\":\"s-1\",\"from\":\"100001\",\"fromname\":\"a\",\"foldername\":\"a.txt\","
+        "\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":3,\"kind\":2}", n));
+    CHECK_FALSE(FolderProtocolClient::parseInviteNotify(
+        "{\"sessionid\":\"s-1\",\"from\":\"100001\",\"fromname\":\"a\",\"foldername\":\"a.txt\","
+        "\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":3,\"kind\":\"1\"}", n));
+}
+
+TEST_CASE("FPC29 buildCancel 带改为离线：toOffline 为 true 时写 tooffline=1，为 false 时与旧重载相同")
+{
+    Json::Value root;
+    REQUIRE(parseJsonText(FolderProtocolClient::buildCancel(kSessionId, true), root));
+    CHECK(root["sessionid"].asString() == kSessionId);
+    CHECK(root["tooffline"].asInt() == 1);
+    CHECK(FolderProtocolClient::buildCancel(kSessionId, false) == FolderProtocolClient::buildCancel(kSessionId));
+    CHECK(FolderProtocolClient::buildCancel("", true).empty());
+}
+
+TEST_CASE("FPC30 buildClose 带链路路径与 MD5：按需写入，md5 统一为小写；越界与格式不对返回空串")
+{
+    Json::Value root;
+    REQUIRE(parseJsonText(FolderProtocolClient::buildClose(kSessionId, true, 0, "", 1,
+                                                           "0123456789ABCDEF0123456789abcdef"), root));
+    CHECK(root["result"].asInt() == 0);
+    CHECK(root["linkpath"].asInt() == 1);
+    CHECK(root["md5"].asString() == kSampleMd5);
+    //没有走 P2P、没有 MD5：两个字段都不写，与旧重载产出相同
+    CHECK(FolderProtocolClient::buildClose(kSessionId, true, 0, "", kFolderLinkPathNone, "") ==
+          FolderProtocolClient::buildClose(kSessionId, true, 0, ""));
+    //失败结束也能带路径；622 是合法的失败原因
+    REQUIRE(parseJsonText(FolderProtocolClient::buildClose(kSessionId, false, error_code_folder_direct_unavailable,
+                                                           "no p2p", 3, ""), root));
+    CHECK(root["errcode"].asInt() == error_code_folder_direct_unavailable);
+    CHECK(root["linkpath"].asInt() == 3);
+    CHECK(FolderProtocolClient::buildClose(kSessionId, true, 0, "", 4, "").empty());
+    CHECK(FolderProtocolClient::buildClose(kSessionId, true, 0, "", -1, "").empty());
+    CHECK(FolderProtocolClient::buildClose(kSessionId, true, 0, "", 1, "1234").empty());
+    CHECK(FolderProtocolClient::buildClose(kSessionId, true, 0, "", 1, "0123456789abcdef0123456789abcdeg").empty());
+}
+
+TEST_CASE("FPC31 文件夹记录条的 linkpath：往返一致；为 0 时不写；越界非法")
+{
+    FolderRecordContent rec;
+    rec.m_sessionId = kSessionId;
+    rec.m_folderName = "docs";
+    rec.m_totalFiles = 3;
+    rec.m_result = folder_state_completed;
+    rec.m_linkPath = 2;
+    FolderRecordContent back;
+    REQUIRE(FolderProtocolClient::parseRecordContent(FolderProtocolClient::buildRecordContent(rec), back));
+    CHECK(back.m_linkPath == 2);
+    Json::Value root;
+    rec.m_linkPath = kFolderLinkPathNone;
+    REQUIRE(parseJsonText(FolderProtocolClient::buildRecordContent(rec), root));
+    CHECK_FALSE(root.isMember("linkpath"));
+    //服务端写的记录（字段名逐字对应）
+    REQUIRE(FolderProtocolClient::parseRecordContent(
+        "{\"sessionid\":\"s\",\"foldername\":\"d\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,\"result\":8,"
+        "\"errcode\":0,\"linkpath\":1}", back));
+    CHECK(back.m_linkPath == 1);
+    CHECK_FALSE(FolderProtocolClient::parseRecordContent(
+        "{\"sessionid\":\"s\",\"foldername\":\"d\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,\"result\":8,"
+        "\"linkpath\":5}", back));
+    //文件夹记录不会有「已改为离线发送」(9)
+    CHECK_FALSE(FolderProtocolClient::parseRecordContent(
+        "{\"sessionid\":\"s\",\"foldername\":\"d\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,\"result\":9}", back));
+}
+
+TEST_CASE("FPC32 直传文件消息的 content：往返一致，对服务端报文逐字对应，普通离线文件消息不认")
+{
+    DirectFileContent rec;
+    rec.m_sessionId = "100001-100002-1-1";
+    rec.m_fileName = u8"报价单.xlsx";
+    rec.m_fileSize = 53687091200LL;
+    rec.m_md5 = kSampleMd5;
+    rec.m_result = folder_state_completed;
+    rec.m_linkPath = 1;
+    DirectFileContent back;
+    REQUIRE(FolderProtocolClient::parseDirectFileContent(FolderProtocolClient::buildDirectFileContent(rec), back));
+    CHECK(back.m_sessionId == rec.m_sessionId);
+    CHECK(back.m_fileName == rec.m_fileName);
+    CHECK(back.m_fileSize == rec.m_fileSize);
+    CHECK(back.m_md5 == kSampleMd5);
+    CHECK(back.m_result == folder_state_completed);
+    CHECK(back.m_linkPath == 1);
+    Json::Value root;
+    REQUIRE(parseJsonText(FolderProtocolClient::buildDirectFileContent(rec), root));
+    CHECK(root["direct"].asInt() == 1);
+    CHECK_FALSE(root.isMember("fileid"));
+
+    //服务端 buildDirectFileContent 的产出
+    REQUIRE(FolderProtocolClient::parseDirectFileContent(
+        "{\"filename\":\"a.txt\",\"filesize\":10,\"direct\":1,\"sessionid\":\"s-2\",\"result\":3}", back));
+    CHECK(back.m_result == folder_state_rejected);
+    CHECK(back.m_md5.empty());
+    CHECK(back.m_linkPath == kFolderLinkPathNone);
+
+    CHECK_FALSE(FolderProtocolClient::parseDirectFileContent(
+        "{\"fileid\":\"abc\",\"filename\":\"a.txt\",\"filesize\":10,\"md5\":\"0123456789abcdef0123456789abcdef\"}", back));
+    CHECK_FALSE(FolderProtocolClient::parseDirectFileContent(
+        "{\"filename\":\"a\",\"filesize\":1,\"direct\":1,\"sessionid\":\"s\",\"result\":7}", back));
+    CHECK_FALSE(FolderProtocolClient::parseDirectFileContent(
+        "{\"filename\":\"a\",\"filesize\":1,\"direct\":1,\"sessionid\":\"s\",\"result\":8,\"linkpath\":4}", back));
+    //构造：入参不合法返回空串
+    DirectFileContent bad = rec;
+    bad.m_result = folder_state_failed;
+    CHECK(FolderProtocolClient::buildDirectFileContent(bad).empty());
+    bad = rec;
+    bad.m_fileName.clear();
+    CHECK(FolderProtocolClient::buildDirectFileContent(bad).empty());
+}
+
+TEST_CASE("FPC33 状态推送接受「已改为离线发送」(9)；取值范围扩到 9 与 622")
+{
+    FolderStateNotify n;
+    REQUIRE(FolderProtocolClient::parseStateNotify("{\"sessionid\":\"s\",\"state\":9,\"errcode\":0,\"errmsg\":\"\"}", n));
+    CHECK(n.m_state == folder_state_to_offline);
+    CHECK_FALSE(FolderProtocolClient::parseStateNotify("{\"sessionid\":\"s\",\"state\":10}", n));
+    CHECK(FolderProtocolClient::isValidState(folder_state_to_offline));
+    CHECK(FolderProtocolClient::isTerminalState(folder_state_to_offline));
+    CHECK_FALSE(FolderProtocolClient::isValidState(folder_state_to_offline + 1));
+    CHECK(FolderProtocolClient::isValidErrorCode(error_code_folder_direct_unavailable));
+    CHECK_FALSE(FolderProtocolClient::isValidErrorCode(error_code_file_sensitive_word));
 }

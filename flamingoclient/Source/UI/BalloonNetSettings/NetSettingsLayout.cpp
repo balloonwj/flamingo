@@ -48,6 +48,8 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：内嵌 XML 的文字属性换成译文
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonnetsettings {
 
@@ -89,7 +91,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -430,7 +432,8 @@ std::unique_ptr<DuiControl> CreateNetCustomControl(const DuiXmlBuilder::Node& n)
 
 std::unique_ptr<DuiControl> BuildNetSettingsBody()
 {
-    return DuiXmlBuilder::FromString(kNetSettingsBodyXml, &CreateNetCustomControl);
+    //XML 里的界面文字先换成当前语言的译文（简体中文时原样返回）
+    return DuiXmlBuilder::FromString(i18n::TranslateXml(kNetSettingsBodyXml).c_str(), &CreateNetCustomControl);
 }
 
 } // namespace balloonnetsettings

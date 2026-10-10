@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 4 章：在管理控制台为部门或项目建群，以及查看实时在线用户。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>建群与在线用户 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a04">
+<article class="doc">
+  <h1>建群与在线用户</h1>
+  <p class="lead">本章介绍两项「本企业」页面里的功能：管理员直接为部门或项目建群并指定群主和管理员，以及实时查看本企业有哪些员工在线、用的是什么设备。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：「本企业」页面右上角的「新建群」按钮；「本企业」→「在线用户」页签</li>
+    <li>需要（在线用户）：服务端开启了管理台长连接</li>
+  </ul>
+
+  <h2 id="new-group">为部门或项目建群</h2>
+  <p>新成立的部门、临时项目组，往往需要一个包含指定成员的群。管理员可以在控制台里直接建好群、指定群主和管理员，不必等员工自己去拉人。</p>
+  <figure class="shot">
+    <img src="../img/ad_dlg_newgroup.png" width="880" alt="新建群对话框">
+    <figcaption>新建群对话框，成员列表里每行都可以设为群主或管理员</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在「本企业」页面切到 <span class="ui">组织架构</span> 页签，点右上角的 <span class="ui">新建群</span>。</li>
+    <li>填写 <span class="ui">群名称</span>（必填），例如「研发一组」。</li>
+    <li>在成员列表中勾选要加入群的员工。每行右侧显示该员工所在的部门。</li>
+    <li>点某位成员右侧的 <span class="ui">群主</span> 单选框，把他设为群主。群主只能有一位，选了新的群主，原来的选择会自动取消。</li>
+    <li>按需勾选几位成员右侧的 <span class="ui">管理员</span>。</li>
+    <li>核对列表右上角的人数统计，例如「已选 8 人」，然后点 <span class="ui">创建</span>。</li>
+  </ol>
+  <p>创建成功后提示「群已创建，成员将在自己的群组界面看到该群」，群成员在客户端的群组列表里就能看到这个群。之后群的日常管理由群主和群管理员在客户端完成，见<a href="../client/14-group-manage.html">「群管理」</a>。</p>
+  <div class="callout tip"><b>必须指定群主</b>人数统计后面出现「（未设群主）」时不能创建，会提示「请填写群名称并指定群主」。设为群主或管理员的成员会自动勾选加入；同一个人不能同时是群主和管理员；取消勾选某位成员时，他的群主或管理员身份也一并取消。</div>
+
+  <h2 id="online">查看在线用户</h2>
+  <p>「在线用户」页签实时显示本企业当前在线的员工。员工登录、退出或切换状态后，列表会自动更新，不需要手动刷新。</p>
+  <figure class="shot">
+    <img src="../img/ad_online.png" width="880" alt="在线用户页签">
+    <figcaption>在线用户页签：当前有 3 人在线，均使用 PC 客户端</figcaption>
+  </figure>
+  <ul>
+    <li><b>标题行</b>：在线人数与设备数，括号里按设备类型分别计数，例如「在线 3 人、3 台设备（PC 3）」。</li>
+    <li><b>连接状态</b>：标题右侧显示与服务器的实时连接状态。<span class="ui">实时连接正常</span> 表示数据是实时的；连接断开时会显示「连接已断开」并自动重连。</li>
+    <li><b>搜索框</b>：输入姓名、账号或部门，筛选列表。</li>
+    <li><b>列表</b>：<span class="ui">姓名</span>、<span class="ui">账号</span>、<span class="ui">部门</span>、<span class="ui">设备</span>、<span class="ui">状态</span>（在线、离开或勿扰）、<span class="ui">登录时间</span> 和 <span class="ui">IP 地址</span>。</li>
+  </ul>
+  <p>想让某位员工下线，请在<a href="02-organization.html">组织架构</a>中选中他，到「设备登录」页签点「强制下线全部设备」。</p>
+  <div class="callout note"><b>看不到「在线用户」页签，或页签里提示无法查看</b>这个页签由管理控制台程序目录里的 <code>FlamingoLink.dll</code> 提供，缺少这个文件时页签不会出现。页签里提示「服务器未开启实时连接，无法查看在线用户」时，说明服务端没有开启管理台长连接端口（聊天服务器配置项 <code>adminlinklistenport</code>），请联系服务器的部署人员。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

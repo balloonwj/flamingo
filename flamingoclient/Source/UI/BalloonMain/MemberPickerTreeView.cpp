@@ -39,6 +39,7 @@ namespace balloonmain {
 
 MemberPickerTreeView::MemberPickerTreeView()
     : m_toggledNodeId(-1)
+    , m_toggleOnRowClick(false)
 {
 }
 
@@ -64,7 +65,8 @@ bool MemberPickerTreeView::OnLButtonDown(POINT pt, UINT mkFlags)
     }
 
     const RECT rcRow = row->GetRect();
-    const int  stripRight = rcRow.left + MemberPickerRow::CheckboxStripWidth();
+    //点整行切换勾选时，判定区一直延伸到行内容区的右缘
+    const int  stripRight = m_toggleOnRowClick ? rcRow.right : rcRow.left + MemberPickerRow::CheckboxStripWidth();
     if (pt.x >= rcRow.left && pt.x < stripRight)
     {
         m_toggledNodeId = nodeId;

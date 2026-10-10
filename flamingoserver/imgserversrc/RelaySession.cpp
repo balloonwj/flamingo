@@ -14,6 +14,9 @@
 #include "../utils/RelayToken.h"
 #include "../jsoncpp1.9.0/json.h"
 #include "../chatserversrc/Protocol.h"   // cmd_rd_relay_* / error_code_*
+#include "RelayHelloPolicy.h"           // 报到命令与角色、数据命令与报到种类的判断
+#include "ScreenShareRoomRelay.h"
+#include "RoomRelayFrame.h"
 
 using namespace net;
 
@@ -37,13 +40,45 @@ static bool parseJsonObject(const std::string& json, Json::Value& root)
 }
 
 RelaySession::RelaySession(const std::shared_ptr<TcpConnection>& conn,
-                           const std::string& tokenkey, RelayHub* hub)
+                           const std::string& tokenkey, RelayHub* hub, ScreenShareRoomRelay* roomRelay,
+                           CloudRecordControl* cloudControl)
     : TcpSession(conn),
       m_tokenKey(tokenkey),
       m_hub(hub),
       m_paired(false),
-      m_role(0)
+      m_role(0),
+      m_pairKind(relay_pair_none),
+      m_roomRelay(roomRelay),
+      m_inRoom(false),
+      m_seat(-1),
+      m_trackDropLogged(false),
+      m_inputDropLogged(false),
+      m_queuedBytes(0),
+      m_outputBytes(0),
+      m_cloudControl(cloudControl),
+      m_control(false)
 {
+}
+
+bool RelaySession::isCloudRecordControl() const
+{
+    return m_control.load();
+}
+
+void RelaySession::sendCloudRecordCtl(const std::string& body)
+{
+    sendFrame(cmd_cloudrec_ctl_data, 0, 0, body);
+}
+
+size_t RelaySession::pendingBytes() const
+{
+    return m_queuedBytes.load() + m_outputBytes.load();
+}
+
+void RelaySession::onWriteComplete(const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    m_outputBytes.store(0);
 }
 
 RelaySession::~RelaySession()
@@ -112,7 +147,7 @@ void RelaySession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer
         }
 
         bool ok = true;
-        if (header.cmd == cmd_rd_relay_hello || header.cmd == cmd_av_relay_hello)
+        if (header.cmd == cmd_rd_relay_hello || header.cmd == cmd_av_relay_hello || header.cmd == cmd_p2p_relay_hello)
         {
             //报到帧的包体本会话自己要读，故按普通业务帧完整还原（解密 + 解压）
             std::string plainbody;
@@ -128,9 +163,49 @@ void RelaySession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer
                 ok = onHello(conn, header.cmd, plainbody);
             }
         }
-        else if (header.cmd == cmd_rd_relay_data || header.cmd == cmd_av_relay_data)
+        else if (header.cmd == cmd_rd_relay_data || header.cmd == cmd_av_relay_data || header.cmd == cmd_p2p_relay_data)
         {
             ok = onData(conn, header.cmd, header.seq, header.flags, header.originlen, framebody);
+        }
+        else if (header.cmd == cmd_screenshare_relay_hello)
+        {
+            //屏幕共享报到帧：与上面两种报到帧一样按普通业务帧完整还原
+            std::string plainbody;
+            if (!net::decodeFramePayload(header.cmd, header.seq, header.flags, header.originlen,
+                                         framebody, &m_handshake.cipher(), plainbody, err))
+            {
+                LOGE("screenshare relay hello: decode payload failed: %s, client: %s",
+                     err.c_str(), conn->peerAddress().toIpPort().c_str());
+                ok = false;
+            }
+            else
+            {
+                ok = onRoomHello(conn, plainbody);
+            }
+        }
+        else if (header.cmd == cmd_screenshare_relay_data)
+        {
+            ok = onRoomData(conn, header.cmd, header.seq, header.flags, header.originlen, framebody);
+        }
+        else if (header.cmd == cmd_cloudrec_ctl_hello)
+        {
+            //云端录制控制连接的报到帧：与其它报到帧一样按普通业务帧完整还原
+            std::string plainbody;
+            if (!net::decodeFramePayload(header.cmd, header.seq, header.flags, header.originlen,
+                                         framebody, &m_handshake.cipher(), plainbody, err))
+            {
+                LOGE("cloud record control hello: decode payload failed: %s, client: %s",
+                     err.c_str(), conn->peerAddress().toIpPort().c_str());
+                ok = false;
+            }
+            else
+            {
+                ok = onControlHello(conn, plainbody);
+            }
+        }
+        else if (header.cmd == cmd_cloudrec_ctl_data)
+        {
+            ok = onControlData(conn, header.cmd, header.seq, header.flags, header.originlen, framebody);
         }
         else
         {
@@ -149,10 +224,13 @@ void RelaySession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer
 
 bool RelaySession::onHello(const std::shared_ptr<TcpConnection>& conn, uint16_t helloCmd, const std::string& body)
 {
-    //重复握手视为非法
-    if (m_paired)
+    //重复报到、或已在屏幕共享房间里的连接再做一对一报到，都视为非法。原先只判断了已配对：房间连接还能再加入
+    //配对表，断开时 RelayServer::onDisconnected 只把它从房间摘除，配对表里留下残留表项，之后同一会话同一角色的
+    //报到会因「角色重复」被拒（P2P 第 2f 步用联调用例 P2PR5 复现后修正）
+    if (!RelayHelloPolicy::canAcceptPairHello(m_paired || m_control.load(), m_inRoom))
     {
-        LOGE("relay duplicate hello, client: %s", conn->peerAddress().toIpPort().c_str());
+        LOGE("relay hello rejected, already paired: %d, in room: %d, client: %s", m_paired ? 1 : 0, m_inRoom ? 1 : 0,
+             conn->peerAddress().toIpPort().c_str());
         return false;
     }
 
@@ -175,8 +253,20 @@ bool RelaySession::onHello(const std::shared_ptr<TcpConnection>& conn, uint16_t 
         return false;
     }
 
+    //报到命令与令牌角色须相符：P2P 报到只接受角色 11 / 12，远程桌面与音视频报到不接受 11 / 12
+    const int pairKind = RelayHelloPolicy::pairKindOfHello(helloCmd);
+    if (!RelayHelloPolicy::isAcceptedPairRole(pairKind, payload.role))
+    {
+        LOGE("relay hello: role not accepted, cmd: %u, role: %d, session: %s, client: %s",
+             static_cast<unsigned>(helloCmd), payload.role, payload.sessionid.c_str(),
+             conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(helloCmd, error_code_bad_request, "role not accepted");
+        return false;
+    }
+
     m_sessionId = payload.sessionid;
     m_role      = payload.role;
+    m_pairKind  = pairKind;
 
     //登记到配对表；同角色重复 / 会话满员则失败。
     //配对表保存的是会话弱引用，故这里要把自己的 shared_ptr 取出来交进去
@@ -218,6 +308,14 @@ bool RelaySession::onData(const std::shared_ptr<TcpConnection>& conn, uint16_t c
         return true;
     }
 
+    //数据命令须与报到种类相符：P2P 连接只转发 1862，远程桌面与音视频连接不转发 1862。不相符时丢弃本帧，不关连接
+    if (!RelayHelloPolicy::isForwardableData(m_pairKind, cmd))
+    {
+        LOGE("relay data cmd does not match hello kind, drop, cmd: %u, kind: %d, session: %s, client: %s",
+             static_cast<unsigned>(cmd), m_pairKind, m_sessionId.c_str(), conn->peerAddress().toIpPort().c_str());
+        return true;
+    }
+
     //定位对端会话：对端尚未连上 / 已断开时丢弃本帧（客户端靠 chatserver 信令收尾）
     std::shared_ptr<RelaySession> peer = m_hub->getPeer(m_sessionId, conn.get());
     if (!peer)
@@ -238,6 +336,9 @@ void RelaySession::forwardFrame(uint16_t cmd, uint32_t seq, uint8_t srcFlags, ui
              static_cast<unsigned>(cmd));
         return;
     }
+
+    //计入积压：从这里起到 forwardFrameInLoop 把它写进连接为止，这些字节都算「还没发出去」
+    m_queuedBytes.fetch_add(plainBody.size());
 
     //本函数运行在<u>配对端</u>的 I/O 线程上，故必须把整段动作投递回本连接自己的线程，
     //理由见 sendFrame 里的说明
@@ -263,6 +364,7 @@ void RelaySession::forwardFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t srcFla
     {
         LOGE("relay forward: encrypt payload failed, cmd: %u, bodylen: %u",
              static_cast<unsigned>(cmd), static_cast<unsigned>(plainBody.size()));
+        m_queuedBytes.fetch_sub(plainBody.size());
         return;
     }
 
@@ -272,10 +374,240 @@ void RelaySession::forwardFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t srcFla
     {
         LOGE("relay forward: encodeFrame failed, cmd: %u, bodylen: %u",
              static_cast<unsigned>(cmd), static_cast<unsigned>(wire.size()));
+        m_queuedBytes.fetch_sub(plainBody.size());
         return;
     }
 
     sendData(out.data(), out.size());
+
+    //本函数在本连接的 EventLoop 线程里执行，此刻读输出缓冲是安全的：写不进 socket 的部分都留在那里
+    std::shared_ptr<TcpConnection> conn = getConnectionPtr();
+    m_outputBytes.store(conn ? conn->outputBuffer()->readableBytes() : 0);
+    m_queuedBytes.fetch_sub(plainBody.size());
+}
+
+bool RelaySession::onRoomHello(const std::shared_ptr<TcpConnection>& conn, const std::string& body)
+{
+    //一条连接只报到一次，两端配对、房间与云端录制控制连接不能混用
+    if (m_paired || m_inRoom || m_control.load())
+    {
+        LOGE("screenshare relay duplicate hello, client: %s", conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+
+    Json::Value root;
+    if (!parseJsonObject(body, root))
+    {
+        sendHelloAck(cmd_screenshare_relay_hello, error_code_bad_request, "bad request");
+        return false;
+    }
+    std::string token = root["token"].isString() ? root["token"].asString() : std::string();
+
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    RelayTokenPayload payload;
+    if (!RelayToken::verify(token, m_tokenKey, now, payload))
+    {
+        LOGE("screenshare relay hello: invalid or expired token, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(cmd_screenshare_relay_hello, error_code_session_expired, "invalid or expired token");
+        return false;
+    }
+
+    //只接受屏幕共享的三种角色（第 22 期加了只推流的共享者）与群通话成员的角色：远程桌面、通话、文件夹传输的令牌不能拿来进房间
+    if (payload.role != RelayToken::role_screenshare_host && payload.role != RelayToken::role_screenshare_member &&
+        payload.role != RelayToken::role_screenshare_publisher && payload.role != RelayToken::role_groupcall_member)
+    {
+        LOGE("screenshare relay hello: role %d is not a room role, session: %s, client: %s",
+             payload.role, payload.sessionid.c_str(), conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(cmd_screenshare_relay_hello, error_code_bad_request, "role mismatch");
+        return false;
+    }
+
+    //座位号由 chatserver 写在令牌的 peeruid 字段里；座位越界、发起人不坐 0 号、座位已被占用都在登记时拒绝
+    const int seat = static_cast<int>(payload.peeruid);
+    if (!m_roomRelay->join(payload.sessionid, seat, payload.role, shared_from_this(), payload.uid))
+    {
+        LOGE("screenshare relay hello: join failed (bad seat, seat taken or role mismatch), room: %s, seat: %d, "
+             "role: %d, client: %s", payload.sessionid.c_str(), seat, payload.role,
+             conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(cmd_screenshare_relay_hello, error_code_server_internal, "join failed");
+        return false;
+    }
+
+    m_inRoom = true;
+    m_roomId = payload.sessionid;
+    m_seat = seat;
+    m_role = payload.role;
+    sendHelloAck(cmd_screenshare_relay_hello, error_code_ok, "ok");
+    LOGI("screenshare relay hello ok, room: %s, seat: %d, role: %d, client: %s",
+         m_roomId.c_str(), m_seat, m_role, conn->peerAddress().toIpPort().c_str());
+    return true;
+}
+
+bool RelaySession::onRoomData(const std::shared_ptr<TcpConnection>& conn, uint16_t cmd, uint32_t seq,
+                              uint8_t flags, uint32_t originlen, const std::string& wireBody)
+{
+    //与 onData 一样，无论这一帧最终转不转发都要先解密，否则这个方向的流加密状态会错位
+    std::string plainbody;
+    std::string err;
+    if (!net::decryptFramePayload(cmd, seq, flags, originlen, wireBody,
+                                  &m_handshake.cipher(), plainbody, err))
+    {
+        LOGE("screenshare relay data: decrypt failed: %s, close connection, client: %s",
+             err.c_str(), conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+
+    //未报到就发数据：丢弃（不关连接，等其先报到）
+    if (!m_inRoom)
+    {
+        LOGE("screenshare relay data before hello, client: %s", conn->peerAddress().toIpPort().c_str());
+        return true;
+    }
+
+    //约定 1860 一律不压缩：压缩过的包体读不出帧头，丢弃本帧，连接保持
+    if ((flags & frame_flag_compressed) != 0)
+    {
+        LOGE("screenshare relay data: compressed frame dropped, room: %s, seat: %d, client: %s",
+             m_roomId.c_str(), m_seat, conn->peerAddress().toIpPort().c_str());
+        return true;
+    }
+
+    RoomRelayFrameHeader header;
+    if (!RoomRelayFrame::parseHeader(plainbody.data(), plainbody.size(), header))
+    {
+        LOGE("screenshare relay data: bad frame header, dropped, room: %s, seat: %d, bodylen: %u",
+             m_roomId.c_str(), m_seat, static_cast<unsigned>(plainbody.size()));
+        return true;
+    }
+
+    //群通话房间只转发摄像头、麦克风与控制帧，屏幕、电脑声音、标注轨道直接丢弃（docs/协议设计-v2.md 21.8）；
+    //每条连接只记第一次，避免出错的客户端把日志刷满
+    if (!RoomRelayFrame::isTrackAllowedForRole(m_role, header.m_track))
+    {
+        if (!m_trackDropLogged)
+        {
+            LOGE("room relay data: track %d not allowed for role %d, dropped, room: %s, seat: %d",
+                 (int)header.m_track, m_role, m_roomId.c_str(), m_seat);
+            m_trackDropLogged = true;
+        }
+        return true;
+    }
+
+    //控制帧里的订阅（群通话第 5 期）：服务端自己消费，不转发
+    if (header.m_track == screenshare_track_control)
+    {
+        std::vector<int> seats;
+        if (RoomRelayFrame::parseSubscribe(plainbody, seats))
+        {
+            m_roomRelay->setSubscription(m_roomId, m_seat, seats);
+            return true;
+        }
+        //群通话里没有共享内容状态等其它控制帧，成员发来的一律不转发
+        if (m_role == RelayToken::role_groupcall_member)
+            return true;
+        //键鼠输入（屏幕共享第 18 期）：只转发给目标座位（画面主人），不广播，免得其他观看者收到键盘输入。
+        //是否真是当前控制者由画面主人按发送者座位核对，服务端不知道控制关系
+        int targetSeat = -1;
+        if (RoomRelayFrame::parseInputTarget(plainbody, targetSeat))
+        {
+            RoomRelayFrame::rewriteSenderSeat(plainbody, static_cast<uint8_t>(m_seat));
+            if (!m_roomRelay->forwardTo(m_roomId, m_seat, targetSeat, cmd, seq, flags, originlen, plainbody) &&
+                !m_inputDropLogged)
+            {
+                LOGE("room relay data: input frame target seat %d not in room, dropped, room: %s, seat: %d",
+                     targetSeat, m_roomId.c_str(), m_seat);
+                m_inputDropLogged = true;
+            }
+            return true;
+        }
+    }
+
+    //发送者座位号以本连接登记的为准，客户端填错或冒充都无效
+    RoomRelayFrame::rewriteSenderSeat(plainbody, static_cast<uint8_t>(m_seat));
+    header.m_senderSeat = static_cast<uint8_t>(m_seat);
+    m_roomRelay->forward(m_roomId, conn, header, cmd, seq, flags, originlen, plainbody);
+    return true;
+}
+
+bool RelaySession::onControlHello(const std::shared_ptr<TcpConnection>& conn, const std::string& body)
+{
+    //一条连接只报到一次，控制连接不能与配对、房间混用
+    if (m_paired || m_inRoom || m_control.load())
+    {
+        LOGE("cloud record control hello rejected, already registered, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+
+    Json::Value root;
+    if (!parseJsonObject(body, root))
+    {
+        sendHelloAck(cmd_cloudrec_ctl_hello, error_code_bad_request, "bad request");
+        return false;
+    }
+    std::string token = root["token"].isString() ? root["token"].asString() : std::string();
+
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    RelayTokenPayload payload;
+    if (!RelayToken::verify(token, m_tokenKey, now, payload))
+    {
+        LOGE("cloud record control hello: invalid or expired token, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(cmd_cloudrec_ctl_hello, error_code_session_expired, "invalid or expired token");
+        return false;
+    }
+
+    //只接受服务端控制连接的角色：客户端的令牌（远程桌面、通话、屏幕共享等）不能拿来冒充 chatserver
+    if (payload.role != RelayToken::role_server_control)
+    {
+        LOGE("cloud record control hello: role %d is not the server control role, session: %s, client: %s",
+             payload.role, payload.sessionid.c_str(), conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(cmd_cloudrec_ctl_hello, error_code_bad_request, "role mismatch");
+        return false;
+    }
+
+    if (m_cloudControl == NULL)
+    {
+        LOGE("cloud record control hello: cloud record is not configured, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        sendHelloAck(cmd_cloudrec_ctl_hello, error_code_server_internal, "cloud record not configured");
+        return false;
+    }
+
+    m_control.store(true);
+    m_sessionId = payload.sessionid;
+    m_role = payload.role;
+    //先回报到应答，再登记为出口：登记时会补发暂存的事件，chatserver 要先收到应答
+    sendHelloAck(cmd_cloudrec_ctl_hello, error_code_ok, "ok");
+    m_cloudControl->attach(shared_from_this());
+    LOGI("cloud record control hello ok, session: %s, client: %s", m_sessionId.c_str(),
+         conn->peerAddress().toIpPort().c_str());
+    return true;
+}
+
+bool RelaySession::onControlData(const std::shared_ptr<TcpConnection>& conn, uint16_t cmd, uint32_t seq,
+                                 uint8_t flags, uint32_t originlen, const std::string& wireBody)
+{
+    //与其它数据帧一样，先还原包体再判断：漏解一帧会使这个方向后面的帧全部解密失败
+    std::string plainbody;
+    std::string err;
+    if (!net::decodeFramePayload(cmd, seq, flags, originlen, wireBody, &m_handshake.cipher(), plainbody, err))
+    {
+        LOGE("cloud record control data: decode payload failed: %s, close connection, client: %s",
+             err.c_str(), conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+    if (!m_control.load() || m_cloudControl == NULL)
+    {
+        LOGE("cloud record control data before control hello, close connection, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+    const std::string reply = m_cloudControl->onCommand(plainbody);
+    if (!reply.empty())
+        sendFrame(cmd_cloudrec_ctl_data, 0, 0, reply);
+    return true;
 }
 
 void RelaySession::sendHelloAck(uint16_t helloCmd, int code, const std::string& msg)

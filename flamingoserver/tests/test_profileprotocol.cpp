@@ -142,3 +142,42 @@ TEST_CASE("U8 buildPresenceChangedNotify")
     CHECK(root["presence"].asInt() == 3);
     CHECK(root["clienttype"].asInt() == 1);
 }
+
+TEST_CASE("SW-P7 改资料：只取本次提交且与当前值不同的昵称、签名、所在地、邮箱")
+{
+    //当前资料。值初始化，未用到的整数字段为 0
+    UserProfile current = UserProfile();
+    current.nickname  = "林知夏";
+    current.signature = "旧签名";
+    current.address   = "上海";
+    current.mail      = "a@b.c";
+
+    //昵称与当前相同：客户端整份提交时原样带上来的，不检查（加词之前就有的内容不查）
+    UpdateProfileRequest req;
+    REQUIRE(ProfileProtocol::parseUpdateProfileRequest(
+        "{\"nickname\":\"林知夏\",\"signature\":\"新签名\",\"gender\":1,"
+        "\"birthday\":19960812,\"address\":\"杭州\",\"mail\":\"x@y.z\"}", req));
+    std::vector<std::string> out;
+    //调用前已有的内容保留，本函数只追加
+    out.push_back("既有");
+    ProfileProtocol::collectChangedProfileTexts(req, current, out);
+    REQUIRE(out.size() == 4);
+    CHECK(out[0] == "既有");
+    CHECK(out[1] == "新签名");
+    CHECK(out[2] == "杭州");
+    CHECK(out[3] == "x@y.z");
+
+    //只提交性别与生日：没有需要检查的文字
+    UpdateProfileRequest numbersOnly;
+    REQUIRE(ProfileProtocol::parseUpdateProfileRequest("{\"gender\":0,\"birthday\":19960812}", numbersOnly));
+    std::vector<std::string> none;
+    ProfileProtocol::collectChangedProfileTexts(numbersOnly, current, none);
+    CHECK(none.empty());
+
+    //把签名改成空串：值变了，但空串没有可检查的内容
+    UpdateProfileRequest cleared;
+    REQUIRE(ProfileProtocol::parseUpdateProfileRequest("{\"signature\":\"\"}", cleared));
+    std::vector<std::string> empty;
+    ProfileProtocol::collectChangedProfileTexts(cleared, current, empty);
+    CHECK(empty.empty());
+}

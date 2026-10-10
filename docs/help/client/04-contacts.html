@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 4 章：通讯录与联系人（组织架构树、联系人右键菜单、联系人资料窗、标签 / 备注 / 收藏）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通讯录与联系人 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c04">
+<article class="doc">
+  <h1>通讯录与联系人</h1>
+  <p class="lead">FlamingoIM 的通讯录就是企业的组织架构，不需要添加好友，所有同事都在里面。本章介绍怎样在通讯录里找到同事、右键菜单里的各项操作，以及在联系人资料窗口中查看资料、设置标签、备注和收藏。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>组织架构由企业管理员维护</li>
+  </ul>
+
+  <h2 id="tree">组织架构树</h2>
+  <p>点主面板的「联系人」页签（人像图标）即可看到通讯录：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_contacts.png" width="338" alt="组织架构树"><figcaption>「联系人」页签里的组织架构树</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <ul>
+        <li>第一层是企业，标题形如「明远科技有限公司 · 167 人」，数字是企业的总人数。</li>
+        <li>下面按部门逐级排列，点部门名展开或收起，例如「技术中心 → 研发部 → 前端组 → Web前端小组」。</li>
+        <li>每个人显示头像、姓名和个性签名；你自己的名字后面带「（我）」。</li>
+        <li>还没有分配到部门的同事列在「其他联系人」里，企业的服务号列在「服务号」里，这两组只在有内容时出现。</li>
+      </ul>
+      <p><b>单击</b>一个人只是选中他，<b>双击</b>打开与他的单聊窗口（双击自己则打开本人资料）。</p>
+      <p>同事很多时，直接在主面板顶部的搜索框里输入姓名、账号或拼音更快，见<a href="02-main-panel.html#search">「认识主面板」</a>。</p>
+    </div>
+  </div>
+  <div class="callout note"><b>组织架构有误？</b>部门的划分和人员的归属由企业管理员在管理控制台中维护，员工在客户端里不能调整。发现错误请联系管理员，管理员的操作见<a href="../admin/02-organization.html">「组织架构与员工」</a>。</div>
+
+  <h2 id="menu">联系人右键菜单</h2>
+  <p>在组织架构树里右键一位同事，会弹出联系人菜单：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_contact_menu.png" width="355" alt="联系人右键菜单"><figcaption>右键赵卓轩弹出的菜单</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <table><colgroup><col style="width:8em"><col></colgroup>
+        <tr><th>菜单项</th><th>作用</th></tr>
+        <tr><td>发消息</td><td>打开与他的单聊窗口</td></tr>
+        <tr><td>语音通话 / 视频通话</td><td>向他发起通话（<a href="16-calls.html">详见</a>）</td></tr>
+        <tr><td>共享文件给TA</td><td>把本机的磁盘、文件夹或文件共享给他（<a href="21-file-share.html">详见</a>）</td></tr>
+        <tr><td>共享屏幕给TA</td><td>打开单聊窗口并开始屏幕共享（<a href="18-screen-share.html">详见</a>）</td></tr>
+        <tr><td>开启字幕模式</td><td>在桌面上以字幕的形式显示与他的聊天，不打开聊天窗口；开启后这一项变为「关闭字幕模式」（<a href="20-captions.html">详见</a>）</td></tr>
+        <tr><td>查看资料</td><td>打开他的联系人资料窗口，见下一节</td></tr>
+        <tr><td>查看消息记录</td><td>打开与他的消息记录（<a href="24-history.html">详见</a>）</td></tr>
+        <tr><td>添加到收藏</td><td>把他放进「我的收藏」；已收藏时这一项变为「取消收藏」</td></tr>
+        <tr><td>消息提醒设置 ▸</td><td>设置收到他的消息时怎样提醒（<a href="05-conversations.html#notify">详见</a>）</td></tr>
+        <tr><td>修改备注</td><td>打开他的资料窗口，并直接进入「备注名」的编辑状态</td></tr>
+        <tr><td>复制名字</td><td>把列表上显示的名字复制到剪贴板（设了备注时复制备注）</td></tr>
+        <tr><td>清空聊天记录</td><td>清空你与他的单聊记录（<a href="05-conversations.html#menu">详见</a>）</td></tr>
+      </table>
+    </div>
+  </div>
+  <ul>
+    <li>「共享文件给TA」「共享屏幕给TA」「开启字幕模式」在对应功能不可用时不出现。</li>
+    <li>右键你自己时，菜单里只有 <span class="ui">查看资料</span> 一项。</li>
+    <li>部门节点没有右键菜单。</li>
+  </ul>
+
+  <h2 id="profile">联系人资料窗口</h2>
+  <p>在组织架构树或「我的收藏」里右键一位同事，选 <span class="ui">查看资料</span>，会打开「<i>他的名字</i>的资料」窗口。每位同事各有一个资料窗口，可以同时打开多个：</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/n_contact_profile.png" width="600" alt="联系人资料窗口">
+      <span class="pin" style="left:29.7%;top:9.6%">1</span>
+      <span class="pin" style="left:1.3%;top:25.7%">2</span>
+      <span class="pin" style="left:84.2%;top:32.5%">3</span>
+      <span class="pin" style="left:20.8%;top:54.6%">4</span>
+      <span class="pin" style="left:1.3%;top:63.2%">5</span>
+      <span class="pin" style="left:1.3%;top:69.9%">6</span>
+      <span class="pin" style="left:1.3%;top:80.3%">7</span>
+      <span class="pin" style="left:1.3%;top:87%">8</span>
+      <span class="pin" style="left:98.7%;top:94.1%">9</span>
+    </div>
+    <figcaption>赵卓轩的资料窗口</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>姓名、账号与部门</b>：点姓名、账号或部门路径即可复制</li>
+    <li><b>快捷按钮</b>：语音通话、视频通话、历史消息、组织架构</li>
+    <li><b>展开全部</b>：查看对方的全部资料</li>
+    <li><b>标签</b>：给对方贴标签</li>
+    <li><b>备注名</b>：给对方起一个只有你看得到的名字</li>
+    <li><b>分组</b>：显示对方所在的部门</li>
+    <li><b>消息提醒</b>：收到对方消息时的提醒方式</li>
+    <li><b>添加到收藏</b>：打开后对方出现在「我的收藏」里</li>
+    <li><b>发消息</b>：打开与对方的单聊窗口</li>
+  </ol>
+  <ul>
+    <li><b>四个快捷按钮</b>：<span class="ui">语音通话</span> 和 <span class="ui">视频通话</span> 直接向对方发起通话（需要在线）；<span class="ui">历史消息</span> 打开与对方的消息记录，读的是本机保存的记录，离线时也能查看；<span class="ui">组织架构</span> 关闭资料窗口，主面板切到「联系人」页签并定位、选中对方所在的那一行。</li>
+    <li><b>展开全部</b>：默认只显示一部分资料（如个性签名、性别、生日），点它可以查看所在地、岗位、邮箱等全部资料。对方设为「仅自己可见」的手机号或座机不会显示。</li>
+  </ul>
+
+  <h3>设置标签</h3>
+  <p>标签用来给同事做记号，例如他负责的工作、合作过的项目，方便以后辨认：</p>
+  <ol class="steps">
+    <li>点「标签」下方的 <span class="ui">+ 添加标签</span>。</li>
+    <li>输入标签文字，例如「桌面端负责人」，按 <kbd>Enter</kbd> 或在别处点一下确定，按 <kbd>Esc</kbd> 取消。</li>
+  </ol>
+  <p>每个标签最多 16 个字符，一位同事最多贴 10 个标签。点标签上的文字可以修改它，点标签右侧的 × 删除它。</p>
+
+  <h3>设置备注名</h3>
+  <ol class="steps">
+    <li>点「备注名」一行右侧的铅笔图标（这一行没有设置时显示「未设置」）。</li>
+    <li>输入备注，例如「卓轩（桌面端）」。</li>
+    <li>按 <kbd>Enter</kbd> 或在别处点一下保存，按 <kbd>Esc</kbd> 取消。</li>
+  </ol>
+  <p>设置后，资料窗口里姓名的旁边会以灰色显示备注，通讯录里显示为「赵卓轩（卓轩（桌面端））」的形式。在右键菜单中选 <span class="ui">修改备注</span> 也会打开这个窗口并直接进入备注名的编辑状态。</p>
+
+  <h3>消息提醒与收藏</h3>
+  <ul>
+    <li><b>消息提醒</b>：在下拉框里选择收到对方消息时的提醒方式，可选项与右键菜单「消息提醒设置」中的相同，各项的含义见<a href="05-conversations.html#notify">「会话列表与消息提醒」</a>。</li>
+    <li><b>添加到收藏</b>：打开开关后，对方出现在「联系人」页签顶部的「我的收藏」里；关闭开关即取消收藏。</li>
+  </ul>
+  <figure class="shot center">
+    <img src="../img/n_contact_profile_edit.png" width="600" alt="设置了标签、备注并加入收藏的资料窗口">
+    <figcaption>罗俊辉给赵卓轩贴了标签「桌面端负责人」、设置备注「卓轩（桌面端）」并加入收藏</figcaption>
+  </figure>
+  <div class="callout note"><b>标签和备注只有你自己看得到</b>标签和备注名只影响你这一方的显示，对方看不到；同一位同事在不同同事那里可以有完全不同的标签和备注。</div>
+
+  <h2 id="favorites">我的收藏</h2>
+  <p>经常联系的同事可以加入收藏，不必每次在组织架构里一层层展开去找：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_contacts_fav.png" width="338" alt="我的收藏"><figcaption>「联系人」页签顶部的「我的收藏」</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ul>
+        <li>收藏的同事出现在「联系人」页签最上方的「我的收藏」分组里，分组标题后面的数字是收藏的个数。</li>
+        <li>在组织架构树里，被收藏的同事名字右侧有一个书签标记。</li>
+        <li>双击收藏里的同事同样会打开单聊窗口。</li>
+        <li>群也可以收藏：在「消息」页签或「群组」页签右键一个群，选 <span class="ui">添加到收藏</span>，收藏的群同样出现在「我的收藏」里，双击打开群聊窗口。</li>
+      </ul>
+      <p>取消收藏：右键选 <span class="ui">取消收藏</span>，或在资料窗口里关闭 <span class="ui">添加到收藏</span> 开关。</p>
+    </div>
+  </div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 6 章：敏感词库的维护、批量导入导出、过滤总开关与拦截记录。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>敏感词 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a06">
+<article class="doc">
+  <h1>敏感词</h1>
+  <p class="lead">企业可以维护一份敏感词库。员工发送的消息、修改的资料等内容一旦包含词库里的词，就会被服务器拦下，不会发出去。本章介绍如何添加和批量导入敏感词、暂停过滤，以及查看被拦截的记录。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：左侧导航「敏感词」</li>
+    <li>上限：每个企业最多 10000 条敏感词</li>
+  </ul>
+
+  <h2 id="overview">敏感词管理页面</h2>
+  <p>点左侧导航的 <span class="ui">敏感词</span>，进入「敏感词管理」页面。页面分为 <span class="ui">词库</span> 和 <span class="ui">拦截记录</span> 两个页签，默认显示词库：</p>
+  <figure class="shot">
+    <img src="../img/ad_sensitive.png" width="880" alt="敏感词词库">
+    <figcaption>词库页签，演示中已添加了一条敏感词「竞品报价」</figcaption>
+  </figure>
+  <ul>
+    <li><b>右上角</b>：<span class="ui">已用 1 / 10000</span> 表示词库已有多少条、最多能放多少条；右侧的 <span class="ui">敏感词过滤</span> 是总开关，见本章<a href="#switch">「暂停与恢复过滤」</a>。</li>
+    <li><b>工具栏</b>：<span class="ui">搜索词条</span> 框和 <span class="ui">全部分类</span> 下拉框用于筛选；<span class="ui">批量导入</span>、<span class="ui">导出</span>、<span class="ui">添加</span> 三个按钮分别见下文。</li>
+    <li><b>列表</b>：<span class="ui">词条</span>、<span class="ui">分类</span>、<span class="ui">备注</span>、<span class="ui">添加人</span>、<span class="ui">添加时间</span>，每行末尾有 <span class="ui">编辑</span> 和 <span class="ui">删除</span>。</li>
+  </ul>
+
+  <h2 id="add">添加敏感词</h2>
+  <p>点工具栏的 <span class="ui">添加</span>，打开「添加敏感词」对话框：</p>
+  <figure class="shot">
+    <img src="../img/ad_sens_add.png" width="880" alt="添加敏感词对话框">
+    <figcaption>添加敏感词「竞品报价」，分类选「其他」</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">词条</span> 中输入敏感词，最多 32 个字。匹配时忽略大小写、全角半角、空白与符号，所以「竞品报价」也能拦住「竞品 报价」这类写法。</li>
+    <li>在 <span class="ui">分类</span> 中选择一个分类：违法违规、色情低俗、攻击辱骂、商业机密、广告引流或其他。分类用于在列表和拦截记录中筛选。</li>
+    <li>按需填写 <span class="ui">备注</span>（选填，最多 64 个字），例如来源或添加原因。</li>
+    <li>点 <span class="ui">保存</span>，敏感词立即生效。</li>
+  </ol>
+  <p>点某一行的 <span class="ui">编辑</span> 会打开同样的「编辑敏感词」对话框。点 <span class="ui">删除</span> 并确认后，删除立即生效，含有这个词的内容将不再被拦截。</p>
+
+  <h2 id="import">批量导入与导出</h2>
+  <p>敏感词较多时，可以一次导入。点工具栏的 <span class="ui">批量导入</span>：</p>
+  <figure class="shot">
+    <img src="../img/ad_sens_import.png" width="880" alt="批量导入敏感词对话框">
+    <figcaption>批量导入敏感词对话框</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在文本框中粘贴要导入的内容，或点 <span class="ui">从文件读取</span> 选择一个文本文件。每行一条，格式是「词条[Tab 分类名[Tab 备注]]」，即词条后面可以用制表符隔开再写分类名和备注，也可以只写词条。</li>
+    <li>在 <span class="ui">默认分类</span> 中选择一个分类。只写了词条、或分类名写错的行都会归入这个分类。</li>
+    <li>点 <span class="ui">开始导入</span>。空行会被忽略，与已有词条重复的行会被跳过。</li>
+  </ol>
+  <p>导入完成后对话框里显示结果，例如「导入完成：成功 12 条，跳过 2 条。」，并逐行列出被跳过的行及原因。</p>
+  <p>下面是三种写法的示例（<kbd>Tab</kbd> 表示一个制表符）：</p>
+  <table>
+    <tr><th>一行的内容</th><th>导入结果</th></tr>
+    <tr><td><code>内部报价单</code></td><td>只写词条，分类取「默认分类」</td></tr>
+    <tr><td><code>竞品报价</code> <kbd>Tab</kbd> <code>商业机密</code></td><td>词条与分类</td></tr>
+    <tr><td><code>加微信</code> <kbd>Tab</kbd> <code>广告引流</code> <kbd>Tab</kbd> <code>群聊引流常用说法</code></td><td>词条、分类与备注</td></tr>
+  </table>
+  <div class="callout tip"><b>文件编码</b>「从文件读取」能识别 UTF-8（带或不带 BOM）、UTF-16 和中文 Windows 记事本默认的 ANSI 编码，用记事本保存的文件一般都能直接读取。</div>
+  <p>点工具栏的 <span class="ui">导出</span>，可以把整个词库保存为文本文件（默认文件名为「敏感词词库-企业名.txt」）。导出文件的格式与导入格式相同，可以留作备份，也可以导入到其他企业。词库为空时会提示「词库为空，没有可导出的词条」。</p>
+
+  <h2 id="switch">暂停与恢复过滤</h2>
+  <p>页面右上角的 <span class="ui">敏感词过滤</span> 开关控制本企业是否检查敏感词。关闭时会先弹出确认框：暂停后，本企业的消息、资料、群资料与文件名都不再检查敏感词，直到重新打开。词库本身保留，重新打开开关即可恢复拦截。</p>
+
+  <h2 id="client">员工这边会看到什么</h2>
+  <p>员工发送含有敏感词的消息时，消息会被服务器拦下，不会送达对方。发送者的客户端在这条消息左侧显示红色感叹号，下方提示「消息包含敏感词，未能发出」：</p>
+  <figure class="shot">
+    <img src="../img/ad_sens_client.png" width="880" alt="客户端提示消息包含敏感词">
+    <figcaption>罗俊辉在「v2.1 版本发布」群里发送含有「竞品报价」的消息，被拦截未能发出</figcaption>
+  </figure>
+  <p>拦截的范围不只是聊天消息。拦截记录的 <span class="ui">全部来源</span> 下拉框列出了所有会检查敏感词的地方：文字消息、转发、文件名、卡片与接龙、个人资料、群资料、群名片、加群申请、禁言原因、文件夹名、自助注册、群公告、屏幕共享、群备忘、文件共享、云端录像、群问答、帖子、帖子留言、机器人配置和机器人外部内容。</p>
+
+  <h2 id="hits">查看拦截记录</h2>
+  <p>切到 <span class="ui">拦截记录</span> 页签，可以查看服务器拦下了哪些内容：</p>
+  <figure class="shot">
+    <img src="../img/ad_sens_log.png" width="880" alt="拦截记录页签">
+    <figcaption>拦截记录：罗俊辉在「v2.1 版本发布」群里发送的文字消息命中了「竞品报价」</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在第一个下拉框中选择时间范围：近 7 天、近 30 天或近 180 天。</li>
+    <li>按需在 <span class="ui">搜索发送者</span> 框中输入发送者的名字。</li>
+    <li>按需在 <span class="ui">全部来源</span> 和 <span class="ui">全部分类</span> 中筛选。</li>
+  </ol>
+  <p>列表各列依次是 <span class="ui">时间</span>、<span class="ui">发送者</span>、<span class="ui">来源</span>（如文字消息）、<span class="ui">会话</span>（单聊对象或群名）、<span class="ui">命中词</span>、<span class="ui">分类</span> 和 <span class="ui">内容摘要</span>。内容摘要只截取命中位置前后的一小段文字，较长时可以把鼠标停在上面查看全文。</p>
+  <div class="callout note"><b>拦截记录保留 180 天</b>拦截记录只能查看，不能删除，保留 180 天。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

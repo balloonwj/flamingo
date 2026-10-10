@@ -7,7 +7,9 @@
  *        重画变化的那几行，画出来与整条重画的结果逐像素相同。
  *    SL2 工作量：选区变化一次，重画时不重新排版；画的文字段数有上限，且两三万字与九千字的消息
  *        相差无几（不随总字数增长）。
- *    SL3 宽度变化、多选状态变化、内容变化时仍整条重画（会重新排版）。
+ *    SL3 宽度变化、多选状态变化、内容变化时仍整条重画（超长气泡分段缓存时为整段重画）；宽度与多选状态
+ *        变化时会重新排版。2026-10-04 起正文的排版在测量阶段完成、绘制时直接复用，所以「重新排版」
+ *        从重排（ForceLayout）开始计数，「整条重画」看 ChatBubble::RenderPassCount。
  *
  *  SL1、SL2 在两种画布上各跑一遍：DIB（直接读写像素的位图）与 DDB（与屏幕兼容的位图，真实客户端
  *  的消息区画在这种位图上）。GDI+ 在 DDB 上绘制时会改动设备上下文的裁剪区，只在 DIB 上测会漏掉
@@ -408,35 +410,43 @@ TEST_CASE("SL3 宽度、多选状态、内容变化时仍整条重画", "[chatbu
     ChatBubble* bub = LastBubble(m.m_list);
     REQUIRE(bub != NULL);
 
-    //先做一次局部重画（选区变化），确认此时确实不排版
+    //先做一次局部重画（选区变化），确认此时确实不排版，也不整条重画
     bub->SelectAllText();
     ResetInlineProbeCounters();
+    ChatBubble::ResetRenderPassCount();
     m.m_list.OnPaint(canvas.Dc(), m.m_view);
     CHECK(InlineLayoutCallCount() == 0);
+    CHECK(ChatBubble::RenderPassCount() == 0);
 
     SECTION("宽度变化")
     {
         //窄一些的消息区（像素），取值无特殊含义
         const int kNarrowW = 500;
         const RECT narrow = { 0, 0, kNarrowW, kViewH };
-        m.m_list.ForceLayout(narrow);
+        //排版发生在重排时的测量阶段，所以从重排之前开始计数
         ResetInlineProbeCounters();
+        ChatBubble::ResetRenderPassCount();
+        m.m_list.ForceLayout(narrow);
         m.m_list.OnPaint(canvas.Dc(), narrow);
         CHECK(InlineLayoutCallCount() > 0);
+        CHECK(ChatBubble::RenderPassCount() > 0);
     }
     SECTION("多选状态变化")
     {
+        ResetInlineProbeCounters();
+        ChatBubble::ResetRenderPassCount();
         m.m_list.SetMultiSelectMode(true);
         m.m_list.ForceLayout(m.m_view);
-        ResetInlineProbeCounters();
         m.m_list.OnPaint(canvas.Dc(), m.m_view);
         CHECK(InlineLayoutCallCount() > 0);
+        CHECK(ChatBubble::RenderPassCount() > 0);
     }
     SECTION("内容变化")
     {
+        //Invalidate 只把渲染缓存置脏，正文本身没变，可以复用测量阶段的排版，只要求整条重画
         bub->Invalidate();
-        ResetInlineProbeCounters();
+        ChatBubble::ResetRenderPassCount();
         m.m_list.OnPaint(canvas.Dc(), m.m_view);
-        CHECK(InlineLayoutCallCount() > 0);
+        CHECK(ChatBubble::RenderPassCount() > 0);
     }
 }

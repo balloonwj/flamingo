@@ -1,0 +1,587 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Engine">
+      <UniqueIdentifier>{7bfa3072-1c5e-726f-f17e-3f972237a82c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Graphics">
+      <UniqueIdentifier>{21144ad0-019c-aa9c-59e5-178683f3dbea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Util">
+      <UniqueIdentifier>{619b9ea2-01a8-48eb-0989-f550bd74060f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Feature">
+      <UniqueIdentifier>{ebf6d2a7-c204-8f10-d2ff-ca297893a34c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Feature\FolderTransfer">
+      <UniqueIdentifier>{e192c8f7-3319-3055-3428-594b599591bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Feature\P2P">
+      <UniqueIdentifier>{29df4b74-c4ba-4b8f-7332-984a6761ee17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Session">
+      <UniqueIdentifier>{a84d62e0-8ce6-ac20-bd05-b0b6f7089c82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{fadd1363-4aa9-d02c-f68a-ae2fcdbc5321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonMain">
+      <UniqueIdentifier>{8c406ee6-61e4-c2e3-aa2c-1a2d79bfd56f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\net">
+      <UniqueIdentifier>{586cf171-509c-ef9a-1318-b44b343ef18d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party">
+      <UniqueIdentifier>{9eab2112-6210-c38a-271b-d8cbe3106a1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\jsoncpp-1.9.0">
+      <UniqueIdentifier>{f4787265-9915-ba4f-0c42-241643d8f88f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\zlib1.2.11">
+      <UniqueIdentifier>{756e4991-ed32-307b-8b91-24926824bab9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{71ff7152-6d15-db86-eb50-fcac245d183b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party">
+      <UniqueIdentifier>{5492c6cc-82d1-3141-a851-7181d809afd6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\sqlite-src-3530100">
+      <UniqueIdentifier>{ce8dc9cb-5369-de65-6682-55191740cd7b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="FileShareModule.cpp" />
+    <ClCompile Include="Engine\HostLogBridge.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareLog.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\SharePathGuard.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\SharePermission.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareControlFraming.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareProtocolCodec.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareLocalStore.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareReconcile.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareFileOps.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareProvider.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareProviderSession.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareService.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareBrowseModel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareVisitor.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareVisitorChannel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareTransferPlan.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareTransferHooks.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareTransferSession.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareCreateModel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareConversationModel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareConversationCounter.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareCenterModel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareNoticeModel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareRecycle.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareWriteOps.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareRecycleShell.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareSearch.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareWorkerPool.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareThumbnail.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ShareDragModel.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third-party\sqlite-src-3530100\sqlite3.c">
+      <Filter>third-party\sqlite-src-3530100</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareCenterWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareLocalOpen.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareNoticePopup.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareNoticeCenter.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareBrowserWindow.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareCreateDialog.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareConversationPopup.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\SharePickDialog.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareNameDialog.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareFolderPickDialog.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareDragData.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareFileList.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareAvatar.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ShareWindowPlacement.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Session\WindowPlacementResolve.cpp">
+      <Filter>Source\Session</Filter>
+    </ClCompile>
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Graphics\ShellTypeIcon.cpp">
+      <Filter>Source\Common\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\CornerPopupPlacement.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelAvatar.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarGlyph.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelIcons.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\PresenceBadge.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarImageUtil.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarBitmapCache.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderManifest.cpp">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderRelayFraming.cpp">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderRelayClient.cpp">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderSendSession.cpp">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\FolderTransfer\FolderRecvSession.cpp">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FolderProtocolClient.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\P2P\FolderP2PTransport.cpp">
+      <Filter>Source\Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Feature\P2P\P2PLinkBroker.cpp">
+      <Filter>Source\Feature\P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\P2PBadge.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FrameCodec.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FrameCrypto.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FramePayload.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\HandshakeRunner.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Util\ZlibUtil.cpp">
+      <Filter>Source\Common\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Util\MD5Sum.cpp">
+      <Filter>Source\Common\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\compress.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\deflate.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzclose.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzlib.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzread.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzwrite.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\infback.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\trees.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\uncompr.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="FileShareApi.h" />
+    <ClInclude Include="FileShareModule.h" />
+    <ClInclude Include="Engine\ShareLog.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\SharePathGuard.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\SharePermission.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareControlFraming.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareProtocolCodec.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareLocalStore.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareReconcile.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareFileOps.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareWinPath.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareProvider.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareProviderSession.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareService.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareBrowseModel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareVisitor.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareVisitorChannel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareTransferPlan.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareTransferHooks.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareTransferSession.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareCreateModel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareConversationModel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareConversationCounter.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareCenterModel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareNoticeModel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareRecycle.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareWriteOps.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareRecycleShell.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareSearch.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareWorkerPool.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareThumbnail.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ShareDragModel.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareCenterWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareLocalOpen.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareNoticePopup.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareNoticeCenter.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareBrowserWindow.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareCreateDialog.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareConversationPopup.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareUiHost.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\SharePickDialog.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareNameDialog.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareFolderPickDialog.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareDragData.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareFileList.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareAvatar.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ShareWindowPlacement.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Session\WindowPlacementPrefs.h">
+      <Filter>Source\Session</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Graphics\ShellTypeIcon.h">
+      <Filter>Source\Common\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\CornerPopupPlacement.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\P2PBadge.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelAvatar.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelIcons.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\PresenceBadge.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarGlyph.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarImageUtil.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarBitmapCache.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderManifest.h">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderRelayFraming.h">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderRelayClient.h">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderSendSession.h">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderRecvSession.h">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FolderProtocolClient.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\FolderTransfer\FolderLaneTransport.h">
+      <Filter>Source\Feature\FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\P2P\FolderP2PTransport.h">
+      <Filter>Source\Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Feature\P2P\P2PLinkBroker.h">
+      <Filter>Source\Feature\P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\Protocol.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FrameCodec.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FrameCrypto.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\FramePayload.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\net\HandshakeRunner.h">
+      <Filter>Source\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Util\MD5Core.h">
+      <Filter>Source\Common\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Util\ZlibUtil.h">
+      <Filter>Source\Common\Util</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoFileShareVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoFileShare.def" />
+  </ItemGroup>
+</Project>

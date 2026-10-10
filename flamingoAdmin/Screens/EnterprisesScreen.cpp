@@ -11,11 +11,15 @@
 #include "Widgets/UiHelpers.h"
 #include "Widgets/IconRenderer.h"
 #include "Widgets/Widgets.h"
+#include "Widgets/PagerBar.h"     // 表尾分页条（与敏感词页共用）
 #include "Util/HttpWorker.h"
 #include "Util/AppConfig.h"
 #include "Util/Logger.h"
+#include "Util/ColumnFit.h"      // 列宽按可用宽度分配
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 
 #include "Controls/Input/DuiEdit.h"
+#include "Controls/Input/DuiComboBox.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 #include "DuiNotify.h"
 
@@ -35,6 +39,12 @@ const int kFilterRowH  = 36;   // 筛选行高
 const int kSideMargin  = 24;   // 内容区左 / 右 / 下统一外边距
 const int kStatGap     = 12;   // 统计卡间距
 const int kFilterGap   = 10;   // 筛选行控件间距
+// 「更多筛选」条各控件的宽度
+const int kMoreIndustryW = 180;  // 行业下拉框
+const int kMorePlanW     = 140;  // 套餐下拉框
+const int kMoreDateW     = 170;  // 起止日期输入框
+const int kMoreToLabelW  = 18;   // 起止日期之间的「至」
+const int kMoreClearW    = 64;   // 「清除」按钮
 
 // ---- 表格度量 ----
 const int kRowHeight     = 64;  // 数据行高
@@ -54,21 +64,68 @@ const int kColAdmin      = 240;  // 主管理员
 const int kColStatus     = 104;  // 状态
 const int kColDate       = 110;  // 开通日期
 
+// 窗口不够宽时各列可压缩到的最小宽度。七列之和 746，加上「操作」列的 kColOpsMin 不超过
+// 最小窗口（1100）下表格的宽度（约 826 = 1100 - 侧栏 224 - 左右外边距 48 - 边框 2），
+// 保证那时「操作」列仍在表格内。
+const int kColEnterpriseMin = 170;  // 企业：头像 + 截断后的名称
+const int kColIndustryMin   = 90;   // 行业 · 地区
+const int kColScaleMin      = 80;   // 规模：两行短数字
+const int kColPlanMin       = 84;   // 套餐徽章
+const int kColAdminMin      = 130;  // 主管理员：头像 + 截断后的姓名与邮箱
+const int kColStatusMin     = 88;   // 状态徽章
+const int kColDateMin       = 104;  // 开通日期「YYYY-MM-DD」
+const int kColOpsMin        = 56;   // 「操作」列（三个点）至少保留的宽度
+
+// 各列的压缩权重：文字较长的企业、主管理员压得最多，行业次之，徽章、数字与日期压得最少。
+const int kColWeightWide   = 3;     // 企业、主管理员
+const int kColWeightMedium = 2;     // 行业 · 地区
+const int kColWeightNarrow = 1;     // 规模、套餐、状态、开通日期
+
 // ---- 数据拉取 ----
 // 服务端分页：每页条数。
 const int kPageSize = 20;
 
-// 算出 8 个列边界的左 x 坐标（xs[7] 为「操作」列左边界）。
-void ColumnLefts(int rowLeft, int xs[8])
+// 构造一列的宽度规格。
+//   width：设计宽度；minWidth：最小宽度；weight：压缩权重。
+ColumnSpec MakeColumn(int width, int minWidth, int weight)
 {
+    ColumnSpec c;
+    c.m_width    = width;
+    c.m_minWidth = minWidth;
+    c.m_weight   = weight;
+    return c;
+}
+
+// 企业表格前七列（「操作」列之外）的宽度规格，顺序即列的顺序。
+const std::vector<ColumnSpec>& EnterpriseColumnSpecs()
+{
+    static std::vector<ColumnSpec> s_specs;
+    if (s_specs.empty())
+    {
+        s_specs.push_back(MakeColumn(kColEnterprise, kColEnterpriseMin, kColWeightWide));
+        s_specs.push_back(MakeColumn(kColIndustry,   kColIndustryMin,   kColWeightMedium));
+        s_specs.push_back(MakeColumn(kColScale,      kColScaleMin,      kColWeightNarrow));
+        s_specs.push_back(MakeColumn(kColPlan,       kColPlanMin,       kColWeightNarrow));
+        s_specs.push_back(MakeColumn(kColAdmin,      kColAdminMin,      kColWeightWide));
+        s_specs.push_back(MakeColumn(kColStatus,     kColStatusMin,     kColWeightNarrow));
+        s_specs.push_back(MakeColumn(kColDate,       kColDateMin,       kColWeightNarrow));
+    }
+    return s_specs;
+}
+
+// 算出 8 个列边界的左 x 坐标（xs[7] 为「操作」列左边界）。前七列按行宽减去「操作」列的
+// 最小宽度来分配：宽度足够时取设计宽度（多出的宽度归「操作」列，与原来相同），不够时按
+// 权重压缩，见 Util/ColumnFit.h。表头、各行与命中测试都经由本函数，列边界因此一致。
+//   rowLeft / rowRight：行（或表头）的左右边界。
+void ColumnLefts(int rowLeft, int rowRight, int xs[8])
+{
+    const std::vector<int> widths =
+        FitColumnWidths(EnterpriseColumnSpecs(), (rowRight - rowLeft) - kColOpsMin);
     xs[0] = rowLeft;
-    xs[1] = xs[0] + kColEnterprise;
-    xs[2] = xs[1] + kColIndustry;
-    xs[3] = xs[2] + kColScale;
-    xs[4] = xs[3] + kColPlan;
-    xs[5] = xs[4] + kColAdmin;
-    xs[6] = xs[5] + kColStatus;
-    xs[7] = xs[6] + kColDate;
+    for (size_t i = 0; i < widths.size(); ++i)
+    {
+        xs[i + 1] = xs[i] + widths[i];
+    }
 }
 
 // 状态分段下标 → 服务端 list.do 的 status 参数。
@@ -177,7 +234,7 @@ public:
             return -1;
         }
         int xs[8];
-        ColumnLefts(m_rcItem.left, xs);
+        ColumnLefts(m_rcItem.left, m_rcItem.right, xs);
         // xs[7] 是「操作」列的左边界，其右侧到行尾即三个点所在区域。
         if (pt.x < xs[7])
         {
@@ -203,7 +260,7 @@ public:
             return;
         }
         int xs[8];
-        ColumnLefts(m_rcItem.left, xs);
+        ColumnLefts(m_rcItem.left, m_rcItem.right, xs);
 
         HFONT font = ui::UiFont(theme::kFontSizeSmall, false);
         const COLORREF clr = theme::kInk400;
@@ -231,117 +288,6 @@ private:
                          (rightAlign ? DT_RIGHT : DT_LEFT)
                          | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
-};
-
-// ===========================================================================
-// TableFooter —— 企业表格表尾。左侧「共 N 条」+ 右侧分页（上一页 / 页码 /
-// 下一页）。翻页按钮点击经 m_owner 回调 EnterprisesScreen::TurnPage。
-// ===========================================================================
-class TableFooter : public DuiControl
-{
-public:
-    // 由 EnterprisesScreen 注入自身指针，翻页按钮点击时回调它。
-    void SetOwner(EnterprisesScreen* owner) { m_owner = owner; }
-
-    // 设置分页信息：当前页码 / 总条数 / 每页条数。
-    void SetPageInfo(int page, int totalCount, int pageSize)
-    {
-        m_page     = page;
-        m_total    = totalCount;
-        m_pageSize = pageSize;
-        Invalidate();
-    }
-
-    void OnPaint(HDC hdc, const RECT& /*rcDirty*/) override
-    {
-        if (!m_bVisible)
-        {
-            return;
-        }
-        // 顶部分隔线。
-        ui::FillLine(hdc, m_rcItem.left, m_rcItem.top,
-                     m_rcItem.right - m_rcItem.left, 1, theme::kInk100);
-
-        HFONT font = ui::UiFont(theme::kFontSizeSmall, false);
-        const int cy = (m_rcItem.top + m_rcItem.bottom) / 2;
-
-        // 左侧：共 N 条。
-        CString left;
-        left.Format(_T("共 %d 条"), m_total);
-        ui::DrawTextLine(hdc, left,
-                         RECT{ m_rcItem.left + kCellPad, m_rcItem.top,
-                               m_rcItem.left + 240, m_rcItem.bottom },
-                         theme::kInk500, font,
-                         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-        const int pageCount = PageCount();
-        const int btnW = 60;
-        const int btnH = 24;
-
-        // 右侧：[上一页] 第 X / 共 Y 页 [下一页]。
-        m_nextRc.right  = m_rcItem.right - kCellPad;
-        m_nextRc.left   = m_nextRc.right - btnW;
-        m_nextRc.top    = cy - btnH / 2;
-        m_nextRc.bottom = cy + btnH / 2;
-        DrawPagerBtn(hdc, m_nextRc, _T("下一页"), m_page < pageCount);
-
-        CString pageText;
-        pageText.Format(_T("第 %d / 共 %d 页"), m_page, pageCount);
-        RECT pageRc = { m_nextRc.left - 8 - 120, cy - 10,
-                        m_nextRc.left - 8, cy + 10 };
-        ui::DrawTextLine(hdc, pageText, pageRc, theme::kInk500, font,
-                         DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-        m_prevRc.right  = pageRc.left - 8;
-        m_prevRc.left   = m_prevRc.right - btnW;
-        m_prevRc.top    = cy - btnH / 2;
-        m_prevRc.bottom = cy + btnH / 2;
-        DrawPagerBtn(hdc, m_prevRc, _T("上一页"), m_page > 1);
-    }
-
-    bool OnLButtonUp(POINT pt, UINT /*mkFlags*/) override
-    {
-        if (m_owner == nullptr)
-        {
-            return true;
-        }
-        if (::PtInRect(&m_prevRc, pt) && m_page > 1)
-        {
-            m_owner->TurnPage(-1);
-        }
-        else if (::PtInRect(&m_nextRc, pt) && m_page < PageCount())
-        {
-            m_owner->TurnPage(1);
-        }
-        return true;
-    }
-
-private:
-    // 按总条数与每页条数算出总页数（至少 1）。
-    int PageCount() const
-    {
-        const int per = (m_pageSize > 0) ? m_pageSize : 1;
-        const int n = (m_total + per - 1) / per;
-        return n < 1 ? 1 : n;
-    }
-
-    // 画一个分页小按钮（禁用态灰底灰字）。
-    void DrawPagerBtn(HDC hdc, const RECT& rc, LPCTSTR text, bool enabled)
-    {
-        ui::FillRoundRect(hdc, rc, enabled ? theme::kInk0 : theme::kInk25, 5);
-        ui::StrokeRoundRect(hdc, rc, theme::kInk100, 5, 1.0f);
-        ui::DrawTextLine(hdc, text, rc,
-                         enabled ? theme::kInk600 : theme::kInk300,
-                         ui::UiFont(theme::kFontSizeSmall, false),
-                         DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
-
-    EnterprisesScreen* m_owner = nullptr;  // 宿主界面（翻页回调）
-    int  m_page     = 1;                   // 当前页码
-    int  m_total    = 0;                   // 总条数
-    int  m_pageSize = 1;                   // 每页条数
-    RECT m_prevRc   = { 0, 0, 0, 0 };      // 「上一页」按钮命中矩形
-    RECT m_nextRc   = { 0, 0, 0, 0 };      // 「下一页」按钮命中矩形
 };
 
 } // anonymous namespace
@@ -439,10 +385,12 @@ EnterprisesScreen::EnterprisesScreen()
 
     auto btnMore = std::make_unique<DuiButton>();
     btnMore->SetCtrlId(kIdEntMore);
-    btnMore->SetText(_T("更多筛选"));
+    btnMore->SetText(adminapi::MoreFilterButtonText(0));
     btnMore->SetVariant(DuiButton::Variant::Ghost);
     btnMore->SetTextPointSize(theme::kFontSizeNormal);
-    filterRow->AddChild(std::move(btnMore), Hint().Fixed(88));
+    m_btnMore = btnMore.get();
+    // 带条件数时文字变为「更多筛选 · 4」，宽度按最长的情况留出。
+    filterRow->AddChild(std::move(btnMore), Hint().Fixed(112));
 
     auto btnRefresh = std::make_unique<DuiButton>();
     btnRefresh->SetCtrlId(kIdEntRefresh);
@@ -452,6 +400,69 @@ EnterprisesScreen::EnterprisesScreen()
     filterRow->AddChild(std::move(btnRefresh), Hint().Fixed(64));
 
     AddChild(std::move(filterRow),
+             Hint().Fixed(kFilterRowH).Margin(kSideMargin, 0, kSideMargin, 14));
+
+    // ---- 「更多筛选」条：行业、套餐、开通起止日期与「清除」，默认隐藏 ----
+    // 与搜索框、状态分段同时生效；变化经 DUIN_VALUECHANGED 上报 AdminFrame，再转发到
+    // OnMoreFilterChanged。
+    auto moreRow = std::make_unique<DuiHBox>();
+    moreRow->SetGap(kFilterGap);
+
+    auto cbIndustry = std::make_unique<DuiComboBox>();
+    cbIndustry->SetCtrlId(kIdEntMoreIndustry);
+    cbIndustry->AddString(_T("不限行业"));
+    for (int i = 0; i < adminapi::kIndustryOptionCount; ++i)
+    {
+        cbIndustry->AddString(adminapi::kIndustryOptions[i]);
+    }
+    cbIndustry->SetCurSel(0, false);
+    m_cbIndustry = cbIndustry.get();
+    moreRow->AddChild(std::move(cbIndustry), Hint().Fixed(kMoreIndustryW));
+
+    // 第 0 项为「不限套餐」，其后依次是共用的套餐选项，下标减 1 即套餐编号。
+    auto cbPlan = std::make_unique<DuiComboBox>();
+    cbPlan->SetCtrlId(kIdEntMorePlan);
+    cbPlan->AddString(_T("不限套餐"));
+    for (int i = 0; i < adminapi::kPlanOptionCount; ++i)
+    {
+        cbPlan->AddString(adminapi::kPlanOptions[i]);
+    }
+    cbPlan->SetCurSel(0, false);
+    m_cbPlan = cbPlan.get();
+    moreRow->AddChild(std::move(cbPlan), Hint().Fixed(kMorePlanW));
+
+    auto editFrom = std::make_unique<DuiEdit>();
+    editFrom->SetCtrlId(kIdEntMoreFrom);
+    editFrom->SetPlaceholder(_T("开通起 YYYY-MM-DD"));
+    editFrom->SetBgColor(theme::kInk25);
+    editFrom->SetShowBorder(true);
+    m_editOpenFrom = editFrom.get();
+    moreRow->AddChild(std::move(editFrom), Hint().Fixed(kMoreDateW));
+
+    moreRow->AddChild(ui::MakeLabel(_T("至"), theme::kFontSizeNormal, false, theme::kInk500,
+                                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX),
+                      Hint().Fixed(kMoreToLabelW));
+
+    auto editTo = std::make_unique<DuiEdit>();
+    editTo->SetCtrlId(kIdEntMoreTo);
+    editTo->SetPlaceholder(_T("开通止 YYYY-MM-DD"));
+    editTo->SetBgColor(theme::kInk25);
+    editTo->SetShowBorder(true);
+    m_editOpenTo = editTo.get();
+    moreRow->AddChild(std::move(editTo), Hint().Fixed(kMoreDateW));
+
+    auto btnClear = std::make_unique<DuiButton>();
+    btnClear->SetCtrlId(kIdEntMoreClear);
+    btnClear->SetText(_T("清除"));
+    btnClear->SetVariant(DuiButton::Variant::Ghost);
+    btnClear->SetTextPointSize(theme::kFontSizeNormal);
+    moreRow->AddChild(std::move(btnClear), Hint().Fixed(kMoreClearW));
+
+    moreRow->AddChild(std::make_unique<DuiControl>(), Hint().Weight(1));  // 弹性空白
+
+    moreRow->SetVisible(false);
+    m_moreRow = moreRow.get();
+    AddChild(std::move(moreRow),
              Hint().Fixed(kFilterRowH).Margin(kSideMargin, 0, kSideMargin, 14));
 
     // ---- 表格卡:表头 + 虚拟列表 + 表尾 ----
@@ -475,8 +486,9 @@ EnterprisesScreen::EnterprisesScreen()
     m_table = table.get();
     card->AddChild(std::move(table), Hint().Weight(1));
 
-    auto footer = std::make_unique<TableFooter>();
-    footer->SetOwner(this);
+    auto footer = std::make_unique<ui::PagerBar>();
+    footer->SetSidePadding(kCellPad);
+    footer->SetPageCallback(&EnterprisesScreen::OnPageThunk, this);
     m_footer = footer.get();
     card->AddChild(std::move(footer), Hint().Fixed(kFooterH));
 
@@ -490,6 +502,28 @@ EnterprisesScreen::EnterprisesScreen()
 void EnterprisesScreen::Refresh()
 {
     StartLoad();
+}
+
+void EnterprisesScreen::ResetState()
+{
+    m_enterprises.clear();
+    m_loadState  = LoadState::Idle;
+    m_errorText.Empty();
+    m_page       = 1;
+    m_totalCount = 0;
+    m_clickedEnterpriseId.Empty();
+    // 「更多筛选」也回到初始状态：换账号登录后不残留上一位管理员的条件。
+    ResetMoreFilterControls();
+    if (m_moreVisible)
+    {
+        ToggleMoreFilters();
+    }
+    if (m_table != nullptr)
+    {
+        m_table->SetRowCount(0);
+        m_table->Invalidate();
+    }
+    UpdateTableState();
 }
 
 void EnterprisesScreen::StartLoad()
@@ -506,14 +540,12 @@ void EnterprisesScreen::StartLoad()
     const ServerConfig& server = AppConfig::Instance().Server();
     const CString       token  = AdminSession::Instance().Token();
 
-    // 搜索词与状态分段作为请求参数下推服务端。
-    CString keyword = (m_search != nullptr) ? m_search->GetText() : CString();
-    keyword.Trim();
-    const int seg = (m_seg != nullptr) ? m_seg->GetActiveIndex() : 0;
+    // 搜索词、状态分段与「更多筛选」作为请求参数下推服务端。
+    const EnterpriseListFilter filter = GetFilter();
 
     // 企业列表：服务端分页 + 服务端筛选。
     HttpRequest request = adminapi::MakeEnterpriseListRequest(
-        server, token, keyword, SegmentToServerStatus(seg), m_page, kPageSize);
+        server, token, filter, m_page, kPageSize);
     request.m_replyHwnd = m_hostWnd;
     request.m_replyMsg  = WM_APP_API_RESULT;
     request.m_tag       = kApiTagEntList;
@@ -580,8 +612,7 @@ void EnterprisesScreen::OnListResult(const HttpResult& http)
     }
     if (m_footer != nullptr)
     {
-        static_cast<TableFooter*>(m_footer)->SetPageInfo(
-            m_page, m_totalCount, kPageSize);
+        m_footer->SetPageInfo(m_page, m_totalCount, kPageSize);
     }
     UpdateTableState();
 }
@@ -603,7 +634,8 @@ void EnterprisesScreen::UpdateTableState()
             // 区分「整个平台无企业」与「当前筛选 / 翻页无匹配」。
             const bool filtering =
                 (m_seg != nullptr && m_seg->GetActiveIndex() != 0)
-                || (m_search != nullptr && !m_search->GetText().IsEmpty());
+                || (m_search != nullptr && !m_search->GetText().IsEmpty())
+                || adminapi::CountMoreFilters(GetFilter()) > 0;
             overlay = filtering ? CString(_T("没有匹配的企业"))
                                 : CString(_T("暂无企业"));
         }
@@ -676,6 +708,130 @@ void EnterprisesScreen::OnSegmentChanged(int /*segIndex*/)
     StartLoad();
 }
 
+void EnterprisesScreen::ToggleMoreFilters()
+{
+    if (m_moreRow == nullptr)
+    {
+        return;
+    }
+    m_moreVisible = !m_moreVisible;
+    m_moreRow->SetVisible(m_moreVisible);
+    // 筛选条是本界面（纵向布局）的直接子控件：对本界面强制布局一次，表格卡随之上下移动。
+    const RECT rc = GetRect();
+    if (!::IsRectEmpty(&rc))
+    {
+        ForceLayout(rc);
+    }
+    Invalidate();
+}
+
+void EnterprisesScreen::OnMoreFilterChanged()
+{
+    UpdateMoreButtonText();
+    if (!AreDateInputsUsable())
+    {
+        // 日期输入到一半：先不拉取，等输入完整或清空后再按新条件拉取。
+        return;
+    }
+    m_page = 1;
+    StartLoad();
+}
+
+void EnterprisesScreen::ClearMoreFilters()
+{
+    ResetMoreFilterControls();
+    UpdateMoreButtonText();
+    m_page = 1;
+    StartLoad();
+}
+
+void EnterprisesScreen::ResetMoreFilterControls()
+{
+    if (m_cbIndustry != nullptr)
+    {
+        m_cbIndustry->SetCurSel(0, false);
+    }
+    if (m_cbPlan != nullptr)
+    {
+        m_cbPlan->SetCurSel(0, false);
+    }
+    if (m_editOpenFrom != nullptr)
+    {
+        m_editOpenFrom->SetTextNoNotify(_T(""));
+    }
+    if (m_editOpenTo != nullptr)
+    {
+        m_editOpenTo->SetTextNoNotify(_T(""));
+    }
+    UpdateMoreButtonText();
+}
+
+EnterpriseListFilter EnterprisesScreen::GetFilter() const
+{
+    EnterpriseListFilter filter;
+    CString keyword = (m_search != nullptr) ? m_search->GetText() : CString();
+    keyword.Trim();
+    filter.m_keyword = keyword;
+    filter.m_status  = SegmentToServerStatus((m_seg != nullptr) ? m_seg->GetActiveIndex() : 0);
+
+    // 行业下拉框第 0 项是「不限行业」，第 i 项对应 kIndustryOptions[i - 1]。
+    const int industry = (m_cbIndustry != nullptr) ? m_cbIndustry->GetCurSel() : 0;
+    if (industry > 0 && industry <= adminapi::kIndustryOptionCount)
+    {
+        filter.m_industry = adminapi::kIndustryOptions[industry - 1];
+    }
+    // 套餐下拉框第 0 项是「不限套餐」，第 i 项对应套餐编号 i - 1。
+    const int plan = (m_cbPlan != nullptr) ? m_cbPlan->GetCurSel() : 0;
+    filter.m_plan = (plan > 0) ? plan - 1 : -1;
+
+    CString from = (m_editOpenFrom != nullptr) ? m_editOpenFrom->GetText() : CString();
+    from.Trim();
+    if (adminapi::IsValidDateText(from))
+    {
+        filter.m_openFrom = from;
+    }
+    CString to = (m_editOpenTo != nullptr) ? m_editOpenTo->GetText() : CString();
+    to.Trim();
+    if (adminapi::IsValidDateText(to))
+    {
+        filter.m_openTo = to;
+    }
+    return filter;
+}
+
+void EnterprisesScreen::UpdateMoreButtonText()
+{
+    if (m_btnMore != nullptr)
+    {
+        m_btnMore->SetText(adminapi::MoreFilterButtonText(adminapi::CountMoreFilters(GetFilter())));
+    }
+}
+
+bool EnterprisesScreen::AreDateInputsUsable() const
+{
+    const balloonwjui::DuiEdit* edits[] = { m_editOpenFrom, m_editOpenTo };
+    for (size_t i = 0; i < sizeof(edits) / sizeof(edits[0]); ++i)
+    {
+        if (edits[i] == nullptr)
+        {
+            continue;
+        }
+        CString text = edits[i]->GetText();
+        text.Trim();
+        if (!text.IsEmpty() && !adminapi::IsValidDateText(text))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void EnterprisesScreen::OnPageThunk(void* user, int newPage)
+{
+    EnterprisesScreen* self = static_cast<EnterprisesScreen*>(user);
+    self->TurnPage(newPage - self->m_page);
+}
+
 void EnterprisesScreen::TurnPage(int delta)
 {
     const int n = (m_totalCount + kPageSize - 1) / kPageSize;
@@ -718,7 +874,7 @@ void EnterprisesScreen::PaintRow(HDC hdc, int rowIndex, const RECT& rowRect,
                  rowRect.right - rowRect.left, 1, theme::kInk100);
 
     int xs[8];
-    ColumnLefts(rowRect.left, xs);
+    ColumnLefts(rowRect.left, rowRect.right, xs);
     const int cy = (rowRect.top + rowRect.bottom) / 2;
 
     // ---- 列 0：企业（头像 + 名称 + ID）----
@@ -747,7 +903,8 @@ void EnterprisesScreen::PaintRow(HDC hdc, int rowIndex, const RECT& rowRect,
                       xs[2] - kCellPad, rowRect.top + 50 };
     ui::DrawTextLine(hdc, e.m_region, rcRegion, theme::kInk400,
                      ui::UiFont(theme::kFontSizeSmall, false),
-                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX
+                     | DT_END_ELLIPSIS);
 
     // ---- 列 2：规模（人数 + 部门数，右对齐）----
     RECT rcMembers = { xs[2] + kCellPad, rowRect.top + 12,
@@ -782,7 +939,8 @@ void EnterprisesScreen::PaintRow(HDC hdc, int rowIndex, const RECT& rowRect,
                          xs[5] - kCellPad, rowRect.top + 32 };
     ui::DrawTextLine(hdc, e.m_admin, rcAdminName, theme::kInk700,
                      ui::UiFont(theme::kFontSizeNormal, false),
-                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX
+                     | DT_END_ELLIPSIS);
     RECT rcAdminMail = { adminTextLeft, rowRect.top + 32,
                          xs[5] - kCellPad, rowRect.top + 50 };
     ui::DrawTextLine(hdc, e.m_contact, rcAdminMail, theme::kInk400,
@@ -795,7 +953,8 @@ void EnterprisesScreen::PaintRow(HDC hdc, int rowIndex, const RECT& rowRect,
 
     // ---- 列 6：开通日期 ----
     RECT rcDate = { xs[6] + kCellPad, rowRect.top, xs[7] - kCellPad, rowRect.bottom };
-    ui::DrawTextLine(hdc, e.m_createdAt, rcDate, theme::kInk500,
+    ui::DrawTextLine(hdc, timetext::FormatTimeText(e.m_createdAt, timetext::TimeStyle::Date), rcDate,
+                     theme::kInk500,
                      ui::UiFont(theme::kFontSizeNormal, false),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
@@ -817,6 +976,13 @@ void EnterprisesScreen::PaintRow(HDC hdc, int rowIndex, const RECT& rowRect,
 bool EnterprisesScreen::HitTestActionDotsAt(POINT hostClientPt)
 {
     if (m_table == nullptr)
+    {
+        return false;
+    }
+    // 点落在表格的子控件（垂直滚动条）上时不算点中三个点。滚动条叠在「操作」列的最右侧，
+    // 而 RowFromActionColumn 把操作列一直算到表格右边界；若不先排除，按下滚动条会被当成
+    // 点了三个点：弹出行操作菜单并拦下这次按下，滚动条既不能点击翻页也不能拖动。
+    if (m_table->HitTest(hostClientPt) != m_table)
     {
         return false;
     }

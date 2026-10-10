@@ -11,11 +11,12 @@
  *  覆盖用例:
  *    GI1  BuildGroupInfoBody 返回非空
  *    GI2  关键 ctrlId 存在且类型正确(头像/群名/群号人数/群主/公告/名片 view+edit/
- *         两开关/两按钮)
+ *         提醒模式下拉框/置顶开关/两按钮)
  *    GI3  初始可见性:名片 view 可见、edit 隐藏
  *    GI4  ApplyGroupInfoDataToView 写入群名 / "群号 N · M 人" / 群主 / 公告 / 名片;
  *         公告空→占位"暂无群公告";名片空→占位"未设置"
- *    GI5  两开关按 mute / pinned 置位
+ *    GI5  提醒模式下拉框与置顶开关按 notifyMode / pinned 置位
+ *    GI5b 提醒模式下拉框的五个选项与右键二级菜单一致
  *    GI6  SetGroupInfoCardEditMode 翻转名片 view/edit 可见性
  *    GI7  ResolveGroupOwnerName / ResolveMyGroupCard:群名片优先、空回退账号昵称、
  *         未命中返回空串
@@ -25,6 +26,8 @@
  *    GIC3 复制提示条落在头部资料区下方，不遮住群名、群号
  *    GIX1 群主的底部多出「解散群聊」按钮，三个按钮等分一行、互不重叠；其余角色只有两个按钮
  *    GIX2 先按普通成员排版、再换成群主数据（"隐藏后再显示"的路径），解散按钮的位置与尺寸仍然正确
+ *    GI9  群简介：有内容时显示原文（换行换成空格），为空时显示占位「暂无群简介」（2026-10-10 补上群简介）
+ *    GI10 加了群简介之后按设计尺寸与最小尺寸都排得下
  *
  *  用 Catch2 v3(amalgamated)。全局 _Module 由 BalloonChatLayoutTests.cpp
  *  统一定义,本文件只引用。
@@ -37,6 +40,9 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonMain/BalloonGroupInfoLayout.h"
+#include "LayoutFitCheck.h"                       // layoutfit::MeasureAt：按设计尺寸排得下（GI10）
+#include "../UI/BalloonMain/NotifyModeMenu.h"   // GetNotifyModeChoices / GetNotifyModeLabel：下拉框选项
+#include "../net/Protocol.h"                    // enum conversation_notify_mode
 #include "../net/GroupProtocolClient.h"          // net::GroupMemberItem
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -44,6 +50,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/DuiResMgr.h"
 #include "../../../third-party/balloonui/balloonui/DuiDpi.h"
@@ -89,7 +96,7 @@ GroupInfoViewData MakeProjectGroupData()
     d.ownerName   = _T("谢知行");
     d.announcement= _T("v3.2 版本即将发布，全员准备。");
     d.myCard      = _T("林知夏");
-    d.mute        = false;
+    d.notifyMode  = notify_mode_allow;
     d.pinned      = true;
     return d;
 }
@@ -119,7 +126,7 @@ TEST_CASE("GI2 关键 ctrlId 存在且类型正确", "[groupinfo]")
     CHECK(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupCardLabel)) != nullptr);
     CHECK(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupCardView)) != nullptr);
     CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kIdGroupCardEdit)) != nullptr);
-    CHECK(dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupMuteSwitch)) != nullptr);
+    CHECK(dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdGroupNotifyCombo)) != nullptr);
     CHECK(dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupPinSwitch)) != nullptr);
     CHECK(dynamic_cast<DuiButton*>(root->FindCtrlById(kIdGroupBtnHistory)) != nullptr);
     CHECK(dynamic_cast<DuiButton*>(root->FindCtrlById(kIdGroupBtnQuit)) != nullptr);
@@ -192,22 +199,47 @@ TEST_CASE("GI4b 公告 / 名片为空时显占位", "[groupinfo][apply]")
     CHECK(card->GetText()   == CString(_T("未设置")));
 }
 
-TEST_CASE("GI5 两开关按 mute / pinned 置位", "[groupinfo][apply]")
+TEST_CASE("GI5 提醒模式下拉框与置顶开关按 notifyMode / pinned 置位", "[groupinfo][apply]")
 {
     std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
     REQUIRE(root != nullptr);
 
     GroupInfoViewData d = MakeProjectGroupData();
-    d.mute   = true;
-    d.pinned = false;
+    d.notifyMode = notify_mode_silent;
+    d.pinned     = false;
     REQUIRE(ApplyGroupInfoDataToView(root.get(), d) == true);
 
-    DuiSwitch* mute = dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupMuteSwitch));
-    DuiSwitch* pin  = dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupPinSwitch));
-    REQUIRE(mute != nullptr);
-    REQUIRE(pin  != nullptr);
-    CHECK(mute->IsChecked() == true);
-    CHECK(pin->IsChecked()  == false);
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdGroupNotifyCombo));
+    DuiSwitch*   pin   = dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupPinSwitch));
+    REQUIRE(combo != nullptr);
+    REQUIRE(pin   != nullptr);
+    CHECK(combo->GetText() == CString(L"接收消息但不提醒"));
+    CHECK(pin->IsChecked() == false);
+
+    // 再换成屏蔽：只有群聊才有这一项
+    d.notifyMode = notify_mode_block;
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), d) == true);
+    CHECK(combo->GetText() == CString(L"屏蔽消息"));
+}
+
+TEST_CASE("GI5b 提醒模式下拉框的选项与右键二级菜单一致（六项，含屏蔽与只提醒 @我和关注的人）", "[groupinfo][notifymode]")
+{
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdGroupNotifyCombo));
+    REQUIRE(combo != nullptr);
+    const std::vector<int> modes = balloonmain::GetNotifyModeChoices(true);
+    REQUIRE(combo->GetCount() == (int)modes.size());
+    //2026-10-06 起群聊有六种模式（加了「只提醒 @我和关注的人」，docs/消息提醒模式与消息盒子方案.md §12）
+    const int kGroupNotifyModeCount = 6;
+    REQUIRE(combo->GetCount() == kGroupNotifyModeCount);
+    for (int i = 0; i < combo->GetCount(); ++i)
+    {
+        CHECK(combo->GetItemText(i) == CString(balloonmain::GetNotifyModeLabel(modes[(size_t)i])));
+    }
+    // 不可手输：只能从六种模式里选
+    CHECK(combo->IsEditable() == false);
 }
 
 // =====================================================================
@@ -575,4 +607,53 @@ TEST_CASE("GIX2 先按普通成员排版再换成群主数据，解散按钮的�
     //解散按钮在客户区之内
     CHECK(rcDismiss.right <= kGixBodyW);
     CHECK(rcDismiss.top == rcQuit.top);
+}
+
+// =====================================================================
+// GI9 / GI10 群简介（2026-10-10 补上：群管理页说群简介「显示在群资料页」，此前群资料窗口里没有）
+// =====================================================================
+
+TEST_CASE("GI9 群资料显示群简介：有内容时显示原文（换行换成空格），为空时显占位", "[groupinfo][apply]")
+{
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+
+    GroupInfoViewData d = MakeProjectGroupData();
+    d.intro = _T("产品与研发的日常沟通群\r\n版本发布前请留意群公告");
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), d) == true);
+    DuiLabel* intro = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupIntro));
+    REQUIRE(intro != nullptr);
+    CHECK(intro->GetText() == CString(_T("产品与研发的日常沟通群 版本发布前请留意群公告")));
+
+    d.intro = _T("");
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), d) == true);
+    CHECK(intro->GetText() == CString(_T("暂无群简介")));
+}
+
+TEST_CASE("GI10 加了群简介之后，群资料按设计尺寸排得下：底部按钮与置顶行不被压缩", "[groupinfo][layoutfit]")
+{
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+    GroupInfoViewData d = MakeProjectGroupData();
+    d.intro = _T("产品与研发的日常沟通群");
+    d.isOwner = true;   // 群主多一个「解散群聊」按钮，底部一行最满
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), d) == true);
+
+    const int contentW = kGroupInfoWidth;
+    const int contentH = kGroupInfoHeight - kGroupInfoTitleBarH;
+    const UINT ids[] = { kIdGroupBtnHistory, kIdGroupBtnQuit, kIdGroupBtnDismiss, kIdGroupPinSwitch, kIdGroupIntro };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        INFO("control id = " << ids[i]);
+        const layoutfit::FitResult r = layoutfit::MeasureAt(root.get(), ids[i], contentW, contentH);
+        REQUIRE(r.m_found);
+        CHECK(r.m_bottom <= contentH);
+        CHECK(r.m_height == r.m_roomyHeight);
+    }
+    //最小尺寸下同样排得下
+    const layoutfit::FitResult minFit = layoutfit::MeasureAt(root.get(), kIdGroupBtnHistory, kGroupInfoMinWidth,
+                                                            kGroupInfoMinHeight - kGroupInfoTitleBarH);
+    REQUIRE(minFit.m_found);
+    CHECK(minFit.m_bottom <= kGroupInfoMinHeight - kGroupInfoTitleBarH);
+    CHECK(minFit.m_height == minFit.m_roomyHeight);
 }

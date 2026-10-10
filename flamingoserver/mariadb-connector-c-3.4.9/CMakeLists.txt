@@ -1,0 +1,569 @@
+# CMakeLists.txt
+
+# This is the LGPL libmariadb project.
+
+CMAKE_MINIMUM_REQUIRED(VERSION 3.12.0 FATAL_ERROR)
+
+INCLUDE(CheckFunctionExists)
+# CMP0077 defaults to NEW since cmake 3.13; can drop when minimum is bumped
+CMAKE_POLICY(SET CMP0077 NEW)
+
+
+# Is C/C built as subproject?
+get_directory_property(IS_SUBPROJECT PARENT_DIRECTORY)
+
+# do not inherit include directories from the parent project
+SET_PROPERTY(DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+FOREACH(V WITH_MYSQLCOMPAT WITH_MSI WITH_SIGNCODE WITH_RTC WITH_UNIT_TESTS
+    WITH_DYNCOL WITH_EXTERNAL_ZLIB WITH_CURL WITH_SQLITE WITH_SSL WITH_ICONV
+    DEFAULT_CHARSET INSTALL_LAYOUT WITH_TEST_SRCPKG WITH_BOOST_CONTEXT
+    DEFAULT_SSL_VERIFY_SERVER_CERT)
+  SET(${V} ${${OPT}${V}})
+ENDFOREACH()
+
+MACRO(ADD_OPTION _name _text _default)
+  IF(NOT DEFINED ${_name})
+    OPTION(${OPT}${_name} "${_text}" "${_default}")
+  ELSE()
+    OPTION(${OPT}${_name} "${_text}" "${${_name}}")
+  ENDIF()
+ENDMACRO()
+
+ADD_OPTION(WITH_BOOST_CONTEXT
+  "Use Boost::Context for the non-blocking API on platforms without native implementation"
+  OFF)
+
+IF(WITH_BOOST_CONTEXT)
+  PROJECT(mariadb-connector-c LANGUAGES C CXX)
+ELSE()
+  PROJECT(mariadb-connector-c C)
+ENDIF()
+
+SET(CC_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+SET(CC_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
+SET(CPACK_PACKAGE_VERSION_MAJOR 3)
+SET(CPACK_PACKAGE_VERSION_MINOR 4)
+SET(CPACK_PACKAGE_VERSION_PATCH 9)
+
+SET(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+MATH(EXPR MARIADB_PACKAGE_VERSION_ID "${CPACK_PACKAGE_VERSION_MAJOR} * 10000 +
+                            ${CPACK_PACKAGE_VERSION_MINOR} * 100   +
+                            ${CPACK_PACKAGE_VERSION_PATCH}")
+
+### Options ###
+IF(NOT WIN32)
+  ADD_OPTION(WITH_MYSQLCOMPAT "creates libmysql* symbolic links" OFF)
+  ADD_OPTION(WITH_DOCS "creates manpages" OFF)
+ELSE()
+  ADD_OPTION(WITH_MSI "Build MSI installation package" OFF)
+  ADD_OPTION(WITH_SIGNCODE "digitally sign files" OFF)
+  ADD_OPTION(WITH_RTC "enables run time checks for debug builds" OFF)
+  ADD_OPTION(WITH_ICONV "enables character set conversion" OFF)
+ENDIF()
+
+ADD_OPTION(WITH_UNIT_TESTS "build test suite" ON)
+ADD_OPTION(WITH_DYNCOL "Enables support of dynamic columns" ON)
+ADD_OPTION(WITH_EXTERNAL_ZLIB "Enables use of external zlib" OFF)
+ADD_OPTION(WITH_CURL "Enables use of curl" ON)
+ADD_OPTION(WITH_SSL "Enables use of TLS/SSL library" ON)
+ADD_OPTION(DEFAULT_SSL_VERIFY_SERVER_CERT "Default value for MYSQL_OPT_SSL_VERIFY_SERVER_CERT" ON)
+
+
+INCLUDE(${CC_SOURCE_DIR}/cmake/misc.cmake)
+FIND_PACKAGE(CURL)
+
+IF(WITH_SIGNCODE)
+  IF(WIN32 AND NOT SIGN_OPTIONS)
+    SET(SIGN_OPTIONS /tr http://timestamp.digicert.com /td sha256 /fd sha256 /a)
+  ELSE()
+    SEPARATE_ARGUMENTS(SIGN_OPTIONS)
+  ENDIF()
+  MARK_AS_ADVANCED(SIGN_OPTIONS)
+ENDIF()
+
+SET(MARIADB_CONNECTOR_C_COPYRIGHT "2013-2017 MariaDB Corporation Ab")
+
+IF(WITH_RTC)
+  SET(RTC_OPTIONS "/RTC1 /RTCc")
+ENDIF()
+
+INCLUDE(${CC_SOURCE_DIR}/cmake/plugins.cmake)
+
+
+IF(WIN32)
+  FILE(REMOVE ${CC_BINARY_DIR}/win/packaging/plugin.conf)
+  INCLUDE(${CC_SOURCE_DIR}/cmake/version_info.cmake)
+ENDIF()
+
+IF(NOT IS_SUBPROJECT)
+IF(MSVC)
+  # Speedup system tests
+  INCLUDE(${CC_SOURCE_DIR}/cmake/WindowsCache.cmake)
+  add_compile_definitions(WIN32_LEAN_AND_MEAN NOGDI)
+  IF (MSVC)
+    SET(CONFIG_TYPES "DEBUG" "RELEASE" "RELWITHDEBINFO")
+    FOREACH(BUILD_TYPE ${CONFIG_TYPES})
+      FOREACH(COMPILER CXX C)
+        SET(COMPILER_FLAGS "${CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE}}")
+        IF (NOT COMPILER_FLAGS STREQUAL "")
+          IF(NOT WITH_ASAN)
+            STRING(REPLACE "/MD" "/MT" COMPILER_FLAGS ${COMPILER_FLAGS})
+            IF (BUILD_TYPE STREQUAL "DEBUG")
+              SET(COMPILER_FLAGS "${COMPILER_FLAGS} ${RTC_OPTIONS}")
+            ENDIF()
+          ENDIF()
+          STRING(REPLACE "/Zi" "/Z7" COMPILER_FLAGS ${COMPILER_FLAGS})
+          MESSAGE (STATUS "CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE}= ${COMPILER_FLAGS}")
+          SET(CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE} ${COMPILER_FLAGS})
+        ENDIF()
+      ENDFOREACH()
+    ENDFOREACH()
+  ENDIF()
+ENDIF()
+ELSE()
+  # MDEV-16383
+  IF(WITH_EMBEDDED_SERVER)
+    add_compile_definitions(HAVE_EMBEDDED)
+  ENDIF()
+ENDIF()
+
+# Disable dbug information for release builds
+SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -DDBUG_OFF")
+SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DDBUG_OFF")
+SET(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -DDBUG_OFF")
+SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -DDBUG_OFF")
+
+IF(CMAKE_C_COMPILER_ID MATCHES "GNU")
+  INCLUDE(CheckCCompilerFlag)
+  SET(GCC_FLAGS -Wunused -Wlogical-op -Wno-uninitialized  -Wall -Wextra -Wformat-security -Wno-init-self -Wwrite-strings -Wshift-count-overflow -Wdeclaration-after-statement -Wno-undef -Wno-unknown-pragmas -Wno-stringop-truncation)
+  FOREACH(GCC_FLAG ${GCC_FLAGS})
+    CHECK_C_COMPILER_FLAG("${GCC_FLAG}" HAS_${GCC_FLAG}_FLAG)
+    IF(${HAS_${GCC_FLAG}_FLAG})
+      SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GCC_FLAG}")
+    ENDIF()
+  ENDFOREACH()
+ENDIF()
+
+# If the build type isn't specified, set to Relwithdebinfo as default.
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE "RelWithDebInfo")
+ENDIF()
+
+FIND_PACKAGE(Git)
+IF(GIT_EXECUTABLE AND EXISTS ${CC_SOURCE_DIR}/.git)
+  EXECUTE_PROCESS(
+    COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+      WORKING_DIRECTORY ${CC_SOURCE_DIR}
+       OUTPUT_VARIABLE OUT RESULT_VARIABLE RES)
+   IF(RES EQUAL 0)
+    STRING(REGEX REPLACE "\n$" "" CC_SOURCE_REVISION "${OUT}")
+  ENDIF()
+  EXECUTE_PROCESS(
+    COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+            WORKING_DIRECTORY ${CC_SOURCE_DIR})
+ENDIF()
+
+# various defines for generating include/mysql_version.h
+SET(PROTOCOL_VERSION 10) # we adapted new password option from PHP's mysqlnd !
+
+# if C/C is build as subproject inside MariaDB server tree we will
+# use the version defined by server
+IF(MAJOR_VERSION)
+  SET(MARIADB_CLIENT_VERSION_MAJOR ${MAJOR_VERSION})
+  SET(MARIADB_CLIENT_VERSION_MINOR ${MINOR_VERSION})
+  SET(MARIADB_CLIENT_VERSION_PATCH ${PATCH_VERSION})
+  SET(MARIADB_CLIENT_VERSION_EXTRA ${EXTRA_VERSION})
+ELSE()
+  SET(MARIADB_CLIENT_VERSION_MAJOR "10")
+  SET(MARIADB_CLIENT_VERSION_MINOR "8")
+  SET(MARIADB_CLIENT_VERSION_PATCH "8")
+  SET(MARIADB_CLIENT_VERSION_EXTRA "")
+ENDIF()
+
+IF(WIN32)
+ # version in resource files need to be consistent
+ # with server's , so that MSI minor upgrade work.
+ # if this is not a subproject build, C/C version is used.
+  FOREACH(v MAJOR MINOR PATCH TINY)
+    IF(DEFINED ${v}_VERSION)
+      SET(${v}_FILE_VERSION "${${v}_VERSION}")
+    ELSEIF(DEFINED CPACK_PACKAGE_VERSION_${v})
+      SET(${v}_FILE_VERSION "${CPACK_PACKAGE_VERSION_${v}}")
+    ELSE()
+      SET(${v}_FILE_VERSION "0")
+    ENDIF()
+    IF(NOT ${v}_FILE_VERSION MATCHES "^[0-9]+$")
+      MESSAGE(FATAL_ERROR
+        "${v}_FILE_VERSION is not numeric - '${${v}_FILE_VERSION}'")
+    ENDIF()
+  ENDFOREACH()
+ENDIF()
+
+SET(MARIADB_CLIENT_VERSION "${MARIADB_CLIENT_VERSION_MAJOR}.${MARIADB_CLIENT_VERSION_MINOR}.${MARIADB_CLIENT_VERSION_PATCH}${MARIADB_CLIENT_VERSION_EXTRA}")
+SET(MARIADB_BASE_VERSION "mariadb-${MARIADB_CLIENT_VERSION_MAJOR}.${MARIADB_CLIENT_VERSION_MINOR}")
+MATH(EXPR MARIADB_VERSION_ID "${MARIADB_CLIENT_VERSION_MAJOR} * 10000 +
+                              ${MARIADB_CLIENT_VERSION_MINOR} * 100   +
+                              ${MARIADB_CLIENT_VERSION_PATCH}")
+
+IF (NOT MARIADB_PORT)
+  SET(MARIADB_PORT 3306)
+ENDIF ()
+IF(NOT MARIADB_UNIX_ADDR)
+  SET(MARIADB_UNIX_ADDR "/tmp/mysql.sock")
+ENDIF()
+
+INCLUDE("${CC_SOURCE_DIR}/cmake/install.cmake")
+IF(NOT PLUGINDIR)
+  SET(PLUGINDIR "${CMAKE_INSTALL_PREFIX}/${INSTALL_PLUGINDIR}")
+ENDIF()
+
+# todo: we don't character sets in share - all is compiled in
+SET(SHAREDIR "share")
+SET(DEFAULT_CHARSET_HOME "${CMAKE_INSTALL_PREFIX}")
+
+INCLUDE(${CC_SOURCE_DIR}/cmake/SearchLibrary.cmake)
+
+# Compression plugins: ZSTD, ZLIB
+
+INCLUDE(${CC_SOURCE_DIR}/cmake/FindZStd.cmake)
+
+IF(WITH_EXTERNAL_ZLIB)
+  IF(NOT ZLIB_FOUND)
+    FIND_PACKAGE(ZLIB REQUIRED)
+  ENDIF()
+  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${ZLIB_LIBRARIES})
+ELSE()
+  SET(ZLIB_INCLUDE_DIR "${CC_SOURCE_DIR}/external/zlib")
+  ADD_SUBDIRECTORY("${CC_SOURCE_DIR}/external/zlib")
+ENDIF()
+INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIR})
+
+IF(NOT WIN32)
+  INCLUDE(TestBigEndian)
+  TEST_BIG_ENDIAN(HAVE_BIGENDIAN)
+ENDIF()
+
+# check for various include files
+INCLUDE(${CC_SOURCE_DIR}/cmake/check_include_files.cmake)
+# check for various functions
+INCLUDE(${CC_SOURCE_DIR}/cmake/check_functions.cmake)
+# check for various types
+INCLUDE(${CC_SOURCE_DIR}/cmake/check_types.cmake)
+
+IF(UNIX)
+  SEARCH_LIBRARY(LIBM floor m)
+  SEARCH_LIBRARY(LIBPTHREAD pthread_getspecific "pthread;pthreads")
+  SEARCH_LIBRARY(LIBNSL gethostbyname_r "nsl_r;nsl")
+  SEARCH_LIBRARY(LIBSOCKET setsockopt socket)
+  FIND_PACKAGE(Threads)
+  SET(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} ${LIBNSL} ${LIBBIND} ${LIBICONV} ${ZLIB_LIBRARY} 
+      ${LIBSOCKET} ${CMAKE_DL_LIBS} ${LIBM} ${LIBPTHREAD})
+  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${LIBNSL} ${LIBBIND} ${LIBICONV} 
+    ${LIBSOCKET} ${CMAKE_DL_LIBS} ${LIBM} ${LIBPTHREAD})
+  #remove possible dups from required libraries
+  LIST(LENGTH CMAKE_REQUIRED_LIBRARIES rllength)
+  IF(${rllength} GREATER 0)
+    LIST(REMOVE_DUPLICATES CMAKE_REQUIRED_LIBRARIES)
+  ENDIF()
+ENDIF()
+
+
+IF(CMAKE_HAVE_PTHREAD_H)
+  SET(CMAKE_REQUIRED_INCLUDES pthread.h)
+ENDIF()
+
+IF(DBUG_OFF)
+  add_compile_definitions(DBUG_OFF=1)
+ENDIF()
+
+add_compile_definitions(MARIADB_SYSTEM_TYPE="${CMAKE_SYSTEM_NAME}")
+add_compile_definitions(MARIADB_MACHINE_TYPE="${CMAKE_SYSTEM_PROCESSOR}")
+
+IF(WIN32)
+  add_compile_definitions(HAVE_DLOPEN)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+ENDIF()
+
+IF(NOT DEFAULT_CHARSET)
+  SET(DEFAULT_CHARSET "utf8mb4")
+ENDIF()
+
+
+# convert SSL options to uppercase
+IF(WITH_SSL)
+  STRING(TOUPPER ${WITH_SSL} WITH_SSL)
+ENDIF()
+IF(WITH_SSL STREQUAL "ON")
+  IF(WIN32)
+    SET(WITH_SSL "SCHANNEL")
+  ELSE()
+    SET(WITH_SSL "OPENSSL")
+  ENDIF()
+ENDIF()
+
+IF(WITH_SSL STREQUAL "OPENSSL")
+  IF (NOT OPENSSL_FOUND)
+    FIND_PACKAGE(OpenSSL)
+  ENDIF()
+  IF(OPENSSL_FOUND)
+    add_compile_definitions(HAVE_OPENSSL HAVE_TLS)
+    SET(SSL_SOURCES "${CC_SOURCE_DIR}/libmariadb/secure/openssl.c"
+                    "${CC_SOURCE_DIR}/libmariadb/secure/openssl_crypt.c")
+    SET(SSL_LIBRARIES ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
+    IF(WIN32 AND EXISTS ${OPENSSL_INCLUDE_DIR}/openssl/applink.c)
+     SET(HAVE_OPENSSL_APPLINK_C 1)
+    ENDIF()
+    IF(EXISTS ${OPENSSL_INCLUDE_DIR}/openssl/evp.h)
+      SET(HAVE_evp_pkey 1)
+    ENDIF()
+    INCLUDE_DIRECTORIES(BEFORE ${OPENSSL_INCLUDE_DIR})
+
+
+    TRY_RUN(LIBRESSL_RESULT HAVE_LIBRESSL
+            ${CMAKE_BINARY_DIR}
+            ${CC_SOURCE_DIR}/cmake/libressl_version.c
+            COMPILE_DEFINITIONS "-I${OPENSSL_INCLUDE_DIR}"
+            RUN_OUTPUT_VARIABLE LIBRESSL_VERSION)
+    IF(HAVE_LIBRESSL)
+      add_compile_definitions(HAVE_LIBRESSL)
+      SET(TLS_LIBRARY_VERSION ${LIBRESSL_VERSION})
+    ELSE()
+      SET(TLS_LIBRARY_VERSION "OpenSSL ${OPENSSL_VERSION}")
+    ENDIF()
+  ELSE()
+    MESSAGE1(TLS_LIBRARY_VERSION "OpenSSL/LibreSSL not found")
+  ENDIF()
+ELSEIF(WITH_SSL STREQUAL "GNUTLS")
+  FIND_PACKAGE(GnuTLS "3.4.2" REQUIRED)
+  IF(GNUTLS_FOUND)
+    add_compile_definitions(HAVE_GNUTLS HAVE_TLS)
+    SET(SSL_SOURCES "${CC_SOURCE_DIR}/libmariadb/secure/gnutls.c"
+                    "${CC_SOURCE_DIR}/libmariadb/secure/gnutls_crypt.c")
+    GET_FILENAME_COMPONENT(LIB_EXT "${GNUTLS_LIBRARIES}" EXT)
+    LIST(APPEND SSL_LIBRARIES ${GNUTLS_LIBRARIES})
+    IF(LIB_EXT STREQUAL ".a")
+      # static library depends on zlib, and libdl
+     LIST(APPEND SSL_LIBRARIES ${ZLIB_LIBRARIES} ${CMAKE_DL_LIBS})
+    ENDIF()
+    SET(TLS_LIBRARY_VERSION "GnuTLS ${GNUTLS_VERSION_STRING}")
+    INCLUDE_DIRECTORIES(${GNUTLS_INCLUDE_DIR})
+  ELSE()
+    MESSAGE(FATAL_ERROR "GnuTLS not found")
+  ENDIF()
+ELSEIF(WIN32 AND WITH_SSL STREQUAL "SCHANNEL")
+  add_compile_definitions(HAVE_SCHANNEL HAVE_TLS HAVE_WINCRYPT)
+  SET(SSL_SOURCES "${CC_SOURCE_DIR}/libmariadb/secure/schannel.c"
+                  "${CC_SOURCE_DIR}/libmariadb/secure/win_crypt.c"
+                  "${CC_SOURCE_DIR}/libmariadb/secure/ma_schannel.c"
+                  "${CC_SOURCE_DIR}/libmariadb/secure/schannel_certs.c")
+  INCLUDE_DIRECTORIES("${CC_SOURCE_DIR}/plugins/pvio/")
+  SET(SSL_LIBRARIES secur32 crypt32 bcrypt)
+  SET(TLS_LIBRARY_VERSION "Schannel ${CMAKE_SYSTEM_VERSION}")
+ELSE()
+  MESSAGE(FATAL_ERROR "Invalid TLS/SSL option '${WITH_SSL}'")
+ENDIF()
+MESSAGE1(TLS_LIBRARY_VERSION "TLS library/version: ${TLS_LIBRARY_VERSION}")
+MARK_AS_ADVANCED(SSL_SOURCES)
+
+IF(WITH_BOOST_CONTEXT)
+  FIND_PACKAGE(Boost 1.40 COMPONENTS context REQUIRED)
+  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${Boost_LIBRARIES})
+ENDIF()
+
+SET(ENABLED_LOCAL_INFILE "AUTO" CACHE STRING "If we should should enable LOAD DATA LOCAL by default (OFF/ON/AUTO)")
+MARK_AS_ADVANCED(ENABLED_LOCAL_INFILE)
+IF (ENABLED_LOCAL_INFILE MATCHES "^(0|FALSE)$")
+  SET(ENABLED_LOCAL_INFILE OFF)
+ELSEIF(ENABLED_LOCAL_INFILE MATCHES "^(1|TRUE)$")
+  SET(ENABLED_LOCAL_INFILE ON)
+ELSEIF (NOT ENABLED_LOCAL_INFILE MATCHES "^(ON|OFF|AUTO)$")
+  MESSAGE(FATAL_ERROR "ENABLED_LOCAL_INFILE must be one of OFF, ON, AUTO")
+ENDIF()
+
+IF(WITH_ICONV)
+  IF(NOT WIN32)
+    INCLUDE(${CC_SOURCE_DIR}/cmake/FindIconv.cmake)
+  ENDIF()
+ENDIF()
+
+CONFIGURE_FILE(${CC_SOURCE_DIR}/include/ma_config.h.in
+               ${CC_BINARY_DIR}/include/ma_config.h)
+CONFIGURE_FILE(${CC_SOURCE_DIR}/include/ma_config.h.in
+               ${CC_BINARY_DIR}/include/config.h)
+CONFIGURE_FILE(${CC_SOURCE_DIR}/include/mariadb_version.h.in
+               ${CC_BINARY_DIR}/include/mariadb_version.h)
+
+INCLUDE_DIRECTORIES(${CC_BINARY_DIR}/include)
+
+IF(WIN32)
+  SET(SYSTEM_LIBS ws2_32 advapi32 kernel32 shlwapi crypt32 bcrypt ${LIBZ})
+ELSE()
+  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${LIBPTHREAD} ${CMAKE_DL_LIBS} ${LIBM})
+  IF(ICONV_EXTERNAL)
+    SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${ICONV_LIBRARIES})
+  ENDIF()
+ENDIF()
+IF(WITH_SSL)
+  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${SSL_LIBRARIES})
+ENDIF()
+MESSAGE1(SYSTEM_LIBS "SYSTEM_LIBS ${SYSTEM_LIBS}")
+MARK_AS_ADVANCED(SYSTEM_LIBS)
+
+IF(NOT IS_SUBPROJECT AND (NOT DEFINED CMAKE_COMPILE_WARNING_AS_ERROR))
+IF ((NOT WIN32) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))
+  SET(WARNING_AS_ERROR "-Werror")
+ELSEIF(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+  SET(WARNING_AS_ERROR "/WX")
+ENDIF()
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WARNING_AS_ERROR}")
+ENDIF()
+
+
+IF(NOT REMOTEIO_PLUGIN_TYPE MATCHES "OFF")
+  IF(CURL_FOUND)
+    INCLUDE_DIRECTORIES(${CURL_INCLUDE_DIRS})
+    IF(REMOTEIO_PLUGIN_TYPE MATCHES "STATIC")
+      SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${CURL_LIBRARIES})
+    ENDIF()
+    add_compile_definitions(HAVE_REMOTEIO=1)
+  ENDIF()
+ENDIF()
+IF(NOT WIN32)
+  IF(NOT AUTH_GSSAPI_PLUGIN_TYPE MATCHES "OFF")
+    INCLUDE(${CC_SOURCE_DIR}/cmake/FindGSSAPI.cmake)
+    IF(GSSAPI_FOUND)
+      INCLUDE_DIRECTORIES(${GSSAPI_INCS})
+      IF(AUTH_GSSAPI_PLUGIN_TYPE MATCHES "STATIC")
+        SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${GSSAPI_LIBS})
+      ENDIF()
+    ENDIF()
+  ENDIF()
+ENDIF()
+INCLUDE(${CC_SOURCE_DIR}/plugins/CMakeLists.txt)
+ADD_SUBDIRECTORY(include)
+ADD_SUBDIRECTORY(libmariadb)
+IF((NOT WIN32) OR CYGWIN)
+  ADD_SUBDIRECTORY(mariadb_config)
+ENDIF()
+
+IF(IS_DIRECTORY ${CC_SOURCE_DIR}/unittest)
+  IF(WITH_UNIT_TESTS)
+    ADD_SUBDIRECTORY(unittest/mytap)
+    ADD_SUBDIRECTORY(unittest/libmariadb)
+  ENDIF()
+ENDIF()
+
+#IF(CLIENT_DOCS)
+#  INSTALL(DIRECTORY ${CLIENT_DOCS}
+#          DESTINATION ${DOCS_INSTALL_DIR_${INSTALL_LAYOUT}}
+#          COMPONENT SharedLibraries)
+#ENDIF()
+
+IF(UNIX)
+  ADD_SUBDIRECTORY(man)
+ENDIF()
+
+IF(WIN32 AND WITH_MSI AND CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  ADD_SUBDIRECTORY(win/packaging)
+ENDIF()
+MESSAGE1(SYSTEM_PROCESSOR "SYSTEM processor: ${CMAKE_SYSTEM_PROCESSOR}")
+SET(CPACK_PACKAGE_VENDOR "MariaDB Corporation Ab")
+SET(CPACK_PACKAGE_DESCRIPTION "MariaDB Connector/C. A library for connecting to MariaDB and MySQL servers")
+SET(CPACK_PACKAGE_NAME "mariadb_connector_c")
+STRING(TOLOWER ${CMAKE_SYSTEM_NAME} system_name)
+SET(CPACK_RESOURCE_FILE_LICENSE "${CC_SOURCE_DIR}/COPYING.LIB")
+SET(CPACK_PACKAGE_DESCRIPTION_FILE "${CC_SOURCE_DIR}/README")
+INCLUDE(cmake/ConnectorName.cmake)
+IF(NOT PACKAGE_STATUS_SUFFIX)
+  SET(CPACK_SOURCE_PACKAGE_FILE_NAME "mariadb-connector-c-${CPACK_PACKAGE_VERSION}-src")
+  IF(PACKAGE_PLATFORM_SUFFIX)
+    SET(CPACK_PACKAGE_FILE_NAME "mariadb-connector-c-${CPACK_PACKAGE_VERSION}-${PACKAGE_PLATFORM_SUFFIX}")
+  ELSE()
+    SET(CPACK_PACKAGE_FILE_NAME "mariadb-connector-c-${CPACK_PACKAGE_VERSION}-${system_name}-${CMAKE_SYSTEM_PROCESSOR}")
+  ENDIF()
+ELSE()
+  SET(CPACK_SOURCE_PACKAGE_FILE_NAME "mariadb-connector-c-${CPACK_PACKAGE_VERSION}-${PACKAGE_STATUS_SUFFIX}-src")
+  IF(PACKAGE_PLATFORM_SUFFIX)
+    SET(CPACK_PACKAGE_FILE_NAME "mariadb-connector-c-${CPACK_PACKAGE_VERSION}-${PACKAGE_STATUS_SUFFIX}-${PACKAGE_PLATFORM_SUFFIX}")
+  ELSE()
+    SET(CPACK_PACKAGE_FILE_NAME "mariadb-connector-c-${CPACK_PACKAGE_VERSION}-${PACKAGE_STATUS_SUFFIX}-${system_name}-${CMAKE_SYSTEM_PROCESSOR}")
+  ENDIF()
+ENDIF()
+# Build source packages
+IF(GIT_BUILD_SRCPKG)
+  # get branch name
+  EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} show-branch OUTPUT_VARIABLE git_branch)
+  STRING(REGEX MATCH "\\[([^]]+)\\]" git_branch ${git_branch})
+  STRING(REGEX REPLACE "\\[|\\]" "" GIT_BRANCH ${git_branch})
+  MESSAGE1(GIT_BRANCH "${GIT_BRANCH}")
+  IF(WIN32)
+    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} archive ${GIT_BRANCH} --format=zip --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/ --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.zip)
+  ELSE()
+    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} archive ${GIT_BRANCH} --format=zip --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/ --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.zip)
+    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} archive ${GIT_BRANCH} --format=tar --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/ --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.tar)
+    EXECUTE_PROCESS(COMMAND gzip -9 -f ${CPACK_SOURCE_PACKAGE_FILE_NAME}.tar)
+  ENDIF()
+ENDIF()
+
+SET(CPACK_SOURCE_IGNORE_FILES
+\\\\.git/
+\\\\.gitignore
+\\\\.gitattributes
+CMakeCache\\\\.txt
+cmake_dist\\\\.cmake
+CPackConfig\\\\.cmake
+mariadb_config\\\\.c$
+\\\\.build/
+html/
+unittest
+/cmake_install.cmake
+/CTestTestfile.cmake
+/CPackSourceConfig.cmake
+/CMakeFiles/
+/version_resources/
+/_CPack_Packages/
+\\\\.gz$
+\\\\.zip$
+mariadb_config/mariadb_config$
+/CMakeFiles/
+/version_resources/
+/_CPack_Packages/
+Makefile$
+include/my_config\\\\.h$
+)
+
+IF(WITH_TEST_SRCPKG)
+  SET(PACKAGE_FILE ${CC_SOURCE_DIR}/package.name)
+  FILE(REMOVE ${PACKAGE_FILE})
+  FILE(WRITE ${PACKAGE_FILE} ${CPACK_SOURCE_PACKAGE_FILE_NAME})
+ENDIF()
+
+IF(WIN32)
+  SET(CPACK_GENERATOR "ZIP")
+  SET(CPACK_SOURCE_GENERATOR "ZIP")
+ELSE()
+  SET(CPACK_GENERATOR "TGZ")
+  SET(CPACK_SOURCE_GENERATOR "TGZ")
+ENDIF()
+INCLUDE(CPack)
+
+IF(WITH_EXTERNAL_ZLIB)
+  SET(zlib_status ${WITH_EXTERNAL_ZLIB})
+ELSE()
+  SET(zlib_status "yes (using bundled zlib)")
+ENDIF()
+
+MESSAGE1(STATUS "MariaDB Connector/c configuration:
+-- Static PLUGINS ${PLUGINS_STATIC}
+-- Dynamic PLUGINS ${PLUGINS_DYNAMIC}
+-- Disabled PLUGINS ${PLUGINS_DISABLED}
+-- CPack generation: ${CPACK_GENERATOR}
+-- SSL support: ${WITH_SSL} Libs: ${SSL_LIBRARIES}
+-- Zlib support: ${zlib_status}
+-- ZStd support: ${ZSTD_FOUND}
+-- Installation layout: ${INSTALL_LAYOUT}
+-- Include files will be installed in ${INSTALL_INCLUDEDIR}
+-- Libraries will be installed in ${INSTALL_LIBDIR}
+-- Binaries will be installed in ${INSTALL_BINDIR}
+-- Required: ${CMAKE_REQUIRED_LIBRARIES}")

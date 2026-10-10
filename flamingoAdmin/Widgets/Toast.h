@@ -62,8 +62,23 @@ public:
     // 弹窗层当前是否有弹窗可见。
     bool IsModalVisible() const;
 
+    // 当前可见的弹窗；没有弹窗可见时返回 nullptr。借用，所有权属本容器。
+    balloonwjui::DuiControl* GetVisibleModal() const
+    {
+        return IsModalVisible() ? m_activeModal : nullptr;
+    }
+
     // 取 Toast 层指针（借用，所有权属本容器）。
     balloonwjui::DuiToast* GetToast() const { return m_toast; }
+
+    // 显示层变化回调：ShowPage / ShowModal / HideModal 改完显隐之后调用。
+    //   user：SetLayerChangedCallback 时传入的指针。
+    typedef void (*LayerChangedFn)(void* user);
+
+    // 注册显示层变化回调。FlamingoLink.dll 的「在线用户」页是原生子窗口，会画在叠层弹窗
+    // 之上，控制台据此在页面切换、弹窗开关时重新决定它显示与否（2026-10-04）。
+    //   fn：回调，为空表示不通知。user：原样传回，所有权归调用方。
+    void SetLayerChangedCallback(LayerChangedFn fn, void* user);
 
     void                     Layout(const RECT& rcAvail) override;
     void                     OnPaint(HDC hdc, const RECT& rcDirty) override;
@@ -75,6 +90,11 @@ private:
     balloonwjui::DuiControl*              m_current     = nullptr;  // 当前显示的页面
     std::vector<balloonwjui::DuiControl*> m_modals;                 // 借用（均在 m_children 中）
     balloonwjui::DuiControl*              m_activeModal = nullptr;  // 当前显示的弹窗
+    LayerChangedFn                        m_layerChanged = nullptr; // 显示层变化回调，可为空
+    void*                                 m_layerChangedUser = nullptr; // 回调的用户数据，所有权归调用方
+
+    // 调用显示层变化回调（未注册时什么都不做）
+    void FireLayerChanged();
 };
 
 }} // namespace flamingoadmin::ui

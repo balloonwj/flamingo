@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 25 章：机器人——机器人的种类、个人机器人（我的机器人、规则、试一试）、群机器人（管理窗口、规则、在群里使用）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>机器人 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c25">
+<article class="doc">
+  <h1>机器人</h1>
+  <p class="lead">机器人按你设定的规则自动发消息。在客户端里可以配置两类机器人：个人机器人在别人给你发单聊时以你的身份代答；群机器人在群里被 @、命中关键词、有新成员入群或到了设定时间时自动发消息。</p>
+  <ul class="facts">
+    <li>个人机器人：全体员工</li>
+    <li>群机器人：仅群主</li>
+    <li>需要：企业开启「机器人」开关</li>
+  </ul>
+
+  <h2 id="kinds">机器人的种类</h2>
+  <table>
+    <tr><th>种类</th><th>由谁配置</th><th>在哪里起作用</th><th>数量上限</th></tr>
+    <tr><td>企业机器人</td><td>企业管理员，在管理控制台配置，见<a href="../admin/09-enterprise-bots.html">「企业机器人」</a></td><td>本企业的全部群，或管理员所选的群</td><td>—</td></tr>
+    <tr><td>群机器人</td><td>群主，在群管理窗口里配置</td><td>本群；消息带「机器人」标记</td><td>每个群 5 个</td></tr>
+    <tr><td>个人机器人</td><td>员工本人，在「我的机器人」里配置</td><td>别人发给你的单聊，以你的身份代答，回复前带「[机器人代答]」</td><td>每人 3 个</td></tr>
+  </table>
+  <div class="callout note"><b>需要哪些开关</b>三类机器人都需要企业开启「机器人」开关；配置个人机器人还要开启「允许员工配置个人机器人」，添加群机器人还要开启「允许群主添加群机器人」。开关由企业管理员设置，见<a href="../admin/05-feature-switches.html">「功能开关」</a>。</div>
+
+  <h2 id="personal">个人机器人</h2>
+  <p>个人机器人只在别人发给你的单聊里、满足你设定的条件时以你的身份代答，例如你不在电脑前时，自动回答同事经常问的问题。对方看到的回复前面带有「[机器人代答]」标记。</p>
+  <h3>打开「我的机器人」</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/y_mybots_empty.png" width="580" alt="我的机器人窗口"><figcaption>还没有个人机器人时的「我的机器人」窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>有两个入口：</p>
+      <ul>
+        <li>主面板的系统菜单里点 <span class="ui">我的机器人</span>；</li>
+        <li><span class="ui">系统设置</span> → <span class="ui">聊天</span> 页里的 <span class="ui">我的机器人</span>。</li>
+      </ul>
+      <p>窗口标题下的「我的机器人（0 / 3）」显示已有几个、最多几个。</p>
+      <div class="callout note"><b>离开 / 忙碌自动回复不在这里</b>状态为离开或忙碌时的自动回复在系统设置的「聊天」页设置，见<a href="28-settings.html">「系统设置」</a>。</div>
+    </div>
+  </div>
+
+  <h3>新建个人机器人</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/y_bot_edit_empty.png" width="620" alt="新建个人机器人窗口"><figcaption>「新建个人机器人」窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ol class="steps">
+        <li>在「我的机器人」窗口里点 <span class="ui">新建机器人</span>。</li>
+        <li>在 <b>基本信息</b> 里填写 <span class="ui">名称</span>（必填）和 <span class="ui">简介</span>（可不填，最多 100 字）。</li>
+        <li>按需设置 <span class="ui">头像字形</span>（1～2 个字，不填时取名称的第一个字）和 <span class="ui">头像底色</span>。左侧会实时显示头像的样子。</li>
+        <li>点 <span class="ui">添加规则</span>，设置什么时候代答、回复什么，见下文。</li>
+        <li>用 <b>试一试</b> 检查规则的效果。</li>
+        <li>点 <span class="ui">保存</span>。</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3>设置规则</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/y_bot_rule.png" width="600" alt="个人机器人的规则窗口"><figcaption>个人机器人的「添加规则」窗口</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>一个机器人可以有多条规则，最多 50 条。收到消息时按顺序逐条判定，命中第一条后就不再往下判定，所以条件越具体的规则越要排在前面。</p>
+      <p>个人机器人的触发方式固定为 <b>收到单聊</b>：别人给你发单聊消息、且满足下面的条件时，以你的身份代答。动作固定为 <b>回复文字</b>。</p>
+    </div>
+  </div>
+  <table>
+    <tr><th>设置项</th><th>说明</th></tr>
+    <tr><td>规则名称</td><td>可不填，便于在规则列表里辨认</td></tr>
+    <tr><td>启用这条规则</td><td>取消勾选后这条规则暂不生效，列表里显示为「（已停用）」</td></tr>
+    <tr><td>关键词</td><td>消息里出现这些词才代答。一行一个，或用逗号分隔，最多 20 个，每个最多 32 字。不填表示任何消息都代答</td></tr>
+    <tr><td>匹配方式</td><td><b>包含</b>、<b>以……开头</b> 或 <b>完全相同</b></td></tr>
+    <tr><td>你的在线状态</td><td>勾选在线、离开、忙碌、离线中的若干项，你处于所选的状态之一时才代答；都不选表示不限</td></tr>
+    <tr><td>发送者</td><td><b>所有人</b>；<b>指定的人</b>（点「选择…」从通讯录里选）；<b>指定的部门</b>（从组织架构里选，包含下级部门）</td></tr>
+    <tr><td>冷却（分钟）</td><td>同一个人在这段时间内只代答一次；0 表示不限</td></tr>
+    <tr><td>正在交谈（分钟）</td><td>你最近这段时间在这个会话里发过言，就说明你正在和对方聊天，机器人不代答；0 表示不检查</td></tr>
+    <tr><td>只在以下时间段生效</td><td>勾选后可以选每天、工作日或周末，并设定起止时刻。按服务器的本地时间计算；结束早于开始表示跨零点（如 18:00 至 09:00），两者相同表示全天</td></tr>
+    <tr><td>回复文字</td><td>代答时发出的内容</td></tr>
+  </table>
+  <p>填好后点 <span class="ui">确定</span>，规则出现在编辑窗口的规则列表里。每条规则右侧有 <span class="ui">编辑</span>、<span class="ui">上移</span>、<span class="ui">下移</span>、<span class="ui">删除</span>，用上移、下移调整判定顺序。</p>
+  <figure class="shot center">
+    <img src="../img/y_bot_edit.png" width="620" alt="编辑个人机器人">
+    <figcaption>规则列表里的一条规则：名称、触发条件和动作写在一行里</figcaption>
+  </figure>
+
+  <h3>试一试</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/y_bot_try.png" width="620" alt="试一试的结果"><figcaption>窗口下部「试一试」区域给出的判定结果</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>「试一试」用编辑中的内容判定一段别人发给你的单聊消息，不必先保存，也不会真的发出任何消息：</p>
+      <ol class="steps">
+        <li>在 <span class="ui">输入</span> 框里写一段同事可能发来的话。</li>
+        <li>在 <span class="ui">你的状态</span> 里选择假设的在线状态。</li>
+        <li>点 <span class="ui">试一试</span>。下方显示判定结果，例如「命中规则「回答测试环境地址」，会回复：」以及回复的内容；没有命中时会说明原因，例如没有规则命中这段文字，或命中的规则正在冷却中。</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3>管理个人机器人</h3>
+  <figure class="shot center">
+    <img src="../img/y_mybots.png" width="580" alt="我的机器人列表">
+    <figcaption>保存后，「我的机器人」里出现这个机器人</figcaption>
+  </figure>
+  <p>列表里的每个机器人显示名称、状态（如「已启用」）、简介、规则条数和一句用法说明，右侧有四个按钮：</p>
+  <ul>
+    <li><span class="ui">编辑</span>：打开「编辑个人机器人」窗口修改。</li>
+    <li><span class="ui">停用</span> / <span class="ui">启用</span>：暂停或恢复代答，规则保留。</li>
+    <li><span class="ui">删除</span>：删除后它不再代答，规则不能恢复。</li>
+  </ul>
+  <div class="callout warn"><b>企业关闭了个人机器人</b>企业管理员关闭「允许员工配置个人机器人」后，窗口会提示暂时不能新建、修改或启用，已有的机器人也不会代答。</div>
+
+  <h2 id="group-bots">创建与使用群机器人</h2>
+  <p>群机器人由群主为本群添加，可以在有人 @ 它、消息命中关键词、有新成员入群或到了设定时间时自动发消息，也可以把外部系统推送来的消息发到群里。</p>
+  <h3>打开群机器人管理窗口</h3>
+  <ol class="steps">
+    <li>打开群管理窗口，在左侧导航点 <span class="ui">群机器人</span>（这一页只有群主能看到），见<a href="14-group-manage.html#bots">「群管理 → 群机器人」</a>。</li>
+    <li>点 <span class="ui">添加与管理机器人</span>，打开「群机器人 · 群名」窗口。</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/y_group_bots.png" width="580" alt="群机器人管理窗口">
+    <figcaption>「群机器人 · v2.1 版本发布」窗口，本群已有一个群机器人「发布小助手」</figcaption>
+  </figure>
+  <ul>
+    <li><b>企业机器人（N）</b>：企业管理员分配给本群的机器人。管理员允许时，卡片上有 <span class="ui">在本群关闭</span> / <span class="ui">在本群打开</span>；不允许时显示「来自企业，管理员不允许在本群关闭。」</li>
+    <li><b>本群的群机器人（N / 5）</b>：每个群最多 5 个群机器人。每张卡片显示名称、状态（如「生效中」「已停用」）、简介、规则条数和用法说明，右侧有 <span class="ui">编辑</span>、<span class="ui">停用</span> / <span class="ui">启用</span>、<span class="ui">删除</span>。</li>
+    <li>底部按钮：<span class="ui">刷新</span>、<span class="ui">新建群机器人</span>、<span class="ui">关闭</span>。</li>
+  </ul>
+  <p>添加、删除机器人，或在本群关闭企业机器人时，群里会出现一条提示，例如「罗俊辉 添加了机器人「发布小助手」」。</p>
+  <div class="callout note"><b>企业没有开放群机器人</b>企业关闭「允许群主添加群机器人」后，不能新建或修改群机器人，已有的仍然可以停用或删除。</div>
+
+  <h3>新建群机器人</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/y_group_bot_edit.png" width="620" alt="新建群机器人窗口"><figcaption>「新建群机器人」窗口，下部是试一试的结果</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>点 <span class="ui">新建群机器人</span>，填写方法与个人机器人相同：名称、简介、头像字形、头像底色、规则。群机器人的简介会显示在群成员页签里它的资料卡上。</p>
+      <p>群机器人的「试一试」判定的是一段本群的群消息，多了一个 <span class="ui">消息里 @ 了机器人</span> 勾选框，用来模拟有人 @ 它的情况。</p>
+    </div>
+  </div>
+
+  <h3>群机器人的规则</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/y_group_bot_rule.png" width="600" alt="群机器人的规则窗口"><figcaption>触发方式为「被 @」的规则</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>群机器人的规则同样按顺序判定、命中第一条就停，最多 50 条。规则窗口里的项目随 <span class="ui">触发方式</span> 变化，例如选「被 @」时只需要设置动作和回复文字。</p>
+      <p>截图中的规则在有人 @ 机器人时回复一段上线安排，回复文字以变量 <code>{发送者}</code> 开头。</p>
+    </div>
+  </div>
+  <p>可选的触发方式有：</p>
+  <table>
+    <tr><th>触发方式</th><th>说明</th></tr>
+    <tr><td>被 @</td><td>有人在群里 @ 这个机器人时触发；@所有人不算</td></tr>
+    <tr><td>关键词</td><td>群消息命中关键词时触发，比较时不区分大小写与全角半角；可以勾选「必须同时 @ 机器人」，避免机器人在群聊中频繁插话</td></tr>
+    <tr><td>新成员入群</td><td>有新成员入群时触发，常用来发欢迎消息</td></tr>
+    <tr><td>定时</td><td>到点时在群里发一条消息，可选每天、工作日、每周所选的几天或每月几号，时刻按 24 小时制填写（如 09:00）；服务停机期间错过的不补发</td></tr>
+    <tr><td>外部系统推送</td><td>企业允许使用外部服务时才有。外部系统推送内容后，由机器人发到群里；这种规则不需要设置动作，推送地址与令牌在机器人的编辑窗口里查看</td></tr>
+  </table>
+  <p><span class="ui">动作</span> 决定机器人做什么：</p>
+  <ul>
+    <li><b>回复文字</b>：发出你写好的回复文字。文字里可以使用变量 <code>{发送者}</code> 和 <code>{日期}</code>，发送时替换成实际内容；勾选 <span class="ui">按 Markdown 显示</span> 后，回复以 Markdown 格式显示。</li>
+    <li><b>用问答作答</b>：只用于「被 @」和「关键词」。用本群的群问答与企业问答作答，没有找到答案时回复你填写的兜底文字，不填则不回复。</li>
+    <li><b>呼叫外部服务</b>：只用于「被 @」和「关键词」，并且需要企业允许。把触发的消息发给指定的地址，再把它的应答发到群里。</li>
+  </ul>
+  <p>「新成员入群」和「定时」只能回复文字。除定时与外部系统推送外，其他触发方式都可以勾选 <span class="ui">只在以下时间段生效</span>，规则与个人机器人相同。</p>
+
+  <h3>在群里使用群机器人</h3>
+  <figure class="shot">
+    <img src="../img/y_at_bot.png" width="880" alt="@ 候选列表中的机器人">
+    <figcaption>添加机器人后，群里出现系统提示，成员页签顶部多出「机器人 1」，@ 候选列表里也有「发布小助手」</figcaption>
+  </figure>
+  <p>在输入框里输入 <code>@</code>，从候选列表中选择机器人，再输入问题发送即可。机器人回复的消息在名字旁边标有 <b>机器人</b>。在右侧成员页签的「机器人」分组里点一个机器人，可以查看它的资料卡（简介、用法与来源）。</p>
+  <figure class="shot">
+    <img src="../img/y_bot_reply.png" width="880" alt="机器人的回复">
+    <figcaption>罗俊辉 @发布小助手 问「什么时候上线？」，机器人按「被 @」规则回复，回复文字中的 {发送者} 换成了「罗俊辉」</figcaption>
+  </figure>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

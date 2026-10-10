@@ -1,0 +1,165 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MariaDB Connector/C 3.4.9 的客户端静态库 mariadbclient.lib，从随仓库提交的上游源码（..\mariadb-connector-c-3.4.9）
+  编译，供 chatserver 与 Tests 以工程引用的方式链接。只有 Debug|x64、Release|x64 两个配置。
+
+  源文件、宏与包含目录照抄上游 CMake 为 mariadb_obj 目标生成的清单 ..\mariadbclient\config\x64\mariadbclient_manifest.txt；
+  上游在配置阶段生成的 ma_config.h、mariadb_version.h、ma_client_plugin.c 也在那个目录下。升级连接器版本时先重跑
+  ..\mariadbclient\gen_config.ps1，再按新清单核对本文件。方案见 docs\服务端依赖库源码编译方案.md。
+
+  balloonwj@qq.com   2026-10-09
+-->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{69C17163-3CE5-4EA9-8568-C618F8256D6E}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>mariadbclient</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <!-- 与上游 CMake 生成的工程一致用多字节字符集：上游按窄字符调用 Windows API，改成 Unicode 会让 API 宏指向宽字符版本 -->
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <!-- 与上游 CMake 生成的工程一致用多字节字符集：上游按窄字符调用 Windows API，改成 Unicode 会让 API 宏指向宽字符版本 -->
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <!-- 产物放在 x64\<配置名>\（与 chatserver 等同目录），中间文件放在 mariadbclient\x64\<配置名>\ -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>mariadbclient\x64\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <!-- 产物放在 x64\<配置名>\（与 chatserver 等同目录），中间文件放在 mariadbclient\x64\<配置名>\ -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>mariadbclient\x64\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <!-- 包含目录与宏照抄上游 CMake 为 mariadb_obj 生成的清单（config\x64\mariadbclient_manifest.txt），
+           上游构建目录下的 include 换成随仓库提交的 config\x64。zlib 用服务端的 zlib1.3.2，不编连接器自带的那份 -->
+      <AdditionalIncludeDirectories>..\zlib1.3.2;..\mariadb-connector-c-3.4.9\plugins\pvio;..\mariadbclient\config\x64;..\mariadb-connector-c-3.4.9\plugins\auth;..\mariadb-connector-c-3.4.9\include;..\mariadb-connector-c-3.4.9\plugins\auth\ref10;..\mariadb-connector-c-3.4.9\plugins\compress;..\mariadb-connector-c-3.4.9\libmariadb;..\mariadb-connector-c-3.4.9\win-iconv;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;WIN32_LEAN_AND_MEAN;NOGDI;MARIADB_SYSTEM_TYPE="Windows";MARIADB_MACHINE_TYPE="AMD64";HAVE_DLOPEN;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;HAVE_SCHANNEL;HAVE_TLS;HAVE_WINCRYPT;HAVE_COMPRESS;LIBMARIADB;THREAD;SIZEOF_CHARP=8;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- 静态 CRT，与服务端其余工程一致；两者不一致时进程里会出现两份 CRT -->
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <!-- /utf-8：服务端所有工程统一传。上游参与编译的源文件与头文件全是 ASCII，加不加结果相同 -->
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <!-- 包含目录与宏照抄上游 CMake 为 mariadb_obj 生成的清单（config\x64\mariadbclient_manifest.txt），
+           上游构建目录下的 include 换成随仓库提交的 config\x64。zlib 用服务端的 zlib1.3.2，不编连接器自带的那份 -->
+      <AdditionalIncludeDirectories>..\zlib1.3.2;..\mariadb-connector-c-3.4.9\plugins\pvio;..\mariadbclient\config\x64;..\mariadb-connector-c-3.4.9\plugins\auth;..\mariadb-connector-c-3.4.9\include;..\mariadb-connector-c-3.4.9\plugins\auth\ref10;..\mariadb-connector-c-3.4.9\plugins\compress;..\mariadb-connector-c-3.4.9\libmariadb;..\mariadb-connector-c-3.4.9\win-iconv;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;WIN32_LEAN_AND_MEAN;NOGDI;MARIADB_SYSTEM_TYPE="Windows";MARIADB_MACHINE_TYPE="AMD64";HAVE_DLOPEN;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;HAVE_SCHANNEL;HAVE_TLS;HAVE_WINCRYPT;HAVE_COMPRESS;LIBMARIADB;THREAD;SIZEOF_CHARP=8;NDEBUG;DBUG_OFF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- 静态 CRT，与服务端其余工程一致；两者不一致时进程里会出现两份 CRT -->
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <!-- /utf-8：服务端所有工程统一传。上游参与编译的源文件与头文件全是 ASCII，加不加结果相同 -->
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\my_auth.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\dialog.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\get_password.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\caching_sha2_pw.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\win_crypt.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\sha256_pw.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\auth_gssapi_client.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\sspi_client.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\sspi_errmsg.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\old_password.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\mariadb_cleartext.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\compress\c_zlib.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\pvio\pvio_socket.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\pvio\pvio_npipe.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_array.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_charset.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_decimal.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_hashtbl.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_net.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_charset.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_time.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_default.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_errmsg.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_lib.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_list.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_pvio.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_tls.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_alloc.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_compress.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_init.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_password.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_ll2str.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_stmt.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_loaddata.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_stmt_codec.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_string.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_dtoa.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_rpl.c" />
+    <ClCompile Include="..\mariadbclient\config\x64\ma_client_plugin.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_io.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\schannel.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\ma_schannel.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\schannel_certs.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\win-iconv\win_iconv.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\win32_errmsg.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_dyncol.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_async.c" />
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_context.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\mariadbclient\config\x64\ma_config.h" />
+    <ClInclude Include="..\mariadbclient\config\x64\mariadb_version.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\mariadbclient\config\x64\mariadbclient_manifest.txt" />
+    <None Include="..\mariadbclient\gen_config.ps1" />
+    <Text Include="..\mariadbclient\README.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

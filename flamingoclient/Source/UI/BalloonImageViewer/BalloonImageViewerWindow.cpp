@@ -9,22 +9,27 @@
 
 #include "stdafx.h"
 #include "BalloonImageViewerWindow.h"
+#include "../../App/BrandText.h"   // g_strAppTitle（窗口标题用的产品名称）
 
 #include <memory>
 #include <shellapi.h>   // CommandLineToArgvW（解析调试入口可选图片路径）
+#include <atldlgs.h>    // CFileDialog（调试入口的选图框）；单测工程的 stdafx.h 不含它
 #pragma comment(lib, "shell32.lib")
 
 #include "../../App/CustomMsgDef.h"     // WM_CLOSE_MAINDLG
 #include "../../Common/Log/IULog.h"            // LOG_INFO / LOG_ERROR
 #include "ImageCanvas.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/Util/FileDialogFilter.h"   // filedlg::MakeFilter：文件对话框过滤串的说明文字逐段翻译
 
 using namespace balloonwjui;
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
-// 窗口初始客户区尺寸（逻辑像素）。
-static const int kVwInitWidth  = 1000;
-static const int kVwInitHeight = 720;
+// 含标题栏的整窗初始尺寸（逻辑像素）。2026-10-02 修复 ResizeClient 多叠加系统边框的问题时由 1000×720 加上
+// 修复前多叠加的 18×47（120 DPI 实测），保持修复前的窗口大小。
+static const int kVwInitWidth  = 1018;
+static const int kVwInitHeight = 767;
 
 // 窗口最小尺寸（逻辑像素）。
 static const int kVwMinWidth  = 480;
@@ -106,6 +111,7 @@ HBITMAP CreateSolidColorBitmap(int size, COLORREF color)
 CBalloonImageViewerWindow::CBalloonImageViewerWindow()
     : m_pCanvas(NULL)
     , m_hMainDlg(NULL)
+    , m_navigator(NULL)
     , m_hBgBitmap(NULL)
 {
 }
@@ -127,7 +133,7 @@ CBalloonImageViewerWindow::~CBalloonImageViewerWindow()
 
 bool CBalloonImageViewerWindow::BuildWindow(HWND hWndParent)
 {
-    if (Create(hWndParent, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(hWndParent, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR(_T("看图窗口 Create 失败。"));
@@ -136,7 +142,7 @@ bool CBalloonImageViewerWindow::BuildWindow(HWND hWndParent)
 
     // 标题栏：透明深色拖动条 —— 右上角保留最小化 / 最大化 / 关闭三按钮。标题文字
     // 颜色设成与背景同色使其在窗体上不可见（任务栏标题不受影响），保持顶部清爽。
-    SetTitle(_T("图片查看"));
+    SetTitle(TR(L"图片查看"));
     SetTitleBarHeight(kVwTitleBarHeight);
     SetTitleBarTransparent(true);
     SetTitleTextColor(kVwDarkColor);
@@ -144,6 +150,9 @@ bool CBalloonImageViewerWindow::BuildWindow(HWND hWndParent)
     SetCaptionGlyphColor(kVwCaptionGlyph);   // 深色条上用浅灰 glyph（关闭 hover 转 Win 红）
     SetResizable(true);
     SetMinSize(kVwMinWidth, kVwMinHeight);
+    // 标题栏左侧的程序图标：标题栏透明，透出的是深色背景，底色用 kVwDarkColor；同时设好任务栏图标
+    SetIcon(m_programIcons.TitleBitmap(balloonmain::kProgramTitleIconSize, kVwDarkColor));
+    m_programIcons.ApplyTaskIcons(m_hWnd);
 
     // 深色背景：用一张纯深色位图铺满（零 inset 整张拉伸），让透明标题栏区域与
     // 画布之外的区域都是深色。位图本类持有、析构释放。
@@ -196,9 +205,11 @@ void CBalloonImageViewerWindow::CreateAndShow(HWND hMainDlg)
     }
     else
     {
+        //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+        const std::wstring fileFilter = filedlg::MakeFilter(TR(L"图片文件"), filedlg::kImagePatterns, TR(L"所有文件"), L"*.*");
         CFileDialog dlg(TRUE, NULL, NULL,
                         OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER,
-                        _T("图片文件\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0所有文件\0*.*\0\0"),
+                        fileFilter.c_str(),
                         m_hWnd);
         if (dlg.DoModal() == IDOK && m_pCanvas != NULL)
         {
@@ -215,8 +226,22 @@ void CBalloonImageViewerWindow::OpenShared(HWND hOwner, LPCTSTR imagePath)
 {
     // 进程内单例：首次调用时构造，之后复用同一个看图窗。m_hMainDlg 保持 NULL，
     // 故关闭只销毁本窗、不退应用。非 UI 线程不应调用本函数（看图窗须在 UI 线程）。
+    OpenSharedWithNavigator(hOwner, imagePath, NULL);
+}
+
+void CBalloonImageViewerWindow::OpenSharedWithNavigator(HWND hOwner, LPCTSTR imagePath, IImageViewerNavigator* navigator)
+{
+    // 进程内单例：首次调用时构造，之后复用同一个看图窗。m_hMainDlg 保持 NULL，
+    // 故关闭只销毁本窗、不退应用。非 UI 线程不应调用本函数（看图窗须在 UI 线程）。
+    // 每次打开都重设翻页回调：聊天图片（不带回调）打开后，← / → 不再翻文件共享的图片
     static CBalloonImageViewerWindow s_sharedViewer;
+    s_sharedViewer.SetNavigator(navigator);
     s_sharedViewer.ShowImage(hOwner, imagePath);
+}
+
+void CBalloonImageViewerWindow::SetNavigator(IImageViewerNavigator* navigator)
+{
+    m_navigator = navigator;
 }
 
 void CBalloonImageViewerWindow::ShowImage(HWND hOwner, LPCTSTR imagePath)
@@ -253,6 +278,12 @@ LRESULT CBalloonImageViewerWindow::OnKeyDownMsg(UINT /*uMsg*/, WPARAM wParam,
         PostMessage(WM_CLOSE);
         return 0;
     }
+    // ← / →：有翻页回调时交给它（文件共享的图片预览翻到上一张 / 下一张）
+    if ((wParam == VK_LEFT || wParam == VK_RIGHT) && m_navigator != NULL)
+    {
+        m_navigator->OnImageViewerNavigate(wParam == VK_LEFT ? -1 : 1);
+        return 0;
+    }
     bHandled = FALSE;   // 其余键交回基类链
     return 0;
 }
@@ -266,6 +297,8 @@ LRESULT CBalloonImageViewerWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     {
         ::PostMessage(m_hMainDlg, WM_CLOSE_MAINDLG, 0, 0);
     }
+    // 关闭之后不再翻页
+    m_navigator = NULL;
     if (IsWindow())
     {
         DestroyWindow();

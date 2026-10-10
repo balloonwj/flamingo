@@ -61,7 +61,7 @@ public:
     // 个性签名。
     const CString& Signature() const;
 
-    // 性别（取值为"女" / "男" / "保密"之一）。
+    // 性别（取值为"女" / "男" / "保密"之一，即中文规范值；界面显示经 ProfileGenderText 翻译）。
     const CString& Gender() const;
 
     // 生日（形如"1996-08-12"的日期字符串）。
@@ -124,5 +124,29 @@ const TCHAR* ProfileStatusText(int status);
 
 // 某个在线状态的圆点颜色（COLORREF）。status 越界时返回"在线"的绿色。
 COLORREF ProfileStatusColor(int status);
+
+// 性别的选项数（女 / 男 / 保密），也是编辑态下拉框的项数
+const int kProfileGenderCount = 3;
+
+/**
+ *  性别的界面显示文字。模型里存的是中文规范值（"女" / "男" / "保密"），显示时换成当前界面语言的译文。
+ *  @param value 模型里的性别值
+ *  @return 是三个规范值之一时返回其译文；其它值（如资料里存着的其它写法）原样返回
+ */
+CString ProfileGenderText(const CString& value);
+
+/**
+ *  性别规范值在编辑态下拉框里的序号，与 ProfileGenderValueAt 互逆。下拉框的选项按这个顺序添加。
+ *  @param value 模型里的性别值
+ *  @return 0 ~ kProfileGenderCount - 1；不是规范值时返回 -1
+ */
+int ProfileGenderIndex(const CString& value);
+
+/**
+ *  编辑态下拉框序号对应的性别规范值（中文，写回模型用；不随界面语言变化）。
+ *  @param index 下拉框序号
+ *  @return 规范值；index 越界时返回空串
+ */
+CString ProfileGenderValueAt(int index);
 
 } // namespace balloonprofile

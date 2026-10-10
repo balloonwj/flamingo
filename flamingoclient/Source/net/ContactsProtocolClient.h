@@ -29,6 +29,12 @@ struct ContactItem
     std::string m_customface;  //头像标识（UTF-8）：字形头像为 "glyph|colorIdx"，自定义图为 fileid；空表示自动
     std::string m_signature;   //个性签名（UTF-8）
     std::string m_address;     //所在地区（UTF-8），搜索副行"账号 · 地区"与地区匹配用
+    int         m_gender;      //性别，取值见 Protocol.h 的 enum profile_gender：0 未设置 / 1 男 / 2 女
+    int         m_birthday;    //生日，YYYYMMDD 形式的整数（如 19960812）；0 表示未填
+    std::string m_phonenumber; //手机号（UTF-8）；本人也不能修改，只用于展示
+    std::string m_mail;        //邮箱（UTF-8）
+    std::string m_landline;    //座机（UTF-8）
+    std::string m_post;        //岗位（UTF-8）：本人填写的自由文本，与部门职位 DeptMemberItem::m_position 无关
     int         m_presence;    //在线状态，取值见 enum presence_type
     //本端登录用户给该联系人起的备注名（UTF-8），空串表示未设置。经
     //cmd_set_friend_remark(1209) 设置，随本应答读回。备注名是单向的——同一个
@@ -47,6 +53,8 @@ struct ContactItem
         : m_userid(0)
         , m_usertype(0)
         , m_facetype(0)
+        , m_gender(0)
+        , m_birthday(0)
         , m_presence(0)
     {
     }
@@ -111,7 +119,8 @@ struct ContactsResult
     std::vector<DepartmentItem> m_departments;     //企业部门（扁平数组，按 m_parentdeptid 还原成树）
     std::vector<ContactItem>    m_contacts;        //去重的联系人资料池
     std::vector<FavoriteItem>   m_favorites;       //「我的收藏」，联系人与群混排，按收藏时间倒序（最近收藏的在前）
-    std::vector<int64_t>        m_starred;         //「特别关注」的联系人 userid，按标记时间倒序（最近标记的在前）。只装人、不带 ctype —— 群没有上下线，标记它没有意义。客户端据它决定这些人上下线时弹不弹右下角提示
+    //原先还有 m_starred（「特别关注」的联系人 userid）。2026-10-03 特别关注并入会话的消息提醒模式，
+    //名单改随 cmd_sync_conversations 应答的 notifymodes 下发（见 ConversationsResult::m_notifyModes）
 
     ContactsResult()
         : m_code(-1)        //-1：尚未解析出有效结果码
@@ -136,20 +145,32 @@ struct PresenceChangedNotify
     }
 };
 
-//cmd_user_info_changed_notify(1108) 推送解析结果：某联系人资料（头像 / 昵称等）发生变更。
+//cmd_user_info_changed_notify(1108) 推送解析结果：某联系人资料发生变更。
 //服务端 ProfileProtocol::buildUserInfoChangedNotify 产出 {userid(字符串), profile:{...}}，
-//本端关心其中的头像字段（facetype/customface）与昵称，用于实时刷新联系人 / 会话头像。
+//profile 是变更后的完整资料。本端用它更新通讯录缓存（ContactsProtocolClient::applyUserInfoChanged），
+//再实时刷新联系人树、会话列表、联系人资料窗与单聊窗。
 struct UserInfoChangedNotify
 {
     int64_t     m_userid;      //资料发生变更的联系人用户ID
+    bool        m_hasProfile;  //推送里是否带了 profile 对象；没带时下面各项都是默认值，不应拿去覆盖缓存
     int         m_facetype;    //新头像类型（见 BalloonMain/AvatarSpec.h AvatarKind）
     std::string m_customface;  //新头像标识（UTF-8）
     std::string m_nickname;    //新昵称（UTF-8；可空，调用方据需更新显示名）
     std::string m_signature;   //新个性签名（UTF-8；可空，调用方据需更新好友资料窗 / 单聊窗签名）
+    int         m_gender;      //性别，取值见 Protocol.h 的 enum profile_gender
+    int         m_birthday;    //生日，YYYYMMDD；0 表示未填
+    std::string m_address;     //所在地（UTF-8）
+    std::string m_phonenumber; //手机号（UTF-8）
+    std::string m_mail;        //邮箱（UTF-8）
+    std::string m_landline;    //座机（UTF-8）
+    std::string m_post;        //岗位（UTF-8）
 
     UserInfoChangedNotify()
         : m_userid(0)
+        , m_hasProfile(false)
         , m_facetype(0)
+        , m_gender(0)
+        , m_birthday(0)
     {
     }
 };
@@ -206,13 +227,23 @@ public:
 
     /**
      *  解析 cmd_user_info_changed_notify(1108) 推送 JSON 包体 {userid, profile:{...}}。
-     *  取 userid（字符串编码 64 位）与 profile 内的 facetype / customface / nickname。
-     *  要求 userid 有效（>0）才算成功；profile 缺字段时对应项取默认（facetype=0、空串）。
+     *  取 userid（字符串编码 64 位）与 profile 内的全部资料字段（头像、昵称、签名、性别、生日、
+     *  所在地、手机号、邮箱、座机、岗位）。要求 userid 有效（>0）才算成功；profile 缺字段时
+     *  对应项取默认（整数为 0、文字为空串），没有 profile 对象时 m_hasProfile 为 false。
      *  @param jsonbody 推送包体（UTF-8 JSON 文本）
      *  @param out      [出参] 解析结果；返回 true 时字段有效
      *  @return JSON 合法且 userid>0 返回 true，否则 false
      */
     static bool parseUserInfoChangedNotify(const std::string& jsonbody, UserInfoChangedNotify& out);
+
+    /**
+     *  把一条资料变更推送合并进通讯录缓存里对应的那一项。推送带的是完整资料，故各项一律覆盖
+     *  （对方可能把签名、所在地等清空）；只有昵称为空时保留原值，避免显示名变成空白。
+     *  备注名、标签、在线状态、账号不在推送的合并范围内，保持不变。推送没带 profile 对象时什么都不改。
+     *  @param notify  已解析的 1108 推送
+     *  @param contact [入出] 缓存里 userid 与推送相同的那一项；由调用方先按 userid 找到
+     */
+    static void applyUserInfoChanged(const UserInfoChangedNotify& notify, ContactItem& contact);
 
     /**
      *  解析 cmd_org_structure_notify(1404) 推送 JSON 包体 {changetype, deptid}。

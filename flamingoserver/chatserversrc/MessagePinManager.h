@@ -112,6 +112,10 @@ public:
      *                 一次的话，200 条就是 200 次建连接，那个代价不该由拉一次列表来付。
      *    outTotal：   出参，**不受 limit 约束**的真实总数。客户端据它与 out.size()
      *                 比较判断是否发生截断，进而决定本地对账的时间下界。
+     *    minCreateTime：消息时间下界（Unix 毫秒），早于它的消息不计入、不返回；0 表示不限。
+     *    minMsgId：   消息 msgid 下界，小于它的消息不计入、不返回；0 表示不限。两个下界是本人在群里能看到的
+     *                 历史范围（GroupProtocol::computeHistoryBound，docs/邀请入群方案.md §5.3）：本应答带完整
+     *                 消息体，不加下界会把新成员看不到的入群前消息送出去。单聊传 0。
      *
      *  @return true 查询成功（一条都没有也算成功）；false 表示参数非法或数据库不可用。
      *
@@ -120,7 +124,7 @@ public:
      */
     bool getPinnedMessages(int ctype, int64_t cid, int64_t selfUserId, int limit,
                            std::vector<MessageRecord>& out, std::vector<PinRecord>& outPins,
-                           int64_t& outTotal);
+                           int64_t& outTotal, int64_t minCreateTime = 0, int64_t minMsgId = 0);
 
     /**
      *  删除某条消息的Pin行，不做任何权限判断。

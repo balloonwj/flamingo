@@ -18,6 +18,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace {
 
@@ -30,7 +31,7 @@ const UINT kIdBtnCancel  = 21;   // 「取消」
 
 // ---- 尺寸（像素）----
 const int kDlgWidth    = 460;   // 窗口宽：够放"名称 + 占用量 + 开关"一行
-const int kDlgHeight   = 320;   // 窗口高：三类 + 合计 + 按钮行
+const int kDlgHeight   = 320;   // 内容区高（标题栏以下）：说明 + 三类 + 合计 + 按钮行
 const int kTitleBarH   = 38;    // 标题栏高
 const int kPadH        = 20;    // 客户区左右内边距
 const int kPadV        = 16;    // 客户区上下内边距
@@ -98,26 +99,30 @@ void CBalloonCacheCleanDlg::OpenDialog(HWND owner)
     if (m_plan.empty())
     {
         // 还没登录时没有可清的东西，直接提示，不弹一个空窗让用户对着发愣。
-        ::MessageBox(owner, _T("尚未登录，没有可清理的缓存。"),
-                     _T("清理本地缓存"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(owner, TR(L"尚未登录，没有可清理的缓存。"),
+                     TR(L"清理本地缓存"), MB_OK | MB_ICONINFORMATION);
         return;
     }
     ScanSizes();
 
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"), WS_OVERLAPPEDWINDOW, 0) == NULL)
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR(_T("清理缓存对话框 Create 失败。"));
         return;
     }
 
-    SetTitle(_T("清理本地缓存"));
+    SetTitle(TR(L"清理本地缓存"));
     SetTitleBarHeight(kTitleBarH);
     SetButtons(false, false, true);   // 只留关闭按钮
     SetResizable(false);
+    // 标题栏左侧的程序图标：标题栏不透明，底色用 kOpaqueTitleBarColor；本窗口没有所有者、会出现在任务栏，同时设好任务栏图标
+    SetIcon(m_programIcons.TitleBitmap(balloonmain::kProgramTitleIconSize, balloonmain::kOpaqueTitleBarColor));
+    m_programIcons.ApplyTaskIcons(m_hWnd);
 
     InitUi();
 
-    ResizeClient(kDlgWidth, kDlgHeight);
+    //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+    ResizeClient(kDlgWidth, kDlgHeight + kTitleBarH);
     CenterWindow();
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -148,7 +153,7 @@ void CBalloonCacheCleanDlg::InitUi()
     root->SetGap(0);
 
     // 顶部说明：讲清"清的是什么、不会动什么"。这是用户点下"开始清理"前唯一的依据。
-    root->AddChild(MakeLabel(_T("清理后这些内容需要时会重新下载。聊天记录、公告与本地设置不受影响。"),
+    root->AddChild(MakeLabel(TR(L"清理后这些内容需要时会重新下载。聊天记录、公告与本地设置不受影响。"),
                              kColorSub, DT_LEFT | DT_TOP | DT_WORDBREAK),
                    balloonwjui::DuiLayout::Hint().Fixed(kTipH));
 
@@ -187,7 +192,7 @@ void CBalloonCacheCleanDlg::InitUi()
 
     // 合计行：把三类加起来，用户一眼知道能腾出多少。
     CString totalText;
-    totalText.Format(_T("合计 %s"), balloonsettings::FormatByteSize(total).c_str());
+    totalText.Format(TR(L"合计 %s"), balloonsettings::FormatByteSize(total).c_str());
     root->AddChild(MakeLabel(totalText, kColorTitle, DT_RIGHT | DT_VCENTER | DT_SINGLELINE),
                    balloonwjui::DuiLayout::Hint().Fixed(kTotalH));
 
@@ -203,7 +208,7 @@ void CBalloonCacheCleanDlg::InitUi()
 
     std::unique_ptr<balloonwjui::DuiButton> cancel(new balloonwjui::DuiButton());
     cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
-    cancel->SetText(_T("取消"));
+    cancel->SetText(TR(L"取消"));
     cancel->SetCtrlId(kIdBtnCancel);
     footer->AddChild(std::move(cancel),
                      balloonwjui::DuiLayout::Hint().Fixed(kBtnW, kBtnH)
@@ -211,7 +216,7 @@ void CBalloonCacheCleanDlg::InitUi()
 
     std::unique_ptr<balloonwjui::DuiButton> clean(new balloonwjui::DuiButton());
     clean->SetButtonType(balloonwjui::DuiButton::StylePushButton);
-    clean->SetText(_T("开始清理"));
+    clean->SetText(TR(L"开始清理"));
     clean->SetCtrlId(kIdBtnClean);
     footer->AddChild(std::move(clean),
                      balloonwjui::DuiLayout::Hint().Fixed(kBtnW, kBtnH)
@@ -256,8 +261,8 @@ void CBalloonCacheCleanDlg::DoClean()
 
     if (cleanedCount == 0)
     {
-        ::MessageBox(m_hWnd, _T("没有勾选任何要清理的内容。"),
-                     _T("清理本地缓存"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, TR(L"没有勾选任何要清理的内容。"),
+                     TR(L"清理本地缓存"), MB_OK | MB_ICONINFORMATION);
         return;
     }
 
@@ -267,17 +272,17 @@ void CBalloonCacheCleanDlg::DoClean()
     CString result;
     if (allOk)
     {
-        result.Format(_T("清理完成，释放约 %s。"),
+        result.Format(TR(L"清理完成，释放约 %s。"),
                       balloonsettings::FormatByteSize(freed).c_str());
     }
     else
     {
         // 有文件没删掉时如实说明，并给出最常见的原因，免得用户反复点。
-        result.Format(_T("清理完成，释放约 %s。\n\n部分文件正在使用中，未能删除，")
-                      _T("可在传输结束后再清理一次。"),
+        result.Format(TR(L"清理完成，释放约 %s。\n\n部分文件正在使用中，未能删除，"
+                      L"可在传输结束后再清理一次。"),
                       balloonsettings::FormatByteSize(freed).c_str());
     }
-    ::MessageBox(m_hWnd, result, _T("清理本地缓存"), MB_OK | MB_ICONINFORMATION);
+    ::MessageBox(m_hWnd, result, TR(L"清理本地缓存"), MB_OK | MB_ICONINFORMATION);
 
     DestroyWindow();
 }

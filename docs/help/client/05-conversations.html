@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 5 章：会话列表与消息提醒（会话右键菜单、六种消息提醒方式、消息盒子、批量管理消息提醒）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会话列表与消息提醒 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c05">
+<article class="doc">
+  <h1>会话列表与消息提醒</h1>
+  <p class="lead">主面板的「消息」页签列出你最近的单聊和群聊。本章介绍会话列表上的各种操作，以及怎样按会话设置消息提醒方式，把不那么重要的群收进「消息盒子」，让重要的消息不被淹没。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>提醒方式只影响你自己，不影响其他人</li>
+  </ul>
+
+  <h2 id="list">会话列表</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_msgs.png" width="338" alt="会话列表"><figcaption>「消息」页签里的会话列表</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <p>点主面板的「消息」页签（时钟图标）即可看到会话列表。最近有消息的会话排在上面，每一行显示：</p>
+      <ul>
+        <li>对方或群的头像与名称；</li>
+        <li>最后一条消息的摘要；</li>
+        <li>最后一条消息的时间；</li>
+        <li>未读消息数：红色圆形数字。提醒方式设为「接收消息但不提醒」等时数字变为灰色，见下文<a href="#notify">「消息提醒设置」</a>。</li>
+      </ul>
+      <p><b>单击</b>一行即打开对应的聊天窗口，并清除该会话的未读数。「消息」页签图标上的红色角标是所有会话的未读总数。</p>
+    </div>
+  </div>
+
+  <h2 id="menu">会话右键菜单</h2>
+  <p>右键一个会话会弹出会话菜单。单聊和群聊的菜单略有不同：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_conv_menu.png" width="338" alt="单聊会话的右键菜单"><figcaption>单聊会话（严英丽）的右键菜单</figcaption></figure>
+    <figure class="shot"><img src="../img/b_conv_menu_group.png" width="338" alt="群聊会话的右键菜单"><figcaption>群聊会话（研发部交流群）的右键菜单</figcaption></figure>
+  </div>
+  <table>
+    <tr><th>菜单项</th><th>作用</th></tr>
+    <tr><td>打开会话</td><td>打开聊天窗口，与单击这一行相同</td></tr>
+    <tr><td>标为未读 / 标记已读</td><td>没有未读消息时显示「标为未读」，点它把会话重新标成未读，提醒自己稍后处理；有未读消息（或已手动标为未读）时显示「标记已读」，点它清除未读</td></tr>
+    <tr><td>共享文件给TA / 共享文件到本群</td><td>把本机的磁盘、文件夹或文件共享到这个会话（<a href="21-file-share.html">详见</a>）</td></tr>
+    <tr><td>共享屏幕给TA / 共享屏幕到本群</td><td>打开聊天窗口并开始屏幕共享（<a href="18-screen-share.html">详见</a>）</td></tr>
+    <tr><td>开启字幕模式</td><td>在桌面上以字幕的形式显示这个会话的消息，不打开聊天窗口；开启后变为「关闭字幕模式」（<a href="20-captions.html">详见</a>）</td></tr>
+    <tr><td>查看资料 / 查看群资料</td><td>单聊打开对方的资料窗口（<a href="04-contacts.html#profile">详见</a>），群聊打开群资料</td></tr>
+    <tr><td>查看消息记录</td><td>打开这个会话的消息记录（<a href="24-history.html">详见</a>）</td></tr>
+    <tr><td>添加到收藏</td><td>把对方或群放进「联系人」页签的「我的收藏」；已收藏时变为「取消收藏」</td></tr>
+    <tr><td>置顶会话</td><td>把会话固定在列表最上方，置顶的会话底色略深、左侧有一道橙色竖条；已置顶时变为「取消置顶」</td></tr>
+    <tr><td>消息提醒设置 ▸</td><td>设置这个会话的提醒方式，见下一节</td></tr>
+    <tr><td>复制名字</td><td>（仅单聊）复制列表上显示的名字</td></tr>
+    <tr><td>复制群号 / 复制群名</td><td>（仅群聊）把群号或群名复制到剪贴板</td></tr>
+    <tr><td>生成加群链接</td><td>（仅群聊）打开「生成加群链接」窗口：选择有效期（1 天、7 天或永久有效）后生成链接，发给同事即可邀请他们入群；窗口下方的「我生成的链接」可以复制或作废你生成过的链接（<a href="13-group-chat.html#link">详见</a>）</td></tr>
+    <tr><td>清空聊天记录</td><td>清空这个会话里你这一方的聊天记录</td></tr>
+    <tr><td>删除该会话</td><td>把这个会话从列表中移除</td></tr>
+    <tr><td>删除全部会话</td><td>清空整个会话列表</td></tr>
+  </table>
+  <div class="callout warn"><b>「清空聊天记录」与「删除会话」的区别</b><b>清空聊天记录</b>会删除这个会话里你这一方的全部消息，清空后无法恢复；你登录的其他设备会同步清空，对方或其他群成员的记录不受影响。清空需要连接服务器，离线时会提示无法清空。<br><b>删除该会话 / 删除全部会话</b>只是把会话从最近会话列表里拿掉，聊天记录不会被删除，以后仍可以在消息记录里查看。</div>
+
+  <h2 id="notify">消息提醒设置</h2>
+  <p>每个会话都可以单独设置收到消息时的提醒方式。在会话上右键，指向 <span class="ui">消息提醒设置</span>，在子菜单里选择，当前的方式前面带勾：</p>
+  <figure class="shot center">
+    <img src="../img/b_conv_menu_notify.png" width="544" alt="消息提醒设置子菜单">
+    <figcaption>群聊会话的「消息提醒设置」子菜单</figcaption>
+  </figure>
+  <table>
+    <tr><th>提醒方式</th><th>效果</th></tr>
+    <tr><td>特别关注</td><td>收到消息时，聊天窗口没有打开就直接弹出来；已打开但你没在看时闪烁任务栏按钮；两种情况都会响提示音。对联系人设为特别关注后，他上线或下线时还会弹出提示（你处于「忙碌」状态时不弹）。特别关注最多 50 个，单聊和群聊合计。</td></tr>
+    <tr><td>允许消息提醒</td><td>默认方式。计入未读数并显示红色数字；聊天窗口没有打开时托盘图标闪烁并响提示音。</td></tr>
+    <tr><td>只提醒 @我和关注的人</td><td>仅群聊可选。消息照常计入未读，数字为灰色；只有你被 @（包括 @所有人）、或你关注的成员发言时，才闪烁托盘图标并响提示音。关注哪些成员见下文。</td></tr>
+    <tr><td>接收消息但不提醒</td><td>消息照常计入未读，数字为灰色，不闪烁、不响；但在群里被 @ 时仍然提醒。会话右下角显示一个划掉的铃铛图标。</td></tr>
+    <tr><td>收进消息盒子且不提醒</td><td>会话不再单独出现在列表里，而是汇总到「消息盒子」一行；不闪烁、不响，被 @ 时也只在摘要前加标注。见下文<a href="#msgbox">「消息盒子」</a>。</td></tr>
+    <tr><td>屏蔽消息</td><td>仅群聊可选。不计未读、不提醒，会话列表也不因新消息而变化；消息仍会保存，打开群聊窗口照样能看到。</td></tr>
+  </table>
+  <p>子菜单下方还有两项：</p>
+  <ul>
+    <li><span class="ui">批量管理消息提醒</span>：一次为多个会话设置提醒方式，见本章最后一节。</li>
+    <li><span class="ui">管理关注的成员…</span>（仅群聊）：选择你在这个群里关注的成员。提醒方式为「只提醒 @我和关注的人」时，这些成员发言会提醒你；其他提醒方式下，他们的消息在摘要前带「[关注] 」字样，便于一眼认出。</li>
+  </ul>
+  <div class="callout tip"><b>在其他地方也能设置</b>联系人的右键菜单、群的右键菜单里都有同样的「消息提醒设置」，联系人资料窗口里的「消息提醒」下拉框也可以设置，几处的设置是同一份。提醒方式保存在服务器上，在别的电脑登录时依然有效。</div>
+
+  <h2 id="msgbox">消息盒子</h2>
+  <p>不需要实时关注、但又不想屏蔽的群（例如兴趣群），可以收进消息盒子。下面以把「羽毛球俱乐部」收进消息盒子为例：</p>
+  <ol class="steps">
+    <li>在会话列表中右键「羽毛球俱乐部」，选 <span class="ui">消息提醒设置</span> → <span class="ui">收进消息盒子且不提醒</span>。</li>
+    <li>这个群从会话列表中消失，列表里出现一行 <span class="ui">消息盒子</span>，摘要显示最近一条被收进的消息，如「羽毛球俱乐部：已经订好 2 片场地……」。</li>
+    <li>单击「消息盒子」这一行（或主面板头部的消息盒子按钮、系统菜单中的 <span class="ui">消息盒子</span>），打开消息盒子窗口。</li>
+  </ol>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_msgs_box.png" width="338" alt="会话列表中的消息盒子"><figcaption>收进的群汇总成「消息盒子」一行</figcaption></figure>
+    <figure class="shot"><img src="../img/c_msgbox.png" width="380" alt="消息盒子窗口"><figcaption>消息盒子窗口</figcaption></figure>
+  </div>
+  <ul>
+    <li>窗口里列出所有收进消息盒子的会话，外观与会话列表相同。<b>单击</b>一行打开对应的聊天窗口并清除未读，消息盒子窗口保持打开。</li>
+    <li><b>右键</b>一行弹出与会话列表相同的菜单。把提醒方式改成别的之后，这个会话随即移出消息盒子、回到会话列表。</li>
+    <li>点左上角的 <span class="ui">全部标为已读</span> 清除盒子里所有会话的未读（没有未读时按钮为灰色）；点右上角的 <span class="ui">批量管理</span> 打开「消息提醒管理」窗口。</li>
+    <li>右键会话列表里的「消息盒子」那一行，也可以选择「全部标为已读」或「批量管理消息提醒」。</li>
+  </ul>
+
+  <h2 id="batch">批量管理消息提醒</h2>
+  <p>需要一次调整很多会话的提醒方式时，用「消息提醒管理」窗口。从任意会话的 <span class="ui">消息提醒设置</span> → <span class="ui">批量管理消息提醒</span>，或消息盒子窗口的 <span class="ui">批量管理</span> 打开：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/c_notify_manage.png" width="460" alt="消息提醒管理窗口"><figcaption>消息提醒管理窗口，「羽毛球俱乐部」当前为收进消息盒子且不提醒</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ol class="steps">
+        <li>在顶部选择 <span class="ui">群聊</span> 或 <span class="ui">单聊</span> 页签。每一行右侧显示该会话当前的提醒方式。</li>
+        <li>勾选要修改的会话。可以在 <span class="ui">搜索名字或账号</span> 框中输入关键字筛选，也可以勾 <span class="ui">全选</span>；旁边会显示「已选 N 个」。</li>
+        <li>在底部 <span class="ui">将选中的设为</span> 下拉框里选择新的提醒方式。</li>
+        <li>点 <span class="ui">应用</span>（没有勾选任何会话时按钮为灰色）。</li>
+      </ol>
+    </div>
+  </div>
+  <p>特别关注最多 50 个（单聊与群聊合计），一次设置会超出上限时，窗口会提示你减少勾选或先取消一些特别关注。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

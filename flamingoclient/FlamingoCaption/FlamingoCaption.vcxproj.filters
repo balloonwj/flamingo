@@ -1,0 +1,321 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Editor">
+      <UniqueIdentifier>{344a7f42-7fb7-6561-0ef9-6eb7bce95257}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Engine">
+      <UniqueIdentifier>{7bfa3072-1c5e-726f-f17e-3f972237a82c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Export">
+      <UniqueIdentifier>{0095a9fa-74d1-713e-43e3-70a7d7846224}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoLang">
+      <UniqueIdentifier>{72a051bc-e638-3565-876a-19c5dad801f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Model">
+      <UniqueIdentifier>{a559b870-6892-1eec-0508-6ce5485e9784}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Record">
+      <UniqueIdentifier>{6a0d9eae-e314-c567-fd72-fb97ee707a36}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Render">
+      <UniqueIdentifier>{5e520da5-341f-2fec-6d3b-bfe7ef357922}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Util">
+      <UniqueIdentifier>{619b9ea2-01a8-48eb-0989-f550bd74060f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{fadd1363-4aa9-d02c-f68a-ae2fcdbc5321}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI\BalloonMain">
+      <UniqueIdentifier>{8c406ee6-61e4-c2e3-aa2c-1a2d79bfd56f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party">
+      <UniqueIdentifier>{9eab2112-6210-c38a-271b-d8cbe3106a1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\jsoncpp-1.9.0">
+      <UniqueIdentifier>{f4787265-9915-ba4f-0c42-241643d8f88f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="deps">
+      <UniqueIdentifier>{44f85496-bf69-30d1-96d5-904271343563}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="deps\sherpa-onnx">
+      <UniqueIdentifier>{d20a002b-4a1a-9167-d4c7-67e0cd8d7274}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="deps\sherpa-onnx\include">
+      <UniqueIdentifier>{f002d2ed-d216-199a-2a1c-4f4382436864}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="deps\sherpa-onnx\include\sherpa-onnx">
+      <UniqueIdentifier>{3968635d-bb85-95a0-5fdf-cc03d97d17a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="deps\sherpa-onnx\include\sherpa-onnx\c-api">
+      <UniqueIdentifier>{49f6f225-8b89-0da1-801f-0fe9260aed5d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionDraft.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionFiles.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionJson.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionLayout.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionSegmenter.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionSettings.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionText.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionTime.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Model\CaptionTrack.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\CaptionAudio.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\CaptionEngine.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\CaptionWorker.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Record\CaptionRecording.cpp">
+      <Filter>Record</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\CaptionRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\CaptionLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\CaptionModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\IULogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionEditorModel.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionEditorWindow.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionExportDialog.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionFormDialog.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionPostRecognizer.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionPreviewView.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionReplaceDialog.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionTimelineMath.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionTimelineView.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\CaptionVideoPlayer.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Export\CaptionExportJob.cpp">
+      <Filter>Export</Filter>
+    </ClCompile>
+    <ClCompile Include="Export\CaptionMediaIo.cpp">
+      <Filter>Export</Filter>
+    </ClCompile>
+    <ClCompile Include="Export\CaptionTimedText.cpp">
+      <Filter>Export</Filter>
+    </ClCompile>
+    <ClCompile Include="Export\Mp4TextTrack.cpp">
+      <Filter>Export</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="CaptionApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\Util\QuietLoadLibrary.h">
+      <Filter>Source\Common\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLang\FlamingoLangApi.h">
+      <Filter>FlamingoLang</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h">
+      <Filter>Source\UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="..\deps\sherpa-onnx\include\sherpa-onnx\c-api\c-api.h">
+      <Filter>deps\sherpa-onnx\include\sherpa-onnx\c-api</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionCue.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionDraft.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionFiles.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionJson.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionLayout.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionSegmenter.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionSettings.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionText.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionTime.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Model\CaptionTrack.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\CaptionAudio.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\CaptionEngine.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\CaptionModelRes.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\CaptionWorker.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Record\CaptionRecording.h">
+      <Filter>Record</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\CaptionRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\CaptionLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\CaptionModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionEditorMessages.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionEditorModel.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionEditorWindow.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionExportDialog.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionFormDialog.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionPostRecognizer.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionPreviewView.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionReplaceDialog.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionTimelineMath.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionTimelineView.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\CaptionVideoPlayer.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Export\CaptionExportJob.h">
+      <Filter>Export</Filter>
+    </ClInclude>
+    <ClInclude Include="Export\CaptionMediaIo.h">
+      <Filter>Export</Filter>
+    </ClInclude>
+    <ClInclude Include="Export\CaptionTimedText.h">
+      <Filter>Export</Filter>
+    </ClInclude>
+    <ClInclude Include="Export\Mp4TextTrack.h">
+      <Filter>Export</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoCaptionVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoCaption.def" />
+  </ItemGroup>
+</Project>

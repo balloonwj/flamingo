@@ -24,7 +24,7 @@
 | Pin 分类下的排序 | 消息时间倒序，与其它六个分类一致 | §6.6 |
 | 消息记录窗的分类形态 | 第七枚单选胶囊，不与类型胶囊叠加 | §7.3 |
 | 推送落空（本地没有该消息）的处理 | 命中 0 行时自动补拉一次消息体 | §4.3 |
-| 聊天窗顶部「已 Pin N 条」提示带 | **本轮不做**，留到后续单独一轮 | §7.5 |
+| 聊天窗顶部「已 Pin N 条」提示带 | 首轮不做，已在 P5 单独一轮完成 | §8 P5 |
 | 测试覆盖范围 | 界面布局契约测试省掉，其余照做 | §9 |
 
 ---
@@ -37,65 +37,51 @@ Pin 与撤回的形状几乎一样：右键触发 → 发请求 → 服务端落
 
 | 环节 | 撤回的实现位置 |
 | --- | --- |
-| 气泡右键菜单 | `flamingoclient/Source/BalloonChatWnd/ChatBubble.cpp:2094`（菜单项在 `:2125`~`:2144`） |
-| 气泡 → 消息列表 | `ChatMessageList::RequestRecallBubble`（`ChatMessageList.h:229`）——只把 msgid 投给宿主窗，自己不改界面 |
-| 发请求 | `net/IUSocket.cpp:2388` `CIUSocket::RecallMessage` |
-| 请求 / 应答 / 推送编解码 | `net/MessageProtocolClient.cpp:612` / `:629` / `:645` |
-| 收包分发 | `net/IUSocket.cpp:1308`（应答）、`:1335`（推送） |
-| 投递给 UI 的窗口消息 | `UserSessionData.h:115` `FMG_MSG_V2_MESSAGE_RECALLED` |
-| UI 入口 | `MainDlg.cpp:1867` `OnV2MessageRecalled` |
-| 扇出三件事 | `BalloonMain/BalloonMainPanel.cpp:3346`：本地库（`:3371`）、已打开的聊天窗（`:3375`~`:3392`）、会话列表预览（`:3399`） |
-| 聊天窗改气泡 | `BalloonChatWindow.h:153` / `BalloonGroupChatWindow.h:119` → `ChatMessageList::RecallMessageByMsgid`（`ChatMessageList.h:236`） |
-| 本地库落标记 | `V2MsgStore::MarkRecalled`（`V2MsgStore.h:56`，SQL 在 `V2MsgStore.cpp:41`） |
-| 服务端处理 | `chatserversrc/ChatSession.cpp:2209` `onRecallMessage`；落库 `MessageManager.h:146` |
+| 气泡右键菜单 | `flamingoclient/Source/UI/BalloonChatWnd/ChatBubble.cpp`（菜单模型在 `ChatMessageMenu.cpp` 的 `BuildChatMessageMenuModel`） |
+| 气泡 → 消息列表 | `ChatMessageList::RequestRecallBubble`——只把 msgid 投给宿主窗，自己不改界面 |
+| 发请求 | `net/IUSocket.cpp` `CIUSocket::RecallMessage` |
+| 请求 / 应答 / 推送编解码 | `net/MessageProtocolClient.cpp` 的 `buildRecallMessageRequest` / `parseRecallResponse` / `parseMessageRecalledNotify` |
+| 收包分发 | `net/IUSocket.cpp` 的 `case cmd_recall_message`（应答）、`case cmd_message_recalled_notify`（推送） |
+| 投递给 UI 的窗口消息 | `Session/UserSessionData.h` `FMG_MSG_V2_MESSAGE_RECALLED` |
+| UI 入口 | `UI/BalloonMain/BalloonMainPanelNetHandlers.cpp` `CBalloonMainPanel::OnV2MessageRecalled` |
+| 扇出三件事 | `UI/BalloonMain/BalloonMainPanel.cpp` `OnMessageRecalled`：本地库、已打开的聊天窗、会话列表预览 |
+| 聊天窗改气泡 | `CBalloonChatWindow` / `CBalloonGroupChatWindow` 的 `OnMessageRecalled` → `ChatMessageList::RecallMessageByMsgid` |
+| 本地库落标记 | `V2MsgStore::MarkRecalled`（`UI/BalloonHistory/V2MsgStore.h`） |
+| 服务端处理 | `chatserversrc/ChatSession.cpp` `onRecallMessage`；落库 `MessageManager::recallMessage` |
 
 其中两条口径值得原样继承：
 
-- **界面改动一律等推送**，请求应答只用于失败时提示原因（见 `IUSocket.cpp:1310` 的注释）。这样本端与对端看到的结果必然一致，Pin 沿用同一套，不做乐观更新。
-- **单聊推送的 `cid` 按收件人视角分别构造**（`ChatSession.cpp:2311`~`2317`：给对端推 `cid=自己`，给自己推 `cid=对端`）。Pin 的推送必须照做，否则收到推送的一方对不上会话。
+- **界面改动一律等推送**，请求应答只用于失败时提示原因（见 `IUSocket.cpp` 中 `case cmd_recall_message` 的注释）。这样本端与对端看到的结果必然一致，Pin 沿用同一套，不做乐观更新。
+- **单聊推送的 `cid` 按收件人视角分别构造**（`ChatSession.cpp` 的 `onRecallMessage`：给对端推 `cid=自己`，给自己推 `cid=对端`）。Pin 的推送必须照做，否则收到推送的一方对不上会话。
 
 ### 2.2 消息记录窗的类型分类本来就是可扩展的枚举
 
-- `BalloonHistory/V2MsgQuery.h:24`~`32` —— `HistoryTypeFilter` 目前 0~5（全部 / 文字 / 图片 / 文件 / 语音 / 链接）
-- `V2MsgQuery.h:148` —— `TypeFilterToSqlFragment` 把枚举翻成 SQL 的 `WHERE` 片段
-- `BalloonHistory/HistoryWindowLayout.h:30`~`35` —— 六枚胶囊的控件 id 是连续的 510~515
-- `BalloonHistoryWindow.cpp:733` —— 注释明写"类型胶囊：id 连续，510..515 → 类型枚举 0..5"
+- `UI/BalloonHistory/V2MsgQuery.h` —— `HistoryTypeFilter` 目前 0~5（全部 / 文字 / 图片 / 文件 / 语音 / 链接）
+- `V2MsgQuery.h` —— `TypeFilterToSqlFragment` 把枚举翻成 SQL 的 `WHERE` 片段
+- `UI/BalloonHistory/HistoryWindowLayout.h` —— 六枚胶囊的控件 id 是连续的 510~515
+- `BalloonHistoryWindow.cpp` —— 注释明写"类型胶囊：id 连续，510..515 → 类型枚举 0..5"
 
 **加一个「Pin」分类就是加一个枚举值 + 一枚胶囊 + 一段 SQL 片段**，没有结构性改动。
 
 ### 2.3 客户端本地库没有补列机制——这是本方案唯一要新打的地基
 
-`V2MsgStore::Open`（`V2MsgStore.cpp:54`~`86`）只做三件事：`CREATE TABLE IF NOT EXISTS t_msg`、建两条索引。**没有任何 `ALTER TABLE`、也没有读写 `PRAGMA user_version`**。
+`V2MsgStore::Open`（`UI/BalloonHistory/V2MsgStore.cpp`）只做三件事：`CREATE TABLE IF NOT EXISTS t_msg`、建两条索引。**没有任何 `ALTER TABLE`、也没有读写 `PRAGMA user_version`**。
 
-这意味着：直接往 `kCreateTableSql`（`V2MsgStore.cpp:12`~`24`）里加一列，对**新装的客户端**有效，对**已经有 `ChatLog\msgv2.db` 的存量客户端无效**——`IF NOT EXISTS` 见表已存在就跳过，新列永远不会出现，随后所有带新列的 SQL 全部报 `no such column`，消息记录窗直接空白。
+这意味着：直接往 `kCreateTableSql` 里加一列，对**新装的客户端**有效，对**已经有 `ChatLog\msgv2.db` 的存量客户端无效**——`IF NOT EXISTS` 见表已存在就跳过，新列永远不会出现，随后所有带新列的 SQL 全部报 `no such column`，消息记录窗直接空白。
 
 所以本方案必须先给 `CV2MsgStore` 补上"存量库缺列自动补齐"，再谈加列。
 
-还有一个连带陷阱：`Upsert` 用的是 `INSERT OR REPLACE`（`V2MsgStore.cpp:34`~`37`），语义是**整行替换**。加了 pin 列之后，实时消息重复落库（同步回填与实时推送撞上同一条）会把已有行的 pin 标记冲成 0。这条必须一并处理，见 §3.3。
-
-### 2.4 服务端 SQLite 已有自动补列，改 `table.sql` 后重跑生成脚本即可
-
-- `flamingoserver/sqliteapi/SqliteSchema.h:35`~`46` —— `SchemaColumn` / `SCHEMA_COLUMNS`，注释写明用途是"存量库缺列自动补齐"
-- `SqliteSchema.cpp:584`~`591` —— `t_chatmsg` 现有列清单
-- `SqliteSchema.h:5` —— 整个 `SqliteSchema.cpp` 由 `tools/gen_table_sqlite.py` 从 `table.sql` 自动生成
-
-服务端这一侧**不需要手写迁移**：改 `table.sql` → 重跑生成脚本 → `table_sqlite.sql` 与 `SqliteSchema.cpp` 一起更新。当前部署跑的是 SQLite（`etc/chatserver.conf` 里 `dbtype=sqlite`），这一步不能漏。
-
-### 2.5 命令号与窗口消息号都有现成空档
-
-- `Protocol.h:156`~`173` —— 会话与消息段 1500~1599，**1501~1517 已用，1518 起空闲**
-- `Protocol.h:292`~`298` —— 消息类错误码 500~599，**500~505 已用，506 起空闲**
-- `UserSessionData.h:143` —— 已用到 `WM_USER + 544`；`:247` `FMG_MSG_LAST = WM_USER + 560`，**545~559 空闲**
+还有一个连带陷阱：`Upsert` 用的是 `INSERT OR REPLACE`，语义是**整行替换**。加了 pin 列之后，实时消息重复落库（同步回填与实时推送撞上同一条）会把已有行的 pin 标记冲成 0。这条必须一并处理，见 §3.3。
 
 ### 2.6 有个同名陷阱：1901~1903 是「收藏消息」
 
-`Protocol.h:217`~`222` 已占用 `cmd_add_favorite`(1901) / `cmd_get_favorites`(1902) / `cmd_delete_favorite`(1903)，语义是把某条聊天记录存进"我的收藏"里跨会话查看。本方案的 Pin 是**把消息钉在它所属的那个会话里给全体参与者看**，两件事，<u>不得复用</u>，数据表也不要混。
+`Protocol.h` 已占用 `cmd_add_favorite`(1901) / `cmd_get_favorites`(1902) / `cmd_delete_favorite`(1903)，语义是把某条聊天记录存进"我的收藏"里跨会话查看。本方案的 Pin 是**把消息钉在它所属的那个会话里给全体参与者看**，两件事，<u>不得复用</u>，数据表也不要混。
 
 （顺带：`cmd_set_favorite`(1215) 是收藏联系人 / 群组，又是第三件事，见 `docs/收藏接入方案.md`。）
 
 ### 2.7 客户端 SQLite 版本足够新
 
-`Flamingo.vcxproj:1076` 编入的是 `third-party/sqlite-src-3530100`，即 SQLite **3.53.1**。远高于 UPSERT（`ON CONFLICT ... DO UPDATE`）所需的 3.24，§3.3 可以放心用。
+`Flamingo.vcxproj` 编入的是 `third-party/sqlite-src-3530100`，即 SQLite **3.53.1**。远高于 UPSERT（`ON CONFLICT ... DO UPDATE`）所需的 3.24，§3.3 可以放心用。
 
 ---
 
@@ -108,8 +94,8 @@ Pin 与撤回的形状几乎一样：右键触发 → 发请求 → 服务端落
 //主键取 f_msgid —— msgid 全局唯一，且经 t_chatmsg 的 f_ctype/f_from/f_to 就能定位它属于
 //哪个会话，本表不必再存一份会话键。单聊的 cid 是"各人视角各不同"的（我看到的 cid 是对方、
 //对方看到的 cid 是我），存进这张共享表反而两边对不齐。
-//独立成表而不往 t_chatmsg 加列：这是只有极少数消息才有的附加状态，与 t_message_deleted
-//（table.sql:384）、文件收取状态表（table.sql:390）同思路。
+//独立成表而不往 t_chatmsg 加列：这是只有极少数消息才有的附加状态，与 t_message_deleted、
+//文件收取状态表 t_file_ack 同思路。
 CREATE TABLE IF NOT EXISTS  t_message_pin  (
          f_msgid     bigint(20) NOT NULL COMMENT '被Pin的消息msgid',
          f_operator  bigint(20) NOT NULL DEFAULT 0 COMMENT '执行Pin的用户userid',
@@ -122,7 +108,7 @@ CREATE TABLE IF NOT EXISTS  t_message_pin  (
 
 `f_operator` 不只是留作日后显示"某某钉了这条消息"，**取消 Pin 的权限判断要用它**（见 §4.4）。
 
-**列举某会话的 Pin 全集**靠与 `t_chatmsg` 联表，复用其现有索引（`table.sql:80`~`82` 的 `idx_from_to` / `idx_to_from`）：
+**列举某会话的 Pin 全集**靠与 `t_chatmsg` 联表，复用其现有索引（`table_mysql.sql` 里 `t_chatmsg` 的 `idx_from_to` / `idx_to_from`）：
 
 ```sql
 -- 群聊
@@ -143,11 +129,11 @@ SELECT m.* FROM t_chatmsg m JOIN t_message_pin p ON m.f_msgid = p.f_msgid
 
 | 文件 | 改什么 |
 | --- | --- |
-| `flamingoserver/table.sql` | 新增上面的 `t_message_pin` 建表语句 |
+| `flamingoserver/table_mysql.sql` | 新增上面的 `t_message_pin` 建表语句 |
 | `flamingoserver/table_sqlite.sql` | 由脚本生成，不手改 |
 | `flamingoserver/sqliteapi/SqliteSchema.cpp` | 由脚本生成，不手改 |
 
-改完 `table.sql` 后重跑 `tools/gen_table_sqlite.py`，后两个文件一起更新（见 §2.4）。生成结果要检查三处：建表语句、`SCHEMA_TABLES` 表名清单、`SCHEMA_COLUMNS` 列清单。
+改完 `table_mysql.sql` 后重跑 `tools/gen_table_sqlite.py`，后两个文件一起更新。生成结果要检查两处：建表语句、`SCHEMA_TABLES` 表名清单。
 
 ### 3.3 客户端本地库 `t_msg` 补两列，并新建补列机制
 
@@ -160,9 +146,9 @@ pin_time  INTEGER NOT NULL DEFAULT 0   -- Pin时间,Unix毫秒(未Pin时为0)
 
 配套三处改动：
 
-**(1) 新增补列机制。** 在 `CV2MsgStore::Open` 的"建表之后、建索引之前"插一步 `EnsureColumnsLocked()`：用 `PRAGMA table_info(t_msg)` 读回现有列名，缺哪列就 `ALTER TABLE t_msg ADD COLUMN <列名> <定义>`。形态照服务端 `SqliteSchema` 的 `SchemaColumn`，但客户端只有一张表，内嵌一张 `{列名, 定义}` 小表即可，不必引入生成脚本。
+**(1) 新增补列机制。** 在 `CV2MsgStore::Open` 的"建表之后、建索引之前"插一步 `EnsureColumnsLocked()`：用 `PRAGMA table_info(t_msg)` 读回现有列名，缺哪列就 `ALTER TABLE t_msg ADD COLUMN <列名> <定义>`。客户端只有一张表，内嵌一张 `{列名, 定义}` 小表（`V2MsgStore.cpp` 的 `kSchemaColumns`）即可，不必引入生成脚本。
 
-顺序不能反——与服务端 `SqliteSchema.h:24` 的注释同理：结构落后的存量库里，新索引要用的列可能还没补上，先建索引会直接报 `no such column`。
+顺序不能反：结构落后的存量库里，新索引要用的列可能还没补上，先建索引会直接报 `no such column`。
 
 **(2) `Upsert` 从 `INSERT OR REPLACE` 改成显式 UPSERT**，只更新内容类字段，不碰 pin 列：
 
@@ -182,7 +168,7 @@ ON CONFLICT(ctype,cid,msgid) DO UPDATE SET
 - `SetPinned(ctype, cid, msgid, bool pinned, int64_t pinTimeMs, bool& outHit)` —— 收到 Pin 推送后落标记，形态照 `MarkRecalled`：命中 0 行也算成功（本机没同步过这条历史属正常），但要经 `outHit` 把"到底有没有命中"如实告诉调用方。主面板据它决定要不要补拉消息体，见 §4.3。
 - `ReplacePinnedSet(ctype, cid, const std::vector<int64_t>& msgids, int64_t minTimestampMs)` —— 在一个事务里，把该会话中 `timestamp >= minTimestampMs` 的行 `pinned` 清零，再把 `msgids` 里的各条置 1。用于与服务端对账。`minTimestampMs` 传 0 表示全量清零；为什么需要这个下界，见 §4.3。
 
-`HistoryRecord`（`V2MsgQuery.h:70`）相应增加 `m_pinned` / `m_pinTime` 两个字段，`Upsert` 与 `QueryPage` 的列清单同步。
+`HistoryRecord`（`V2MsgQuery.h`）相应增加 `m_pinned` / `m_pinTime` 两个字段，`Upsert` 与 `QueryPage` 的列清单同步。
 
 ---
 
@@ -232,7 +218,7 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 #### 拉取时机与对账
 
-客户端在两个时机拉一次：**打开会话窗时**、**打开消息记录窗时**（`BalloonMainPanel.cpp:4633` `OpenHistory`）。拿到后做两件事：
+客户端在两个时机拉一次：**打开会话窗时**、**打开消息记录窗时**（`BalloonMainPanel.cpp` `OpenHistory`）。拿到后做两件事：
 
 1. 把返回的完整消息体 `Upsert` 进本地库——补齐本地缺的那些行；
 2. 调 `ReplacePinnedSet` 对账——把本地多出来的 pin 标记清掉（在别的设备上取消的、或推送因离线丢掉的）。
@@ -268,13 +254,13 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 | 请求者是该会话参与方（单聊双方之一 / 群成员） | `error_code_not_group_member`(302) 或 `error_code_permission_denied`(6) |
 | 取消 Pin 的权限（见上表） | 新增 `error_code_pin_not_allowed`(506) |
 
-重复 Pin 一条已 Pin 的消息、取消一条没 Pin 的消息，都**幂等返回成功**，不重复落库也不重复推送——照 `onRecallMessage` 对已撤回消息的处理（`ChatSession.cpp:2229`）。幂等的重复 Pin 不刷新 `f_pin_time`，也不改 `f_operator`：否则甲钉的消息被乙点一下"Pin"，取消权限就悄悄转到乙手里了。
+重复 Pin 一条已 Pin 的消息、取消一条没 Pin 的消息，都**幂等返回成功**，不重复落库也不重复推送——照 `onRecallMessage` 对已撤回消息的处理（`ChatSession.cpp`）。幂等的重复 Pin 不刷新 `f_pin_time`，也不改 `f_operator`：否则甲钉的消息被乙点一下"Pin"，取消权限就悄悄转到乙手里了。
 
 ### 4.5 与撤回的联动
 
 消息被撤回时，服务端在 `recallMessage` 成功后顺手删掉该 msgid 的 Pin 行。
 
-**不额外推 `pin=0`**：客户端本地库的所有查询恒含 `recalled=0`（`V2MsgQuery.h:151` / `:159` 已写明），撤回推送到达时 `MarkRecalled` 一置位，这条自然就从 Pin 分类里消失了。少一条推送就少一处时序竞态。
+**不额外推 `pin=0`**：客户端本地库的所有查询恒含 `recalled=0`（`V2MsgQuery.h` 已写明），撤回推送到达时 `MarkRecalled` 一置位，这条自然就从 Pin 分类里消失了。少一条推送就少一处时序竞态。
 
 反向不需要处理：Pin 一条消息不影响它能否被撤回。
 
@@ -299,13 +285,13 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 ### 5.2 `MessageProtocol` 扩展（纯逻辑，进 doctest）
 
-新增 `PinMessageRequest` / `GetPinnedMessagesRequest` 两个结构与四个编解码函数：`parsePinMessageRequest` / `buildPinMessageResponse` / `buildMessagePinnedNotify` / `buildGetPinnedMessagesResponse`。形态照同文件里撤回那三个（`MessageProtocol.h:363` / `:377`）。
+新增 `PinMessageRequest` / `GetPinnedMessagesRequest` 两个结构与四个编解码函数：`parsePinMessageRequest` / `buildPinMessageResponse` / `buildMessagePinnedNotify` / `buildGetPinnedMessagesResponse`。形态照同文件里撤回那三个（`MessageProtocol.h` 的 `parseRecallMessageRequest` / `buildMessageRecalledNotify` 等）。
 
 ### 5.3 `ChatSession` 增加两个 handler
 
-在 dispatch（`ChatSession.cpp:315` 一带）加 `cmd_pin_message` / `cmd_get_pinned_messages` 两个 `case`，实现 `onPinMessage()` / `onGetPinnedMessages()`。`onPinMessage` 的骨架照 `onRecallMessage`（`ChatSession.cpp:2209`）：取消息 → 幂等判断 → 分单聊 / 群聊两支做权限校验 → 落库 → 回应答 → 推送。
+在 `ChatSession` 的 cmd 分发里加 `cmd_pin_message` / `cmd_get_pinned_messages` 两个 `case`，实现 `onPinMessage()` / `onGetPinnedMessages()`。`onPinMessage` 的骨架照 `onRecallMessage`：取消息 → 幂等判断 → 分单聊 / 群聊两支做权限校验 → 落库 → 回应答 → 推送。
 
-推送用现成的两个出口：群聊 `notifyGroupMembers`、单聊 `sendToUser` 各推一次（`ChatSession.cpp:2277` / `:2311`）。
+推送用现成的两个出口：群聊 `notifyGroupMembers`、单聊 `sendToUser` 各推一次（与 `onRecallMessage` 相同）。
 
 ### 5.4 清理挂载点
 
@@ -318,7 +304,7 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 ### 5.5 关键路径日志
 
-按仓库规范，`onPinMessage` 的成功与各失败分支、`onGetPinnedMessages` 的返回条数与是否发生截断、`removePinForMessage` 的实际影响行数都要打 `LOGI` / `LOGE`，格式照 `ChatSession.cpp:2278` 那几条撤回日志（带 userid / cid / msgid / 结果）。截断那条尤其要打——线上出现"用户说钉了却看不到"时，第一眼就能判断是不是撞上了 200 条上限。
+按仓库规范，`onPinMessage` 的成功与各失败分支、`onGetPinnedMessages` 的返回条数与是否发生截断、`removePinForMessage` 的实际影响行数都要打 `LOGI` / `LOGE`，格式照 `onRecallMessage` 那几条撤回日志（带 userid / cid / msgid / 结果）。截断那条尤其要打——线上出现"用户说钉了却看不到"时，第一眼就能判断是不是撞上了 200 条上限。
 
 ---
 
@@ -335,9 +321,9 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 ### 6.2 `net/IUSocket`
 
-新增 `PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin)` 与 `GetPinnedMessages(int ctype, int64_t cid)`，形态照 `RecallMessage`（`IUSocket.cpp:2388`）：参数非法直接不发，并打日志说明原因。
+新增 `PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin)` 与 `GetPinnedMessages(int ctype, int64_t cid)`，形态照 `RecallMessage`（`IUSocket.cpp`）：参数非法直接不发，并打日志说明原因。
 
-收包分发（`IUSocket.cpp:1308` 一带）加三个 `case`，各自解析后投给 UI 线程：
+收包分发（`IUSocket.cpp` 里 `case cmd_recall_message` 一带）加三个 `case`，各自解析后投给 UI 线程：
 
 | 命令 | 新增窗口消息 |
 | --- | --- |
@@ -347,13 +333,9 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 三者的 `lParam` 都是接收线程堆分配的结构指针，UI 处理后 `delete`——与现有各条推送同约定。
 
-### 6.3 `CMainDlg`
-
-三个 handler 转给主面板，照 `OnV2MessageRecalled`（`MainDlg.cpp:1867`）。
-
 ### 6.4 主面板 `CBalloonMainPanel`
 
-**`OnMessagePinned(notify)`** —— 照 `OnMessageRecalled`（`BalloonMainPanel.cpp:3346`）做三件事，外加一件：
+**`OnMessagePinned(notify)`** —— 照 `OnMessageRecalled`（`BalloonMainPanel.cpp`）做三件事，外加一件：
 
 1. `m_msgStore.SetPinned(...)` 落本地标记，接住 `outHit`；
 2. 该会话的聊天窗若开着，调其 `OnMessagePinned(msgid, pinned)` 刷新气泡；
@@ -364,9 +346,9 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 **`OnPinResult(result)`** —— 只在失败时弹提示：`error_code_pin_not_allowed` 说明"只有钉它的人和群主 / 管理员能取消"，`error_code_message_not_exist` 说明消息已撤回或不存在，其余按通用失败。成功什么都不做（界面等推送）。
 
-**`OnPinnedMessagesArrived(result)`** —— 逐条 `Upsert` 消息体，按 §4.3 的规则算出 `minTimestampMs` 后 `ReplacePinnedSet` 对账，最后 `RefreshIfConversation`。这段与 `BalloonMainPanel.cpp:3042` 的同步回填落库路径可以共用同一个"网络消息 → HistoryRecord"转换（`RecordFromNotify`）。
+**`OnPinnedMessagesArrived(result)`** —— 逐条 `Upsert` 消息体，按 §4.3 的规则算出 `minTimestampMs` 后 `ReplacePinnedSet` 对账，最后 `RefreshIfConversation`。这段与 `BalloonMainPanel.cpp` 的同步回填落库路径可以共用同一个"网络消息 → HistoryRecord"转换（`RecordFromNotify`）。
 
-**发起时机** —— `OpenHistory(ctype, cid)`（`:4633`）与打开聊天窗时各发一次 `GetPinnedMessages`，另加上面第 4 条的补拉。
+**发起时机** —— `OpenHistory(ctype, cid)` 与打开聊天窗时各发一次 `GetPinnedMessages`，另加上面第 4 条的补拉。
 
 ### 6.5 聊天窗与消息列表
 
@@ -374,7 +356,7 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 - `ChatMessageList` 新增：
   - `RequestPinBubble(ChatBubble* bubble, bool pin)` —— 只把 msgid 与目标状态经新的 `WM_CHAT_PIN_REQUEST` 投给宿主窗，自己不改界面（照 `RequestRecallBubble`）。
   - `SetPinnedByMsgid(long long msgid, bool pinned)` —— 按 msgid 找到行并置标记；找不到安静忽略。Pin 标记画在气泡外侧、不改行高，故只 `Invalidate` 不重排。
-- `ChatMessage`（`ChatMockData.h:61`）加 `bool pinned = false`；`ChatBubble` 加 `SetPinned(bool)`，内部置渲染缓存脏位（`ChatBubble.h:210` 的 `Invalidate` 已代办）。
+- `ChatMessage`（`ChatMockData.h`）加 `bool pinned = false`；`ChatBubble` 加 `SetPinned(bool)`，内部置渲染缓存脏位（`ChatBubble.h` 的 `Invalidate` 已代办）。
 
 ### 6.6 本地查询层 `V2MsgQuery`
 
@@ -389,7 +371,7 @@ Pin 的**总数不限**（§4.4），但一次应答里不能什么都往回塞�
 
 ### 7.1 气泡右键菜单
 
-在现有菜单（`ChatBubble.cpp:2125`~`2144`）的「转发」之后、第一条分隔线之前插一项 `kMenuPin`：
+在现有菜单（`ChatMessageMenu.cpp` 的 `BuildChatMessageMenuModel`）的「转发」之后、第一条分隔线之前插一项 `kMenuPin`：
 
 ```
 复制
@@ -404,13 +386,13 @@ Pin / 取消 Pin      ← 新增，文案随 m_msg.pinned 取反
 ```
 
 - 文案取反的写法照主面板那几处菜单（置顶 / 取消置顶）
-- `msgid == 0`（本端刚发出、服务器回执还没回填）时**不显示**该项——照撤回的做法（`ChatBubble.cpp:2133`），免得用户点了才被服务端拒绝
+- `msgid == 0`（本端刚发出、服务器回执还没回填）时**不显示**该项——照撤回的做法，免得用户点了才被服务端拒绝
 - 时间分隔行与撤回提示行本来就不弹菜单（`IsRealMessage()` 已挡）
 - 取消 Pin 的权限**不在客户端预判**：本端不一定知道是谁钉的（`operator` 只在推送里带、历史行未必有），预判会出现"该显示的没显示"。菜单项一律给出，无权时由服务端以 `error_code_pin_not_allowed` 拒绝并提示
 
 ### 7.2 气泡上的 Pin 标记
 
-`ChatIcons.h:22` 的 `ChatIconKind` 增加 `kChatIconPin = 16`（图钉），被 Pin 的气泡在**气泡右上角外侧**画一枚小图钉。
+`ChatIcons.h` 的 `ChatIconKind` 增加 `kChatIconPin = 16`（图钉），被 Pin 的气泡在**气泡右上角外侧**画一枚小图钉。
 
 这是 `ChatBubble` 自绘范围内的事，不动 balloonui。标记画在气泡矩形之外的空白里、不占内容宽度、不改行高，因此 `SetPinnedByMsgid` 只需重绘不必重排。
 
@@ -422,15 +404,15 @@ Pin / 取消 Pin      ← 新增，文案随 m_msg.pinned 取反
 [全部] [文字] [图片] [文件] [语音] [链接] [Pin]
 ```
 
-`BalloonHistoryWindow.cpp:733` 那句"510..515 → 类型枚举 0..5"的映射相应扩到 510..516 → 0..6，注释一并更新。
+`BalloonHistoryWindow.cpp` 那句"510..515 → 类型枚举 0..5"的映射相应扩到 510..516 → 0..6，注释一并更新。
 
 胶囊是单选的，所以「Pin」与「图片」不能同时选——选了 Pin 就是"本会话全部被钉的消息，不分类型"。这是已确认的取舍：做成可与类型叠加的独立开关交互上更强，但要改胶囊行布局与 `HistoryFilter` 结构，本轮不做。
 
 ### 7.4 消息记录窗：行内 Pin 按钮
 
-`HistoryRowView`（`HistoryWindowLayout.h:59`）增加 `bool m_pinned`；每行在「定位」按钮**左侧**加一枚同风格的次操作小按钮（`DuiButton` + `StylePushButton` + `Variant::Default`，照 `HistoryWindowLayout.cpp:163`），文案随 `m_pinned` 取反：「Pin」/「取消」。
+`HistoryRowView`（`HistoryWindowLayout.h`）增加 `bool m_pinned`；每行在「定位」按钮**左侧**加一枚同风格的次操作小按钮（`DuiButton` + `StylePushButton` + `Variant::Default`，照「定位」按钮），文案随 `m_pinned` 取反：「Pin」/「取消」。
 
-按钮 id 用新基址 `kIdHistoryPinBase = 800`（第 i 行 = 基址 + i），与页码基址 600、定位基址 700 拉开距离。
+按钮 id 用新基址 `kIdHistoryPinBase = 3200`（第 i 行 = 基址 + i），与页码基址 1000、定位基址 3000 各占一段，各段容量见 `HistoryWindowLayout.h` 的 `kIdHistoryXxxCapacity` 常量。
 
 点击后走与胶囊 / 翻页同一套局部刷新：发请求 → 等推送 → 主面板 `RefreshIfConversation` → 重建列表。**不做乐观更新**，与聊天窗那侧口径一致。
 
@@ -439,7 +421,7 @@ Pin / 取消 Pin      ← 新增，文案随 m_msg.pinned 取反
 - **哪些消息不能 Pin**：时间分隔行、撤回提示行（本就无 msgid）；已撤回的消息服务端会以 `error_code_message_not_exist` 拒绝
 - 图片 / 文件 / 语音消息**可以** Pin——恰恰是"那份定稿文件"最需要被钉住
 - Pin 数量不设上限，界面上没有"已达上限"这类提示
-- **本轮不做**：聊天窗顶部「已 Pin N 条」提示带、Pin 列表的手动排序、"某某钉了这条消息"的系统提示行
+- **本轮不做**：Pin 列表的手动排序、"某某钉了这条消息"的系统提示行（「已 Pin N 条」提示带已在 P5 完成）
 
 ---
 
@@ -447,7 +429,7 @@ Pin / 取消 Pin      ← 新增，文案随 m_msg.pinned 取反
 
 | 阶段 | 内容 | 完成判据 |
 | --- | --- | --- |
-| P1 ✅ | 服务端：建表（改 `table.sql` + 重跑生成脚本）、`MessagePinManager`、`MessageProtocol` 扩展、三条命令、撤回与解散的清理挂载 | doctest 全过；用日志确认 Pin 写库、回读、推送、截断 |
+| P1 ✅ | 服务端：建表（改 `table_mysql.sql` + 重跑生成脚本）、`MessagePinManager`、`MessageProtocol` 扩展、三条命令、撤回与解散的清理挂载 | doctest 全过；用日志确认 Pin 写库、回读、推送、截断 |
 | P2 ✅ | 客户端本地库：补列机制、`Upsert` 改 UPSERT、`SetPinned` / `ReplacePinnedSet`、`kHistoryTypePinned` | FlamingoUnit 全过，**含存量库补列、Upsert 不冲 pin、带下界对账三条回归用例** |
 | P3 ✅ | 客户端协议层与数据流：`MessageProtocolClient` 扩展、`IUSocket` 三个入口、三条窗口消息、主面板三个 handler、对账与补拉 | FlamingoUnit 全过；两台客户端对钉互看 |
 | P4 ✅ | 界面：气泡右键菜单 + 气泡 Pin 标记 + 消息记录窗 Pin 胶囊 + 行内 Pin 按钮 | 截图目视检查 |
@@ -462,8 +444,8 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 
 | 文件 | 改动 |
 | --- | --- |
-| `flamingoserver/table.sql` | 新增 `t_message_pin` 建表语句 |
-| `flamingoserver/table_sqlite.sql`、`sqliteapi/SqliteSchema.cpp` | 重跑 `tools/gen_table_sqlite.py` 生成；建表语句、`SCHEMA_TABLES`、`SCHEMA_COLUMNS` 三处均已带上新表 |
+| `flamingoserver/table_mysql.sql` | 新增 `t_message_pin` 建表语句 |
+| `flamingoserver/table_sqlite.sql`、`sqliteapi/SqliteSchema.cpp` | 重跑 `tools/gen_table_sqlite.py` 生成；建表语句与 `SCHEMA_TABLES` 均已带上新表 |
 | `chatserversrc/Protocol.h`、`flamingoclient/Source/net/Protocol.h` | 同步新增 1518 / 1519 / 1520 三条命令与 `error_code_pin_not_allowed`(506) |
 | `chatserversrc/MessagePinManager.{h,cpp}` | 新增，含 `PIN_FETCH_LIMIT = 200` |
 | `chatserversrc/MessageProtocol.{h,cpp}` | 新增 `PinRecord` / `PinMessageRequest` / `GetPinnedMessagesRequest` 与四个编解码函数 |
@@ -478,9 +460,7 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 1. **`PinRecord` 定义在 `MessageProtocol.h` 而不是 `MessagePinManager.h`。** 它既是数据库行、又是 `cmd_get_pinned_messages` 应答里 pin 子对象的来源，放在 Manager 那边会让 `MessageProtocol.h` 反过来依赖它，两个头文件互相包含。放到 `MessageProtocol.h` 与 `MessageRecord` 做邻居，与既有设计一致。
 2. **`getPinnedMessages` 多了一个 `outPins` 出参**，Pin 元信息跟着同一条联表查询一起取回。原方案没写这一步，按字面实现就得逐条再查一次 `getPinRecord` —— 每次都新建一条数据库连接，200 条就是 200 次建连接。
 
-测试基础设施上多做的一件事：`MessagePinManager` 经 `DbFactory` 取连接，而测试程序原先没有编进 `dbapi/DbFactory.cpp`。已把它加进两套测试构建，并单独给测试目标定义 `FLAMINGO_NO_MYSQL`（CMake 用 `target_compile_definitions`，vcxproj 加进四个配置的预处理器定义），使测试程序只带 SQLite 后端、不牵扯 `libmysqlclient`。这是本仓库第一个走真实数据库的单元测试套。
-
-实测结果：新增 15 个用例全过；测试程序全量 286 个用例、2059 条断言全过；`chatserver` 全部源文件编译通过。
+测试基础设施上多做的一件事：`MessagePinManager` 经 `DbFactory` 取连接，而测试程序原先没有编进 `dbapi/DbFactory.cpp`。已把它加进两套测试构建，并单独给测试目标定义 `FLAMINGO_NO_MYSQL`（CMake 用 `target_compile_definitions`，vcxproj 加进预处理器定义），使 `DbFactory` 编出只带 SQLite 后端的版本。这是本仓库第一个走真实数据库的单元测试套。
 
 ### P2 实施记录（2026-08-04）
 
@@ -488,18 +468,16 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 
 | 文件 | 改动 |
 | --- | --- |
-| `BalloonHistory/V2MsgStore.h` | 新增 `PinnedItem` 结构、`SetPinned` / `ReplacePinnedSet` 两个接口、私有的 `EnsureColumnsLocked` |
-| `BalloonHistory/V2MsgStore.cpp` | 建表语句加两列；新增补列机制与 `kSchemaColumns` 清单；`Upsert` 改显式 UPSERT；两个写接口的实现；`QueryPage` 多读两列 |
-| `BalloonHistory/V2MsgQuery.h` | `HistoryTypeFilter` 增加 `kHistoryTypePinned=6`；`HistoryRecord` 增加 `m_pinned` / `m_pinTime` |
-| `BalloonHistory/V2MsgQuery.cpp` | `kColumns` 加两列；`TypeFilterToSqlFragment` 对 Pin 返回 `pinned=1` |
+| `UI/BalloonHistory/V2MsgStore.h` | 新增 `PinnedItem` 结构、`SetPinned` / `ReplacePinnedSet` 两个接口、私有的 `EnsureColumnsLocked` |
+| `UI/BalloonHistory/V2MsgStore.cpp` | 建表语句加两列；新增补列机制与 `kSchemaColumns` 清单；`Upsert` 改显式 UPSERT；两个写接口的实现；`QueryPage` 多读两列 |
+| `UI/BalloonHistory/V2MsgQuery.h` | `HistoryTypeFilter` 增加 `kHistoryTypePinned=6`；`HistoryRecord` 增加 `m_pinned` / `m_pinTime` |
+| `UI/BalloonHistory/V2MsgQuery.cpp` | `kColumns` 加两列；`TypeFilterToSqlFragment` 对 Pin 返回 `pinned=1` |
 | `Tests/V2MsgStoreTests.cpp` | 新增 11 个用例（V2S12~V2S22） |
 | `Tests/V2MsgQueryTests.cpp` | 新增 3 个用例（V2Q9~V2Q11）；V2Q5 / V2Q6 的既有断言随列清单更新 |
 
 与方案原文的一处差异，是被测试逼出来的：
 
 **`ReplacePinnedSet` 的入参从 `vector<int64_t> msgids` 改成了 `vector<PinnedItem> items`（msgid + Pin 时间）。** 方案原文写的是"对账只对齐钉没钉住这一件事，不写 `pin_time`"，照此实现之后 V2S22 直接失败：清零那一步为了不留"没钉住却有 Pin 时间"的半截状态，把 `pin_time` 也归了零，而置位那一步不写回去，于是每对账一次就把所有 Pin 时间抹平成 0。两个值本来就一起来自服务端应答里每条消息挂的 `pin` 子对象，分开处理反而要多绕一圈，故改成一并对齐。
-
-实测结果：新增 14 个用例全过；FlamingoUnit 全量 1271 个用例、7198 条断言全过；主客户端 `Flamingo.vcxproj`（Debug x64）全部源文件编译通过。
 
 一个踩到的坑记在这里：中间目录里残留的 `.obj` 时间戳比源文件还新（快了约 3 小时），MSBuild 据此判定"无需重编"，改完代码重新构建后跑的仍是旧二进制 —— 表现为测试报的失败位置与当前源码对不上。清掉中间目录重新构建即可。改完代码测试结果没有随之变化时，先核对一下 exe 的时间戳。
 
@@ -511,10 +489,10 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 | --- | --- |
 | `net/MessageProtocolClient.{h,cpp}` | 新增 `PinMessageResponse` / `MessagePinnedNotify` / `PinnedMessageItem` / `PinnedMessagesResult` 四个结构与五个编解码函数 |
 | `net/IUSocket.{h,cpp}` | 新增 `PinMessage` / `GetPinnedMessages` 两个发送入口；收包分发加 1518 / 1519 / 1520 三个 `case` |
-| `UserSessionData.h` | 三条窗口消息（`WM_USER + 545`~`547`）；新增 `enum PinErrorCode` |
-| `FlamingoClient.cpp` | 消息代理窗口的转发 switch 加这三条（**补于 P4 联调，见下**） |
-| `MainDlg.{h,cpp}` | 三个 handler：`OnV2PinResult` / `OnV2MessagePinned` / `OnV2PinnedMessages` |
-| `BalloonMain/BalloonMainPanel.{h,cpp}` | `OnMessagePinned` / `OnPinnedMessagesArrived`；`OpenHistory` 里多发一次 `GetPinnedMessages` |
+| `Session/UserSessionData.h` | 三条窗口消息（`WM_USER + 545`~`547`） |
+| `App/FlamingoClient.cpp` | 消息代理窗口的转发 switch 加这三条（**补于 P4 联调，见下**） |
+| `UI/BalloonMain/BalloonMainPanel.h`、`BalloonMainPanelNetHandlers.cpp` | 三个 handler：`OnV2PinResult` / `OnV2MessagePinned` / `OnV2PinnedMessages` |
+| `UI/BalloonMain/BalloonMainPanel.{h,cpp}` | `OnMessagePinned` / `OnPinnedMessagesArrived`；`OpenHistory` 里多发一次 `GetPinnedMessages` |
 | `Tests/MessageProtocolTests.cpp` | 新增 8 个用例（MP-PIN1~MP-PIN8） |
 
 两处值得记下来的实现细节：
@@ -522,11 +500,7 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 1. **`parseMessagePinnedNotify` 对 `pin` 字段缺失或越界一律丢弃整条推送**，不做"缺省当取消"的容错。缺省成取消会把别人刚钉上的消息在本端悄悄抹掉，比丢弃这条推送糟得多。
 2. **`parseGetPinnedMessagesResponse` 在应答缺 `total` 时按"返回多少就是多少"兜底。** 照原样留 0 的话，调用方会算出 `total < 返回条数`、被当成没截断……实际上更糟：`total` 为 0 而 `items` 非空时，截断判断 `total > items.size()` 为假，走全量对账，行为恰好正确；但若日后有人把判断改成 `total != items.size()` 就会出错。兜底成相等最稳。
 
-**联调时发现的一处漏接（2026-08-04 修）**：新增窗口消息一共要接<u>四层</u>，我漏了第三层。`CIUSocket` 收到帧后 `PostMessage` 的目标是 `CFlamingoClient` 的<u>消息代理窗口</u>，那里有一个 switch 把消息转发给主窗口（`m_UserMgr.m_hCallBackWnd`）；不在 switch 里的消息落进 `default` 被丢掉，堆负载也跟着泄漏。三条 Pin 消息当时只做了「定义 → IUSocket 投递 → CMainDlg 消息映射」三层，代理窗那层没加，于是网络全通、日志里应答与推送都收到了，界面却纹丝不动。**日后新增 `FMG_MSG_*` 一律照着 `FMG_MSG_V2_MESSAGE_RECALLED` 把四层全找一遍。**
-
-**P3 没做、留给 P4 的一件事**：主面板的 `OnMessagePinned` 目前只落本地库标记与刷新消息记录窗，<u>没有</u>通知已打开的聊天窗刷新气泡上的 Pin 标记（§6.4 第 2 条）。那需要 `ChatMessage::pinned` 字段与 `ChatMessageList::SetPinnedByMsgid`，都属于 P4 的界面改动，两者一起做才不会留下半截状态。
-
-实测结果：新增 8 个用例全过；FlamingoUnit 全量 1280 个用例、7293 条断言全过；主客户端 `Flamingo.vcxproj`（Debug x64）全部源文件编译通过。
+**联调时发现的一处漏接（2026-08-04 修）**：新增窗口消息一共要接<u>四层</u>，我漏了第三层。`CIUSocket` 收到帧后 `PostMessage` 的目标是 `CFlamingoClient` 的<u>消息代理窗口</u>，那里有一个 switch 把消息转发给主窗口（`m_UserMgr.m_hCallBackWnd`）；不在 switch 里的消息落进 `default` 被丢掉，堆负载也跟着泄漏。三条 Pin 消息当时只做了「定义 → IUSocket 投递 → 主窗口消息映射」三层，代理窗那层没加，于是网络全通、日志里应答与推送都收到了，界面却纹丝不动。**日后新增 `FMG_MSG_*` 一律照着 `FMG_MSG_V2_MESSAGE_RECALLED` 把四层全找一遍。**
 
 ### P4 实施记录（2026-08-04）
 
@@ -534,16 +508,16 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 
 | 文件 | 改动 |
 | --- | --- |
-| `BalloonChatWnd/ChatMessageMenu.{h,cpp}` | 菜单模型加 `kChatMsgMenuPin`；`BuildChatMessageMenuModel` 增加 `canPin` / `pinned` 两个入参 |
-| `BalloonChatWnd/ChatMockData.h` | `ChatMessage` 加 `pinned` 字段 |
-| `BalloonChatWnd/ChatIcons.{h,cpp}` | 新增 `kChatIconPin`（水滴形图钉，头部挖孔） |
-| `BalloonChatWnd/ChatBubble.{h,cpp}` | `SetPinned` / `IsPinned`；菜单接上 Pin 项与分发；气泡外侧上角画图钉 |
-| `BalloonChatWnd/ChatMessageList.{h,cpp}` | `RequestPinBubble` / `SetPinnedByMsgid` |
-| `CustomMsgDef.h` | 新增 `WM_CHAT_PIN_REQUEST` |
-| `BalloonChatWnd/BalloonChatWindow.{h,cpp}`、`BalloonGroupChatWindow.{h,cpp}` | `OnChatPinRequest` / `OnMessagePinned`；开窗时多拉一次被 Pin 消息全集 |
-| `BalloonMain/BalloonMainPanel.{h,cpp}` | `OnMessagePinned` 补上向已打开聊天窗的扇出；新增 `ChatWindowApplyPinnedSet` |
-| `BalloonHistory/HistoryWindowLayout.{h,cpp}` | `kIdHistoryChipPin` / `kIdHistoryPinBase`；第七枚胶囊；行内 Pin 按钮 |
-| `BalloonHistory/BalloonHistoryWindow.cpp` | 胶囊 id 映射扩到 0..6；行数据填 `m_pinned`；行内 Pin 按钮发请求 |
+| `UI/BalloonChatWnd/ChatMessageMenu.{h,cpp}` | 菜单模型加 `kChatMsgMenuPin`；`BuildChatMessageMenuModel` 增加 `canPin` / `pinned` 两个入参 |
+| `UI/BalloonChatWnd/ChatMockData.h` | `ChatMessage` 加 `pinned` 字段 |
+| `UI/BalloonChatWnd/ChatIcons.{h,cpp}` | 新增 `kChatIconPin`（水滴形图钉，头部挖孔） |
+| `UI/BalloonChatWnd/ChatBubble.{h,cpp}` | `SetPinned` / `IsPinned`；菜单接上 Pin 项与分发；气泡外侧上角画图钉 |
+| `UI/BalloonChatWnd/ChatMessageList.{h,cpp}` | `RequestPinBubble` / `SetPinnedByMsgid` |
+| `App/CustomMsgDef.h` | 新增 `WM_CHAT_PIN_REQUEST` |
+| `UI/BalloonChatWnd/BalloonChatWindow.{h,cpp}`、`BalloonGroupChatWindow.{h,cpp}` | `OnChatPinRequest` / `OnMessagePinned`；开窗时多拉一次被 Pin 消息全集 |
+| `UI/BalloonMain/BalloonMainPanel.{h,cpp}` | `OnMessagePinned` 补上向已打开聊天窗的扇出；新增 `ChatWindowApplyPinnedSet` |
+| `UI/BalloonHistory/HistoryWindowLayout.{h,cpp}` | `kIdHistoryChipPin` / `kIdHistoryPinBase`；第七枚胶囊；行内 Pin 按钮 |
+| `UI/BalloonHistory/BalloonHistoryWindow.cpp` | 胶囊 id 映射扩到 0..6；行数据填 `m_pinned`；行内 Pin 按钮发请求 |
 | `Tests/ChatImageMenuTests.cpp` | 既有用例适配新签名；新增 5 个用例（CIM-PIN1~CIM-PIN5） |
 
 两处实现时才发现、方案里没写到的问题：
@@ -552,8 +526,6 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 2. **`P3` 遗留的一个真空。** 聊天窗的历史是从网络渲染的，而 `net::MessageNotify` 里没有 Pin 信息 —— 只补主面板的推送扇出还不够，刚开窗时那些被钉住的老消息仍然不带图钉。故开窗时另发一次 `cmd_get_pinned_messages`，应答到达后经 `ChatWindowApplyPinnedSet` 把标记打到已渲染的气泡上。
 
 3. **假数据必须带上 `msgid`，否则调试入口里这一项根本不出现。** 菜单项的出现条件是 `msgid > 0`，而 `ChatMockData` 造的假消息从来不设 `msgid`（真实会话由 `MakeRealTextMessage` 填）。于是 `--chatwindow` / `--groupchatwindow` 两个调试入口下右键菜单里看不到「Pin」—— 真实客户端是好的，但目检时看到的是"功能没做"。修法是给两批假消息按顺序补上 `msgid`（单聊 900001 起、群聊 910001 起，两段不重叠），并把第一条标成已 Pin，使图钉标记与「取消 Pin」文案在调试入口下也能看到。**凡是"拿 msgid 说事"的界面，加完都要回头看一眼假数据。**
-
-实测结果：新增 5 个用例全过；FlamingoUnit 全量 1285 个用例、7331 条断言全过；主客户端 `Flamingo.vcxproj`（Debug x64）编译与链接均通过。消息记录窗已截图核对：七枚胶囊间距一致、Pin 排在末位，行内「Pin」与「定位」两枚按钮并排后没有挤到预览文字。气泡右键菜单已在 `--chatwindow` 下实际弹出核对：复制 / 引用回复 / 转发 / **Pin** / — / 删除 / — / 多选。
 
 **构建环境的一个坑（比 P2 记的那个更要命）**：不要把多个工程的 `IntDir` 指到<u>同一个</u>目录。客户端的 `Buffer.cpp` 与 speexdsp 的 `buffer.c` 都产出 `Buffer.obj`，共享中间目录时后者会把前者覆盖掉，链接期报 `CBuffer::*` 全部无法解析 —— 看起来像代码问题，其实是构建参数问题。`/p:IntDir=...$(MSBuildProjectName)...` 也不行：该变量在编译阶段被展开、链接阶段不展开。结论是**别覆盖 `IntDir`**，用各工程自己的默认中间目录。
 
@@ -571,13 +543,13 @@ P2 必须先于 P3 落地：补列机制没上就改列，存量客户端的消�
 
 | 文件 | 改动 |
 | --- | --- |
-| `BalloonChatWnd/ChatWindowLayout.{h,cpp}` | `kIdPinBanner = 415` 与 XML 里那条 28px 的 `chat-banner`；新增单群共用的三个函数 `MakePinBannerText` / `ApplyPinBannerStyle` / `UpdatePinBanner`，以及四个配色常量 |
-| `BalloonChatWnd/GroupChatWindowLayout.{h,cpp}` | `kGIdPinBanner = 515` 与同形的 XML 一行；建树后调同一个 `ApplyPinBannerStyle` |
-| `BalloonChatWnd/ChatBannerLabel.h` | 类注释更新：这个控件本身不接管交互，可点与否由调用方 `SetMode` 决定 |
-| `BalloonChatWnd/BalloonChatWindow.{h,cpp}`、`BalloonGroupChatWindow.{h,cpp}` | `m_pinnedCount` 成员；`SetPinnedCount` / `AdjustPinnedCount` / `RefreshPinBanner`；把「消息记录」按钮那段抽成 `RequestOpenHistory(initialTypeFilter)`，提示带点击复用它 |
-| `UserSessionData.h` | `FMG_MSG_OPEN_HISTORY` 的 `wParam` 约定改为"低字节=ctype、次低字节=预选的类型胶囊" |
-| `BalloonMain/BalloonMainPanel.{h,cpp}` | `OpenHistory` 与 `OnOpenHistoryMsg` 接受并解出类型胶囊；`ChatWindowApplyPinnedSet` 顺带 `SetPinnedCount(total)`；`OnMessagePinned` 就地 ±1 |
-| `BalloonHistory/BalloonHistoryWindow.{h,cpp}` | `OpenForConversation` 多一个 `initialTypeFilter` 参数（默认 0=全部，越界回退全部） |
+| `UI/BalloonChatWnd/ChatWindowLayout.{h,cpp}` | `kIdPinBanner = 415` 与 XML 里那条 28px 的 `chat-banner`；新增单群共用的三个函数 `MakePinBannerText` / `ApplyPinBannerStyle` / `UpdatePinBanner`，以及四个配色常量 |
+| `UI/BalloonChatWnd/GroupChatWindowLayout.{h,cpp}` | `kGIdPinBanner = 515` 与同形的 XML 一行；建树后调同一个 `ApplyPinBannerStyle` |
+| `UI/BalloonChatWnd/ChatBannerLabel.h` | 类注释更新：这个控件本身不接管交互，可点与否由调用方 `SetMode` 决定 |
+| `UI/BalloonChatWnd/BalloonChatWindow.{h,cpp}`、`BalloonGroupChatWindow.{h,cpp}` | `m_pinnedCount` 成员；`SetPinnedCount` / `AdjustPinnedCount` / `RefreshPinBanner`；把「消息记录」按钮那段抽成 `RequestOpenHistory(initialTypeFilter)`，提示带点击复用它 |
+| `Session/UserSessionData.h` | `FMG_MSG_OPEN_HISTORY` 的 `wParam` 约定改为"低字节=ctype、次低字节=预选的类型胶囊" |
+| `UI/BalloonMain/BalloonMainPanel.{h,cpp}` | `OpenHistory` 与 `OnOpenHistoryMsg` 接受并解出类型胶囊；`ChatWindowApplyPinnedSet` 顺带 `SetPinnedCount(total)`；`OnMessagePinned` 就地 ±1 |
+| `UI/BalloonHistory/BalloonHistoryWindow.{h,cpp}` | `OpenForConversation` 多一个 `initialTypeFilter` 参数（默认 0=全部，越界回退全部） |
 | `Tests/ChatWindowLayoutTests.cpp` | 新增 6 个用例（PB1~PB6） |
 
 实现时的两个决定，记下来免得日后被当成疏漏：
@@ -678,5 +650,5 @@ PB5 / PB6 两个用例把"占位 28px、且夹在头部行与消息区之间"钉
 - **单次返回 200 条是拍的**，没有实测依据。它约束的只是一次应答的体量，不是用户能钉多少（数量不限）。真要调，改服务端一个具名常量即可，协议与表结构都不受影响。
 - **截断场景下的对账下界**（§4.3）是本方案里最容易写错的一处：漏掉下界会把本地那些"更老的 Pin"误清，而且只有在同一会话 Pin 超过 200 条时才暴露，日常测不出来。第 29 条用例专门钉这个，不能省。
 - **取消权限不在客户端预判**（§7.1），代价是无权的用户点了才会被拒。要想菜单项直接置灰，得让历史消息也带上 `operator`——那意味着 `cmd_sync_messages` 的消息体要加字段，本轮不划算。
-- **`Upsert` 改成 UPSERT 语法**依赖 SQLite ≥ 3.24，当前编入的是 3.53.1（§2.7），满足。但这是本方案里唯一一处对 SQLite 版本有硬要求的改动，日后若有人把 amalgamation 换回旧版本会静默失败（语法错误 → `prepare` 失败 → `Upsert` 恒返回 false），要在代码注释里写明。
+- **`Upsert` 改成 UPSERT 语法**依赖 SQLite ≥ 3.24，当前编入的是 3.53.1（§2.7），满足。但这是本方案里唯一一处对 SQLite 版本有硬要求的改动，日后若有人把 amalgamation 换回旧版本会静默失败（语法错误 → `prepare` 失败 → `Upsert` 恒返回 false），这一点已写在 `V2MsgStore.cpp` 的 UPSERT 语句注释里。
 - **Android 端不受影响**：新增的是三条全新命令与一张新表，没有改动任何既有报文的形状。Android 端不实现即可，行为与现在完全一致。

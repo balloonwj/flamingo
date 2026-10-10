@@ -1,5 +1,6 @@
 ﻿#include "stdafx.h"
 #include "GDIFactory.h"
+#include "../I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 std::map<long, HFONT> CGDIFactory::m_mapFontCache;
 std::map<long, HFONT> CGDIFactory::m_mapBoldFontCache;
@@ -23,7 +24,7 @@ HFONT CGDIFactory::GetFont(long nSize)
 								 CLIP_DEFAULT_PRECIS,		// nClipPrecision 
 								 DEFAULT_QUALITY,			// nQuality 
 								 DEFAULT_PITCH | FF_SWISS,	// nPitchAndFamily 
-								 _T("微软雅黑"));
+								 i18n::UiFontName());
 
 	m_mapFontCache.insert(std::pair<long, HFONT>(nSize, hFont));
 
@@ -49,7 +50,7 @@ HFONT CGDIFactory::GetBoldFont(long nSize)
 								 CLIP_DEFAULT_PRECIS,		// nClipPrecision 
 								 DEFAULT_QUALITY,			// nQuality 
 								 DEFAULT_PITCH | FF_SWISS,	// nPitchAndFamily 
-								 _T("微软雅黑"));
+								 i18n::UiFontName());
 
 	m_mapBoldFontCache.insert(std::pair<long, HFONT>(nSize, hFont));
 

@@ -8,6 +8,11 @@
  *    R9-R20   RegisterModel 数据模型：步骤推进 / 回退、字段读写、表单校验
  *             （合法 / 各类非法输入）与提示文案。
  *    R21-R24  cmd_register 报文编解码（RegisterProtocolClient）。
+ *    RG1-RG4  公司名称组合框与默认公司。
+ *    RG5      企业关闭了「允许用户自助注册」（服务端错误码 410）时给出专门的提示。
+ *    RG6      服务端建号失败（错误码 100）时提示稍后重试，不再提「自定义账号」。
+ *    DC3      默认公司取 flamingo.ini 的 [ui] defaultcompany：注册模型的初始公司名与组合框的
+ *             默认项都取配置值，未读取配置时为 FlamingoIM.org（DC1～DC2 在 BrandTextTests.cpp）。
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 / 操作模型 + 断言。
@@ -20,9 +25,13 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonRegister/RegisterLayout.h"
+#include "LayoutFitCheck.h"                 // layoutfit::MeasureAt：按设计尺寸排得下的检查
 #include "../UI/BalloonRegister/RegisterModel.h"
+#include "../App/BrandText.h"               // g_strDefaultCompany / kDefaultCompany：注册的默认公司
 #include "../net/RegisterProtocolClient.h"
+#include "../net/Protocol.h"                // enum error_code：RG5 的服务端错误码
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 公司名称组合框
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 using namespace balloonwjui;
@@ -89,8 +98,8 @@ TEST_CASE("R2 填写页含全部五个输入框", "[register]")
     CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditPwd2))    != nullptr);
     // 手机号原先在已被去掉的"手机验证"那一步，现在并入本页。
     CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditPhone))   != nullptr);
-    // 公司名称是本次新增的字段，注册的核心输入。
-    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditCompany)) != nullptr);
+    // 公司名称是注册的核心输入，用可编辑组合框：既可选默认公司，也可自行输入。
+    CHECK(dynamic_cast<DuiComboBox*>(root->FindCtrlById(kRegIdComboCompany)) != nullptr);
 }
 
 TEST_CASE("R3 填写页含返回按钮与提交注册按钮", "[register]")
@@ -188,7 +197,7 @@ TEST_CASE("R8 两步互不含对方专属控件", "[register]")
 
     // 完成页不应再出现任何输入框与提交按钮。
     CHECK(done->FindCtrlById(kRegIdEditNick)    == nullptr);
-    CHECK(done->FindCtrlById(kRegIdEditCompany) == nullptr);
+    CHECK(done->FindCtrlById(kRegIdComboCompany) == nullptr);
     CHECK(done->FindCtrlById(kRegIdBtnSubmit)   == nullptr);
 }
 
@@ -196,14 +205,15 @@ TEST_CASE("R8 两步互不含对方专属控件", "[register]")
 // R9-R20 RegisterModel 数据模型契约
 // =====================================================================
 
-TEST_CASE("R9 RegisterModel 默认处于步骤 1、字段为空", "[register][model]")
+TEST_CASE("R9 RegisterModel 默认处于步骤 1、公司名为默认公司、其余字段为空", "[register][model]")
 {
     RegisterModel model;
     CHECK(model.CurrentStep() == kRegStepFillInfo);
     CHECK(model.Nickname().IsEmpty());
     CHECK(model.Password().IsEmpty());
     CHECK(model.Phone().IsEmpty());
-    CHECK(model.Company().IsEmpty());
+    // 公司名默认填好默认公司，用户不改就注册进默认公司
+    CHECK(model.Company() == RegDefaultCompany());
 }
 
 TEST_CASE("R10 RegisterModel 步骤推进 / 回退到边界后不越界", "[register][model]")
@@ -273,11 +283,10 @@ TEST_CASE("R15 填写页没有账号输入框，模型也没有账号字段",
     // 811 是历史上"自定义账号"输入框的 id，现在必须找不到任何控件。
     CHECK(root->FindCtrlById(811) == nullptr);
 
-    // 填写页的输入框恰好是五个：昵称 / 密码 / 确认密码 / 手机号 / 公司名称。
-    const int kExpectedEditCount = 5;
+    // 填写页的输入恰好是五项：昵称 / 密码 / 确认密码 / 手机号四个输入框，加上公司名称组合框。
+    const int kExpectedEditCount = 4;
     int editCount = 0;
-    const UINT kEditIds[] = { kRegIdEditNick, kRegIdEditPwd, kRegIdEditPwd2,
-                              kRegIdEditPhone, kRegIdEditCompany };
+    const UINT kEditIds[] = { kRegIdEditNick, kRegIdEditPwd, kRegIdEditPwd2, kRegIdEditPhone };
     for (size_t i = 0; i < sizeof(kEditIds) / sizeof(kEditIds[0]); ++i)
     {
         if (dynamic_cast<DuiEdit*>(root->FindCtrlById(kEditIds[i])) != nullptr)
@@ -286,6 +295,7 @@ TEST_CASE("R15 填写页没有账号输入框，模型也没有账号字段",
         }
     }
     CHECK(editCount == kExpectedEditCount);
+    CHECK(dynamic_cast<DuiComboBox*>(root->FindCtrlById(kRegIdComboCompany)) != nullptr);
 }
 
 TEST_CASE("R16 ValidateForm 密码为空 / 过短 / 两次不一致均被拒",
@@ -441,4 +451,180 @@ TEST_CASE("R24 parseRegisterResponse 拒绝非法应答", "[register][protocol]"
     CHECK_FALSE(net::RegisterProtocolClient::parseRegisterResponse("{\"code\":\"0\"}", resp));
     // 解析失败时 code 应保持 -1，不能被误判为成功
     CHECK(resp.code == -1);
+}
+
+// R25：窗口按设计尺寸设置后（2026-10-02 起 ResizeClient 即整窗尺寸），扣掉标题栏剩下的内容区
+// 要完整容下两步各自最底下的主按钮：按钮没有被压扁，下方留白也与空间充裕时相同（没有占用
+// 容器的下内边距）。
+TEST_CASE("R25 两步在窗口设计尺寸扣掉标题栏后都排得下底部主按钮", "[register][layoutfit]")
+{
+    const int contentH = kRegWindowHeight - kRegWindowTitleBarH;
+    const int steps[]  = { kRegStepFillInfo, kRegStepDone };
+    const UINT btns[]  = { (UINT)kRegIdBtnSubmit, (UINT)kRegIdBtnLogin };
+    for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i)
+    {
+        INFO("step = " << steps[i]);
+        std::unique_ptr<DuiControl> root = BuildRegisterBody(steps[i]);
+        REQUIRE(root != nullptr);
+        const layoutfit::FitResult r = layoutfit::MeasureAt(root.get(), btns[i], kRegWindowWidth, contentH);
+        REQUIRE(r.m_found);
+        INFO("button bottom = " << r.m_bottom << ", content height = " << contentH
+             << ", height = " << r.m_height << ", roomy height = " << r.m_roomyHeight
+             << ", bottom gap = " << r.m_bottomGap << ", roomy bottom gap = " << r.m_roomyBottomGap);
+        CHECK(r.m_bottom <= contentH);
+        CHECK(r.m_height == r.m_roomyHeight);
+        CHECK(r.m_bottomGap == r.m_roomyBottomGap);
+    }
+}
+
+
+// =====================================================================
+// RG1-RG4 公司名称组合框与默认公司
+// =====================================================================
+
+TEST_CASE("RG1 公司名称是可编辑组合框，下拉只有默认公司一项，且默认显示它", "[register][company]")
+{
+    //与服务端 DEFAULT_ENTERPRISE_NAME 的约定：两边的缺省值相同，chatserver 启动时保证库里有这家企业
+    CHECK(std::wstring(brandtext::kDefaultCompany) == L"FlamingoIM.org");
+
+    auto root = BuildRegisterBody(kRegStepFillInfo);
+    REQUIRE(root != nullptr);
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kRegIdComboCompany));
+    REQUIRE(combo != nullptr);
+
+    CHECK(combo->IsEditable());
+    REQUIRE(combo->GetCount() == 1);
+    CHECK(combo->GetItemText(0) == RegDefaultCompany());
+    CHECK(combo->GetText() == RegDefaultCompany());
+    //只有一个默认选项，不提供删除叉
+    CHECK_FALSE(combo->IsShowItemDelete());
+}
+
+TEST_CASE("RG2 在组合框里输入别的公司名，读回的是输入的内容，校验通过", "[register][company]")
+{
+    auto root = BuildRegisterBody(kRegStepFillInfo);
+    REQUIRE(root != nullptr);
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kRegIdComboCompany));
+    REQUIRE(combo != nullptr);
+
+    combo->SetText(_T("明远科技有限公司"));
+    CHECK(combo->GetText() == CString(_T("明远科技有限公司")));
+
+    RegisterModel model = MakeValidModel();
+    model.SetCompany(combo->GetText());
+    CHECK(model.Company() == CString(_T("明远科技有限公司")));
+    CHECK(model.ValidateForm() == kRegValidOk);
+}
+
+TEST_CASE("RG3 清空组合框后校验仍提示公司名称为空", "[register][company]")
+{
+    auto root = BuildRegisterBody(kRegStepFillInfo);
+    REQUIRE(root != nullptr);
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kRegIdComboCompany));
+    REQUIRE(combo != nullptr);
+
+    combo->SetText(_T(""));
+    RegisterModel model = MakeValidModel();
+    model.SetCompany(combo->GetText());
+    CHECK(model.ValidateForm() == kRegValidCompanyEmpty);
+}
+
+TEST_CASE("RG4 组合框与其它输入框同高，窗口按设计尺寸仍排得下", "[register][company][layoutfit]")
+{
+    auto root = BuildRegisterBody(kRegStepFillInfo);
+    REQUIRE(root != nullptr);
+
+    //MeasureAt 最后一次按设计尺寸排版，之后读到的控件矩形就是设计尺寸下的结果
+    const int contentH = kRegWindowHeight - kRegWindowTitleBarH;
+    const layoutfit::FitResult r = layoutfit::MeasureAt(root.get(), kRegIdBtnSubmit, kRegWindowWidth, contentH);
+    REQUIRE(r.m_found);
+    CHECK(r.m_bottom <= contentH);
+    CHECK(r.m_height == r.m_roomyHeight);
+    CHECK(r.m_bottomGap == r.m_roomyBottomGap);
+
+    DuiControl* combo = root->FindCtrlById(kRegIdComboCompany);
+    DuiControl* phone = root->FindCtrlById(kRegIdEditPhone);
+    REQUIRE(combo != nullptr);
+    REQUIRE(phone != nullptr);
+    const RECT rcCombo = combo->GetRect();
+    const RECT rcPhone = phone->GetRect();
+    INFO("combo = [" << rcCombo.top << ", " << rcCombo.bottom << "], phone = ["
+         << rcPhone.top << ", " << rcPhone.bottom << "]");
+    CHECK(rcCombo.bottom - rcCombo.top == rcPhone.bottom - rcPhone.top);
+    CHECK(rcCombo.top > rcPhone.bottom);
+}
+
+TEST_CASE("RG5 企业关闭了自助注册（410）时给出专门的提示，不落到通用的「注册失败」", "[register][company]")
+{
+    CHECK(static_cast<int>(error_code_register_closed) == 410);
+
+    const CString closed = RegisterModel::ServerErrorMessage(error_code_register_closed);
+    CHECK(closed == CString(L"这家公司已关闭自助注册，请联系公司管理员为你开通账号。"));
+    //与通用提示、企业不可用的提示都不同，用户能看出该找管理员开账号
+    CHECK(closed != CString(RegisterModel::ServerErrorMessage(-1)));
+    CHECK(closed != CString(RegisterModel::ServerErrorMessage(error_code_enterprise_disabled)));
+}
+
+TEST_CASE("RG6 服务端建号失败（100）时提示稍后重试，不再提早已不存在的「自定义账号」", "[register][company]")
+{
+    const CString failed = RegisterModel::ServerErrorMessage(error_code_register_fail);
+    CHECK(failed == CString(L"注册失败，请稍后重试。"));
+    CHECK(failed.Find(L"自定义账号") < 0);
+}
+
+// =====================================================================
+// DC3 默认公司取 flamingo.ini 的 [ui] defaultcompany
+// =====================================================================
+
+namespace {
+
+// 在作用域内临时改写 g_strDefaultCompany（模拟启动时读到的配置值），离开作用域时写回原值；
+// 用例中途断言失败抛出异常时同样会写回，不影响后续用例。
+class ScopedDefaultCompany
+{
+public:
+    // 保存原值并改写。value：本作用域内使用的配置值，空串表示尚未读取配置。
+    explicit ScopedDefaultCompany(const std::wstring& value)
+        : m_saved(g_strDefaultCompany)
+    {
+        g_strDefaultCompany = value;
+    }
+
+    // 写回原值。
+    ~ScopedDefaultCompany()
+    {
+        g_strDefaultCompany = m_saved;
+    }
+
+private:
+    std::wstring m_saved;   // 改写前的原值，析构时写回
+};
+
+} // namespace
+
+TEST_CASE("DC3 注册模型的初始公司名与组合框的默认项取 [ui] defaultcompany 的配置值", "[register][company][brand]")
+{
+    //尚未读取配置（单元测试不走启动流程）时取内置的 FlamingoIM.org
+    {
+        ScopedDefaultCompany unread(L"");
+        CHECK(RegDefaultCompany() == CString(L"FlamingoIM.org"));
+        RegisterModel model;
+        CHECK(model.Company() == CString(L"FlamingoIM.org"));
+    }
+
+    //配置成别的名称（含中文）时，模型与组合框都取配置值，下拉里仍只有这一项
+    const CString configured(L"火烈鸟科技有限公司");
+    ScopedDefaultCompany scoped(std::wstring(configured.GetString()));
+    CHECK(RegDefaultCompany() == configured);
+
+    RegisterModel model;
+    CHECK(model.Company() == configured);
+
+    auto root = BuildRegisterBody(kRegStepFillInfo);
+    REQUIRE(root != nullptr);
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kRegIdComboCompany));
+    REQUIRE(combo != nullptr);
+    REQUIRE(combo->GetCount() == 1);
+    CHECK(combo->GetItemText(0) == configured);
+    CHECK(combo->GetText() == configured);
 }

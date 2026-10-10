@@ -144,7 +144,8 @@ public:
      *  @return true 删除成功（一行都没有也算成功）；false 表示数据库不可用或语句失败。
      *
      *  用于账号停用、成员被移出企业这类"这个人从此不该出现在任何人通讯录里"的场合，
-     *  与 StarredManager::removeStarredForAll 同一用途。目前尚无调用点，接口先备着 ——
+     *  （原特别关注名单 t_starred 的 removeStarredForAll 是同一用途，2026-10-03 随特别关注并入
+     *  消息提醒模式一并删除。）目前尚无调用点，接口先备着 ——
      *  清理动作散落在各处比集中在一处更难补全，宁可先把入口留出来。
      */
     bool removeTagsForAll(int64_t target);

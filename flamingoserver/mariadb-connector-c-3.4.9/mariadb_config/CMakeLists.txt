@@ -1,0 +1,67 @@
+INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/include)
+
+# Figure out additional libraries for use with
+
+FUNCTION(GET_LIB_NAME LIB_NAME LIB_OUT)
+  IF(APPLE)
+    STRING(FIND ${LIB_NAME} ".dylib" IS_SO)
+  ELSE()
+    STRING(FIND ${LIB_NAME} ".so" IS_SO)
+  ENDIF()
+  IF(NOT ${IS_SO} STREQUAL "-1")
+    GET_FILENAME_COMPONENT(LIB_FILE ${LIB_NAME} NAME_WE)
+  ELSE()
+    SET(LIB_FILE ${LIB_NAME})
+  ENDIF()
+
+  STRING(SUBSTRING ${LIB_NAME} 0 1 LIB_PREFIX)
+
+  IF(NOT ${LIB_PREFIX} STREQUAL "-")
+    SET(LIB_FILE "-l${LIB_FILE}")
+    STRING(REPLACE "-llib" "-l" LIB_FILE ${LIB_FILE})
+    SET(${LIB_OUT} ${LIB_FILE} PARENT_SCOPE)
+  ELSE()
+    SET(${LIB_OUT} ${LIB_NAME} PARENT_SCOPE)
+  ENDIF()
+ENDFUNCTION()
+
+LIST(LENGTH SYSTEM_LIBS rllength)
+IF(${rllength} GREATER 0)
+  LIST(REMOVE_DUPLICATES SYSTEM_LIBS)
+ENDIF()
+
+FOREACH (LIB_NAME ${SYSTEM_LIBS})
+  GET_LIB_NAME(${LIB_NAME} LIB_OUT)
+  SET(extra_dynamic_LDFLAGS "${extra_dynamic_LDFLAGS} ${LIB_OUT}")
+ENDFOREACH()
+STRING(STRIP "${extra_dynamic_LDFLAGS}" extra_dynamic_LDFLAGS)
+LIST(REMOVE_DUPLICATES extra_dynamic_LDFLAGS)
+
+IF(UNIX AND NOT APPLE)
+  IF(ICONV_EXTERNAL)
+    GET_LIB_NAME(${ICONV_LIBRARIES} LIB_OUT)
+    SET(extra_dynamic_LDFLAGS "${extra_dynamic_LDFLAGS} ${LIB_OUT}")
+  ENDIF()
+ENDIF()
+
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/mariadb_config.c.in
+               ${CMAKE_CURRENT_BINARY_DIR}/mariadb_config.c @ONLY)
+
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libmariadb.pc.in
+               ${CMAKE_CURRENT_BINARY_DIR}/libmariadb.pc @ONLY)
+
+ADD_EXECUTABLE(mariadb_config ${CMAKE_CURRENT_BINARY_DIR}/mariadb_config.c)
+
+IF(CMAKE_SYSTEM_NAME MATCHES AIX)
+  TARGET_LINK_LIBRARIES(mariadb_config compat-getopt)
+ENDIF()
+
+# Installation
+#
+INSTALL(TARGETS mariadb_config
+        DESTINATION "${INSTALL_BINDIR}"
+        COMPONENT Development)
+
+INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/libmariadb.pc
+        DESTINATION "${INSTALL_PCDIR}"
+        COMPONENT Development)

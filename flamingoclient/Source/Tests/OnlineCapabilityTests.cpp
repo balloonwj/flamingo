@@ -9,6 +9,7 @@
  *    · 托盘图标选择（离线用灰色图标）。
  *    · 托盘状态徽标叠加 —— 只有"连接就绪 + 离开 / 忙碌"才在图标右下角叠徽标。
  *    · 自动重连守卫 —— 用户主动离线时恒不重连。
+ *    · 离线用户头像置灰（AG1 ~ AG4）—— 别人离线才灰、未知不灰、自己只看连接态。
  *
  *  用 Catch2 v3（amalgamated）作框架，纯内存断言，不创建窗口 / 不依赖消息循环。
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
@@ -239,12 +240,46 @@ TEST_CASE("CAP12 用户主动离线时恒不自动重连", "[onlinecap][reconnec
     //
     // "被踢下线"与"用户主动离线"在这里是同一种情形 —— 两者都会把面板状态置成
     // balloonmain::kSessionUserGoOffline，对"要不要连回去"的答案都是不要。
-    CHECK(!ShouldAutoReconnect(true, true));    // 主动离线：配置允许重连也不连
-    CHECK(!ShouldAutoReconnect(true, false));
+    CHECK(!ShouldAutoReconnect(true, true, true));    // 主动离线：配置允许重连也不连
+    CHECK(!ShouldAutoReconnect(true, true, false));
 
     // 非主动离线（真掉线）时才看配置。
-    CHECK(ShouldAutoReconnect(false, true));
-    CHECK(!ShouldAutoReconnect(false, false));  // 配置里关掉了自动重连
+    CHECK(ShouldAutoReconnect(true, false, true));
+    CHECK(!ShouldAutoReconnect(true, false, false));  // 配置里关掉了自动重连
+
+    // 没有登录时一律不重连（2026-10-03 实测）：登出时连接被关闭，掉线事件随后异步到达，
+    // 此时会话状态已是「登录中」而不是「主动离线」，原先的判断放行了重连，重连成功的结果
+    // 又被登录窗当作过期结果丢掉，重连定时器之后一直空转
+    CHECK(!ShouldAutoReconnect(false, false, true));
+    CHECK(!ShouldAutoReconnect(false, false, false));
+    CHECK(!ShouldAutoReconnect(false, true, true));
+}
+
+// =====================================================================
+// CAP24 —— 会话控制器报告的「本人当前在线状态」
+// =====================================================================
+
+TEST_CASE("CAP24 没登录时一律是离线；登录后以主面板状态胶囊为准", "[onlinecap][presence]")
+{
+    // 登出后主面板只是隐藏、窗口还在，胶囊上仍是登出前的「在线」。原先先看主面板，于是登出后
+    // 报告的是在线，连接态被算成「正在连接」，托盘在登录窗阶段一直亮灰交替（2026-10-03 实测）
+    CHECK(ResolveSessionPresence(false, false, true, presence_online, presence_online) == presence_offline);
+    CHECK(ResolveSessionPresence(false, false, false, presence_online, presence_away) == presence_offline);
+    CHECK(ComputeConnectionUiState(
+              ResolveSessionPresence(false, false, true, presence_online, presence_online), false)
+          == kConnUiOffline);
+
+    // 已登录、主面板在：以胶囊为准。从离线恢复在线时会话状态仍是「主动离线」，胶囊已经乐观地
+    // 显示成在线，这时要报告在线，连接态才是「正在连接」、托盘才会亮灰交替
+    CHECK(ResolveSessionPresence(true, true, true, presence_online, presence_offline) == presence_online);
+    CHECK(ComputeConnectionUiState(
+              ResolveSessionPresence(true, true, true, presence_online, presence_offline), false)
+          == kConnUiConnecting);
+    CHECK(ResolveSessionPresence(true, false, true, presence_busy, presence_online) == presence_busy);
+
+    // 已登录、主面板不在：用户主动离线时是离线，其余（登录中、重连中）退回期望在线状态
+    CHECK(ResolveSessionPresence(true, true, false, presence_online, presence_away) == presence_offline);
+    CHECK(ResolveSessionPresence(true, false, false, presence_online, presence_away) == presence_away);
 }
 
 // =====================================================================
@@ -570,6 +605,82 @@ TEST_CASE("CAP23 菜单当前项文字与胶囊文字同源（只多一个\"（�
             // 前半段逐字等于胶囊文字，后半段恰好是"（当前）"。
             CHECK(::wcsncmp(menuLabel, pillText, pillLen) == 0);
             CHECK(::wcscmp(menuLabel + pillLen, L"（当前）") == 0);
+        }
+    }
+}
+
+// =====================================================================
+// AG1 ~ AG4 —— 离线用户头像置灰（ShouldGrayUserAvatar，2026-10-03）
+// =====================================================================
+
+// 全部三种界面连接态，再加一个越界值，供"别人的结果与本端连接态无关"逐一遍历。
+static const int kAgAllConnStates[4] =
+{
+    (int)kConnUiOnline, (int)kConnUiConnecting, (int)kConnUiOffline, 999,
+};
+
+TEST_CASE("AG1 别人离线时头像置灰，在线、离开、忙碌时不置灰", "[onlinecap][offlinegray]")
+{
+    CHECK(ShouldGrayUserAvatar(false, presence_offline, kConnUiOnline));
+    for (int i = 0; i < 3; ++i)
+    {
+        INFO("presence = " << kOnlineLikePresences[i]);
+        CHECK_FALSE(ShouldGrayUserAvatar(false, kOnlineLikePresences[i], kConnUiOnline));
+    }
+
+    // 越界值（含已作废的 4）按 net/Protocol.h 的约定归为离线，置灰。
+    CHECK(ShouldGrayUserAvatar(false, kRetiredPresence, kConnUiOnline));
+    CHECK(ShouldGrayUserAvatar(false, 999, kConnUiOnline));
+}
+
+TEST_CASE("AG2 别人的在线状态未知时不置灰", "[onlinecap][offlinegray]")
+{
+    CHECK(kPresenceUnknown < 0);
+    CHECK_FALSE(ShouldGrayUserAvatar(false, kPresenceUnknown, kConnUiOnline));
+    // 任何负数都按未知处理。
+    CHECK_FALSE(ShouldGrayUserAvatar(false, -2, kConnUiOnline));
+    CHECK_FALSE(ShouldGrayUserAvatar(false, -100, kConnUiOnline));
+}
+
+TEST_CASE("AG3 自己的头像只看本端连接态，与顶部头像的判断一致", "[onlinecap][offlinegray]")
+{
+    // 自己在线时彩色；正在连接、离线、越界值都置灰。
+    CHECK_FALSE(ShouldGrayUserAvatar(true, presence_online, kConnUiOnline));
+    CHECK(ShouldGrayUserAvatar(true, presence_online, kConnUiConnecting));
+    CHECK(ShouldGrayUserAvatar(true, presence_online, kConnUiOffline));
+    CHECK(ShouldGrayUserAvatar(true, presence_online, 999));
+
+    // presence 对自己不起作用：传什么都只按连接态判断，并且与 ShouldGrayAvatar 逐项相等。
+    const int kPresences[7] =
+    {
+        presence_offline, presence_online, presence_away, presence_busy,
+        kRetiredPresence, kPresenceUnknown, 999,
+    };
+    for (int s = 0; s < 4; ++s)
+    {
+        for (int p = 0; p < 7; ++p)
+        {
+            INFO("connUiState = " << kAgAllConnStates[s] << ", presence = " << kPresences[p]);
+            CHECK(ShouldGrayUserAvatar(true, kPresences[p], kAgAllConnStates[s])
+                  == ShouldGrayAvatar(kAgAllConnStates[s]));
+        }
+    }
+}
+
+TEST_CASE("AG4 本端掉线时别人的结果不变，沿用掉线前得知的状态", "[onlinecap][offlinegray]")
+{
+    const int kPresences[6] =
+    {
+        presence_offline, presence_online, presence_away, presence_busy,
+        kPresenceUnknown, kRetiredPresence,
+    };
+    for (int p = 0; p < 6; ++p)
+    {
+        const bool whenOnline = ShouldGrayUserAvatar(false, kPresences[p], kConnUiOnline);
+        for (int s = 0; s < 4; ++s)
+        {
+            INFO("presence = " << kPresences[p] << ", connUiState = " << kAgAllConnStates[s]);
+            CHECK(ShouldGrayUserAvatar(false, kPresences[p], kAgAllConnStates[s]) == whenOnline);
         }
     }
 }

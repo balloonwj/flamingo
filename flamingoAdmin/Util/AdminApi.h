@@ -96,6 +96,81 @@ enum ApiTag
     kApiTagCvCreate          = 58, // 新建版本记录 clientversion/create.do
     kApiTagCvUpdate          = 59, // 修改版本记录 clientversion/update.do
     kApiTagCvSetEnabled      = 60, // 发布 / 撤回 clientversion/setenabled.do
+    kApiTagSwList            = 61, // 敏感词库列表 sensitive/list.do
+    kApiTagSwAdd             = 62, // 添加敏感词 sensitive/add.do
+    kApiTagSwUpdate          = 63, // 修改敏感词 sensitive/update.do
+    kApiTagSwDelete          = 64, // 删除敏感词（可批量）sensitive/delete.do
+    kApiTagSwImport          = 65, // 批量导入的一批 sensitive/import.do
+    kApiTagSwExport          = 66, // 导出全部敏感词 sensitive/export.do
+    kApiTagSwSetEnabled      = 67, // 敏感词总开关 sensitive/setenabled.do
+    kApiTagSwHits            = 68, // 拦截记录列表 sensitive/hits.do
+    kApiTagSwEnterprises     = 69, // 敏感词界面的企业选择框拉取的企业列表 enterprise/list.do
+    kApiTagFeatureGet        = 70, // 企业详情「功能开关」页里「文件共享」的面板读企业的功能设置 setting/get.do
+    kApiTagFeatureSet        = 71, // 企业详情「功能开关」页里「文件共享」的面板改企业的功能设置 setting/set.do
+    // 72、73、82、83、105、106、122、123、126、127、130、131、134、135、138、139、142、143 已作废，不得复用：原为平台设置页
+    // 「功能开关」卡（企业管理员设置本企业）各面板读 / 改设置的标签，2026-10-08 该卡删除，功能开关集中到企业详情「功能开关」页
+    kApiTagFsList            = 74, // 文件共享列表 fileshare/list.do
+    kApiTagFsMembers         = 75, // 选中共享的成员与权限 fileshare/members.do
+    kApiTagFsCancel          = 76, // 强制取消共享 fileshare/cancel.do
+    kApiTagFsEnterprises     = 77, // 文件共享页的企业筛选框拉取的企业列表 enterprise/list.do
+    kApiTagFsAudit           = 78, // 共享审计列表 fileshare/audit.do
+    kApiTagFsAuditEnterprises = 79, // 共享审计页的企业筛选框拉取的企业列表 enterprise/list.do
+    kApiTagP2PSwitchGet      = 80, // 企业详情「功能开关」页里点对点直连的面板读企业的功能设置 setting/get.do
+    kApiTagP2PSwitchSet      = 81, // 企业详情「功能开关」页里点对点直连的面板改企业的功能设置 setting/set.do
+    kApiTagSvcDetail         = 84, // 服务号面板选中某个服务号后拉取它的绑定范围 service/detail.do
+    kApiTagSvcDetailForBinding = 85, // 点「修改绑定」后先拉取当前绑定，成功才打开绑定弹窗 service/detail.do
+    kApiTagInviteConfirmGet  = 86, // 企业详情「功能开关」页里「邀请入群需被邀请人同意」的面板读企业的功能设置 setting/get.do
+    kApiTagInviteConfirmSet  = 87, // 企业详情「功能开关」页里「邀请入群需被邀请人同意」的面板改企业的功能设置 setting/set.do
+    // 100～119：控制台第二批完善（外壳刷新、公告重新推送、企业列表更多筛选等）使用，与上面按顺序追加的编号错开。
+    kApiTagTickerAudit       = 100, // 顶栏「最新审计」滚动提示单独拉取的最近几条审计 audit/list.do
+    kApiTagAnnCopyFetch      = 101, // 公告中心「复制」先拉取原公告详情，再按其内容打开新建公告 announcement/detail.do
+    kApiTagAnnRepush         = 102, // 公告中心「重新推送」announcement/repush.do
+    kApiTagRegisterSwitchGet    = 103, // 企业详情「功能开关」页里「允许用户自助注册」的面板读企业的功能设置 setting/get.do
+    kApiTagRegisterSwitchSet    = 104, // 企业详情「功能开关」页里「允许用户自助注册」的面板改企业的功能设置 setting/set.do
+    // 120～123：群语音 / 群视频通话开关（docs/群音视频通话方案.md 第 6 期），避开上面 100～119 的号段。
+    kApiTagGroupCallSwitchGet    = 120, // 企业详情「功能开关」页里「群语音 / 群视频通话」的面板读企业的功能设置 setting/get.do
+    kApiTagGroupCallSwitchSet    = 121, // 企业详情「功能开关」页里「群语音 / 群视频通话」的面板改企业的功能设置 setting/set.do
+    // 124～127：语音字幕开关（docs/语音字幕方案.md 第 10 节）。
+    kApiTagCaptionSwitchGet    = 124, // 企业详情「功能开关」页里「语音字幕」的面板读企业的功能设置 setting/get.do
+    kApiTagCaptionSwitchSet    = 125, // 企业详情「功能开关」页里「语音字幕」的面板改企业的功能设置 setting/set.do
+    // 128～135：云端录制（docs/屏幕共享与录制方案.md 12.6.5，第 27 期 27g）：开关一组，配额与保留天数一组。
+    kApiTagCloudRecordSwitchGet    = 128, // 企业详情「功能开关」页里「云端录制」的面板读企业的功能设置 setting/get.do
+    kApiTagCloudRecordSwitchSet    = 129, // 企业详情「功能开关」页里「云端录制」的面板改企业的功能设置 setting/set.do
+    kApiTagCloudQuotaGet    = 132,        // 企业详情「功能开关」页的「云端录像空间」面板读配额、保留天数与已用空间 setting/get.do
+    kApiTagCloudQuotaSet    = 133,        // 企业详情「功能开关」页的「云端录像空间」面板改配额或保留天数 setting/set.do（一次保存可能发两个）
+    // 136～143：单聊密聊开关（docs/密聊方案.md 4.9）一组，帖子群开关（docs/帖子群方案.md 4.7）一组。
+    kApiTagSecretChatSwitchGet     = 136, // 企业详情「功能开关」页里「单聊密聊」的面板读企业的功能设置 setting/get.do
+    kApiTagSecretChatSwitchSet     = 137, // 企业详情「功能开关」页里「单聊密聊」的面板改企业的功能设置 setting/set.do
+    kApiTagThreadGroupSwitchGet    = 140, // 企业详情「功能开关」页里「帖子群」的面板读企业的功能设置 setting/get.do
+    kApiTagThreadGroupSwitchSet    = 141, // 企业详情「功能开关」页里「帖子群」的面板改企业的功能设置 setting/set.do
+    // 160～165：企业问答页（docs/群问答方案.md，Util/QaAdminApi.h），与上面按顺序追加的编号错开
+    kApiTagQaList            = 160, // 企业问答列表 qa/list.do
+    kApiTagQaSave            = 161, // 新增或修改企业问答 qa/add.do、qa/update.do
+    kApiTagQaDelete          = 162, // 删除企业问答 qa/delete.do
+    kApiTagQaGroups          = 163, // 本企业的群（选择应用范围、显示群名）qa/groups.do
+    kApiTagQaEnterprises     = 164, // 企业问答页的企业选择框拉取的企业列表 enterprise/list.do
+    // 170～180：机器人页（docs/机器人方案.md 第 7 节，Util/BotAdminApi.h）
+    kApiTagBotList           = 170, // 企业机器人列表 bot/list.do
+    kApiTagBotDetail         = 171, // 企业机器人详情（点「编辑」后拉取，带规则与密钥）bot/detail.do
+    kApiTagBotSave           = 172, // 新建或修改企业机器人 bot/save.do
+    kApiTagBotDelete         = 173, // 删除企业机器人 bot/delete.do
+    kApiTagBotSetStatus      = 174, // 停用 / 启用企业机器人 bot/setstatus.do
+    kApiTagBotGroups         = 175, // 本企业的群（应用范围、定时目标群、「试一试」的群）bot/groups.do
+    kApiTagBotTry            = 176, // 编辑窗里的「试一试」bot/try.do
+    kApiTagBotResetToken     = 177, // 重新生成 Webhook 令牌与签名密钥 bot/resettoken.do
+    kApiTagBotDomains        = 178, // 外部服务的域名白名单 bot/domains.do
+    kApiTagBotSetDomains     = 179, // 修改外部服务的域名白名单 bot/setdomains.do
+    kApiTagBotEnterprises    = 180, // 机器人页的企业选择框拉取的企业列表 enterprise/list.do
+    // 181～196：机器人的四个开关（docs/机器人方案.md 4.1），每个开关原有四个标签：企业设置弹窗读 / 改，平台设置页读 / 改；
+    // 2026-10-08 起只剩企业详情「功能开关」页的读 / 改，183、184、187、188、191、192、195、196 作废，不得复用
+    kApiTagBotSwitchGet               = 181, // 企业详情「功能开关」页里「机器人」的面板读企业的功能设置 setting/get.do
+    kApiTagBotSwitchSet               = 182, // 企业详情「功能开关」页里「机器人」的面板改企业的功能设置 setting/set.do
+    kApiTagBotGroupSwitchGet          = 185, // 企业详情「功能开关」页里「允许群主添加群机器人」的面板读企业的功能设置
+    kApiTagBotGroupSwitchSet          = 186, // 企业详情「功能开关」页里「允许群主添加群机器人」的面板改企业的功能设置
+    kApiTagBotPersonalSwitchGet       = 189, // 企业详情「功能开关」页里「允许员工配置个人机器人」的面板读企业的功能设置
+    kApiTagBotPersonalSwitchSet       = 190, // 企业详情「功能开关」页里「允许员工配置个人机器人」的面板改企业的功能设置
+    kApiTagBotExternalSwitchGet       = 193, // 企业详情「功能开关」页里「允许群主给群机器人配置外部服务」的面板读企业的功能设置
+    kApiTagBotExternalSwitchSet       = 194, // 企业详情「功能开关」页里「允许群主给群机器人配置外部服务」的面板改企业的功能设置
 };
 
 // 当前登录管理员的会话信息（进程级单例）。
@@ -154,9 +229,11 @@ struct LoginResult
     CString   m_adminName;     // 管理员姓名（成功时有效）
     CString   m_adminEmail;    // 管理员邮箱（成功时有效）
     long long m_enterpriseId;  // 管辖企业 ID（成功时有效），0 = 平台超管
+    int       m_linkPort;      // 管理端口（FlamingoLink 长连接，成功时有效）；0 表示服务器未开启或未下发
+    std::string m_linkPubkey;  // 服务端身份公钥的 base64（成功时有效）；空串表示服务器未开启加密
 
     LoginResult()
-        : m_transportOk(false), m_code(0), m_adminId(0), m_enterpriseId(0)
+        : m_transportOk(false), m_code(0), m_adminId(0), m_enterpriseId(0), m_linkPort(0)
     {
     }
 
@@ -322,6 +399,9 @@ struct AnnouncementDetailResult
     int          m_severityCode;  // 级别整数（0/1/2，编辑回填弹窗用）
     int          m_audienceType;  // 受众类型整数（0-4，编辑回填弹窗用）
     std::vector<AnnTarget> m_targets;  // 投放目标（编辑回填弹窗用）
+    // 定时发送时间（服务端原文，如 "2026-10-05 09:30:00"；未设定时为空）。编辑一条尚未
+    // 到点的定时公告时据此回填弹窗，否则提交会按「立即发布」处理。
+    CString      m_scheduledTime;
 
     AnnouncementDetailResult()
         : m_transportOk(false), m_code(0), m_severityCode(0), m_audienceType(0)
@@ -348,6 +428,23 @@ struct AnnSaveResult
 };
 
 // 企业列表（list.do）的解析结果。
+// 企业列表与导出的筛选条件：搜索框、状态分段与「更多筛选」条合在一起（enterprise/list.do、
+// export.do）。行业、套餐、开通日期三项未设置时不出现在请求里。
+struct EnterpriseListFilter
+{
+    CString m_keyword;   // 搜索词；空串表示不按关键字筛选
+    int     m_status;    // 状态 0 待审核 / 1 活跃 / 2 停用；-1 表示不筛选
+    CString m_industry;  // 行业（服务端精确匹配）；空串表示不限
+    int     m_plan;      // 套餐编号（0 基础版 / 1 专业版 / 2 旗舰版）；-1 表示不限
+    CString m_openFrom;  // 开通日期下限「YYYY-MM-DD」，当天包含在内；空串或格式不对时不带
+    CString m_openTo;    // 开通日期上限「YYYY-MM-DD」，当天包含在内；空串或格式不对时不带
+
+    EnterpriseListFilter()
+        : m_status(-1), m_plan(-1)
+    {
+    }
+};
+
 struct EnterpriseListResult
 {
     bool                    m_transportOk;  // HTTP 往返是否成功
@@ -458,6 +555,52 @@ struct ServiceListResult
 
     ServiceListResult()
         : m_transportOk(false), m_code(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 服务端返回的一条原始绑定（service/detail.do 的 bindings 项）：只有类型与目标 ID，
+// 显示名要再按组织树查（见 ResolveServiceBindings）。
+struct RawServiceBinding
+{
+    int       m_bindType;   // 绑定类型：0 本企业全员 / 1 部门 / 2 员工（接口文档 9.5）
+    long long m_targetId;   // 目标 ID：部门 ID 或员工 ID；全员时为 0
+
+    RawServiceBinding()
+        : m_bindType(0), m_targetId(0)
+    {
+    }
+};
+
+// 服务号详情（service/detail.do）的解析结果。
+struct ServiceDetailResult
+{
+    bool                           m_transportOk;  // HTTP 往返是否成功
+    int                            m_code;         // 业务错误码
+    CString                        m_message;      // 失败时给用户看的中文提示
+    Service                        m_service;      // 服务号资料（成功时有效；m_bindings 留空，见下）
+    std::vector<RawServiceBinding> m_bindings;     // 原始绑定列表（成功时有效）
+
+    ServiceDetailResult()
+        : m_transportOk(false), m_code(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 重新推送公告（announcement/repush.do）的解析结果。
+struct AnnRepushResult
+{
+    bool    m_transportOk;  // HTTP 往返是否成功
+    int     m_code;         // 业务错误码（140 表示公告不是已发布状态）
+    CString m_message;      // 失败时给用户看的中文提示
+    int     m_pushed;       // 实际推送的人数（受众里在线且未读的成员数），成功时有效
+
+    AnnRepushResult()
+        : m_transportOk(false), m_code(0), m_pushed(0)
     {
     }
 
@@ -632,9 +775,10 @@ struct UserResetPwdResult
     int     m_code;          // 业务错误码
     CString m_message;       // 失败时给用户看的中文提示
     CString m_newPassword;   // 重置后的新密码（成功时有效，须展示给用户）
+    int     m_kicked;        // 因密码重置而被强制下线的会话数（应答的 kicked 字段，2026-10-07 起展示；老服务端不带时为 0）
 
     UserResetPwdResult()
-        : m_transportOk(false), m_code(0)
+        : m_transportOk(false), m_code(0), m_kicked(0)
     {
     }
 
@@ -765,12 +909,80 @@ HttpRequest MakeEnterpriseListRequest(const ServerConfig& server,
                                       const CString& keyword, int status,
                                       int page, int pagesize);
 
+// 套餐名称，下标即套餐编号，与服务端 t_enterprise.f_plan 一致：0 基础版 / 1 专业版 / 2 旗舰版。
+// 新增企业、企业设置与「更多筛选」的套餐下拉框都用它。2026-10-04 起统一为这三档：产品本身就是
+// 企业版 IM，2 号套餐不叫「企业版」；控制台原先自行约定的编号 3 不再使用。
+extern const TCHAR* const kPlanOptions[];
+// kPlanOptions 的项数。
+extern const int kPlanOptionCount;
+
+// 套餐编号转名称：0～2 为 kPlanOptions 中的名称；列表外的编号显示成「套餐N」，以便察觉与
+// 服务端约定不一致的数据，并可由 PlanCodeFromName 还原。
+//   plan：套餐编号。
+CString PlanNameFromInt(int plan);
+
+// 套餐名称转编号：kPlanOptions 中的名称返回其下标；「套餐N」返回 N；其余返回 -1。
+//   name：套餐名称。
+int PlanCodeFromName(const CString& name);
+
+// 企业账号前缀的长度上限（字符数），与服务端 AccountName.h 的 ACCOUNT_PREFIX_MAX_LENGTH 一致。
+const int kAccountPrefixMaxLength = 10;
+
+// 校验并规整企业账号前缀（docs/登录账号与手机号登录方案.md 第 4 节），规则与服务端 NormalizeAccountPrefix
+// 一致：去掉首尾空白后，空串表示清除（合法）；否则须为 1～kAccountPrefixMaxLength 个字符、只含英文字母与
+// 点号「.」、至少一个字母，规整为大写。企业设置窗口保存前用它做本地校验，不合格时不发请求。
+//   raw：管理员填写的原文；out：[出参] 合法时为规整后的前缀（可能为空串）。
+//   返回：合法返回 true。
+bool NormalizeAccountPrefix(const CString& raw, CString& out);
+
+// 手机号的位数（中国大陆手机号），与服务端 AccountName.h 的 PHONE_NUMBER_LENGTH 一致。
+const int kPhoneNumberLength = 11;
+
+// 手机号格式是否合法：恰好 11 位、以 1 开头、全部是数字，与服务端 IsValidPhoneNumber 一致。
+// 新建与编辑员工时手机号必填（2026-10-06 起，手机号可用于登录），保存前用它做本地校验。
+//   phone：手机号原文，不做去空白处理。
+bool IsValidPhoneNumber(const CString& phone);
+
+// 公告级别的名称，下标即服务端的级别编号（announcement 的 severity：0 普通 / 1 提醒 / 2 警告）。
+// 新建公告弹窗的级别选项用它；公告列表、详情徽章与导出经 AnnSeverityLabel 取同一套名称。
+extern const TCHAR* const kAnnSeverityLabels[];
+// kAnnSeverityLabels 的项数。
+extern const int kAnnSeverityLabelCount;
+
+// 公告级别（客户端 Severity）转名称：Warn 为「提醒」，Danger 为「警告」，其余为「普通」。
+//   severity：公告级别。
+LPCTSTR AnnSeverityLabel(Severity severity);
+
+// 新增企业与「更多筛选」共用的行业选项（下标顺序即下拉框里的顺序）。
+extern const TCHAR* const kIndustryOptions[];
+// kIndustryOptions 的项数。
+extern const int kIndustryOptionCount;
+
+// 按完整的筛选条件构造企业列表请求（POST /admin/enterprise/list.do）。关键字与状态总是带上；
+// 行业、套餐、开通日期只在已设置（日期还须格式正确）时带上。
+//   filter：筛选条件；page / pagesize：分页参数。
+HttpRequest MakeEnterpriseListRequest(const ServerConfig& server,
+                                      const CString& token,
+                                      const EnterpriseListFilter& filter,
+                                      int page, int pagesize);
+
+// 判断文字是否为合法的「YYYY-MM-DD」日期：长度 10、分隔符为「-」、其余为数字、月份 1～12、
+// 日 1～31（不按月份核对天数，与服务端 EnterpriseManager::isValidDateText 一致）。
+bool IsValidDateText(const CString& text);
+
+// 「更多筛选」里已设置的条件数：行业非空、套餐不为 -1、起止日期格式正确，各计 1。
+int CountMoreFilters(const EnterpriseListFilter& filter);
+
+// 「更多筛选」按钮文字：没有条件时为「更多筛选」，有 N 个时为「更多筛选 · N」。
+//   count：已设置的条件数，见 CountMoreFilters。
+CString MoreFilterButtonText(int count);
+
 // 解析企业列表应答，得到 EnterpriseListResult。
 EnterpriseListResult ParseEnterpriseListResponse(const HttpResult& http);
 
 // 构造新增企业请求（POST /admin/enterprise/create.do）。
 //   name / shortName / industry / region：企业基本信息。
-//   plan：套餐编号（见 docs/Admin控制台接口文档.md，约定 1专业版/2企业版/3旗舰版）。
+//   plan：套餐编号（与服务端 t_enterprise.f_plan 一致：0 基础版 / 1 专业版 / 2 旗舰版）。
 //   adminName / adminEmail：初始企业管理员姓名与邮箱。
 HttpRequest MakeEnterpriseCreateRequest(const ServerConfig& server,
                                         const CString& token,
@@ -804,6 +1016,12 @@ EnterpriseActionResult ParseEnterpriseActionResponse(const HttpResult& http);
 HttpRequest MakeEnterpriseExportRequest(const ServerConfig& server,
                                         const CString& token,
                                         const CString& keyword, int status);
+
+// 按完整的筛选条件构造导出请求（POST /admin/enterprise/export.do），条件的带法与
+// 按条件构造的列表请求相同。
+HttpRequest MakeEnterpriseExportRequest(const ServerConfig& server,
+                                        const CString& token,
+                                        const EnterpriseListFilter& filter);
 
 // 解析导出应答。成功时 m_csvUtf8 为 CSV 文本；失败时服务端回 JSON 错误。
 EnterpriseExportResult ParseEnterpriseExportResponse(const HttpResult& http);
@@ -842,6 +1060,35 @@ HttpRequest MakeServiceListRequest(const ServerConfig& server,
 // 解析服务号列表应答。
 ServiceListResult ParseServiceListResponse(const HttpResult& http);
 
+// 构造服务号详情请求（POST /admin/service/detail.do）。列表接口不带绑定范围，
+// 绑定只能从这里读。
+//   serviceId：目标服务号 ID。
+HttpRequest MakeServiceDetailRequest(const ServerConfig& server,
+                                     const CString& token,
+                                     long long serviceId);
+
+// 解析服务号详情应答：服务号资料与原始绑定列表。失败时 m_message 为中文提示。
+ServiceDetailResult ParseServiceDetailResponse(const HttpResult& http);
+
+// 把服务端的原始绑定翻译成界面用的绑定项（带显示名）。
+//   raw：detail.do 返回的原始绑定；
+//   orgRoot：该企业的组织树根节点（借用，可为 nullptr —— 组织树尚未加载时）；
+//   enterpriseShortName：企业简称，用于「全员（简称）」这一项的显示名。
+//   返回：与 raw 一一对应的绑定项。全员的 ID 固定为 "root"（与绑定弹窗一致）；
+//         部门 / 员工按 ID 在组织树里查名字，查不到时显示「部门 #ID」「员工 #ID」；
+//         类型不在 0~2 之内的项被跳过。
+std::vector<ServiceBinding> ResolveServiceBindings(
+    const std::vector<RawServiceBinding>& raw, const OrgNode* orgRoot,
+    const CString& enterpriseShortName);
+
+// 重新拉取服务号列表后，把旧列表里已经读到的绑定按服务号 ID 带到新列表上 ——
+// 列表接口不带绑定，直接覆盖会把已读到的绑定清空。
+//   oldList：覆盖前的服务号列表；
+//   newList：刚拉到的服务号列表（输入输出：其中 ID 在 oldList 里出现、且旧项的
+//            m_bindingsLoaded 为 true 的服务号，m_bindings 与 m_bindingsLoaded 取旧值）。
+void CarryOverLoadedBindings(const std::vector<Service>& oldList,
+                             std::vector<Service>& newList);
+
 // ---- 企业详情子屏的写操作（模块 4 部门 / 模块 5 员工）----
 // 说明：dept/create、dept/delete、user/delete 只关心成败，应答复用上面的
 //       ParseEnterpriseActionResponse 解析；user/create 需取初始密码，单独解析。
@@ -860,12 +1107,13 @@ HttpRequest MakeDeptCreateRequest(const ServerConfig& server,
 // 构造新增员工请求（POST /admin/user/create.do）。
 //   enterpriseId：企业 ID；deptId：所属部门 ID。
 //   name/title/employeeNo/email/phone/joinDate：员工资料（employeeNo/joinDate 可空）。
+//   gender：性别编码 0 保密 / 1 男 / 2 女（见 GenderComboIndexToCode）。
 HttpRequest MakeUserCreateRequest(const ServerConfig& server,
                                   const CString& token, long long enterpriseId,
                                   long long deptId, const CString& name,
                                   const CString& title, const CString& employeeNo,
                                   const CString& email, const CString& phone,
-                                  const CString& joinDate);
+                                  const CString& joinDate, int gender);
 
 // 解析新增员工应答（含 userid 与初始密码）。
 UserCreateResult ParseUserCreateResponse(const HttpResult& http);
@@ -987,8 +1235,14 @@ HttpRequest MakeUserSetStatusRequest(const ServerConfig& server,
 HttpRequest MakeUserResetPasswordRequest(const ServerConfig& server,
                                          const CString& token, long long userId);
 
-// 解析重置员工密码应答（含新密码）。
+// 解析重置员工密码应答（含新密码与被强制下线的会话数）。
 UserResetPwdResult ParseUserResetPasswordResponse(const HttpResult& http);
+
+// 拼出「密码已重置」弹窗的正文（2026-10-07 起，有设备被强制下线时多一句说明）。
+//   newPassword：重置后的新密码。
+//   kicked：     被强制下线的会话数；不大于 0 时不提下线。
+// 返回：正文，行之间用 \n 分隔。纯函数，无副作用。
+CString FormatResetPasswordNotice(const CString& newPassword, int kicked);
 
 // 构造强制下线员工设备请求（POST /admin/user/kickdevice.do）。
 //   deviceId：要注销的设备 ID；空串表示注销该员工的全部设备。
@@ -1004,7 +1258,8 @@ HttpRequest MakeUserDetailRequest(const ServerConfig& server,
 UserDetailResult ParseUserDetailResponse(const HttpResult& http);
 
 // 构造修改员工资料请求（POST /admin/user/update.do）。
-//   员工的姓名 / 职位 / 工号 / 入职日期 / 座机 / 工位 / 手机 / 邮箱 / 签名。
+//   员工的姓名 / 职位 / 工号 / 入职日期 / 座机 / 工位 / 手机 / 邮箱 / 签名；
+//   gender：性别编码 0 保密 / 1 男 / 2 女（服务端据此修改性别）。
 //   应答只关心成败，复用 ParseEnterpriseActionResponse。
 HttpRequest MakeUserUpdateRequest(const ServerConfig& server,
                                   const CString& token, long long userId,
@@ -1014,7 +1269,17 @@ HttpRequest MakeUserUpdateRequest(const ServerConfig& server,
                                   const CString& landline,
                                   const CString& workstation,
                                   const CString& phone, const CString& email,
-                                  const CString& signature);
+                                  const CString& signature, int gender);
+
+// 性别编码（0 保密 / 1 男 / 2 女，与服务端 enum profile_gender 一致）转显示文字；
+// 其它取值按「保密」。
+CString GenderDisplayText(int gender);
+
+// 性别下拉框（依次为「保密 / 男 / 女」）的序号转编码；越界（含未选中的 -1）按 0。
+int GenderComboIndexToCode(int index);
+
+// 性别编码转下拉框序号；未知编码选中「保密」（序号 0）。
+int GenderCodeToComboIndex(int gender);
 
 // 构造调整员工所属部门请求（POST /admin/user/move.do）。
 //   deptId：员工当前所属部门 ID；newDeptId：要调入的目标部门 ID。
@@ -1027,14 +1292,16 @@ HttpRequest MakeUserMoveRequest(const ServerConfig& server,
 // 说明：update / removeadmin 只关心成败，应答复用 ParseEnterpriseActionResponse。
 
 // 构造修改企业信息请求（POST /admin/enterprise/update.do）。
-//   name/shortName/industry/region：企业基本信息；plan：套餐编号（1/2/3）。
+//   name/shortName/industry/region：企业基本信息；plan：套餐编号（0/1/2，见 kPlanOptions）；
+//   accountPrefix：新建账号的前缀（2026-10-06 起总是带上；空串表示清除、改回默认的 EMP，服务端会再校验一次）。
 HttpRequest MakeEnterpriseUpdateRequest(const ServerConfig& server,
                                         const CString& token,
                                         long long enterpriseId,
                                         const CString& name,
                                         const CString& shortName,
                                         const CString& industry,
-                                        const CString& region, int plan);
+                                        const CString& region, int plan,
+                                        const CString& accountPrefix);
 
 // 构造企业管理员列表请求（POST /admin/enterprise/admins.do）。
 HttpRequest MakeEnterpriseAdminsRequest(const ServerConfig& server,
@@ -1082,6 +1349,15 @@ AnnouncementDetailResult ParseAnnDetailResponse(const HttpResult& http);
 // 构造撤回公告请求（POST /admin/announcement/recall.do）。仅能撤回已发布公告。
 HttpRequest MakeAnnRecallRequest(const ServerConfig& server, const CString& token,
                                  long long announcementId);
+
+// 构造重新推送公告请求（POST /admin/announcement/repush.do）。服务端只接受已发布的公告，
+// 推给受众里当前在线且未读的成员；仅平台超管可调用。
+//   announcementId：公告 ID。
+HttpRequest MakeAnnRepushRequest(const ServerConfig& server, const CString& token,
+                                 long long announcementId);
+
+// 解析重新推送应答：成功时 m_pushed 为推送人数（缺少 pushed 字段时按 0）。
+AnnRepushResult ParseAnnRepushResponse(const HttpResult& http);
 
 // 构造删除公告请求（POST /admin/announcement/delete.do）。
 HttpRequest MakeAnnDeleteRequest(const ServerConfig& server, const CString& token,
@@ -1297,6 +1573,523 @@ HttpRequest MakeClientVersionSetEnabledRequest(const ServerConfig& server, const
 // 3221225472 -> "3.00 GB"。列表与下拉里显示包大小用。
 //   bytes：字节数；负数按 0 处理。
 CString FormatPackageSize(long long bytes);
+
+// 判断版本号文字是否合法：2～4 段十进制数字，以点分隔，每段 1～5 位，不含空白或其它
+// 字符。服务端比较版本号时会忽略非数字字符（LoginProtocol::isVersionAtLeast），格式
+// 不对时不报错、却让门槛变了样，所以在控制台提交前校验。
+//   text：版本号文字（调用方负责去掉首尾空白）。
+bool IsValidVersionText(const CString& text);
+
+// 比较两个版本号：逐段按数值比较，缺少的段按 0 处理，与服务端的比较规则一致。
+//   a / b：版本号文字，应已通过 IsValidVersionText；无法识别的段按 0 处理。
+//   返回：a 低于 b 时为负数，相等为 0，高于为正数。
+int CompareVersionText(const CString& a, const CString& b);
+
+// 校验客户端版本记录的「最低版本」。
+//   minVersion：最低版本输入，先去掉首尾空白；为空表示不另设门槛，直接通过。
+//   version：这条记录的版本号（新建时是输入的版本号，编辑时是记录原有的版本号）；
+//            为空或格式不对时只校验最低版本自身的格式。
+//   返回：空串表示通过；否则是给用户看的中文提示。
+CString CheckMinVersion(const CString& minVersion, const CString& version);
+
+// ---- 敏感词（模块 11，docs/Admin控制台接口文档.md 第十一节）----
+// 说明：词库按企业划分。平台超管须在每个请求里指定 enterpriseid；企业管理员传 0，请求里不带
+//       enterpriseid，由服务端改写为本企业。修改与总开关只关心成败，应答复用
+//       ParseEnterpriseActionResponse；导出成功时回纯文本、失败时回 JSON，复用
+//       ParseEnterpriseExportResponse（文字在 m_csvUtf8 里）。
+
+// 一条敏感词（list.do 返回）。
+struct SensitiveWordItem
+{
+    long long m_id;           // 词条 ID
+    CString   m_word;         // 词条原文
+    int       m_category;     // 分类，1～6，名称见 swtext::CategoryName
+    CString   m_remark;       // 备注
+    CString   m_creatorName;  // 添加者姓名
+    long long m_createTime;   // 添加时间，Unix 毫秒
+    long long m_updateTime;   // 最后修改时间，Unix 毫秒
+
+    SensitiveWordItem()
+        : m_id(0), m_category(0), m_createTime(0), m_updateTime(0)
+    {
+    }
+};
+
+// 词库列表（list.do）的解析结果。
+struct SensitiveWordListResult
+{
+    bool                           m_transportOk;  // HTTP 往返是否成功
+    int                            m_code;         // 业务错误码
+    CString                        m_message;      // 失败时给用户看的中文提示
+    int                            m_total;        // 满足筛选条件的总条数（分页条用）
+    bool                           m_enabled;      // 该企业的敏感词总开关是否打开
+    int                            m_wordCount;    // 该企业的词条总数（不受筛选影响，显示「已用 N / 10000」）
+    std::vector<SensitiveWordItem> m_list;         // 本页词条（成功时有效）
+
+    SensitiveWordListResult()
+        : m_transportOk(false), m_code(0), m_total(0), m_enabled(false), m_wordCount(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 添加敏感词（add.do）的解析结果，带回新词条的 ID。
+struct SensitiveWordAddResult
+{
+    bool      m_transportOk;  // HTTP 往返是否成功
+    int       m_code;         // 业务错误码；词条为空 / 超长 / 重复 / 词库已满时为 120～123
+    CString   m_message;      // 失败时给用户看的中文提示
+    long long m_id;           // 新词条 ID（成功时有效）
+
+    SensitiveWordAddResult()
+        : m_transportOk(false), m_code(0), m_id(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 删除敏感词（delete.do）的解析结果，带回实际删掉的条数。
+struct SensitiveWordDeleteResult
+{
+    bool    m_transportOk;  // HTTP 往返是否成功
+    int     m_code;         // 业务错误码
+    CString m_message;      // 失败时给用户看的中文提示
+    int     m_deleted;      // 实际删除的条数（不属于该企业或已被删的 ID 不计）
+
+    SensitiveWordDeleteResult()
+        : m_transportOk(false), m_code(0), m_deleted(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 导入时被跳过的一行（import.do 返回）。
+struct SensitiveImportSkip
+{
+    int     m_line;        // 行号：本批请求 lines 数组里的第几行（从 1 起），加上批次首行行号减一即为原文行号
+    CString m_word;        // 该行的词条（去掉首尾空白后）
+    int     m_reason;      // 跳过原因的错误码，120～124
+    CString m_reasonText;  // 跳过原因的中文说明
+
+    SensitiveImportSkip()
+        : m_line(0), m_reason(0)
+    {
+    }
+};
+
+// 批量导入一批（import.do）的解析结果。
+struct SensitiveImportResult
+{
+    bool                             m_transportOk;  // HTTP 往返是否成功
+    int                              m_code;         // 业务错误码
+    CString                          m_message;      // 失败时给用户看的中文提示
+    int                              m_added;        // 本批成功添加的条数
+    std::vector<SensitiveImportSkip> m_skipped;      // 本批被跳过的行（空行不算，不在其中）
+
+    SensitiveImportResult()
+        : m_transportOk(false), m_code(0), m_added(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 一条拦截记录（hits.do 返回）。
+struct SensitiveHitItem
+{
+    long long m_id;          // 记录 ID
+    long long m_time;        // 拦截时间，Unix 毫秒
+    long long m_userId;      // 提交者 userid；自助注册时为 0
+    CString   m_userName;    // 提交者名称（昵称、账号，自助注册时为手机号）
+    int       m_source;      // 来源，1～12，名称见 swtext::HitSourceName
+    int       m_ctype;       // 会话类型：0 与会话无关，1 单聊，2 群聊
+    long long m_cid;         // 会话 ID：单聊为对方 userid，群聊为群 ID；与会话无关时为 0
+    CString   m_targetName;  // 会话名称快照（对方昵称、群名，或「群发助手（N 个对象）」）
+    CString   m_word;        // 命中的词条
+    int       m_category;    // 命中词条的分类
+    CString   m_snippet;     // 内容摘要：命中位置前后各 20 个字符
+
+    SensitiveHitItem()
+        : m_id(0), m_time(0), m_userId(0), m_source(0), m_ctype(0), m_cid(0), m_category(0)
+    {
+    }
+};
+
+// 拦截记录列表（hits.do）的解析结果。
+struct SensitiveHitListResult
+{
+    bool                          m_transportOk;  // HTTP 往返是否成功
+    int                           m_code;         // 业务错误码
+    CString                       m_message;      // 失败时给用户看的中文提示
+    int                           m_total;        // 满足筛选条件的总条数
+    std::vector<SensitiveHitItem> m_list;         // 本页记录，按拦截时间倒序（成功时有效）
+
+    SensitiveHitListResult()
+        : m_transportOk(false), m_code(0), m_total(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 构造词库列表请求（POST /admin/sensitive/list.do）。
+//   enterpriseId：平台超管选中的企业 ID；企业管理员传 0（请求里不带）。
+//   keyword：按词条模糊搜索；空串表示不筛选。
+//   category：按分类筛选，1～6；0 表示全部分类。
+//   page：页号，从 1 起。pageSize：每页条数，服务端上限 200。
+HttpRequest MakeSensitiveListRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                     const CString& keyword, int category, int page, int pageSize);
+
+// 解析词库列表应答，得到 SensitiveWordListResult。
+SensitiveWordListResult ParseSensitiveListResponse(const HttpResult& http);
+
+// 构造添加敏感词请求（POST /admin/sensitive/add.do）。
+//   word：词条，最多 32 个字；category：分类 1～6；remark：备注，可为空，最多 64 个字。
+HttpRequest MakeSensitiveAddRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                    const CString& word, int category, const CString& remark);
+
+// 解析添加敏感词应答，得到 SensitiveWordAddResult。
+SensitiveWordAddResult ParseSensitiveAddResponse(const HttpResult& http);
+
+// 构造修改敏感词请求（POST /admin/sensitive/update.do）。词条、分类、备注三项整体覆盖。
+// 应答复用 ParseEnterpriseActionResponse；改后的词条与别的词条重复时为 122，词条已被删时为 124。
+//   id：词条 ID。
+HttpRequest MakeSensitiveUpdateRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                       long long id, const CString& word, int category, const CString& remark);
+
+// 构造删除敏感词请求（POST /admin/sensitive/delete.do）。
+//   ids：要删除的词条 ID，1～500 个。
+HttpRequest MakeSensitiveDeleteRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                       const std::vector<long long>& ids);
+
+// 解析删除敏感词应答，得到 SensitiveWordDeleteResult。
+SensitiveWordDeleteResult ParseSensitiveDeleteResponse(const HttpResult& http);
+
+// 构造批量导入请求（POST /admin/sensitive/import.do），提交一批行。
+//   linesUtf8：本批各行（UTF-8），1～1000 行，通常取 swtext::MakeImportBatches 的一批；空行原样提交，
+//              服务端报回的行号才能与原文对齐。
+//   defaultCategory：只有词条、或分类名写错的行归入的分类，1～6。
+// 一批在服务端的一个事务里写库，超时比常规接口宽。
+HttpRequest MakeSensitiveImportRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                       const std::vector<std::string>& linesUtf8, int defaultCategory);
+
+// 解析批量导入应答，得到 SensitiveImportResult。
+SensitiveImportResult ParseSensitiveImportResponse(const HttpResult& http);
+
+// 构造导出请求（POST /admin/sensitive/export.do）。应答用 ParseEnterpriseExportResponse 解析，
+// 成功时文字（每行「词条 Tab 分类名 Tab 备注」）在 m_csvUtf8 里，存盘前交给 swtext::BuildExportFileBytes。
+HttpRequest MakeSensitiveExportRequest(const ServerConfig& server, const CString& token, long long enterpriseId);
+
+// 构造总开关请求（POST /admin/sensitive/setenabled.do）。应答复用 ParseEnterpriseActionResponse。
+//   enabled：true 启用，false 暂停（暂停期间该企业不做任何敏感词检查）。
+HttpRequest MakeSensitiveSetEnabledRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                           bool enabled);
+
+// 构造拦截记录列表请求（POST /admin/sensitive/hits.do）。
+//   keyword：按提交者名称模糊搜索；空串表示不筛选。
+//   source：按来源筛选，1～12；0 表示全部来源。category：按分类筛选，1～6；0 表示全部分类。
+//   beginTime / endTime：拦截时间范围，Unix 毫秒；0 表示该端不限。
+//   page：页号，从 1 起。pageSize：每页条数，服务端上限 200。
+HttpRequest MakeSensitiveHitsRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                     const CString& keyword, int source, int category,
+                                     long long beginTime, long long endTime, int page, int pageSize);
+
+// 解析拦截记录列表应答，得到 SensitiveHitListResult。
+SensitiveHitListResult ParseSensitiveHitsResponse(const HttpResult& http);
+
+// ==================== 文件共享（模块 12，docs/Admin控制台接口文档.md 第十二章）====================
+
+// 文件共享开关的设置项名称（setting/get.do 与 setting/set.do 的 key），取值 "1" 开启、"0" 关闭
+const wchar_t kSettingFileShareEnabled[] = L"fileshare.enabled";
+
+// 客户端点对点直连开关的设置项名称（docs/P2P通信方案.md 9.4），取值 "1" 开启、"0" 关闭
+const wchar_t kSettingP2PEnabled[] = L"p2p.enabled";
+
+// 「邀请入群需被邀请人同意」开关的设置项名称（docs/邀请入群方案.md §3.5、§4.6），取值 "1" 开启、"0" 关闭，未设置时为关闭
+const wchar_t kSettingInviteConfirm[] = L"group.inviteconfirm";
+
+// 「允许用户自助注册」开关的设置项名称（2026-10-04），取值 "1" 开启、"0" 关闭，未设置时为开启。关闭后该企业不能在
+// PC 客户端自助注册加入，只能由管理员新建账号；服务端只在注册流程里检查，不下发给客户端
+const wchar_t kSettingRegisterEnabled[] = L"register.enabled";
+
+// 群语音 / 群视频通话开关的设置项名称（docs/群音视频通话方案.md 第 6 期），取值 "1" 开启、"0" 关闭，未设置时为开启。
+// 关闭后该企业成员不能发起或加入群通话（错误码 727），客户端群聊窗隐藏「语音通话」「视频通话」按钮
+const wchar_t kSettingGroupCallEnabled[] = L"groupcall.enabled";
+
+// 语音字幕开关的设置项名称（docs/语音字幕方案.md 第 10 节），取值 "1" 开启、"0" 关闭，未设置时为开启。
+// 关闭后该企业成员的客户端不再加载字幕模块，录屏与屏幕共享都不再提供字幕；服务端只下发，不做检查
+const wchar_t kSettingCaptionEnabled[] = L"caption.enabled";
+
+// 云端录制开关的设置项名称（docs/屏幕共享与录制方案.md 12.6.5），取值 "1" 开启、"0" 关闭，未设置时为关闭。
+// 关闭后该企业成员不能再开始云端录制、不能把录像保存到云端，已有的云端录像照常可看、可删
+const wchar_t kSettingCloudRecordEnabled[] = L"cloudrecord.enabled";
+
+// 云端录像的企业总配额（单位 GB，不带符号的十进制整数，0～1000000，未设置时为 50）：原始帧文件与合成后的录像都计入，
+// 0 表示不允许再新增云端录像
+const wchar_t kSettingCloudRecordQuotaGb[] = L"cloudrecord.quotagb";
+
+// 云端录像的保留天数（0～3650，未设置时为 30，0 表示永久保留）。录像结束或上传完成时按当时的天数算出到期时间，
+// 改天数只影响之后结束的录像
+const wchar_t kSettingCloudRecordRetainDays[] = L"cloudrecord.retaindays";
+
+// 单聊密聊开关的设置项名称（docs/密聊方案.md 4.9），取值 "1" 开启、"0" 关闭，未设置时为开启。关闭后该企业成员的客户端
+// 不再显示「密聊」按钮，服务端拒绝发起与应答密聊，并结束该企业成员参与的全部密聊（双方只能查看已有内容）
+const wchar_t kSettingSecretChatEnabled[] = L"secretchat.enabled";
+
+// 帖子群开关的设置项名称（docs/帖子群方案.md 4.7），取值 "1" 开启、"0" 关闭，未设置时为开启。关闭后该企业成员的客户端
+// 隐藏全部帖子群、不能再新建帖子群，服务端拒绝 2700 段请求；已有的帖子与留言保留，重新打开后恢复
+const wchar_t kSettingThreadGroupEnabled[] = L"threadgroup.enabled";
+
+// 机器人总开关的设置项名称（docs/机器人方案.md 4.1），取值 "1" 开启、"0" 关闭，未设置时为开启。关闭后本企业全部机器人
+// （企业、群、个人机器人）停止响应，客户端隐藏全部机器人入口
+const wchar_t kSettingBotEnabled[] = L"bot.enabled";
+
+// 「允许群主添加群机器人」开关的设置项名称，取值 "1" 开启、"0" 关闭，未设置时为开启
+const wchar_t kSettingBotGroup[] = L"bot.groupbot";
+
+// 「允许员工配置个人机器人」开关的设置项名称，取值 "1" 开启、"0" 关闭，未设置时为开启
+const wchar_t kSettingBotPersonal[] = L"bot.personal";
+
+// 「允许群主给群机器人配置外部服务」开关的设置项名称，取值 "1" 开启、"0" 关闭，未设置时为关闭。打开后群主才能在群机器人上
+// 添加「外部系统推送」触发方式与「呼叫外部服务」动作
+const wchar_t kSettingBotGroupExternal[] = L"bot.groupexternal";
+
+// 一项功能设置（setting/get.do 的 settings 数组元素）。
+struct FeatureSettingItem
+{
+    CString m_key;        // 设置项名称，如 kSettingFileShareEnabled
+    CString m_value;      // 当前取值（字符串）
+    bool    m_isDefault;  // 该企业没有设置记录、取的是内置默认值时为 true
+
+    FeatureSettingItem()
+        : m_isDefault(false)
+    {
+    }
+};
+
+// 读功能设置（setting/get.do）的解析结果。
+struct FeatureSettingsResult
+{
+    bool                            m_transportOk;   // HTTP 往返是否成功
+    int                             m_code;          // 业务错误码
+    CString                         m_message;       // 失败时给用户看的中文提示
+    long long                       m_enterpriseId;  // 设置所属的企业（服务端回填，企业管理员即本企业）
+    std::vector<FeatureSettingItem> m_settings;      // 各项设置（成功时有效）
+    long long                       m_cloudRecordUsedBytes;  // 该企业云端录像的已用字节数；应答里没有（老服务端、云端录制
+                                                             // 没有初始化）时为 -1
+
+    FeatureSettingsResult()
+        : m_transportOk(false), m_code(0), m_enterpriseId(0), m_cloudRecordUsedBytes(-1)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+
+    // 按名称查找一项设置。
+    //   key：设置项名称。out：[出参] 找到时为该项。
+    //   返回：找到返回 true。
+    bool Find(const CString& key, FeatureSettingItem& out) const
+    {
+        for (size_t i = 0; i < m_settings.size(); ++i)
+        {
+            if (m_settings[i].m_key == key)
+            {
+                out = m_settings[i];
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+// 改功能设置（setting/set.do）的解析结果。
+struct FeatureSetResult
+{
+    bool      m_transportOk;   // HTTP 往返是否成功
+    int       m_code;          // 业务错误码；设置项或取值不认识时为 133
+    CString   m_message;       // 失败时给用户看的中文提示
+    long long m_enterpriseId;  // 设置所属的企业
+    bool      m_enabled;       // 修改之后文件共享是否开启（成功时有效）
+
+    FeatureSetResult()
+        : m_transportOk(false), m_code(0), m_enterpriseId(0), m_enabled(false)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 一个共享（fileshare/list.do 的 list 项）。
+struct FileShareItem
+{
+    long long m_shareId;           // 共享 ID
+    long long m_enterpriseId;      // 分享者所属的企业
+    long long m_ownerId;           // 分享者 userid
+    CString   m_ownerName;         // 分享者昵称
+    CString   m_ownerAccount;      // 分享者账号
+    int       m_ctype;             // 会话类型：1 单聊，2 群聊
+    long long m_cid;               // 会话 ID：单聊为对方 userid，群聊为群 ID
+    CString   m_conversationName;  // 会话名称：群聊为群名，单聊为对方昵称
+    int       m_kind;              // 共享类型：1 整个磁盘，2 文件夹，3 单个文件
+    CString   m_name;              // 共享名（共享根的名字）
+    CString   m_displayPath;       // 分享者电脑上的显示路径
+    int       m_memberCount;       // 成员人数
+    int       m_state;             // 状态：1 有效，2 已取消
+    int       m_cancelReason;      // 取消原因，见 fstext::CancelReason；有效时为 0
+    long long m_createTime;        // 发起时间，Unix 毫秒
+    long long m_cancelTime;        // 取消时间，Unix 毫秒；有效时为 0
+
+    FileShareItem()
+        : m_shareId(0), m_enterpriseId(0), m_ownerId(0), m_ctype(0), m_cid(0), m_kind(0), m_memberCount(0),
+          m_state(0), m_cancelReason(0), m_createTime(0), m_cancelTime(0)
+    {
+    }
+};
+
+// 共享列表（fileshare/list.do）的解析结果。
+struct FileShareListResult
+{
+    bool                       m_transportOk;  // HTTP 往返是否成功
+    int                        m_code;         // 业务错误码
+    CString                    m_message;      // 失败时给用户看的中文提示
+    int                        m_total;        // 满足筛选条件的总条数
+    std::vector<FileShareItem> m_list;         // 本页共享，按共享 ID 倒序（成功时有效）
+
+    FileShareListResult()
+        : m_transportOk(false), m_code(0), m_total(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 共享的一个成员（fileshare/members.do 的 members 项）。
+struct FileShareMemberItem
+{
+    long long m_userId;    // 成员 userid
+    CString   m_name;      // 成员昵称
+    CString   m_account;   // 成员账号
+    int       m_perms;     // 写权限位的组合，见 fstext::PermBit；0 表示只读
+
+    FileShareMemberItem()
+        : m_userId(0), m_perms(0)
+    {
+    }
+};
+
+// 共享成员（fileshare/members.do）的解析结果。
+struct FileShareMembersResult
+{
+    bool                             m_transportOk;  // HTTP 往返是否成功
+    int                              m_code;         // 业务错误码；共享不存在 130，不属于本企业 132
+    CString                          m_message;      // 失败时给用户看的中文提示
+    std::vector<FileShareMemberItem> m_members;      // 成员列表（成功时有效）
+
+    FileShareMembersResult()
+        : m_transportOk(false), m_code(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 一条文件共享审计记录（fileshare/audit.do 的 list 项）。
+struct FileShareAuditItem
+{
+    long long m_id;            // 记录 ID
+    long long m_time;          // 记录时间，Unix 毫秒
+    long long m_shareId;       // 共享 ID
+    CString   m_shareName;     // 共享名
+    long long m_ownerId;       // 分享者 userid
+    CString   m_ownerName;     // 分享者昵称
+    long long m_actorId;       // 操作人：普通用户为 userid，管理员为管理员 ID
+    CString   m_actorName;     // 操作人名称：普通用户为昵称，管理员为姓名
+    bool      m_actorIsAdmin;  // 操作人是否为后台管理员
+    int       m_action;        // 动作，见 fstext::AuditAction
+    int       m_source;        // 来源：1 服务端记录，2 分享者客户端上报
+    CString   m_path;          // 相对共享根的路径；申请传输时为条目清单的摘要
+    CString   m_toPath;        // 重命名后的新名字或移动的目标目录；其余动作为空
+    long long m_size;          // 涉及的字节数；没有字节数的动作为 0
+    int       m_result;        // 0 成功，否则为错误码（800 段）
+    CString   m_accessId;      // 所属访问会话 ID；与访问会话无关的动作为空
+
+    FileShareAuditItem()
+        : m_id(0), m_time(0), m_shareId(0), m_ownerId(0), m_actorId(0), m_actorIsAdmin(false), m_action(0),
+          m_source(0), m_size(0), m_result(0)
+    {
+    }
+};
+
+// 文件共享审计列表（fileshare/audit.do）的解析结果。
+struct FileShareAuditListResult
+{
+    bool                            m_transportOk;  // HTTP 往返是否成功
+    int                             m_code;         // 业务错误码
+    CString                         m_message;      // 失败时给用户看的中文提示
+    int                             m_total;        // 满足筛选条件的总条数
+    std::vector<FileShareAuditItem> m_list;         // 本页记录，按时间倒序（成功时有效）
+
+    FileShareAuditListResult()
+        : m_transportOk(false), m_code(0), m_total(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 构造读功能设置请求（POST /admin/setting/get.do）。
+//   enterpriseId：平台管理员要读的企业，必须大于 0；企业管理员传 0（请求里不带，服务端按本企业处理）。
+HttpRequest MakeFeatureSettingsRequest(const ServerConfig& server, const CString& token, long long enterpriseId);
+
+// 解析读功能设置应答，得到 FeatureSettingsResult。
+FeatureSettingsResult ParseFeatureSettingsResponse(const HttpResult& http);
+
+// 构造改功能设置请求（POST /admin/setting/set.do）。
+//   enterpriseId：同 MakeFeatureSettingsRequest。key：设置项名称。value：新取值（如 "0" / "1"）。
+HttpRequest MakeFeatureSetRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                  const CString& key, const CString& value);
+
+// 解析改功能设置应答，得到 FeatureSetResult。
+FeatureSetResult ParseFeatureSetResponse(const HttpResult& http);
+
+// 构造共享列表请求（POST /admin/fileshare/list.do）。
+//   enterpriseId：平台管理员按企业过滤，0 表示全部企业；企业管理员传什么都按本企业处理。
+//   keyword：按分享者的账号或昵称模糊搜索；空串表示不筛选。
+//   state：1 只看有效，2 只看已取消，0 全部。
+//   page：页号，从 1 起。pageSize：每页条数，服务端上限 200。
+HttpRequest MakeFileShareListRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                     const CString& keyword, int state, int page, int pageSize);
+
+// 解析共享列表应答，得到 FileShareListResult。
+FileShareListResult ParseFileShareListResponse(const HttpResult& http);
+
+// 构造共享成员请求（POST /admin/fileshare/members.do）。shareId：共享 ID。
+HttpRequest MakeFileShareMembersRequest(const ServerConfig& server, const CString& token, long long shareId);
+
+// 解析共享成员应答，得到 FileShareMembersResult。
+FileShareMembersResult ParseFileShareMembersResponse(const HttpResult& http);
+
+// 构造强制取消共享请求（POST /admin/fileshare/cancel.do）。应答复用 ParseEnterpriseActionResponse：
+// 共享不存在为 130，已取消过为 131，不属于本企业为 132。
+//   shareId：共享 ID。
+HttpRequest MakeFileShareCancelRequest(const ServerConfig& server, const CString& token, long long shareId);
+
+// 构造文件共享审计请求（POST /admin/fileshare/audit.do）。
+//   enterpriseId：同 MakeFileShareListRequest。
+//   actorKeyword：按操作人的账号或昵称（管理员按姓名）模糊搜索；空串表示不筛选。
+//   action：动作，见 fstext::AuditAction；0 表示全部动作。
+//   startTime / endTime：时间范围，Unix 毫秒，两端都包含；0 表示该端不限。
+//   shareId：只看这个共享；0 表示不限。
+//   page：页号，从 1 起。pageSize：每页条数，服务端上限 200。
+HttpRequest MakeFileShareAuditRequest(const ServerConfig& server, const CString& token, long long enterpriseId,
+                                      const CString& actorKeyword, int action, long long startTime,
+                                      long long endTime, long long shareId, int page, int pageSize);
+
+// 解析文件共享审计应答，得到 FileShareAuditListResult。
+FileShareAuditListResult ParseFileShareAuditResponse(const HttpResult& http);
 
 } // namespace adminapi
 

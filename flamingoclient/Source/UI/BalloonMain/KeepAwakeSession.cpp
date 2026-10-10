@@ -14,15 +14,19 @@
 #include <tchar.h>          // _T（本 .cpp 不走 stdafx.h，须自行引入）
 
 #include "../../Common/Log/IULog.h"
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonmain {
 
 namespace {
 
 // 传给 PowerCreateRequest 的理由说明。管理员执行 `powercfg /requests` 时显示的就是这句，
-// 因此需写明是哪个程序、因何阻止休眠。REASON_CONTEXT 要求非 const 指针，故用数组而非
-// 字符串常量指针。
-WCHAR g_szPowerRequestReason[] = L"FlamingoIM：用户开启了「禁止机器休眠」";
+// 因此需写明是哪个程序、因何阻止休眠。这里只做标记（TR_NOOP），创建请求时再取译文。
+const wchar_t* const kPowerRequestReason = TR_NOOP(L"FlamingoIM：用户开启了「禁止机器休眠」");
+
+// 理由说明的译文副本。REASON_CONTEXT 要求非 const 指针，TR 返回的是只读文字，所以先复制到这里；
+// 与进程同生命周期，与改造前的全局数组一致，不依赖 PowerCreateRequest 是否复制该字符串
+std::wstring g_strPowerRequestReason;
 
 // SetThreadExecutionState 回落路径使用的标志组合。
 //   ES_CONTINUOUS       —— 该状态持续有效，直到下次显式修改（不加它则只生效一次）
@@ -105,7 +109,8 @@ bool CKeepAwakeSession::Acquire()
     ::ZeroMemory(&ctx, sizeof(ctx));
     ctx.Version                    = POWER_REQUEST_CONTEXT_VERSION;
     ctx.Flags                      = POWER_REQUEST_CONTEXT_SIMPLE_STRING;
-    ctx.Reason.SimpleReasonString  = g_szPowerRequestReason;
+    g_strPowerRequestReason = TR(kPowerRequestReason);
+    ctx.Reason.SimpleReasonString  = &g_strPowerRequestReason[0];
 
     HANDLE hRequest = ::PowerCreateRequest(&ctx);
     if (hRequest != NULL && hRequest != INVALID_HANDLE_VALUE)

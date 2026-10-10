@@ -87,6 +87,57 @@ void DrawShield(Gdiplus::Graphics& g, Gdiplus::Pen& pen)
     g.DrawPolygon(&pen, shield, 6);
 }
 
+// 敏感词：与「审计日志」同一个盾牌轮廓，内部加一个感叹号，表示「拦截 / 警示」。
+void DrawShieldAlert(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::SolidBrush& brush)
+{
+    DrawShield(g, pen);
+    g.DrawLine(&pen, 12.0f, 7.5f, 12.0f, 12.5f);        // 感叹号竖杆
+    g.FillEllipse(&brush, 10.9f, 14.6f, 2.2f, 2.2f);    // 感叹号圆点
+}
+
+void DrawFolderSearch(Gdiplus::Graphics& g, Gdiplus::Pen& pen)
+{
+    // 文件夹轮廓的右下角让出一块，压一个小放大镜（镜片圆 + 手柄斜线）。
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+    Gdiplus::PointF folder[6] =
+    {
+        Gdiplus::PointF(12.0f, 19.0f), Gdiplus::PointF(3.5f,  19.0f),
+        Gdiplus::PointF(3.5f,  6.5f),  Gdiplus::PointF(9.0f,  6.5f),
+        Gdiplus::PointF(11.0f, 9.0f),  Gdiplus::PointF(20.5f, 9.0f),
+    };
+    g.DrawLines(&pen, folder, 6);
+    g.DrawLine(&pen, 20.5f, 9.0f, 20.5f, 12.0f);
+    g.DrawEllipse(&pen, 13.0f, 12.5f, 5.5f, 5.5f);
+    g.DrawLine(&pen, 18.0f, 17.5f, 21.0f, 20.5f);
+}
+
+void DrawBot(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::SolidBrush& brush)
+{
+    // 机器人头像：圆角方头 + 两只眼睛 + 嘴 + 头顶一根天线（顶端一个圆点）+ 两侧耳朵。
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    Gdiplus::GraphicsPath head;
+    const float x = 4.5f;    // 头部左边
+    const float y = 8.0f;    // 头部顶边
+    const float w = 15.0f;   // 头部宽度
+    const float h = 12.0f;   // 头部高度
+    const float r = 3.0f;    // 头部圆角半径
+    head.AddArc(x, y, r * 2, r * 2, 180.0f, 90.0f);
+    head.AddArc(x + w - r * 2, y, r * 2, r * 2, 270.0f, 90.0f);
+    head.AddArc(x + w - r * 2, y + h - r * 2, r * 2, r * 2, 0.0f, 90.0f);
+    head.AddArc(x, y + h - r * 2, r * 2, r * 2, 90.0f, 90.0f);
+    head.CloseFigure();
+    g.DrawPath(&pen, &head);
+    g.DrawLine(&pen, 12.0f, 8.0f, 12.0f, 5.0f);          // 天线
+    g.FillEllipse(&brush, 10.8f, 2.6f, 2.4f, 2.4f);      // 天线顶端的圆点
+    g.FillEllipse(&brush, 8.2f, 11.8f, 2.4f, 2.4f);      // 左眼
+    g.FillEllipse(&brush, 13.4f, 11.8f, 2.4f, 2.4f);     // 右眼
+    g.DrawLine(&pen, 9.5f, 16.8f, 14.5f, 16.8f);         // 嘴
+    g.DrawLine(&pen, 2.5f, 12.5f, 2.5f, 15.5f);          // 左耳
+    g.DrawLine(&pen, 21.5f, 12.5f, 21.5f, 15.5f);        // 右耳
+}
+
 void DrawSettings(Gdiplus::Graphics& g, Gdiplus::Pen& pen)
 {
     // 齿轮：外圈 8 个短齿（径向线）+ 圆环 + 圆心。
@@ -453,6 +504,18 @@ void DrawIconCore(Gdiplus::Graphics& g, Icon icon, COLORREF color)
     case Icon::Warning:      DrawWarning(g, pen, brush);   break;
     case Icon::Refresh:      DrawRefresh(g, pen, brush);   break;
     case Icon::Download:     DrawDownload(g, pen, brush);  break;
+    //侧栏「敏感词」导航项：盾牌内一个感叹号
+    case Icon::ShieldAlert:
+        DrawShieldAlert(g, pen, brush);
+        break;
+    //侧栏「共享审计」导航项：文件夹压一个放大镜
+    case Icon::FolderSearch:
+        DrawFolderSearch(g, pen);
+        break;
+    //侧栏「机器人」导航项：机器人头像
+    case Icon::Bot:
+        DrawBot(g, pen, brush);
+        break;
     default:                                              break;
     }
 }

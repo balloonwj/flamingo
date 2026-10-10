@@ -22,8 +22,17 @@ namespace flamingoadmin {
 class DataStore
 {
 public:
-    // 取全局唯一实例。首次调用时从种子数据完成构建。
+    // 取全局唯一实例。首次调用时构建一个空的数据层：产品代码的数据全部来自服务端，
+    // 种子数据只给单元测试用（见 LoadSeedData）。
     static DataStore& Instance();
+
+    // 清空全部缓存（企业、组织树、服务号、公告、审计日志、消息趋势）。登出与会话失效时
+    // 调用，换账号登录后不会看到上一位管理员的数据。
+    void Clear();
+
+    // 先清空，再装入演示用的种子数据（BuildSeed*）。只供单元测试使用；产品代码不调用，
+    // 否则接口加载失败时界面上会显示虚构的企业、公告与审计记录。
+    void LoadSeedData();
 
     // ---- 企业 ----------------------------------------------------------
 
@@ -54,6 +63,12 @@ public:
     //   services：该企业的服务号列表。
     void InjectEnterpriseDetail(const Enterprise& e, const OrgNode& orgTree,
                                 const std::vector<Service>& services);
+
+    // 只替换某企业的企业记录（组织树、服务号不动）。企业设置保存成功后由 AdminFrame 调用，此前从企业
+    // 详情屏保存后缓存里仍是旧记录，再打开设置窗口显示的是旧值（2026-10-06 修正）。
+    //   e：新的企业记录，按其 m_id 查找。
+    //   返回：缓存里有这家企业并已替换返回 true；没有时什么都不做、返回 false。
+    bool UpdateEnterpriseRecord(const Enterprise& e);
 
     // 用从服务端重新拉取的组织树整体覆盖某企业的组织树。组织写操作（增删
     // 部门 / 员工）成功后，重拉 dept/tree.do 并据此刷新详情屏。

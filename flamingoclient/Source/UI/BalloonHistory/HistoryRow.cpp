@@ -13,6 +13,7 @@
 #include "../BalloonChatWnd/ChatFileVisual.h"  // FileTypeColor（与文件气泡共用配色）
 #include "../BalloonChatWnd/ChatImageCache.h"  // 缩略图的后台解码与缓存
 #include "../BalloonChatWnd/ImagePlaceholder.h"  // 破图 / 需要下载 / 下载中的占位绘制（与聊天气泡共用）
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -51,13 +52,13 @@ static const COLORREF kDefaultPinColor = RGB(0xE6, 0x8A, 0x2E);
 static const Gdiplus::REAL kPinStrokeWidth = 1.6f;
 
 //鼠标停在图钉上时的提示文字：点击图钉就是取消 Pin（与聊天气泡上那枚的提示一致）。
-static const wchar_t* const kPinMarkTooltip = L"取消 Pin";
+static const wchar_t* const kPinMarkTooltip = TR_NOOP(L"取消 Pin");
 
 HistoryPinMark::HistoryPinMark()
     : m_color(kDefaultPinColor)
 {
     //鼠标进入本控件时 DuiHost 会为已登记的控件自动弹出提示，不必自己处理悬停。
-    balloonwjui::DuiToolTipMgr::Inst().Register(this, kPinMarkTooltip);
+    balloonwjui::DuiToolTipMgr::Inst().Register(this, TR(kPinMarkTooltip));
 }
 
 bool HistoryPinMark::OnSetCursor(POINT /*pt*/)
@@ -280,7 +281,7 @@ void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
             HFONT font = ::CreateFont(-::MulDiv(kThumbExtPointSize, 96, 72), 0, 0, 0,
                                       FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                      CLEARTYPE_QUALITY, DEFAULT_PITCH, _T("微软雅黑"));
+                                      CLEARTYPE_QUALITY, DEFAULT_PITCH, i18n::UiFontName());
             HFONT oldFont = (HFONT)::SelectObject(hdc, font);
             RECT textRc = rc;
             ::DrawText(hdc, m_ext, -1, &textRc,
@@ -346,9 +347,13 @@ void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 
     //图片：命中缓存就画缩放好的图，未命中画占位块并请求后台解码。
     //缓存键含展示尺寸，故这里传的宽高要与实际绘制尺寸一致。
+    //一律按居中裁切缩放：「图片」网格的格子是固定的正方形，原图宽高缺失时预览图与卡片缩略图
+    //也取固定方框，整张缩放会把非方形的图压扁；宽高比已与原图一致时裁切区域就是整张图。
+    //Get / IsFailed / Request 三处须传同一个缩放方式，否则缓存键对不上。
     if (!m_path.empty())
     {
-        Gdiplus::Bitmap* bmp = balloonchatwnd::ChatImageCache::Inst().Get(m_path, w, h);
+        Gdiplus::Bitmap* bmp = balloonchatwnd::ChatImageCache::Inst().Get(m_path, w, h,
+                                                                           balloonchatwnd::kImageFitCover);
         if (bmp != NULL)
         {
             Gdiplus::GraphicsPath clipPath;
@@ -368,7 +373,7 @@ void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 
     //本地原图解码失败（文件损坏）：画破图。窗口判定状态时并不解码，所以这一情形只能
     //在绘制时按缓存的失败记录来认。
-    if (balloonchatwnd::ChatImageCache::Inst().IsFailed(m_path, w, h))
+    if (balloonchatwnd::ChatImageCache::Inst().IsFailed(m_path, w, h, balloonchatwnd::kImageFitCover))
     {
         balloonchatwnd::DrawBrokenImageGlyph(g, centerX, centerY, brokenSize,
                                              balloonchatwnd::kImagePlaceholderGlyphStroke);
@@ -376,7 +381,72 @@ void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     }
 
     //请求后台解码。已缓存 / 进行中 / 已记下失败的都会被内部去重，重复调用无害。
-    balloonchatwnd::ChatImageCache::Inst().Request(m_path, w, h);
+    balloonchatwnd::ChatImageCache::Inst().Request(m_path, w, h, balloonchatwnd::kImageFitCover);
+}
+
+// ---- HistoryCardThumb -----------------------------------------------------
+
+//「+N」那层半透明深色的不透明度（0~255）
+static const BYTE kCardExtraShadeAlpha = 120;
+//「+N」的字号（磅）
+static const int kCardExtraPointSize = 14;
+//屏幕每英寸像素数与每英寸磅数：磅换算成像素高度用
+static const int kScreenDpi = 96;
+static const int kPointsPerInch = 72;
+
+HistoryCardThumb::HistoryCardThumb()
+    : m_extra(0)
+{
+}
+
+void HistoryCardThumb::SetExtraCount(int extra)
+{
+    m_extra = (extra > 0) ? extra : 0;
+    Invalidate();
+}
+
+void HistoryCardThumb::OnPaint(HDC hdc, const RECT& rcDirty)
+{
+    HistoryRowThumb::OnPaint(hdc, rcDirty);
+    if (m_extra <= 0)
+    {
+        return;
+    }
+    const RECT rc = GetRect();
+    if (rc.right <= rc.left || rc.bottom <= rc.top)
+    {
+        return;
+    }
+    //整张盖一层半透明深色，图片仍隐约可见，与帖子群窗口左栏卡片的「+N」一致
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        Gdiplus::SolidBrush shade(Gdiplus::Color(kCardExtraShadeAlpha, 0, 0, 0));
+        Gdiplus::GraphicsPath path;
+        AddRoundRectPath(path, rc, kThumbCorner);
+        g.FillPath(&shade, &path);
+    }
+    //文字用 GDI 画，与类型色块里的扩展名同一套字体渲染
+    CString text;
+    text.Format(_T("+%d"), m_extra);
+    const int oldBk = ::SetBkMode(hdc, TRANSPARENT);
+    const COLORREF oldClr = ::SetTextColor(hdc, RGB(0xFF, 0xFF, 0xFF));
+    HFONT font = ::CreateFont(-::MulDiv(kCardExtraPointSize, kScreenDpi, kPointsPerInch), 0, 0, 0,
+                              FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              CLEARTYPE_QUALITY, DEFAULT_PITCH, i18n::UiFontName());
+    HFONT oldFont = (HFONT)::SelectObject(hdc, font);
+    RECT textRc = rc;
+    ::DrawText(hdc, text, -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    ::SelectObject(hdc, oldFont);
+    ::DeleteObject(font);
+    ::SetTextColor(hdc, oldClr);
+    ::SetBkMode(hdc, oldBk);
+}
+
+bool HistoryCardThumb::OnLButtonDblClk(POINT /*pt*/, UINT /*mkFlags*/)
+{
+    return true;
 }
 
 // ---- HistoryRow -----------------------------------------------------------

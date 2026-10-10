@@ -11,6 +11,10 @@
 #include "TcpSession.h"
 #include <memory>
 
+//文件共享管理接口的私有辅助函数要用到，只需前向声明
+namespace Json { class Value; }
+struct AdminInfo;
+
 using namespace net;
 
 class HttpSession
@@ -106,6 +110,8 @@ private:
     void onAdminAnnouncementSend(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     void onAdminAnnouncementDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     void onAdminAnnouncementRecall(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //announcement/repush.do：把一条已发布的公告重新推送给在线且未读的受众，应答带推送人数 pushed；仅平台超管可调用
+    void onAdminAnnouncementRepush(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     void onAdminAnnouncementSetPinned(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
 
     //==== admin 控制台接口处理器（审计日志模块）====
@@ -138,7 +144,87 @@ private:
     //群组管理：在企业详情页把企业成员拉进一个群，指定群主、可选管理员（/admin/group/create.do）。
     void onAdminGroupCreate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
 
+    //==== admin 控制台接口处理器（敏感词模块，/admin/sensitive/*.do）====
+    //企业管理员只能操作本企业的词库与拦截记录；平台超级管理员须在请求里用 enterpriseid
+    //指定企业。接口说明见 docs/Admin控制台接口文档.md 的「敏感词」一节。
+    //词库分页列表，应答附带总开关状态与该企业词条总数
+    void onAdminSensitiveList(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //添加一条词条
+    void onAdminSensitiveAdd(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //修改一条词条的原文、分类与备注
+    void onAdminSensitiveUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //删除一条或多条词条
+    void onAdminSensitiveDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //批量导入，应答列出被跳过的行与原因
+    void onAdminSensitiveImport(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //导出全部词条，应答正文是纯文本（每行一条）
+    void onAdminSensitiveExport(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //设置企业的敏感词过滤总开关
+    void onAdminSensitiveSetEnabled(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //拦截记录分页列表
+    void onAdminSensitiveHits(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
+    //==== admin 控制台接口处理器（企业问答，/admin/qa/*.do，docs/群问答方案.md）====
+    //企业管理员只能操作本企业的问答；平台超级管理员须在请求里用 enterpriseid 指定企业。
+    //本企业全部企业问答（每条带应用到的群）
+    void onAdminQaList(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //新增一条企业问答
+    void onAdminQaAdd(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //修改一条企业问答（内容与应用范围整份覆盖）
+    void onAdminQaUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //删除一条企业问答
+    void onAdminQaDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //列出本企业的群（群主属于本企业的群），供「应用到所选的群」勾选
+    void onAdminQaGroups(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
+    //以下为机器人的管理后台接口（/admin/bot/*.do，docs/机器人方案.md 6.3）与外部系统推送入口（/bot/webhook.do）
+    //本企业的企业机器人列表（不含规则）
+    void onAdminBotList(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //一个企业机器人的详情（含规则、Webhook 令牌与签名密钥）
+    void onAdminBotDetail(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //新建或修改企业机器人（含规则，整份覆盖）
+    void onAdminBotSave(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //删除企业机器人（软删除）
+    void onAdminBotDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //停用 / 启用企业机器人
+    void onAdminBotSetStatus(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //列出本企业的群，供「应用到所选的群」与定时消息的目标勾选
+    void onAdminBotGroups(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //「试一试」：按给定规则判定一段模拟输入，不发消息
+    void onAdminBotTry(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //重新生成 Webhook 令牌与签名密钥
+    void onAdminBotResetToken(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //读外部服务的域名白名单
+    void onAdminBotDomains(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //整份替换外部服务的域名白名单
+    void onAdminBotSetDomains(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //外部系统经 Webhook 推送内容，由机器人发到群里（不需要管理员 token，凭机器人的 Webhook 令牌）
+    void onBotWebhook(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
+    //以下为文件共享的管理后台接口（docs/文件共享方案.md 6.5、docs/Admin控制台接口文档.md「文件共享」一章）
+    //读一个企业的功能设置（fileshare.enabled、p2p.enabled 与 group.inviteconfirm 的取值及是否为默认值）
+    void onAdminSettingGet(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //改一个企业的功能设置：写库后向该企业在线用户推 1013，开关关闭时结束该企业的全部访问
+    void onAdminSettingSet(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //分页查共享
+    void onAdminFileShareList(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //读一个共享的成员与权限
+    void onAdminFileShareMembers(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //强制取消一个共享
+    void onAdminFileShareCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //分页查文件共享的审计记录
+    void onAdminFileShareAudit(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
 private:
+    //文件共享管理接口的公共步骤：解析请求体并校验令牌，失败时已回包、返回 false
+    bool prepareFileShareRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn, Json::Value& root,
+                                 AdminInfo& admin);
+    //文件共享管理接口回包：成功时把应答主体并上 code 与 msg，失败时只回 code 与 msg（rc 为 file_share_admin_result）
+    void sendFileShareResult(const std::shared_ptr<TcpConnection>& conn, int rc, Json::Value& out);
+    //确定读写功能设置作用的企业：企业管理员为本企业，平台管理员须指定且企业存在；失败时已回包、返回 false
+    bool resolveSettingEnterprise(const std::shared_ptr<TcpConnection>& conn, const Json::Value& root, const AdminInfo& admin,
+                                  int64_t& enterpriseId);
+
     std::weak_ptr<TcpConnection>       m_tmpConn;
 };
 

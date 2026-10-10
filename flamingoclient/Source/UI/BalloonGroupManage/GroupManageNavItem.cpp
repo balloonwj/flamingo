@@ -37,6 +37,8 @@ extern CAppModule _Module;
 #include "GroupManageNavItem.h"
 #include "GroupManageIcons.h"
 #include "GroupManagePaint.h"
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
+#include "../../Common/I18n/I18nLayout.h"   // i18n::MeasureUiTextWidth：按半粗体量导航文字宽度
 
 namespace balloongroupmanage {
 
@@ -59,6 +61,9 @@ const int kBadgeHPad        = 7;   // 徽章文字左右内边距
 const GmTextStyle kLabelStyle = kGmTextItemTitle;
 const GmTextStyle kBadgeStyle = kGmTextCaption;
 const int kLabelBadgeGap    = 6;   // 文字右缘与徽章左缘之间至少留出的距离
+
+// 量导航项所需宽度时，计数徽章按这段文字的宽度预留（两位数；三位数时徽章略宽，文字以省略号结尾）
+const wchar_t kBadgeReserveText[] = L"99";
 
 // 图标描边宽度。单位是图标 24 格视图坐标（见 DrawGmNavIcon），已随图标边长缩放，
 // 不再按 DPI 换算。
@@ -97,7 +102,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight)
     HFONT hFont = ::CreateFontW(
         -GmFontPixelHeight(pixelHeight), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;
@@ -240,6 +245,45 @@ void GroupManageNavItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     RECT textRc = { left + labelX, top, badgeLeft - labelGap, m_rcItem.bottom };
     GmDrawText(hdc, (LPCWSTR)m_label, textRc, labelSpec.m_px, textWeight, textColor,
                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+}
+
+int GroupManageNavItem::MeasureRequiredWidth(bool reserveBadge) const
+{
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return 0;
+    }
+
+    // 文字：选中项是半粗体，按半粗体量，选中与否都放得下
+    const GmTextSpec labelSpec = GmTextStyleSpec(kLabelStyle);
+    const int labelW = i18n::MeasureUiTextWidth((LPCWSTR)m_label, GmFontPixelHeight(labelSpec.m_px), true);
+
+    // 徽章：与 OnPaint 的算法相同，宽度不足高度时取高度
+    int badgeW = 0;
+    if (m_count > 0 || reserveBadge)
+    {
+        CString countText;
+        countText.Format(_T("%d"), m_count);
+        const int badgePx = GmTextStyleSpec(kBadgeStyle).m_px;
+        int textW = MeasureTextWidth(hdc, (LPCWSTR)countText, badgePx);
+        if (reserveBadge)
+        {
+            const int reserveW = MeasureTextWidth(hdc, kBadgeReserveText, badgePx);
+            if (reserveW > textW)
+            {
+                textW = reserveW;
+            }
+        }
+        badgeW = textW + GmScale(kBadgeHPad) * 2;
+        if (badgeW < GmScale(kBadgeHeight))
+        {
+            badgeW = GmScale(kBadgeHeight);
+        }
+    }
+    ::ReleaseDC(NULL, hdc);
+
+    return GmScale(kLabelX) + labelW + GmScale(kLabelBadgeGap) + badgeW + GmScale(kBadgeRightPad);
 }
 
 } // namespace balloongroupmanage

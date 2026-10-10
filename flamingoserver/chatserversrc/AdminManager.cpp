@@ -401,28 +401,45 @@ void AdminManager::getDashboardStats(int64_t enterpriseId, DashboardStats& outSt
     if (!pConn)
         return;
 
-    outStats.enterprisesTotal   = queryCount(pConn.get(), "SELECT COUNT(*) FROM t_enterprise");
-    outStats.enterprisesActive  = queryCount(pConn.get(), "SELECT COUNT(*) FROM t_enterprise WHERE f_status = 1");
-    outStats.enterprisesPending = queryCount(pConn.get(), "SELECT COUNT(*) FROM t_enterprise WHERE f_status = 0");
-
-    //平台超管统计全部企业员工；企业级管理员只统计本企业。
+    //平台超管统计全平台；企业级管理员的每一项都只统计本企业（与 audit/list.do 的口径一致），
+    //企业数按本企业的状态计：总数为 1，活跃 / 待审核按其 f_status 取 0 或 1。
     if (enterpriseId == 0)
     {
+        outStats.enterprisesTotal   = queryCount(pConn.get(), "SELECT COUNT(*) FROM t_enterprise");
+        outStats.enterprisesActive  = queryCount(pConn.get(), "SELECT COUNT(*) FROM t_enterprise WHERE f_status = 1");
+        outStats.enterprisesPending = queryCount(pConn.get(), "SELECT COUNT(*) FROM t_enterprise WHERE f_status = 0");
+        //只算真实员工：机器人与服务号账号（f_usertype 非 0）不计入（docs/机器人方案.md §3.2）
         outStats.usersTotal = queryCount(pConn.get(),
-            "SELECT COUNT(*) FROM t_user WHERE f_enterprise_id <> 0");
-    }
-    else
-    {
-        char sql[ADMIN_SQL_BUF_LEN] = { 0 };
-        snprintf(sql, sizeof(sql),
-            "SELECT COUNT(*) FROM t_user WHERE f_enterprise_id = %lld", (long long)enterpriseId);
-        outStats.usersTotal = queryCount(pConn.get(), sql);
+            "SELECT COUNT(*) FROM t_user WHERE f_enterprise_id <> 0 AND f_usertype = 0");
+        outStats.auditToday = queryCount(pConn.get(),
+            "SELECT COUNT(*) FROM t_admin_audit_log WHERE f_create_time >= CURDATE()");
+        outStats.auditTodayWarn = queryCount(pConn.get(),
+            "SELECT COUNT(*) FROM t_admin_audit_log WHERE f_create_time >= CURDATE() AND f_severity >= 1");
+        return;
     }
 
-    outStats.auditToday = queryCount(pConn.get(),
-        "SELECT COUNT(*) FROM t_admin_audit_log WHERE f_create_time >= CURDATE()");
-    outStats.auditTodayWarn = queryCount(pConn.get(),
-        "SELECT COUNT(*) FROM t_admin_audit_log WHERE f_create_time >= CURDATE() AND f_severity >= 1");
+    const long long entId = (long long)enterpriseId;
+    char sql[ADMIN_SQL_BUF_LEN] = { 0 };
+    snprintf(sql, sizeof(sql),
+        "SELECT COUNT(*) FROM t_enterprise WHERE f_enterprise_id = %lld", entId);
+    outStats.enterprisesTotal = queryCount(pConn.get(), sql);
+    snprintf(sql, sizeof(sql),
+        "SELECT COUNT(*) FROM t_enterprise WHERE f_enterprise_id = %lld AND f_status = 1", entId);
+    outStats.enterprisesActive = queryCount(pConn.get(), sql);
+    snprintf(sql, sizeof(sql),
+        "SELECT COUNT(*) FROM t_enterprise WHERE f_enterprise_id = %lld AND f_status = 0", entId);
+    outStats.enterprisesPending = queryCount(pConn.get(), sql);
+    snprintf(sql, sizeof(sql),
+        "SELECT COUNT(*) FROM t_user WHERE f_enterprise_id = %lld AND f_usertype = 0", entId);
+    outStats.usersTotal = queryCount(pConn.get(), sql);
+    snprintf(sql, sizeof(sql),
+        "SELECT COUNT(*) FROM t_admin_audit_log WHERE f_create_time >= CURDATE() AND f_enterprise_id = %lld",
+        entId);
+    outStats.auditToday = queryCount(pConn.get(), sql);
+    snprintf(sql, sizeof(sql),
+        "SELECT COUNT(*) FROM t_admin_audit_log WHERE f_create_time >= CURDATE() AND f_severity >= 1 "
+        "AND f_enterprise_id = %lld", entId);
+    outStats.auditTodayWarn = queryCount(pConn.get(), sql);
 }
 
 //算出近 14 天的日期序列（最旧→今天）：outYmd 为 "YYYY-MM-DD"（用于匹配 SQL

@@ -4,6 +4,7 @@
  */
 #include "GroupManager.h"
 #include <memory>
+#include <set>
 #include <sstream>
 #include <vector>
 #include <time.h>          //time()，禁言到期判定取当前时刻用
@@ -15,6 +16,9 @@
 #include "../base/Singleton.h"
 #include "UserManager.h"   //仅为复用群ID下界宏 GROUPID_BOUBDARY
 #include "GroupAutoName.h" //自动群名的生成规则
+#include "MessageSearchText.h" //MakeLikeContainsPattern：群公告搜索的 LIKE 匹配串
+#include "../dbapi/SqlDialect.h" //dbapi::EscapeString（搜索关键字拼进 SQL 前转义）
+#include "MessageManager.h"        //GroupSearchScope：getUserHistoryScopes 的出参
 
 /**
  *  执行一条只返回一个整数的查询（如 SELECT MAX(...)），取回这个整数。
@@ -95,6 +99,51 @@ static std::string joinUserIds(const std::vector<int64_t>& userids)
     return os.str();
 }
 
+//一条多行 INSERT 最多带多少个成员行。500 行约 30KB，远低于两种后端的语句长度上限；企业群上限也在这个量级，
+//常见规模一条语句写完
+static const size_t kMemberInsertBatch = 500;
+
+/**
+ *  把一批成员行按 kMemberInsertBatch 一条语句多行写入 t_group_member（INSERT IGNORE：已是成员的 userid 静默跳过，
+ *  同一批里重复的 userid 只写第一个）。调用方负责把它放进事务：逐条各自提交时每次都要刷盘，WSL 访问 /mnt/e 上的
+ *  SQLite 库时一次提交约 8 毫秒，166 人的群要 1.3 秒（用例 GB1，2026-10-08 实测）。
+ *    pConn：      数据库连接（借用，不持有）
+ *    groupid：    群ID
+ *    userids：    要写入的 userid；等于 skipUserId 的项跳过
+ *    role：       写入的角色，取值见 group_member_role
+ *    joinTime：   入群时间，Unix毫秒
+ *    historyFrom：能看到的最早一条群消息 msgid（f_history_from），0 表示不限
+ *    skipUserId： 要跳过的 userid（建群时为群主，群主一行另写）；0 表示不跳过
+ *  返回：全部语句执行成功返回 true；任一条失败返回 false（已执行的部分由调用方的事务回滚）
+ */
+static bool insertMemberRows(IDatabase* pConn, int64_t groupid, const std::vector<int64_t>& userids, int role,
+                             int64_t joinTime, int64_t historyFrom, int64_t skipUserId)
+{
+    size_t index = 0;
+    while (index < userids.size())
+    {
+        std::ostringstream osSql;
+        osSql << "INSERT IGNORE INTO t_group_member(f_groupid, f_userid, f_role, f_join_time, f_history_from) VALUES ";
+        size_t rows = 0;
+        for (; index < userids.size() && rows < kMemberInsertBatch; ++index)
+        {
+            if (skipUserId != 0 && userids[index] == skipUserId)
+                continue;
+            osSql << (rows > 0 ? ", " : "") << "(" << groupid << ", " << userids[index] << ", " << role << ", "
+                  << joinTime << ", " << historyFrom << ")";
+            ++rows;
+        }
+        if (rows == 0)
+            continue;
+        if (!pConn->execute(osSql.str().c_str()))
+        {
+            LOGE("insertMemberRows error, groupid: %lld, rows: %u", (long long)groupid, static_cast<unsigned>(rows));
+            return false;
+        }
+    }
+    return true;
+}
+
 GroupManager::GroupManager()
 {
 }
@@ -162,8 +211,8 @@ static const char* const kGroupSelectColumns =
     "g.f_groupid, g.f_name, g.f_facetype, g.f_customface, g.f_announcement, "
     "g.f_ownerid, g.f_join_mode, g.f_mute_all, g.f_create_time, "
     "g.f_intro, g.f_at_all_scope, g.f_new_see_history, g.f_member_invite, "
-    "g.f_welcome_on, g.f_welcome_text, g.f_sensitive_on, "
-    "g.f_announce_id, g.f_announce_title, g.f_announce_time, g.f_name_custom";
+    "g.f_welcome_on, g.f_welcome_text, "
+    "g.f_announce_id, g.f_announce_title, g.f_announce_time, g.f_name_custom, g.f_must_read_id, g.f_group_type";
 
 //群成员数子查询，接在 kGroupSelectColumns 之后作为最后一列
 static const char* const kGroupMemberCountColumn =
@@ -187,16 +236,17 @@ static void fillGroupRecord(Field* pRow, GroupRecord& g)
     g.memberinvite  = pRow[12].getInt32();
     g.welcomeon     = pRow[13].getInt32();
     g.welcometext   = pRow[14].getCppString();
-    g.sensitiveon   = pRow[15].getInt32();
-    g.announceid    = static_cast<int64_t>(pRow[16].getUInt64());
-    g.announcetitle = pRow[17].getCppString();
-    g.announcetime  = static_cast<int64_t>(pRow[18].getUInt64());
-    g.namecustom    = pRow[19].getInt32();
-    g.membercount   = pRow[20].getInt32();
+    g.announceid    = static_cast<int64_t>(pRow[15].getUInt64());
+    g.announcetitle = pRow[16].getCppString();
+    g.announcetime  = static_cast<int64_t>(pRow[17].getUInt64());
+    g.namecustom    = pRow[18].getInt32();
+    g.mustreadid    = static_cast<int64_t>(pRow[19].getUInt64());
+    g.grouptype     = pRow[20].getInt32();
+    g.membercount   = pRow[21].getInt32();
 }
 
 int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
-                                  const std::vector<int64_t>& memberids, int64_t createTime)
+                                  const std::vector<int64_t>& memberids, int64_t createTime, int groupType)
 {
     std::unique_ptr<IDatabase> pConn;
     pConn.reset(DbFactory::createConnection());
@@ -212,40 +262,48 @@ int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
     std::vector<char> escName(name.size() * 2 + 1, '\0');
     pConn->escapeString(&escName[0], name.c_str(), static_cast<uint32_t>(name.size()));
 
-    //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）。
-    //   群名为空时先写空串并标记为自动群名，等成员行写完再由 refreshAutoGroupName 生成
-    const int nameCustom = name.empty() ? 0 : 1;
-    std::ostringstream osGroup;
-    osGroup << "INSERT INTO t_group(f_groupid, f_name, f_name_custom, f_ownerid, f_create_time) VALUES("
-            << groupid << ", '" << &escName[0] << "', " << nameCustom << ", "
-            << ownerid << ", " << createTime << ")";
-    if (!pConn->execute(osGroup.str().c_str()))
+    //群行与全部成员行在一个事务里写入、一次提交（2026-10-08 建群卡顿：逐条各自提交时每条都要刷盘），
+    //任何一步失败整体回滚，不会留下只有一半成员的群
     {
-        LOGE("GroupManager::createGroup insert t_group error, name: %s", name.c_str());
-        return 0;
+        CDbTransaction transaction(pConn.get());
+        if (!transaction.IsActive())
+        {
+            LOGE("GroupManager::createGroup begin transaction error, owner: %d", ownerid);
+            return 0;
+        }
+
+        //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）。
+        //   群名为空时先写空串并标记为自动群名，等成员行写完再由 refreshAutoGroupName 生成。
+        //   群类型建群时写定，之后不再改（docs/帖子群方案.md）
+        const int nameCustomFlag = name.empty() ? 0 : 1;
+        std::ostringstream osGroup;
+        osGroup << "INSERT INTO t_group(f_groupid, f_name, f_name_custom, f_ownerid, f_create_time, f_group_type) VALUES("
+                << groupid << ", '" << &escName[0] << "', " << nameCustomFlag << ", "
+                << ownerid << ", " << createTime << ", " << groupType << ")";
+        if (!pConn->execute(osGroup.str().c_str()))
+        {
+            LOGE("GroupManager::createGroup insert t_group error, name: %s", name.c_str());
+            return 0;
+        }
+
+        //2) 写群主成员行
+        const std::vector<int64_t> owner(1, static_cast<int64_t>(ownerid));
+        if (!insertMemberRows(pConn.get(), groupid, owner, group_role_owner, createTime, 0, 0))
+            return 0;
+
+        //3) 写初始成员行（多行合并写入）；INSERT IGNORE 防御重复 userid，并跳过与群主相同的项
+        if (!insertMemberRows(pConn.get(), groupid, memberids, group_role_member, createTime, 0, ownerid))
+            return 0;
+
+        if (!transaction.Commit())
+        {
+            LOGE("GroupManager::createGroup commit error, groupid: %lld", (long long)groupid);
+            return 0;
+        }
     }
 
-    //2) 写群主成员行
-    std::ostringstream osOwner;
-    osOwner << "INSERT INTO t_group_member(f_groupid, f_userid, f_role, f_join_time) VALUES("
-            << groupid << ", " << ownerid << ", " << group_role_owner << ", " << createTime << ")";
-    pConn->execute(osOwner.str().c_str());
-
-    //3) 写初始成员行；用 INSERT IGNORE 防御重复 userid，并跳过与群主相同的项
-    for (size_t i = 0; i < memberids.size(); ++i)
-    {
-        if (memberids[i] == ownerid)
-            continue;
-
-        std::ostringstream osMember;
-        osMember << "INSERT IGNORE INTO t_group_member(f_groupid, f_userid, f_role, f_join_time) VALUES("
-                 << groupid << ", " << memberids[i] << ", " << group_role_member << ", "
-                 << createTime << ")";
-        pConn->execute(osMember.str().c_str());
-    }
-
-    //4) 没给群名的，按刚写入的成员生成自动群名
-    if (nameCustom == 0)
+    //4) 没给群名的，按刚写入的成员生成自动群名。须在提交之后：它另开一条连接读成员行
+    if (name.empty())
     {
         std::string autoName;
         refreshAutoGroupName(groupid, autoName);
@@ -272,53 +330,50 @@ int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
     std::vector<char> escName(name.size() * 2 + 1, '\0');
     pConn->escapeString(&escName[0], name.c_str(), static_cast<uint32_t>(name.size()));
 
-    //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）。
-    //   群名为空时先写空串并标记为自动群名，等成员行写完再由 refreshAutoGroupName 生成
-    const int nameCustom = name.empty() ? 0 : 1;
-    std::ostringstream osGroup;
-    osGroup << "INSERT INTO t_group(f_groupid, f_name, f_name_custom, f_ownerid, f_create_time) VALUES("
-            << groupid << ", '" << &escName[0] << "', " << nameCustom << ", "
-            << ownerid << ", " << createTime << ")";
-    if (!pConn->execute(osGroup.str().c_str()))
+    //群行与全部成员行在一个事务里写入、一次提交（理由同上一个版本），任何一步失败整体回滚
     {
-        LOGE("GroupManager::createGroup(admin) insert t_group error, name: %s", name.c_str());
-        return 0;
+        CDbTransaction transaction(pConn.get());
+        if (!transaction.IsActive())
+        {
+            LOGE("GroupManager::createGroup(admin) begin transaction error, owner: %d", ownerid);
+            return 0;
+        }
+
+        //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）。
+        //   群名为空时先写空串并标记为自动群名，等成员行写完再由 refreshAutoGroupName 生成
+        const int nameCustomFlag = name.empty() ? 0 : 1;
+        std::ostringstream osGroup;
+        osGroup << "INSERT INTO t_group(f_groupid, f_name, f_name_custom, f_ownerid, f_create_time) VALUES("
+                << groupid << ", '" << &escName[0] << "', " << nameCustomFlag << ", "
+                << ownerid << ", " << createTime << ")";
+        if (!pConn->execute(osGroup.str().c_str()))
+        {
+            LOGE("GroupManager::createGroup(admin) insert t_group error, name: %s", name.c_str());
+            return 0;
+        }
+
+        //2) 写群主成员行（角色为群主）
+        const std::vector<int64_t> owner(1, static_cast<int64_t>(ownerid));
+        if (!insertMemberRows(pConn.get(), groupid, owner, group_role_owner, createTime, 0, 0))
+            return 0;
+
+        //3) 写管理员成员行（角色为管理员）；INSERT IGNORE 防御重复 userid，并跳过与群主相同的项
+        if (!insertMemberRows(pConn.get(), groupid, adminids, group_role_admin, createTime, 0, ownerid))
+            return 0;
+
+        //4) 写普通成员行（角色为普通成员）；INSERT IGNORE 防御重复 userid，并跳过与群主相同的项
+        if (!insertMemberRows(pConn.get(), groupid, memberids, group_role_member, createTime, 0, ownerid))
+            return 0;
+
+        if (!transaction.Commit())
+        {
+            LOGE("GroupManager::createGroup(admin) commit error, groupid: %lld", (long long)groupid);
+            return 0;
+        }
     }
 
-    //2) 写群主成员行（角色为群主）
-    std::ostringstream osOwner;
-    osOwner << "INSERT INTO t_group_member(f_groupid, f_userid, f_role, f_join_time) VALUES("
-            << groupid << ", " << ownerid << ", " << group_role_owner << ", " << createTime << ")";
-    pConn->execute(osOwner.str().c_str());
-
-    //3) 写管理员成员行（角色为管理员）；INSERT IGNORE 防御重复 userid，并跳过与群主相同的项
-    for (size_t i = 0; i < adminids.size(); ++i)
-    {
-        if (adminids[i] == ownerid)
-            continue;
-
-        std::ostringstream osAdmin;
-        osAdmin << "INSERT IGNORE INTO t_group_member(f_groupid, f_userid, f_role, f_join_time) VALUES("
-                << groupid << ", " << adminids[i] << ", " << group_role_admin << ", "
-                << createTime << ")";
-        pConn->execute(osAdmin.str().c_str());
-    }
-
-    //4) 写普通成员行（角色为普通成员）；INSERT IGNORE 防御重复 userid，并跳过与群主相同的项
-    for (size_t i = 0; i < memberids.size(); ++i)
-    {
-        if (memberids[i] == ownerid)
-            continue;
-
-        std::ostringstream osMember;
-        osMember << "INSERT IGNORE INTO t_group_member(f_groupid, f_userid, f_role, f_join_time) VALUES("
-                 << groupid << ", " << memberids[i] << ", " << group_role_member << ", "
-                 << createTime << ")";
-        pConn->execute(osMember.str().c_str());
-    }
-
-    //5) 没给群名的，按刚写入的成员生成自动群名
-    if (nameCustom == 0)
+    //5) 没给群名的，按刚写入的成员生成自动群名。须在提交之后：它另开一条连接读成员行
+    if (name.empty())
     {
         std::string autoName;
         refreshAutoGroupName(groupid, autoName);
@@ -337,7 +392,7 @@ bool GroupManager::dismissGroup(int64_t groupid)
         return false;
     }
 
-    //依次删除：各成员对该群的收藏行与会话设置行、群公告、加群申请、敏感词、群文件条目、成员行，
+    //依次删除：各成员对该群的收藏行与会话设置行、群公告、加群申请、群文件条目、成员行，
     //最后删群本身。几点说明：
     //  · 群消息（t_chatmsg）保留不删，供企业日后审计追溯；群号也因此不会被新群复用，见 init。
     //  · 群文件只删条目，文件实体按 MD5 去重存放、可能被别的会话引用，不在这里删。
@@ -353,12 +408,19 @@ bool GroupManager::dismissGroup(int64_t groupid)
         os << "DELETE FROM t_conversation WHERE f_ctype = " << conversation_group << " AND f_cid = " << groupid;
         statements.push_back(os.str());
     }
-    //以下各表都按 f_groupid 定位
+    //以下各表都按 f_groupid 定位（t_group_follow 是各成员在本群的关注名单）
     const char* const kGroupTables[] = {
         "t_group_announcement",
         "t_group_join_request",
-        "t_group_sensitive_word",
         "t_group_file",
+        "t_group_follow",
+        "t_group_qa",               //本群问答（docs/群问答方案.md）
+        "t_enterprise_qa_group",    //企业问答应用到本群的登记
+        "t_group_link",             //加群链接（docs/邀请入群方案.md §12）
+        "t_thread_reaction",        //帖子群的互动（docs/帖子群方案.md 第 5 节；以下四张表普通群里没有行）
+        "t_thread_comment",         //帖子群的留言与回复
+        "t_thread_addendum",        //帖子群的楼主补充
+        "t_thread_post",            //帖子群的帖子
         "t_group_member",
         "t_group"
     };
@@ -372,8 +434,6 @@ bool GroupManager::dismissGroup(int64_t groupid)
     if (!executeInTransaction(pConn.get(), statements, "GroupManager::dismissGroup", groupid))
         return false;
 
-    //敏感词已从库里删掉，内存里的词库缓存也一并丢弃
-    invalidateSensitiveCache(groupid);
     LOGI("GroupManager::dismissGroup ok, groupid: %lld", (long long)groupid);
     return true;
 }
@@ -408,6 +468,36 @@ bool GroupManager::getGroup(int64_t groupid, GroupRecord& out)
     return found;
 }
 
+//群成员查询的 SELECT 列清单。getGroupMembers、getMember、getUserMemberships 三处都由 fillMemberRecord
+//按下标取值，列序必须逐字一致，故抽成一个常量；kMemberSelectColumnCount 是它的列数
+static const char* const kMemberSelectColumns =
+    "f_userid, f_role, f_card, f_muted, f_join_time, f_mute_until, f_mute_reason, f_history_from, f_must_read";
+static const int kMemberSelectColumnCount = 9;
+
+//按 kMemberSelectColumns 的列序填一条群成员记录。now 为当前时间（Unix 毫秒），用于禁言到期判定
+static void fillMemberRecord(Field* pRow, int64_t now, GroupMemberRecord& m)
+{
+    m.userid      = static_cast<int64_t>(pRow[0].getUInt64());
+    m.role        = pRow[1].getInt32();
+    m.card        = pRow[2].getCppString();
+    m.muted       = pRow[3].getInt32();
+    m.jointime    = static_cast<int64_t>(pRow[4].getUInt64());
+    m.muteuntil   = static_cast<int64_t>(pRow[5].getUInt64());
+    m.mutereason  = pRow[6].getCppString();
+    m.historyfrom = static_cast<int64_t>(pRow[7].getUInt64());
+    m.mustread    = pRow[8].getInt32();
+
+    //定时禁言到期后不写库、只在读到时按未禁言呈现（惰性判定，见
+    //docs/群管理接入方案.md §3.2）。真正把库里的 f_muted 抹掉发生在
+    //发言校验那条路径上 —— 那里本来就要写库，顺手清理不额外增加开销。
+    if (GroupProtocol::isMuteExpired(m.muted, m.muteuntil, now))
+    {
+        m.muted      = 0;
+        m.muteuntil  = 0;
+        m.mutereason.clear();
+    }
+}
+
 bool GroupManager::getGroupMembers(int64_t groupid, std::vector<GroupMemberRecord>& out)
 {
     std::unique_ptr<IDatabase> pConn;
@@ -419,8 +509,8 @@ bool GroupManager::getGroupMembers(int64_t groupid, std::vector<GroupMemberRecor
     }
 
     std::ostringstream osSql;
-    osSql << "SELECT f_userid, f_role, f_card, f_muted, f_join_time, f_mute_until, f_mute_reason "
-             "FROM t_group_member WHERE f_groupid = " << groupid << " ORDER BY f_join_time ASC";
+    osSql << "SELECT " << kMemberSelectColumns
+          << " FROM t_group_member WHERE f_groupid = " << groupid << " ORDER BY f_join_time ASC";
     QueryResult* pResult = pConn->query(osSql.str().c_str());
     if (pResult == NULL)
         return false;
@@ -433,23 +523,7 @@ bool GroupManager::getGroupMembers(int64_t groupid, std::vector<GroupMemberRecor
             break;
 
         GroupMemberRecord m;
-        m.userid     = static_cast<int64_t>(pRow[0].getUInt64());
-        m.role       = pRow[1].getInt32();
-        m.card       = pRow[2].getCppString();
-        m.muted      = pRow[3].getInt32();
-        m.jointime   = static_cast<int64_t>(pRow[4].getUInt64());
-        m.muteuntil  = static_cast<int64_t>(pRow[5].getUInt64());
-        m.mutereason = pRow[6].getCppString();
-
-        //定时禁言到期后不写库、只在读到时按未禁言呈现（惰性判定，见
-        //docs/群管理接入方案.md §3.2）。真正把库里的 f_muted 抹掉发生在
-        //发言校验那条路径上 —— 那里本来就要写库，顺手清理不额外增加开销。
-        if (GroupProtocol::isMuteExpired(m.muted, m.muteuntil, now))
-        {
-            m.muted      = 0;
-            m.muteuntil  = 0;
-            m.mutereason.clear();
-        }
+        fillMemberRecord(pRow, now, m);
         out.push_back(m);
 
         if (!pResult->nextRow())
@@ -457,6 +531,101 @@ bool GroupManager::getGroupMembers(int64_t groupid, std::vector<GroupMemberRecor
     }
     pResult->endQuery();
     delete pResult;
+    return true;
+}
+
+bool GroupManager::getMember(int64_t groupid, int32_t userid, GroupMemberRecord& out)
+{
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupManager::getMember db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    std::ostringstream osSql;
+    osSql << "SELECT " << kMemberSelectColumns << " FROM t_group_member WHERE f_groupid = " << groupid
+          << " AND f_userid = " << userid;
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    if (pResult == NULL)
+        return false;
+
+    bool found = false;
+    Field* pRow = pResult->fetch();
+    if (pRow != NULL)
+    {
+        fillMemberRecord(pRow, nowMilliseconds(), out);
+        found = true;
+    }
+    pResult->endQuery();
+    delete pResult;
+    return found;
+}
+
+bool GroupManager::getUserMemberships(int32_t userid, std::map<int64_t, GroupMemberRecord>& out)
+{
+    out.clear();
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupManager::getUserMemberships db init failed, db: %s",
+             Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //列序与 kMemberSelectColumns 相同，最后多一列群 id（下标 kMemberSelectColumnCount）
+    std::ostringstream osSql;
+    osSql << "SELECT " << kMemberSelectColumns << ", f_groupid FROM t_group_member WHERE f_userid = " << userid;
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    if (pResult == NULL)
+        return false;
+
+    const int64_t now = nowMilliseconds();
+    while (true)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow == NULL)
+            break;
+
+        GroupMemberRecord m;
+        fillMemberRecord(pRow, now, m);
+        out[static_cast<int64_t>(pRow[kMemberSelectColumnCount].getUInt64())] = m;
+
+        if (!pResult->nextRow())
+            break;
+    }
+    pResult->endQuery();
+    delete pResult;
+    return true;
+}
+
+bool GroupManager::getUserHistoryScopes(int32_t userid, std::vector<GroupSearchScope>& out)
+{
+    out.clear();
+    std::vector<GroupRecord> groups;
+    if (!getUserGroups(userid, groups))
+    {
+        LOGE("GroupManager::getUserHistoryScopes failed to load groups, userid: %d", userid);
+        return false;
+    }
+    std::map<int64_t, GroupMemberRecord> rows;
+    getUserMemberships(userid, rows);
+    for (size_t i = 0; i < groups.size(); ++i)
+    {
+        GroupSearchScope scope;
+        scope.groupid = groups[i].groupid;
+        std::map<int64_t, GroupMemberRecord>::const_iterator row = rows.find(groups[i].groupid);
+        if (row != rows.end())
+        {
+            const GroupHistoryBound bound = GroupProtocol::computeHistoryBound(
+                row->second.role, groups[i].newseehistory, row->second.jointime, row->second.historyfrom);
+            scope.minCreateTime = bound.m_minCreateTime;
+            scope.minMsgId = bound.m_minMsgId;
+        }
+        out.push_back(scope);
+    }
     return true;
 }
 
@@ -543,12 +712,14 @@ int GroupManager::getMemberRole(int64_t groupid, int32_t userid)
 }
 
 bool GroupManager::getMemberRoleAndMuted(int64_t groupid, int32_t userid, int& role, int& muted,
-                                         int64_t* muteUntil)
+                                         int64_t* muteUntil, int* mustRead)
 {
     role  = group_role_member;
     muted = 0;
     if (muteUntil != NULL)
         *muteUntil = 0;
+    if (mustRead != NULL)
+        *mustRead = 0;
 
     std::unique_ptr<IDatabase> pConn;
     pConn.reset(DbFactory::createConnection());
@@ -556,7 +727,7 @@ bool GroupManager::getMemberRoleAndMuted(int64_t groupid, int32_t userid, int& r
         return false;
 
     std::ostringstream osSql;
-    osSql << "SELECT f_role, f_muted, f_mute_until FROM t_group_member WHERE f_groupid = " << groupid
+    osSql << "SELECT f_role, f_muted, f_mute_until, f_must_read FROM t_group_member WHERE f_groupid = " << groupid
           << " AND f_userid = " << userid;
     QueryResult* pResult = pConn->query(osSql.str().c_str());
     if (pResult == NULL)
@@ -576,6 +747,8 @@ bool GroupManager::getMemberRoleAndMuted(int64_t groupid, int32_t userid, int& r
         //据出参 muteUntil 决定（见 clearExpiredMute 的注释）。
         if (GroupProtocol::isMuteExpired(muted, until, nowMilliseconds()))
             muted = 0;
+        if (mustRead != NULL)
+            *mustRead = pRow[3].getInt32();
 
         found = true;
     }
@@ -652,7 +825,7 @@ bool GroupManager::updateGroupInfo(const UpdateGroupInfoRequest& req)
     if (req.has_muteall)
         sets.push_back("f_mute_all = " + std::to_string(req.muteall));
 
-    //---- 以下七项为群管理功能新增的群设置 ----
+    //---- 以下六项为群管理功能新增的群设置 ----
     if (req.has_intro)
         sets.push_back(makeTextSet(pConn.get(), "f_intro", req.intro));
     if (req.has_atallscope)
@@ -665,8 +838,6 @@ bool GroupManager::updateGroupInfo(const UpdateGroupInfoRequest& req)
         sets.push_back("f_welcome_on = " + std::to_string(req.welcomeon));
     if (req.has_welcometext)
         sets.push_back(makeTextSet(pConn.get(), "f_welcome_text", req.welcometext));
-    if (req.has_sensitiveon)
-        sets.push_back("f_sensitive_on = " + std::to_string(req.sensitiveon));
 
     //没有任何字段需要更新，视为成功（no-op）
     if (sets.empty())
@@ -696,7 +867,8 @@ bool GroupManager::updateGroupInfo(const UpdateGroupInfoRequest& req)
     return true;
 }
 
-bool GroupManager::addMembers(int64_t groupid, const std::vector<int64_t>& userids, int64_t joinTime)
+bool GroupManager::addMembers(int64_t groupid, const std::vector<int64_t>& userids, int64_t joinTime,
+                              int64_t historyFrom)
 {
     if (userids.empty())
         return true;
@@ -709,18 +881,24 @@ bool GroupManager::addMembers(int64_t groupid, const std::vector<int64_t>& useri
         return false;
     }
 
-    //逐个 INSERT IGNORE：已是成员的 userid 静默跳过，保证幂等
-    for (size_t i = 0; i < userids.size(); ++i)
+    //INSERT IGNORE：已是成员的 userid 静默跳过，保证幂等（已在群里的人的历史边界也因此不变）。
+    //全部行在一个事务里多行合并写入、一次提交（2026-10-08 建群卡顿，用例 GB3），失败时整体回滚
+    CDbTransaction transaction(pConn.get());
+    if (!transaction.IsActive())
     {
-        std::ostringstream osSql;
-        osSql << "INSERT IGNORE INTO t_group_member(f_groupid, f_userid, f_role, f_join_time) VALUES("
-              << groupid << ", " << userids[i] << ", " << group_role_member << ", " << joinTime << ")";
-        if (!pConn->execute(osSql.str().c_str()))
-        {
-            LOGE("GroupManager::addMembers insert error, groupid: %lld, userid: %lld",
-                 (long long)groupid, (long long)userids[i]);
-            return false;
-        }
+        LOGE("GroupManager::addMembers begin transaction error, groupid: %lld", (long long)groupid);
+        return false;
+    }
+    if (!insertMemberRows(pConn.get(), groupid, userids, group_role_member, joinTime, historyFrom, 0))
+    {
+        LOGE("GroupManager::addMembers insert error, groupid: %lld, users: %u",
+             (long long)groupid, static_cast<unsigned>(userids.size()));
+        return false;
+    }
+    if (!transaction.Commit())
+    {
+        LOGE("GroupManager::addMembers commit error, groupid: %lld", (long long)groupid);
+        return false;
     }
     return true;
 }
@@ -739,7 +917,7 @@ bool GroupManager::removeMembers(int64_t groupid, const std::vector<int64_t>& us
     }
 
     //当事人离开后，他对这个群的收藏行与会话设置行（置顶、免打扰、已读位点）都已无意义：收藏
-    //分区显示不出来却仍占收藏上限，日后重新入群时旧的置顶与免打扰状态也会意外恢复。三条语句
+    //分区显示不出来却仍占收藏上限，日后重新入群时旧的置顶与免打扰状态也会意外恢复。各条语句
     //一起成败，成员行放在最后删
     const std::string idList = joinUserIds(userids);
     std::vector<std::string> statements;
@@ -753,6 +931,14 @@ bool GroupManager::removeMembers(int64_t groupid, const std::vector<int64_t>& us
         std::ostringstream os;
         os << "DELETE FROM t_conversation WHERE f_ctype = " << conversation_group << " AND f_cid = " << groupid
            << " AND f_userid IN (" << idList << ")";
+        statements.push_back(os.str());
+    }
+    //关注名单（docs/消息提醒模式与消息盒子方案.md §12.1）：当事人自己在本群的名单作废；别人名单里的当事人
+    //也一并删掉，否则这些名额一直被不在群里的人占着，当事人日后重新入群时关注还会意外恢复
+    {
+        std::ostringstream os;
+        os << "DELETE FROM t_group_follow WHERE f_groupid = " << groupid
+           << " AND (f_userid IN (" << idList << ") OR f_target_userid IN (" << idList << "))";
         statements.push_back(os.str());
     }
     {
@@ -770,7 +956,7 @@ bool GroupManager::removeMembers(int64_t groupid, const std::vector<int64_t>& us
 
 int64_t GroupManager::addJoinRequest(int64_t groupid, int32_t userid,
                                      const std::string& verifymsg, int64_t createTime,
-                                     int source, int64_t recommender)
+                                     int source, int64_t recommender, int historyLimit, int64_t inviteId)
 {
     std::unique_ptr<IDatabase> pConn;
     pConn.reset(DbFactory::createConnection());
@@ -786,9 +972,9 @@ int64_t GroupManager::addJoinRequest(int64_t groupid, int32_t userid,
 
     std::ostringstream osSql;
     osSql << "INSERT INTO t_group_join_request(f_groupid, f_userid, f_verify_msg, f_status, "
-             "f_create_time, f_source, f_recommender) VALUES("
+             "f_create_time, f_source, f_recommender, f_history_limit, f_invite_id) VALUES("
           << groupid << ", " << userid << ", '" << &escMsg[0] << "', 0, " << createTime
-          << ", " << source << ", " << recommender << ")";
+          << ", " << source << ", " << recommender << ", " << historyLimit << ", " << inviteId << ")";
     if (!pConn->execute(osSql.str().c_str()))
     {
         LOGE("GroupManager::addJoinRequest insert error, groupid: %lld, userid: %d",
@@ -814,7 +1000,7 @@ int64_t GroupManager::addJoinRequest(int64_t groupid, int32_t userid,
 //查询的列必须逐字一致（都由 fillJoinRequestRecord 按下标取值），故抽成一个常量。
 static const char* const kJoinRequestSelectColumns =
     "f_id, f_groupid, f_userid, f_verify_msg, f_status, f_create_time, "
-    "f_handle_time, f_handler, f_source, f_recommender";
+    "f_handle_time, f_handler, f_source, f_recommender, f_history_limit, f_invite_id";
 
 //按 kJoinRequestSelectColumns 的列序填一条加群申请记录
 static void fillJoinRequestRecord(Field* pRow, GroupJoinRequestRecord& rec)
@@ -829,6 +1015,8 @@ static void fillJoinRequestRecord(Field* pRow, GroupJoinRequestRecord& rec)
     rec.handler     = static_cast<int64_t>(pRow[7].getUInt64());
     rec.source      = pRow[8].getInt32();
     rec.recommender = static_cast<int64_t>(pRow[9].getUInt64());
+    rec.historylimit = pRow[10].getInt32();
+    rec.inviteid    = static_cast<int64_t>(pRow[11].getUInt64());
 }
 
 bool GroupManager::getJoinRequestById(int64_t requestid, GroupJoinRequestRecord& out)
@@ -861,8 +1049,9 @@ bool GroupManager::getJoinRequestById(int64_t requestid, GroupJoinRequestRecord&
 }
 
 bool GroupManager::updateJoinRequestStatus(int64_t requestid, int status,
-                                           int64_t handleTime, int32_t handler)
+                                           int64_t handleTime, int32_t handler, bool& changed)
 {
+    changed = false;
     std::unique_ptr<IDatabase> pConn;
     pConn.reset(DbFactory::createConnection());
     if (!pConn)
@@ -872,14 +1061,19 @@ bool GroupManager::updateJoinRequestStatus(int64_t requestid, int status,
     }
 
     std::ostringstream osSql;
+    //只改仍是待处理的申请：已被别的管理员处理过时改到 0 行，本次处理无效
+    const int kStatusPending = 0;
     osSql << "UPDATE t_group_join_request SET f_status = " << status
           << ", f_handle_time = " << handleTime << ", f_handler = " << handler
-          << " WHERE f_id = " << requestid;
-    if (!pConn->execute(osSql.str().c_str()))
+          << " WHERE f_id = " << requestid << " AND f_status = " << kStatusPending;
+    uint32_t affected = 0;
+    int dbErrno = 0;
+    if (!pConn->execute(osSql.str().c_str(), affected, dbErrno))
     {
-        LOGE("GroupManager::updateJoinRequestStatus error, requestid: %lld", (long long)requestid);
+        LOGE("GroupManager::updateJoinRequestStatus error, requestid: %lld, errno: %d", (long long)requestid, dbErrno);
         return false;
     }
+    changed = (affected > 0);
     return true;
 }
 
@@ -1278,6 +1472,54 @@ bool GroupManager::getAnnouncements(int64_t groupid, int offset, int count,
     return true;
 }
 
+bool GroupManager::searchAnnouncements(const std::vector<int64_t>& groupids, const std::string& keyword,
+                                       int limit, std::vector<GroupAnnouncementRecord>& out)
+{
+    out.clear();
+    if (groupids.empty())
+        return true;
+    if (keyword.empty() || limit <= 0)
+        return false;
+
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupManager::searchAnnouncements db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //标题与正文是纯文本列（不是 JSON），直接 LIKE 即可，中文能搜到。先按 LIKE 规则转义 ! % _，
+    //再按 SQL 字符串字面量规则转义引号等，顺序不能颠倒
+    const std::string likeEsc = dbapi::EscapeString(chatserver::MakeLikeContainsPattern(keyword));
+    std::ostringstream osSql;
+    osSql << "SELECT " << kAnnouncementSelectColumns << " FROM t_group_announcement WHERE f_groupid IN (";
+    for (size_t i = 0; i < groupids.size(); ++i)
+        osSql << (i > 0 ? ", " : "") << groupids[i];
+    osSql << ") AND (f_title LIKE '" << likeEsc << "' ESCAPE '!' OR f_content LIKE '" << likeEsc << "' ESCAPE '!')"
+          << " ORDER BY f_publish_time DESC, f_id DESC LIMIT " << limit;
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    if (pResult == NULL)
+    {
+        LOGE("GroupManager::searchAnnouncements query error");
+        return false;
+    }
+    while (true)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow == NULL)
+            break;
+        GroupAnnouncementRecord rec;
+        fillAnnouncementRecord(pRow, rec);
+        out.push_back(rec);
+        if (!pResult->nextRow())
+            break;
+    }
+    pResult->endQuery();
+    delete pResult;
+    return true;
+}
+
 bool GroupManager::getAnnouncement(int64_t id, GroupAnnouncementRecord& out)
 {
     std::unique_ptr<IDatabase> pConn;
@@ -1439,39 +1681,21 @@ bool GroupManager::refreshLatestAnnouncement(int64_t groupid)
     return true;
 }
 
-// ====================================================================
-// 群敏感词库
-// ====================================================================
-
-bool GroupManager::getSensitiveWords(int64_t groupid, std::vector<GroupSensitiveWordRecord>& out)
+//读出本群全部待确认入群必读的成员
+static bool queryMustReadPending(IDatabase* pConn, int64_t groupid, std::vector<int64_t>& out)
 {
-    std::unique_ptr<IDatabase> pConn;
-    pConn.reset(DbFactory::createConnection());
-    if (!pConn)
-    {
-        LOGE("GroupManager::getSensitiveWords db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
-        return false;
-    }
-
+    out.clear();
     std::ostringstream osSql;
-    osSql << "SELECT f_id, f_word, f_create_time FROM t_group_sensitive_word "
-             "WHERE f_groupid = " << groupid << " ORDER BY f_create_time ASC";
+    osSql << "SELECT f_userid FROM t_group_member WHERE f_groupid = " << groupid << " AND f_must_read = 1";
     QueryResult* pResult = pConn->query(osSql.str().c_str());
     if (pResult == NULL)
-        return false;
-
+        return true;   //结果集为空时 dbapi 同样返回 NULL，按没有待确认的人处理
     while (true)
     {
         Field* pRow = pResult->fetch();
         if (pRow == NULL)
             break;
-
-        GroupSensitiveWordRecord rec;
-        rec.id         = static_cast<int64_t>(pRow[0].getUInt64());
-        rec.word       = pRow[1].getCppString();
-        rec.createtime = static_cast<int64_t>(pRow[2].getUInt64());
-        out.push_back(rec);
-
+        out.push_back(static_cast<int64_t>(pRow[0].getUInt64()));
         if (!pResult->nextRow())
             break;
     }
@@ -1480,157 +1704,100 @@ bool GroupManager::getSensitiveWords(int64_t groupid, std::vector<GroupSensitive
     return true;
 }
 
-int64_t GroupManager::addSensitiveWord(int64_t groupid, const std::string& word, int64_t createTime)
+bool GroupManager::setMustRead(int64_t groupid, int64_t announcementId, std::vector<int64_t>& cleared)
 {
-    if (word.empty())
-        return 0;
-
+    cleared.clear();
     std::unique_ptr<IDatabase> pConn;
     pConn.reset(DbFactory::createConnection());
     if (!pConn)
     {
-        LOGE("GroupManager::addSensitiveWord db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
-        return 0;
-    }
-
-    //同群下已有同一个词就不再插一遍。这里用"先查后插"而不是唯一索引，是因为
-    //(f_groupid, f_word) 上的唯一索引要给 varchar(64) 建索引、代价不小，而本表
-    //的写入频率极低（管理员偶尔加个词），多一次查询完全可以接受。
-    std::vector<char> escWord(word.size() * 2 + 1, '\0');
-    pConn->escapeString(&escWord[0], word.c_str(), static_cast<uint32_t>(word.size()));
-
-    std::ostringstream osExist;
-    osExist << "SELECT f_id FROM t_group_sensitive_word WHERE f_groupid = " << groupid
-            << " AND f_word = '" << &escWord[0] << "'";
-    QueryResult* pExist = pConn->query(osExist.str().c_str());
-    if (pExist != NULL)
-    {
-        bool duplicated = (pExist->fetch() != NULL);
-        pExist->endQuery();
-        delete pExist;
-        if (duplicated)
-        {
-            LOGI("sensitive word already exists, groupid: %lld, word: %s",
-                 (long long)groupid, word.c_str());
-            return 0;
-        }
-    }
-
-    std::ostringstream osSql;
-    osSql << "INSERT INTO t_group_sensitive_word(f_groupid, f_word, f_create_time) VALUES("
-          << groupid << ", '" << &escWord[0] << "', " << createTime << ")";
-    if (!pConn->execute(osSql.str().c_str()))
-    {
-        LOGE("GroupManager::addSensitiveWord insert error, groupid: %lld", (long long)groupid);
-        return 0;
-    }
-
-    int64_t wordId = 0;
-    QueryResult* pResult = pConn->query("SELECT LAST_INSERT_ID()");
-    if (pResult != NULL)
-    {
-        Field* pRow = pResult->fetch();
-        if (pRow != NULL)
-            wordId = static_cast<int64_t>(pRow[0].getUInt64());
-        pResult->endQuery();
-        delete pResult;
-    }
-
-    invalidateSensitiveCache(groupid);
-    LOGI("sensitive word added, groupid: %lld, id: %lld, word: %s",
-         (long long)groupid, (long long)wordId, word.c_str());
-    return wordId;
-}
-
-bool GroupManager::deleteSensitiveWord(int64_t groupid, int64_t id)
-{
-    std::unique_ptr<IDatabase> pConn;
-    pConn.reset(DbFactory::createConnection());
-    if (!pConn)
-    {
-        LOGE("GroupManager::deleteSensitiveWord db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        LOGE("GroupManager::setMustRead db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
         return false;
     }
 
-    //条件里带上 f_groupid，防止拿着别的群的词条ID越权删除
-    std::ostringstream osSql;
-    osSql << "DELETE FROM t_group_sensitive_word WHERE f_id = " << id
-          << " AND f_groupid = " << groupid;
-    if (!pConn->execute(osSql.str().c_str()))
+    std::vector<std::string> statements;
     {
-        LOGE("GroupManager::deleteSensitiveWord error, groupid: %lld, id: %lld",
-             (long long)groupid, (long long)id);
+        std::ostringstream os;
+        os << "UPDATE t_group SET f_must_read_id = " << announcementId << " WHERE f_groupid = " << groupid;
+        statements.push_back(os.str());
+    }
+    //取消必读：所有待确认的人一并解除限制。换成另一条必读公告时不动 —— 已确认的人不必重新确认，
+    //还没确认的人改为确认新的这一条（docs/群公告接入方案.md §14.1）
+    if (announcementId == 0)
+    {
+        if (!queryMustReadPending(pConn.get(), groupid, cleared))
+            return false;
+        std::ostringstream os;
+        os << "UPDATE t_group_member SET f_must_read = 0 WHERE f_groupid = " << groupid << " AND f_must_read = 1";
+        statements.push_back(os.str());
+    }
+    if (!executeInTransaction(pConn.get(), statements, "GroupManager::setMustRead", groupid))
+    {
+        cleared.clear();
         return false;
     }
-
-    invalidateSensitiveCache(groupid);
-    LOGI("sensitive word deleted, groupid: %lld, id: %lld", (long long)groupid, (long long)id);
+    LOGI("GroupManager::setMustRead ok, groupid: %lld, announcement: %lld, cleared: %u",
+         (long long)groupid, (long long)announcementId, static_cast<unsigned>(cleared.size()));
     return true;
 }
 
-//把一段文本整体转小写。敏感词匹配不区分大小写，词与待检文本都先过这一道。
-//只折叠 ASCII 字母 —— 中文没有大小写，而对 UTF-8 多字节序列逐字节调 tolower
-//是安全的（多字节序列的每个字节都 >= 0x80，不落在 'A'-'Z' 区间内）。
-static std::string toLowerAscii(const std::string& s)
+bool GroupManager::markMustReadPending(int64_t groupid, const std::vector<int64_t>& userids)
 {
-    std::string out = s;
-    for (size_t i = 0; i < out.size(); ++i)
+    if (userids.empty())
+        return true;
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
     {
-        if (out[i] >= 'A' && out[i] <= 'Z')
-            out[i] = static_cast<char>(out[i] - 'A' + 'a');
-    }
-    return out;
-}
-
-void GroupManager::ensureSensitiveCacheLoaded(int64_t groupid)
-{
-    //调用方已持有 m_sensitiveMutex
-    if (m_sensitiveCache.find(groupid) != m_sensitiveCache.end())
-        return;
-
-    std::vector<GroupSensitiveWordRecord> records;
-    getSensitiveWords(groupid, records);
-
-    //即便该群一个词都没有，也要留一个空 vector 占位，否则每条消息都会为
-    //"这个群没有敏感词"再查一次库。
-    std::vector<std::string>& cached = m_sensitiveCache[groupid];
-    cached.clear();
-    cached.reserve(records.size());
-    for (size_t i = 0; i < records.size(); ++i)
-    {
-        if (!records[i].word.empty())
-            cached.push_back(toLowerAscii(records[i].word));
-    }
-
-    LOGI("sensitive word cache loaded, groupid: %lld, count: %d",
-         (long long)groupid, static_cast<int>(cached.size()));
-}
-
-void GroupManager::invalidateSensitiveCache(int64_t groupid)
-{
-    std::lock_guard<std::mutex> guard(m_sensitiveMutex);
-    m_sensitiveCache.erase(groupid);
-}
-
-bool GroupManager::hitSensitiveWord(int64_t groupid, const std::string& text, std::string* hitWord)
-{
-    if (text.empty())
+        LOGE("GroupManager::markMustReadPending db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
         return false;
-
-    const std::string lowered = toLowerAscii(text);
-
-    std::lock_guard<std::mutex> guard(m_sensitiveMutex);
-    ensureSensitiveCacheLoaded(groupid);
-
-    const std::vector<std::string>& words = m_sensitiveCache[groupid];
-    for (size_t i = 0; i < words.size(); ++i)
-    {
-        if (lowered.find(words[i]) != std::string::npos)
-        {
-            if (hitWord != NULL)
-                *hitWord = words[i];
-            return true;
-        }
     }
-    return false;
+    std::ostringstream osSql;
+    osSql << "UPDATE t_group_member SET f_must_read = 1 WHERE f_groupid = " << groupid
+          << " AND f_userid IN (" << joinUserIds(userids) << ")";
+    if (!pConn->execute(osSql.str().c_str()))
+    {
+        LOGE("GroupManager::markMustReadPending error, groupid: %lld", (long long)groupid);
+        return false;
+    }
+    return true;
+}
+
+bool GroupManager::clearMustReadPending(int64_t groupid, const std::vector<int64_t>& userids,
+                                        std::vector<int64_t>& cleared)
+{
+    cleared.clear();
+    if (userids.empty())
+        return true;
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupManager::clearMustReadPending db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //先找出其中确实待确认的人，再清零；不是待确认的人不算进 cleared，调用方不必为他们推送
+    std::vector<int64_t> pending;
+    if (!queryMustReadPending(pConn.get(), groupid, pending))
+        return false;
+    std::set<int64_t> wanted(userids.begin(), userids.end());
+    for (size_t i = 0; i < pending.size(); ++i)
+    {
+        if (wanted.count(pending[i]) != 0)
+            cleared.push_back(pending[i]);
+    }
+    if (cleared.empty())
+        return true;
+
+    std::ostringstream osSql;
+    osSql << "UPDATE t_group_member SET f_must_read = 0 WHERE f_groupid = " << groupid
+          << " AND f_userid IN (" << joinUserIds(cleared) << ")";
+    if (!pConn->execute(osSql.str().c_str()))
+    {
+        LOGE("GroupManager::clearMustReadPending error, groupid: %lld", (long long)groupid);
+        cleared.clear();
+        return false;
+    }
+    return true;
 }

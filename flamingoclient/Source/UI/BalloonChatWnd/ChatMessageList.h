@@ -18,11 +18,13 @@
 #pragma once
 
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "ChatMockData.h"
 #include "ChatSmoothScroll.h"   // 滚轮的平滑滚动（成员需完整类型）
+#include "ChatScrollFade.h"     // 滑块的淡入淡出（成员需完整类型）
 
 /**
  *  消息列表请宿主聊天窗删除消息（右键「删除」或多选「删除 N」里已有服务器 msgid 的那些行）。
@@ -52,7 +54,210 @@
  */
 #define WM_CHAT_OPEN_MERGED_RECORD (WM_APP + 0x64)
 
+/**
+ *  接龙卡片或带 cardmsgid 的接龙系统提示行请宿主聊天窗打开接龙详情窗（单击了卡片、卡片按钮或提示行）。
+ *  wParam = ChatRelayAction 取值，区分只打开详情窗还是打开后把焦点放到本人那条的输入框；
+ *  lParam = 堆上 long long*（卡片消息的服务器 msgid），宿主处理后 delete；异步消息。
+ *  msgid 放在堆上而不直接放进 lParam，是因为 Win32 下 LPARAM 只有 32 位，装不下 64 位 msgid。
+ *  与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息，理由见上。
+ */
+#define WM_CHAT_RELAY_ACTION (WM_APP + 0x66)
+
+/**
+ *  气泡右键「重新编辑」请宿主聊天窗把原文放回输入框（docs/敏感词方案.md 8.4）。
+ *  lParam = 堆上 balloonchatwnd::ChatReeditData*（片段与 @ 候选），宿主处理后 delete；wParam 未用；异步消息。
+ *  与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息，理由见上。
+ */
+#define WM_CHAT_REEDIT_REQUEST (WM_APP + 0x68)
+
+/**
+ *  共享卡片请宿主聊天窗打开那个共享（单击了卡片或卡片上的「打开」「下载」「在本机打开」，docs/文件共享方案.md 7.3）。
+ *  lParam = 堆上 long long*（共享 id），宿主处理后 delete；wParam 为 kChatOpenShareOwn 时是本人发起的共享，否则为 0；
+ *  异步消息。宿主经文件共享宿主交给 FlamingoFileShare.dll：别人的共享打开浏览窗口，本人的共享在本机打开。
+ *  id 放在堆上的理由同 WM_CHAT_RELAY_ACTION。
+ *  方案原定的 0x66 已被接龙卡片占用，改取 0x69。与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息，理由见上。
+ */
+#define WM_CHAT_OPEN_SHARE (WM_APP + 0x69)
+
+//WM_CHAT_OPEN_SHARE 的 wParam：卡片是本人发起的共享，宿主改为在本机打开（2026-10-03 起）
+const WPARAM kChatOpenShareOwn = 1;
+
+/**
+ *  屏幕共享卡片请宿主聊天窗加入那场共享（单击了可加入的卡片或卡片上的「加入」，docs/屏幕共享与录制方案.md 5.2 第 4 步）。
+ *  lParam = 堆上 balloonchatwnd::ScreenShareJoinRequest*（房间号与发起人名），宿主处理后 delete；wParam 未用；异步消息。
+ *  宿主经屏幕共享中心交给 FlamingoMedia.dll 加入。与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息，理由见上。
+ */
+#define WM_CHAT_JOIN_SCREENSHARE (WM_APP + 0x6A)
+
+//语音气泡请宿主聊天窗播放 / 停止，或重发发送失败的语音（语音消息第 3d 步）：wParam 为动作（ChatVoiceAction，见
+//ChatVoiceBubble.h），lParam 为堆上的 VoiceActionRequest*，宿主处理后 delete
+#define WM_CHAT_VOICE_ACTION (WM_APP + 0x82)
+
+/**
+ *  入群邀请卡片请宿主单聊窗加入那个群（被邀请人点了卡片上的「加入群聊」，docs/邀请入群方案.md §3.3、§6.4）。
+ *  lParam = 堆上 balloonchatwnd::GroupInviteJoinRequest*（卡片 msgid 与邀请 id），宿主处理后 delete；wParam 未用；
+ *  异步消息。宿主把卡片置为「正在加入」并发 cmd_accept_group_invite（1327）。与 WM_CHAT_DELETE_REQUEST 同属
+ *  窗口私有消息，理由见上。0x6B ~ 0x6E 已被主面板搜索下拉占用，取 0x6F。
+ */
+#define WM_CHAT_JOIN_GROUP_INVITE (WM_APP + 0x6F)
+
+/**
+ *  群公告卡片请宿主群聊窗打开这条公告的详情窗（点了可点的群公告卡片，docs/群公告接入方案.md §13.4）。
+ *  lParam = 堆上 balloonchatwnd::InfoCardOpenRequest*（卡片 msgid 与公告 id），宿主处理后 delete；wParam 未用；异步消息。
+ *  与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息。0x80 ~ 0x82 已占用，取 0x83。
+ */
+#define WM_CHAT_OPEN_ANNOUNCEMENT_CARD (WM_APP + 0x83)
+
+/**
+ *  群备忘卡片请宿主群聊窗打开这条备忘（点了可点的群备忘卡片，docs/备忘与提醒方案.md §7.3）：群主、管理员以修改方式打开，
+ *  其他人只读。lParam = 堆上 balloonchatwnd::InfoCardOpenRequest*（卡片 msgid 与备忘 id），宿主处理后 delete；wParam 未用。
+ */
+#define WM_CHAT_OPEN_MEMO_CARD (WM_APP + 0x84)
+
+/**
+ *  代码片段卡片请宿主聊天窗打开代码查看窗（点了卡片正文、底栏「查看全部」或右键「在窗口中查看」，
+ *  docs/代码片段方案.md §3.2）。lParam = 堆上 balloonchatwnd::CodeViewerOpenRequest*，宿主处理后 delete；
+ *  wParam 未用；异步消息。与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息。0x85 已被 Markdown 格式命令占用，取 0x86。
+ */
+#define WM_CHAT_OPEN_CODE_VIEWER (WM_APP + 0x86)
+
+/**
+ *  Markdown 卡片请宿主聊天窗打开 Markdown 预览窗口（点了卡片或右键「在窗口中查看」，docs/Markdown消息方案.md 第 11.3 节）。
+ *  lParam = 堆上 balloonchatwnd::MarkdownPreviewOpenRequest*，宿主处理后 delete；wParam 未用；异步消息。
+ *  0x86 ~ 0x89 已被代码片段占用，取 0x8A。
+ */
+#define WM_CHAT_OPEN_MARKDOWN_PREVIEW (WM_APP + 0x8A)
+
+/**
+ *  文字消息右键选了「添加到备忘」/「添加到我的备忘」/「添加到群备忘」，请宿主聊天窗补上来源信息（对方或发送人的
+ *  名字、群名）后打开新建备忘的窗口并预填内容（docs/备忘与提醒方案.md §8）。
+ *  lParam = 堆上 balloonchatwnd::ChatAddToMemoRequest*（ChatMemoPrefill.h），宿主处理后 delete；wParam 未用；异步消息。
+ *  0x87 ~ 0x8C 已被代码片段、Markdown 编辑窗与 Markdown 预览窗占用，取 0x8D。
+ */
+#define WM_CHAT_ADD_TO_MEMO (WM_APP + 0x8D)
+
+/**
+ *  云端录像卡片请宿主聊天窗播放这条录像（点了可点的云端录像卡片，docs/屏幕共享与录制方案.md 12.6.5）。
+ *  lParam = 堆上 balloonchatwnd::CloudRecordOpenRequest*（录像 id 与标题），宿主处理后 delete；wParam 未用；异步消息。
+ *  0x8E 已被代码查看窗占用，取 0x8F。
+ */
+#define WM_CHAT_OPEN_CLOUD_RECORD_CARD (WM_APP + 0x8F)
+
+/**
+ *  密聊邀请卡片请宿主单聊窗执行卡片上的按钮（被邀请方点了「同意」「忽略」，发起方点了「取消」，docs/密聊方案.md 4.8）。
+ *  wParam = 动作，取值见 ChatSecretMode.h 的 ChatSecretInviteAction；lParam = 堆上 unsigned long long*（卡片上的密聊会话号），
+ *  宿主处理后 delete；异步消息。会话号放在堆上的理由同 WM_CHAT_RELAY_ACTION。方案初稿写的 0x8A 已被 Markdown 卡片占用，
+ *  0xB0、0xB1 已被远程桌面占用，取 0xB2。
+ */
+#define WM_CHAT_SECRET_INVITE_ACTION (WM_APP + 0xB2)
+
 namespace balloonchatwnd {
+
+/**
+ *  MarkdownPreviewOpenRequest —— WM_CHAT_OPEN_MARKDOWN_PREVIEW 的载荷：要预览的文档与它是谁、什么时候发的。
+ */
+struct MarkdownPreviewOpenRequest
+{
+    std::string  m_sourceUtf8;    //Markdown 源文本（UTF-8，正文转义已还原）
+    std::wstring m_title;         //卡片标题，作为预览窗口的标题
+    std::wstring m_sender;        //发送者显示名；单聊对方的消息可能为空，由宿主补上
+    bool         m_fromMe;        //是否本人发出
+    long long    m_timestampMs;   //发送时间（毫秒）；还没收到回执的本人消息为 0
+    std::string  m_key;           //这条消息的标识（服务器 msgid 的十进制串；还没有 msgid 时为 clientMsgId），
+                                  //预览窗口据此复用同一条消息已打开的窗口
+
+    MarkdownPreviewOpenRequest()
+        : m_fromMe(false)
+        , m_timestampMs(0)
+    {
+    }
+};
+
+/**
+ *  InfoCardOpenRequest —— WM_CHAT_OPEN_ANNOUNCEMENT_CARD / WM_CHAT_OPEN_MEMO_CARD 的载荷：点的是哪张卡片。
+ */
+struct InfoCardOpenRequest
+{
+    long long m_msgid;   //卡片消息的 msgid，宿主据此取出那一行的 content
+    long long m_refId;   //卡片指向的公告 id 或备忘 id（ChatMessage::infoCardRefId）
+
+    InfoCardOpenRequest()
+        : m_msgid(0)
+        , m_refId(0)
+    {
+    }
+};
+
+/**
+ *  CloudRecordOpenRequest —— WM_CHAT_OPEN_CLOUD_RECORD_CARD 的载荷：要播放的是哪条云端录像。
+ */
+struct CloudRecordOpenRequest
+{
+    long long m_recordId;   //录像 id（ChatMessage::infoCardRefId），大于 0
+    CString   m_title;      //录像标题（ChatMessage::screenShareTitle），作本机缓存文件名与提示用
+
+    CloudRecordOpenRequest()
+        : m_recordId(0)
+    {
+    }
+};
+
+/**
+ *  CodeViewerOpenRequest::m_action 的取值：收到请求的宿主要做什么。
+ */
+enum CodeViewerAction
+{
+    kCodeViewerActionView     = 0,   //打开代码查看窗：点了代码卡片的正文、底栏，或右键「在窗口中查看」
+    kCodeViewerActionAnnotate = 1,   //给这条代码片段追加批注（docs/代码片段方案.md 第 12 节）：聊天卡片右键「添加批注…」，宿主打开
+                                     //可追加批注、展开了批注栏的代码查看窗。只有单聊窗、群聊窗处理，其余宿主忽略
+};
+
+/**
+ *  CodeViewerOpenRequest —— WM_CHAT_OPEN_CODE_VIEWER 的载荷：要在查看窗里显示、或要追加批注的代码。
+ */
+struct CodeViewerOpenRequest
+{
+    int          m_action;   //要做的事，取值见 CodeViewerAction
+    std::wstring m_code;     //规范化后的代码原文（换行为 LF）
+    int          m_lang;     //语言，取值见 codesnippet::CodeLanguage
+    std::string  m_key;      //这条消息的标识（服务器 msgid 的十进制串；还没有 msgid 时为 clientMsgId），
+                             //查看窗据此复用同一条消息已打开的窗口
+    std::vector<codesnippet::CodeNote> m_notes;   //批注，行号指 m_code 的行；没有批注时为空（docs/代码片段方案.md 第 10.5 节）
+    long long    m_msgid;      //这条消息的服务器 msgid；还没有时为 0，此时不能追加批注
+    long long    m_senderId;   //这条消息的发送者 userid；0 表示不知道（单聊里宿主按 m_fromMe 推出）
+    bool         m_fromMe;     //这条消息是不是本人发的
+
+    CodeViewerOpenRequest()
+        : m_action(kCodeViewerActionView)
+        , m_lang(0)
+        , m_msgid(0)
+        , m_senderId(0)
+        , m_fromMe(false)
+    {
+    }
+};
+
+/**
+ *  GroupInviteJoinRequest —— WM_CHAT_JOIN_GROUP_INVITE 的载荷：点的是哪张入群邀请卡片。
+ */
+struct GroupInviteJoinRequest
+{
+    long long m_msgid;      //卡片消息的 msgid，宿主据此找到那一行并置为「正在加入」
+    long long m_inviteId;   //卡片上的邀请 id，随 1327 发给服务端
+
+    GroupInviteJoinRequest()
+        : m_msgid(0)
+        , m_inviteId(0)
+    {
+    }
+};
+
+//WM_CHAT_RELAY_ACTION 的 wParam：用户点的是卡片的哪一部分
+enum ChatRelayAction
+{
+    kChatRelayActionOpen = 0,   //点了卡片的空白处或提示行：只打开详情窗
+    kChatRelayActionJoin = 1,   //点了卡片底部的「参与接龙」「修改我的」：打开详情窗并把焦点放到本人那条的输入框
+};
 
 /**
  *  WM_CHAT_FORWARD_REQUEST 的负载：用户在多选操作条上要转发哪些消息、用哪种模式。
@@ -61,12 +266,22 @@ namespace balloonchatwnd {
 struct ChatForwardRequest
 {
     bool                   m_merge;     //true 合并转发为一条聊天记录，false 逐条转发
-    std::vector<long long> m_msgids;    //要转发的服务器 msgid，按 msgid 升序、去重，至少一个
+    //要转发的服务器 msgid，按 msgid 升序、去重。逐条转发且选中的只有在线直传文件时可以为空
+    std::vector<long long> m_msgids;
     size_t                 m_skipped;   //选中了但不能转发的行数，供宿主提示「已跳过 N 条」
+    //逐条转发时要以离线文件重新发送的在线直传文件的本机路径（规则见 balloonmain::DecideDirectFileForward）
+    std::vector<std::wstring> m_reuploadFiles;
+    //逐条转发时本机已没有文件、无法转发的在线直传文件条数，不计入 m_skipped。右键「转发」一条这样的消息时，
+    //列表投来的请求只有这一项为 1，宿主据此提示「在线直传的文件无法转发」
+    size_t                 m_skippedDirect;
+    //合并转发时进入记录的在线直传文件条数（文件本身不随记录发出，对方在记录里看到说明文字）
+    size_t                 m_directPlaceholders;
 
     ChatForwardRequest()
         : m_merge(false)
         , m_skipped(0)
+        , m_skippedDirect(0)
+        , m_directPlaceholders(0)
     {
     }
 };
@@ -180,6 +395,23 @@ public:
     long long PeerReadMsgid() const { return m_peerReadMsgid; }
 
     /**
+     *  设置某个发送者（别人）的气泡头像是否画成灰度（离线用户头像置灰，2026-10-03）。宿主聊天窗
+     *  在该发送者上线 / 下线时调用。本列表记住结果，已有的行当场改，之后追加的行（新消息、翻页
+     *  加载的历史）在 AppendMessage 里按记住的结果设置。
+     *    senderUserId：发送者 userid；<=0 直接忽略。
+     *    gray：        true 画灰度（该发送者离线），false 画彩色。
+     *  只作用于对方发来的行；本人的气泡由 SetSelfAvatarGray 决定。有行变化时由各行自己请求重绘。
+     */
+    void SetSenderAvatarGray(int64_t senderUserId, bool gray);
+
+    /**
+     *  设置本人的气泡头像是否画成灰度。宿主聊天窗在本端连接态变化时调用（掉线或正在连接时为 true）。
+     *  已有的行当场改，之后追加的行按记住的结果设置。
+     *    gray：true 画灰度，false 画彩色。
+     */
+    void SetSelfAvatarGray(bool gray);
+
+    /**
      *  向上翻页渲染的<u>开始</u>标记。
      *
      *  用法：BeginPrependBatch() → 照常用 AppendMessage / 各类渲染入口把这一页
@@ -248,6 +480,24 @@ public:
      */
     bool GetMessageByMsgid(long long msgid, ChatMessage& out) const;
 
+    /**
+     *  按服务器 msgid 把改好的整条消息写回那一行，并重排 + 重绘。与 GetMessageByMsgid 成对使用，
+     *  用于接龙卡片收到变更推送、到了截止时间之后的刷新。
+     *  <u>必须重排而不能只重绘</u>：接龙卡片的高度随接龙条数与有无按钮变化，理由同 SetFolderMessage。
+     *    msgid：目标消息的服务器 msgid；0 一律返回 false。
+     *    msg：  改好的整条消息（通常是 GetMessageByMsgid 取出后改过的那份）。
+     *  @return 找到并写回返回 true；列表里没有该 msgid 返回 false。
+     */
+    bool SetMessageByMsgid(long long msgid, const ChatMessage& msg);
+
+    /**
+     *  取列表里某一类消息的服务器 msgid，按列表顺序排列，msgid 为 0 的行（发送中等）不在其中。
+     *  用于成员表到达后逐张刷新接龙卡片上的名字。
+     *    kind：消息类型，取值见 ChatMockData.h 的 ChatMsgKind。
+     *  @return msgid 列表；没有这类消息时为空。本方法只读。
+     */
+    std::vector<long long> GetMsgidsOfKind(int kind) const;
+
     // 列表里是否已存在带该服务器 msgid 的图片气泡（收到 live 图片时去重用，避免与
     // 历史已渲染的同一条重复 / 错位）。msgid 为 0 一律返回 false。
     bool HasImageMsgid(long long msgid) const;
@@ -282,6 +532,79 @@ public:
 
     // 某条收到的图片下载失败：按 msgid 找到本行标失败。找不到则忽略。
     void MarkImageDownloadFailedByMsgid(long long msgid);
+
+    /**
+     *  一段语音下载有了结果：把列表里所有该 md5 的语音气泡改为就绪（记下本地路径）或下载失败（语音消息第 3d-3 步）。
+     *  按 md5 而不按 msgid 定位：同一段语音被转发多次时会有好几条消息共用一个文件，下载一次即可全部就绪。
+     *  只改「下载中」「下载失败」的气泡：「发送中」的本人语音与已就绪的气泡不受影响。
+     *  @param md5       语音文件内容 MD5（小写十六进制）；空串一律忽略
+     *  @param ok        是否下载并校验成功
+     *  @param localPath 成功时文件的本地完整路径（ChatVoice\<md5>.ogg）；失败时忽略
+     *  @return 改动了几条气泡；有改动时重绘列表
+     */
+    int ApplyVoiceDownloadResult(const std::string& md5, bool ok, const CString& localPath);
+
+    /**
+     *  重发一条发送失败的本人语音（语音消息第 3c 步）：按 clientMsgId 找到那条气泡，改回「发送中」、清掉失败原因，
+     *  位置不变。群聊里失败原因那一行随之去掉、行高变矮，故更新后重排。
+     *  @param clientMsgId 发送时的客户端消息ID；空串一律忽略
+     *  @return 找到一条发送失败的本人语音并改回发送中时返回 true；没有这条、或它不是失败状态时返回 false 且不改
+     */
+    bool RestartVoiceSendByClientMsgId(const std::string& clientMsgId);
+
+    /**
+     *  重发一条被服务端拒绝的本人文件消息（2026-10-05，群里经「发送到会话」发出的录像等）：文件已在服务器上，不再上传，
+     *  只重发文件消息。按 fileClientMsgId 找到那条气泡，清掉失败标记与原因、状态回到已完成（可以打开），位置不变；
+     *  群聊里失败原因那一行随之去掉、行高变矮，故更新后重排。
+     *  @param clientMsgId 发送时的客户端消息ID；空串一律忽略
+     *  @return 找到一条发送失败的本人文件消息并改回已完成时返回 true；没有这条、它不是本人的或不是失败状态时返回 false 且不改
+     */
+    bool RestartFileMessageSendByClientMsgId(const std::string& clientMsgId);
+
+    // ---- 语音气泡的播放（语音消息第 3e 步）。定位一条语音：msgid 大于 0 时按 msgid，否则按 clientMsgId ----
+
+    /**
+     *  让一条语音进入或退出播放中。进入时同一列表里别的正在播的先停下，这一条记为已听（红点消失）。
+     *  @param msgid       服务器消息ID；还没回执的本人语音为 0
+     *  @param clientMsgId 客户端消息ID；msgid 为 0 时据它定位
+     *  @param playing     true 进入播放中，false 退出（图标回到第一帧）
+     *  @return 找到这条语音时返回 true
+     */
+    bool SetVoicePlaying(long long msgid, const std::string& clientMsgId, bool playing);
+
+    /**
+     *  更新播放中喇叭图标的帧号；帧号没变时不重绘。
+     *  @param msgid、clientMsgId 定位方式同 SetVoicePlaying
+     *  @param frame 帧号（VoicePlayFrame 的结果）
+     *  @return 找到这条语音时返回 true
+     */
+    bool SetVoicePlayFrame(long long msgid, const std::string& clientMsgId, int frame);
+
+    // 让列表里所有正在播放的语音退出播放中（窗口关闭、开始录音、播放被别的窗口顶掉时）。
+    void StopAllVoicePlaying();
+
+    /**
+     *  一条语音播完后，取紧挨着的下一条自动接着播的语音（规则见 PickNextAutoPlayVoice）。
+     *  @param msgid、clientMsgId 刚播完的那条，定位方式同 SetVoicePlaying
+     *  @param next [出参] 找到时填下一条的副本
+     *  @return 有下一条可以接着播时返回 true
+     */
+    bool NextAutoPlayVoice(long long msgid, const std::string& clientMsgId, ChatMessage& next) const;
+
+    /**
+     *  下载失败的语音重新下载：把该 md5 的「下载失败」气泡改回「下载中」。
+     *  @param md5 语音文件内容 MD5；空串一律忽略
+     *  @return 改动了几条
+     */
+    int MarkVoiceDownloading(const std::string& md5);
+
+    /**
+     *  别的窗口（另一个聊天窗或消息记录窗）里听过一条语音后，把本列表里同一条的未听红点去掉（语音消息第 6a 步）。
+     *  只改对方发来、还没听过的那一条语音；本人发的、已听的、不是语音的消息都不动。
+     *  @param msgid 服务器消息ID；小于等于 0 时忽略
+     *  @return 找到这条未听的语音并改为已听时返回 true（该气泡重绘），否则返回 false
+     */
+    bool MarkVoicePlayedByMsgid(long long msgid);
 
     // ---- 文件气泡的收发态更新 -----------------------------------------
     // 注：文件气泡高度随状态变化，故改状态的接口在更新后会 ForceLayout 重排（进度类
@@ -354,6 +677,23 @@ public:
     bool GetFolderMessage(const std::string& sessionId, ChatMessage& out) const;
 
     /**
+     *  按直传会话 id 或本端的 clientMsgId 取回一条在线直传的文件气泡（2026-10-04 起）。发送方的气泡在 1810 应答到达
+     *  之前只有 clientMsgId，之后两者都有；接收方的气泡只有会话 id。同一会话有多条时取最后一条。
+     *    key： 直传会话 id 或 clientMsgId（UTF-8）；空串一律返回 false。
+     *    out： [出参] 命中时填入该行的消息。
+     *  @return 找到返回 true；改为离线文件之后的气泡（fileDirect 为 false）不再认
+     */
+    bool GetDirectFileMessage(const std::string& key, ChatMessage& out) const;
+
+    /**
+     *  按与 GetDirectFileMessage 相同的规则写回一条在线直传的文件气泡，并重排 + 重绘（文件卡片的高度随状态变化）。
+     *    key： 定位用的会话 id 或 clientMsgId（写回之前那条气泡上的）。
+     *    msg： 改好的整条消息。
+     *  @return 命中并写回返回 true；找不到返回 false
+     */
+    bool SetDirectFileMessage(const std::string& key, const ChatMessage& msg);
+
+    /**
      *  按会话 id 把改好的消息写回那条<u>尚未被记录接管</u>的文件夹气泡，并重排 + 重绘。
      *  命中条件与 GetFolderMessage 完全一致（会话 id 相同且 msgid 仍为 0），两者成对使用。
      *
@@ -383,6 +723,71 @@ public:
      *  @return 找到并移除返回 true；没有这条会话的本地气泡返回 false。
      */
     bool RemoveFolderMessage(const std::string& sessionId);
+
+    // ---- 密聊邀请卡片（kMsgSecretInvite，docs/密聊方案.md 4.8）。卡片是纯本地气泡（msgid 为 0），按密聊会话号定位；
+    //      同一会话号在列表里最多一张 ----
+
+    /**
+     *  按密聊会话号取回那张邀请卡片。
+     *    sessionId：密聊会话号；0 一律返回 false。
+     *    out：      [出参] 命中时填入该行的消息。
+     *  @return 找到返回 true
+     */
+    bool GetSecretInviteMessage(unsigned long long sessionId, ChatMessage& out) const;
+
+    /**
+     *  按密聊会话号写回那张邀请卡片。
+     *    sessionId：定位用的会话号（写回之前那张卡片上的）。
+     *    msg：      改好的整条消息。
+     *    relayout： true 时重排整个列表（按钮数变了、卡片高度可能变化）；只改了剩余秒数时传 false，只重绘这一行。
+     *  @return 命中并写回返回 true
+     */
+    bool SetSecretInviteMessage(unsigned long long sessionId, const ChatMessage& msg, bool relayout);
+
+    /**
+     *  按密聊会话号移除那张邀请卡片（销毁该行并重排）。同意、忽略、超时、撤回、在其他设备处理之后调用。
+     *    sessionId：密聊会话号；0 一律返回 false。
+     *  @return 找到并移除返回 true
+     */
+    bool RemoveSecretInviteMessage(unsigned long long sessionId);
+
+    /**
+     *  取列表里全部密聊邀请卡片的会话号（按从上到下的顺序）。倒计时定时器据此逐张刷新剩余秒数。
+     */
+    std::vector<unsigned long long> GetSecretInviteSessionIds() const;
+
+    /**
+     *  打开或关闭密聊限制：打开后整张列表没有右键菜单、不响应 Ctrl+C、不能进入多选、气泡不能拖出；正在多选时立即退出。
+     *  单聊窗进入密聊状态（密聊中、只能查看）时打开，回到普通状态时关闭。
+     *  @param on 是否打开
+     */
+    void SetSecretRestricted(bool on);
+
+    /**
+     *  当前是否处于密聊限制（气泡据此不弹菜单、不准备拖出）。
+     */
+    bool IsSecretRestricted() const { return m_secretRestricted; }
+
+    /**
+     *  清除全部密聊内容：先把每条密聊文字在内存里清零，再移除这些行与全部密聊邀请卡片并重排（本人退出密聊、关窗时调用）。
+     *  图片字节在 ChatImageCache 的内存图源里，由宿主另行撤销。
+     *  @return 移除的行数
+     */
+    size_t WipeSecretMessages();
+
+    /**
+     *  按 clientMsgId 取回一条消息（密聊图片收齐后据此改写那条占位气泡）。
+     *    clientMsgId：本地消息号；空串一律返回 false。
+     *    out：        [出参] 命中时填入该行的消息。
+     *  @return 找到返回 true
+     */
+    bool GetMessageByClientMsgId(const std::string& clientMsgId, ChatMessage& out) const;
+
+    /**
+     *  按 clientMsgId 写回一条消息并重排、重绘（图片收齐后尺寸可能与占位不同）。
+     *  @return 命中并写回返回 true；空串或找不到时返回 false
+     */
+    bool SetMessageByClientMsgId(const std::string& clientMsgId, const ChatMessage& msg);
 
     /**
      *  把某条已被服务端记录接管的文件夹气泡放回"活的本地气泡"状态：清掉它身上的 msgid
@@ -473,7 +878,7 @@ public:
      *  装上"该联系人是否被特别关注"的查询钩子。气泡里 @某人 的右键菜单、以及发送者
      *  头像的右键菜单据此决定那一项的文案是「特别关注」还是「取消特别关注」。
      *
-     *  为什么要走钩子：关注名单只有主面板那一份（balloonmain::StarredModel），气泡与
+     *  为什么要走钩子：提醒模式表只有主面板那一份（balloonmain::NotifyModeModel），气泡与
      *  消息列表都不认识它；与上面两个群成员查询同一套路子，宿主窗代问、控件只管显示。
      *  只有群聊窗需要装；单聊窗不装即可（不装时恒返回 false，见 IsStarred）。
      *    fn：      查询回调；传 NULL 表示卸载。
@@ -488,12 +893,34 @@ public:
     bool IsStarred(long long uid) const;
 
     /**
+     *  装上「本人是否在本群关注了 TA 的发言」的查询钩子（docs/消息提醒模式与消息盒子方案.md §12）。
+     *  气泡里 @某人 与发送者头像的右键菜单据它决定「关注 TA 在本群的发言 / 取消关注」的文案。
+     *  签名与特别关注的钩子相同；只有群聊窗需要装，不装时 IsGroupFollowed 恒返回 false。
+     *    fn：      查询回调；传 NULL 表示卸载。
+     *    userdata：回调透传的用户数据（借用，不持有）。
+     */
+    void SetGroupFollowQuery(StarredQuery fn, void* userdata);
+
+    /**
+     *  本人是否在本群关注了该成员的发言。未装查询钩子时恒返回 false。
+     */
+    bool IsGroupFollowed(long long uid) const;
+
+    /**
      *  设置 / 读取本人在本群的角色，取值见 grouprole::NetGroupRole，负值表示未知。
      *  由群聊窗在自己的角色更新时同步下来 —— 气泡不认识"当前登录用户"这类业务对象，
      *  与其让它去问，不如由宿主推给它。
      */
     void SetMyNetRole(int role);
     int  MyNetRole() const;
+
+    /**
+     *  设置 / 读取文字消息右键菜单里「添加到备忘」的出现方式（docs/备忘与提醒方案.md §8），取值见
+     *  ChatMemoMenuMode。单聊窗设为 kChatMemoMenuSingle；群聊窗按本人能否新建群备忘设为 kChatMemoMenuGroupMine
+     *  或 kChatMemoMenuGroupBoth，角色变化时重设。其它复用本控件的窗口保持默认的 kChatMemoMenuNone。
+     */
+    void SetMemoMenuMode(int mode);
+    int  MemoMenuMode() const;
 
     // ---- ChatBubble 右键菜单 / 多选点击回调进来的请求 -----------------
 
@@ -537,6 +964,34 @@ public:
      *  @return 可转发的 msgid；未处于多选模式或没有可转发的选中行时返回空数组
      */
     std::vector<long long> GetSelectedForwardMsgids(size_t* skipped) const;
+
+    /**
+     *  同上，但按转发模式判定每一行：逐条转发按 CanForwardMessage，合并转发按 CanMergeForwardMessage
+     *  （两者只差接龙卡片：合并转发收、逐条转发跳过）。上面那个不带模式的版本等同于逐条转发。
+     *  这两个版本不单独处理在线直传的文件；发起转发与操作条计数用的是 CollectSelectedForward。
+     *  @param merge   true 合并转发，false 逐条转发
+     *  @param skipped [出参，可为 NULL] 选中了但按该模式不能转发的行数
+     *  @return 可转发的 msgid，按 msgid 升序、去重
+     */
+    std::vector<long long> GetSelectedForwardMsgids(bool merge, size_t* skipped) const;
+
+    /**
+     *  按转发模式整理多选模式下选中的行（2026-10-05 起把在线直传的文件单独处理）。
+     *  在线直传的文件服务器上没有副本，按 balloonmain::DecideDirectFileForward 处理：合并转发照常进入记录、
+     *  计入 m_directPlaceholders；逐条转发本机有文件时不进 m_msgids、路径记进 m_reuploadFiles，本机没有时
+     *  计入 m_skippedDirect。其余行的判定与 GetSelectedForwardMsgids 相同。本方法只读，不改选中态、不退出多选；
+     *  逐条转发时要实测磁盘（见 DirectFileHasLocalCopy）。
+     *  @param merge true 合并转发，false 逐条转发
+     *  @return 整理结果；m_merge 等于 merge。未处于多选模式时各项都为空
+     */
+    ChatForwardRequest CollectSelectedForward(bool merge) const;
+
+    /**
+     *  右键「转发」的是一条本机已没有文件的在线直传文件时调用（判定见 DirectFileForwardBlocked）：不进入多选，
+     *  向宿主聊天窗投一条只带 m_skippedDirect = 1 的 WM_CHAT_FORWARD_REQUEST，由宿主提示「在线直传的文件无法转发」。
+     *  宿主窗口不存在时什么都不做。
+     */
+    void PostDirectForwardUnavailable();
 
     /**
      *  判断列表里是否已有同一条消息，供群聊窗对本人消息的回显去重。
@@ -604,6 +1059,27 @@ public:
     bool RecallMessageByMsgid(long long msgid, const CString& tipText);
 
     /**
+     *  同上，并处理撤回后重新编辑（docs/撤回后重新编辑方案.md §3.1）：撤回者是本人、这一行是本人发出的文字类
+     *  消息时，在原文被提示文字覆盖之前生成快照，提示行挂上「编辑」，到期时刻为 nowMs 加 5 分钟。
+     *  同一条撤回推送重复到达（重连补推）时，已经是提示行的那一行保持原样，「编辑」不受影响。
+     *    msgid：        被撤消息的服务器 msgid；0 一律忽略。
+     *    tipText：      提示文案。
+     *    recalledByMe： 撤回者是否本人。
+     *    nowMs：        撤回推送到达的时间（Unix 毫秒）。
+     *    outDraftJson： [出参，可为 NULL] 生成了快照时写入快照 JSON，由宿主交给主面板存进本机库；没有生成时置空。
+     *  @return 找到并改成提示行返回 true，否则 false。
+     */
+    bool RecallMessageByMsgid(long long msgid, const CString& tipText, bool recalledByMe, long long nowMs,
+                              std::string* outDraftJson);
+
+    /**
+     *  到期处理（docs/撤回后重新编辑方案.md §3.3）：把「编辑」已到期的撤回提示行变回普通提示行并重画。
+     *    nowMs：当前时间（Unix 毫秒）。
+     *  @return 仍带「编辑」的行里最早的到期时刻（Unix 毫秒），宿主据此定下一次定时器；没有时返回 0。
+     */
+    long long ExpireRecallEdits(long long nowMs);
+
+    /**
      *  移除带指定服务器 msgid 的消息行（收到"本人删除了消息"推送后调用，见
      *  docs/清理聊天记录方案.md §8）。
      *
@@ -628,19 +1104,30 @@ public:
     bool BackfillSentMessage(const std::string& clientMsgId, long long msgid,
                              long long timestampMs);
 
+    /**
+     *  发送回执失败（或文件在发出消息之前就上传失败）时，按本端生成的 clientMsgId 找到那条「刚发出」、
+     *  还没有服务器 msgid 的消息行，置为「发送失败」并显示原因，随后重排、重绘。
+     *  文字、图片、文件、卡片各类气泡都适用（文本 / 图片按 clientMsgId，文件按 fileClientMsgId 匹配）。
+     *  @param clientMsgId 本端发送时生成的客户端消息ID；空串一律返回 false
+     *  @param reason      失败原因（界面显示用，不带句号）
+     *  @return 找到并标记返回 true；本列表没有该行、或该行已回填了服务器 msgid 时返回 false
+     *          （clientMsgId 全局唯一，主面板向所有聊天窗广播，由本方法自行筛选）
+     */
+    bool MarkSendFailed(const std::string& clientMsgId, const CString& reason);
+
     // 以某一条消息为起点进入多选模式（该行预选中）。
     void EnterMultiSelectWith(ChatBubble* bubble);
 
     /**
      *  转发多选中的消息（多选操作条上的「逐条转发」「合并转发」）。
      *
-     *  按 GetSelectedForwardMsgids 取可转发的 msgid；一条都没有时什么都不做、也不退出多选
-     *  （操作条上这两个按钮此时是灰的）。否则把 msgid、模式与跳过条数经
+     *  按 CollectSelectedForward 整理选中的行（在线直传的文件单独处理）；可转发的消息与要重新发送的文件
+     *  一条都没有时什么都不做、也不退出多选（操作条上这两个按钮此时是灰的）。否则把整理结果经
      *  WM_CHAT_FORWARD_REQUEST 投给宿主聊天窗，随后退出多选。消息列表不直接碰网络，
      *  与删除、撤回同一做法。列表不在窗口里（单元测试）时投递这一步跳过。
      *
      *  @param merge true 合并转发，false 逐条转发
-     *  @return 投给宿主（或本应投给宿主）的 msgid 条数；0 表示没有可转发的行、未做任何事
+     *  @return 投给宿主（或本应投给宿主）的条数：msgid 条数加要重新发送的文件个数；0 表示没有可转发的行、未做任何事
      */
     size_t RequestForwardSelected(bool merge);
 
@@ -701,8 +1188,12 @@ public:
     // 命中底部操作条执行 取消 / 逐条转发所选 / 合并转发所选 / 删除所选。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
 
-    // DuiControl 覆写：鼠标移动 —— 正在拖动滚动条滑块时据 pt.y 更新滚动位置。
+    // DuiControl 覆写：鼠标移动 —— 正在拖动滚动条滑块时据 pt.y 更新滚动位置；否则报告鼠标是否在
+    // 滚动条命中带上（悬停时滑块淡入并保持可见）。
     bool OnMouseMove(POINT pt, UINT mkFlags) override;
+
+    // DuiControl 覆写（2026-10-04 起）：鼠标离开本控件时滑块开始淡出。返回值同基类。
+    bool OnMouseLeave() override;
 
     // DuiControl 覆写：左键抬起 —— 结束滚动条滑块拖动。
     bool OnLButtonUp(POINT pt, UINT mkFlags) override;
@@ -821,6 +1312,12 @@ private:
     // BackfillSentMessage 据它为新出现的行当场判定。
     long long m_peerReadMsgid;
 
+    // 头像要画成灰度的发送者（别人，即当前离线的人）的 userid 集合。由 SetSenderAvatarGray
+    // 维护，AppendMessage 据它为新追加的对方气泡设置灰彩。
+    std::set<int64_t> m_graySenders;
+    // 本人的气泡头像是否画成灰度（本端掉线或正在连接时为 true）。由 SetSelfAvatarGray 维护，默认 false。
+    bool m_selfAvatarGray;
+
     // "该成员是否仍在群里"的查询钩子与其透传数据（借用，不持有）。群聊窗装上，
     // 单聊窗不装 —— 为空时 IsMemberInGroup 恒返回 true。
     MemberInGroupQuery m_memberQuery;
@@ -836,12 +1333,25 @@ private:
     StarredQuery m_starredQuery;
     void*        m_starredQueryUd;
 
+    // 「本人是否在本群关注了 TA 的发言」的查询钩子与其透传数据（借用，不持有）。群聊窗装上，
+    // 单聊窗不装 —— 为空时 IsGroupFollowed 恒返回 false。
+    StarredQuery m_groupFollowQuery;
+    void*        m_groupFollowQueryUd;
+
     // 本人在本群的角色，取值见 grouprole::NetGroupRole；-1 表示未知（单聊窗 / 尚未拉到群资料）
     int m_myNetRole;
+
+    // 文字消息右键菜单里「添加到备忘」的出现方式，取值见 ChatMemoMenuMode；默认不出现，由宿主聊天窗设置
+    int m_memoMenuMode;
+
+    // 是否处于密聊限制（单聊窗处于密聊中或只能查看）：为 true 时整张列表没有右键菜单、不响应 Ctrl+C、不能多选、
+    // 气泡不能拖出。由宿主聊天窗切换状态时设置（docs/密聊方案.md 4.5）
+    bool m_secretRestricted;
 
     // 滚动条滑块拖动状态。
     bool m_thumbDragging;    // 是否正在用鼠标拖动滑块
     int  m_thumbDragOffsetY; // 拖动开始时鼠标相对滑块顶部的 y 偏移（保持抓点不跳）
+    CChatScrollFade m_scrollFade;   // 滑块的淡入淡出（2026-10-04 起，与 balloonui 滚动条同一时序），随本控件销毁
 
     // ---- 离屏合成缓冲 ----
     // 气泡用 GDI+ 自绘，GDI 裁剪区约束不住 GDI+，滚动时气泡会溢出消息

@@ -35,7 +35,9 @@ enum HistoryKeyAction
     kHistoryKeyFirstPage   = 5,   // Ctrl+Home：第一页（焦点在搜索框时留给输入框移动光标）
     kHistoryKeyLastPage    = 6,   // Ctrl+End：最后一页（同上）
     kHistoryKeyFocusSearch = 7,   // Ctrl+F：焦点移到搜索框并选中框里全部文字
-    kHistoryKeySearchNow   = 8    // 焦点在搜索框时按回车：立即搜索，不等输入停顿
+    kHistoryKeySearchNow   = 8,   // 焦点在搜索框时按回车：立即搜索，不等输入停顿
+    kHistoryKeyNextHit     = 9,   // F3：时间轴模式下跳到下一处命中（不在时间轴模式时窗口不处理）
+    kHistoryKeyPrevHit     = 10   // Shift+F3：时间轴模式下跳到上一处命中
 };
 
 /**
@@ -48,5 +50,13 @@ enum HistoryKeyAction
  *  @return 动作，取值见 HistoryKeyAction；没有对应动作时返回 kHistoryKeyNone。
  */
 int DecideHistoryKey(UINT vk, bool ctrlDown, bool altDown, bool searchFocused, bool searchHasText);
+
+/**
+ *  同上，另外认 Shift：F3 与 Shift+F3 分别是下一处、上一处命中（docs/聊天记录管理器方案.md §11.7）。
+ *  其余按键的结果与上一个函数相同（Shift 不影响它们）。
+ *    shiftDown：Shift 是否按住。
+ *  @return 动作，取值见 HistoryKeyAction。
+ */
+int DecideHistoryKey(UINT vk, bool ctrlDown, bool altDown, bool shiftDown, bool searchFocused, bool searchHasText);
 
 } // namespace balloonhistory

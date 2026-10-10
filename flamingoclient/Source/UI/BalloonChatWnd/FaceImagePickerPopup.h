@@ -1,13 +1,13 @@
 /**
  *  FaceImagePickerPopup.h
  *
- *  单聊 / 群聊窗"表情"按钮点开后的图片表情选择浮层 —— 装 Bin/Face 目录下的
+ *  单聊 / 群聊窗"表情"按钮点开后的图片表情选择浮层 —— 装 程序目录/Face 目录下的
  *  PNG 表情（face0.png … face142.png，配 Face/FaceConfig.xml）。子类化 balloonui
  *  DuiPopupHost（无边框 WS_POPUP 浮层，自带 ESC / 失焦自动关闭），内部直接复用
  *  balloonui 现成控件 DuiEmojiPanel（图标网格 + hover + 点击）承载表情格子。
  *
  *  与旧的 Unicode emoji 浮层 CEmojiPickerPopup 的关系：本浮层<u>取代</u>它 ——
- *  「表情」按钮改弹本浮层（Bin/Face 图片表情），原 Unicode emoji 不再用。
+ *  「表情」按钮改弹本浮层（程序目录/Face 图片表情），原 Unicode emoji 不再用。
  *
  *  点中某表情经回调把 (faceId, 文件绝对路径) 交回聊天窗，由聊天窗用
  *  DuiRichEdit::InsertTaggedImage 以"带 faceId 标记的内联图"插入输入框

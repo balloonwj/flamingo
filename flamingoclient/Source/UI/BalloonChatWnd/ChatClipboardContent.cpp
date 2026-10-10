@@ -25,12 +25,13 @@
 #include "../../third-party/jsoncpp-1.9.0/json.h"
 
 #include <memory>
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
 const wchar_t* const kChatClipFormatName = L"Flamingo.ChatContent.v1";
-const wchar_t* const kChatClipFacePlaceholder  = L"[表情]";
-const wchar_t* const kChatClipImagePlaceholder = L"[图片]";
+const wchar_t* const kChatClipFacePlaceholder  = TR_NOOP(L"[表情]");
+const wchar_t* const kChatClipImagePlaceholder = TR_NOOP(L"[图片]");
 
 namespace {
 
@@ -217,12 +218,12 @@ std::wstring ClipSegmentsToPlainText(const std::vector<ChatClipSegment>& segs)
 
         //表情：写成 [表情]
         case kChatClipFace:
-            text += kChatClipFacePlaceholder;
+            text += TR(kChatClipFacePlaceholder);
             break;
 
         //图片：写成 [图片]
         case kChatClipImage:
-            text += kChatClipImagePlaceholder;
+            text += TR(kChatClipImagePlaceholder);
             break;
 
         //不会出现的类型：不输出任何文字

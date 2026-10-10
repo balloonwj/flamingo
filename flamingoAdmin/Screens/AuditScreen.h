@@ -24,6 +24,8 @@ namespace balloonwjui { class DuiButton; }   // FlatButton 已迁到 balloonwjui
 
 namespace flamingoadmin {
 
+namespace ui { class PagerBar; }
+
 class OverlayScrollbar;   // 表格区 / 详情区的悬浮 auto-hide 滚动条子控件
 
 // 审计日志界面。
@@ -65,12 +67,9 @@ private:
     struct Hit
     {
         RECT m_rc;     // 命中矩形（host 客户区坐标）
-        int  m_kind;   // 0=选条目 1=切级别筛选 2=切操作者筛选 3=上一页 4=下一页
-        int  m_arg;    // kind=0：日志 id；kind=1/2：筛选下标；kind=3/4：未用
+        int  m_kind;   // 0=选条目 1=切级别筛选 2=切操作者筛选（翻页由子控件 m_pager 处理）
+        int  m_arg;    // kind=0：日志 id；kind=1/2：筛选下标
     };
-
-    // 总页数（按 m_totalCount 与每页条数算出，至少为 1）。
-    int  PageCount() const;
 
     // 把「按当前页码 + 筛选重新加载」的意图上报 AdminFrame（并立即重绘以
     // 反映筛选高亮）。
@@ -78,7 +77,6 @@ private:
 
     void PaintTable (HDC hdc, const RECT& rc);
     void PaintDetail(HDC hdc, const RECT& rc);
-    void PaintFooter(HDC hdc, const RECT& rc);
 
     // 表格区悬浮滚动条拖动滑块时的回调（注册给 m_tableSb）：把新滚动偏移
     // 写回 m_tableScroll 并重绘本界面。
@@ -92,6 +90,11 @@ private:
 
     balloonwjui::DuiButton* m_btnRefresh = nullptr;   // 「刷新」按钮（子控件）
     balloonwjui::DuiButton* m_btnExport  = nullptr;   // 「导出」按钮（子控件）
+
+    // 分页条的翻页回调：记下目标页码并请求 AdminFrame 重新拉取（与原先点「上一页」
+    // 「下一页」相同）。
+    //   user：本界面指针；newPage：目标页码，从 1 起。
+    static void OnPagerThunk(void* user, int newPage);
 
     // 表格区悬浮 auto-hide 滚动条（子控件，悬浮于表格行区右缘，见
     // Widgets/OverlayScrollbar）；生命周期由 m_children 持有，本指针仅作引用。
@@ -117,7 +120,11 @@ private:
 
     RECT m_tableRc{};    // 表格区矩形（不含页脚）
     RECT m_detailRc{};   // 详情区矩形
-    RECT m_footerRc{};   // 分页页脚矩形
+    RECT m_footerRc{};   // 分页页脚矩形，共用分页条 m_pager 摆在这里
+
+    // 表格下方的分页条（子控件，与企业列表、敏感词页共用 ui::PagerBar）；生命周期由
+    // m_children 持有，本指针仅作引用。
+    ui::PagerBar* m_pager = nullptr;
 
     std::vector<Hit> m_hits;   // 本帧的命中区集合
 };

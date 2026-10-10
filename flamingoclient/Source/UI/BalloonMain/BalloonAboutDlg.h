@@ -24,6 +24,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 namespace balloonwjui { class DuiVBox; }
 
@@ -97,6 +98,8 @@ private:
     // 标题栏左上角小图标位图（app 图标 16x16 合成到标题栏底色上的 HBITMAP）。
     // DuiFrameWindow::SetIcon 仅借用，故由本类持有、析构时 DeleteObject。
     HBITMAP m_titleIconBmp;
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 
     // 品牌区放大显示的 app 图标位图（app 图标 64x64 合成到对话框白底上的 HBITMAP）。
     // DuiAvatar::SetBitmap 仅借用，故由本类持有、析构时 DeleteObject。

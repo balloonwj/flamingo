@@ -78,7 +78,7 @@ public:
      *
      *  之所以把 userid 原样回带：客户端是"先改界面再发请求"的乐观更新，用户连着
      *  编辑几个人的标签时会有多条请求在途，应答不带它就分不清是哪一条失败、回滚会
-     *  退错人。口径与 cmd_set_starred 回带 target 一致。
+     *  退错人。口径与 cmd_set_favorite 回带对象一致。
      */
     static std::string buildSetContactTagsResponse(int code, const std::string& msg,
                                                    int64_t userid,

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 19 章：屏幕录制（选择录制内容、框选区域、录制条、录制完成提示、录制管理与云端录像、录屏设置）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>屏幕录制 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c19">
+<article class="doc">
+  <h1>屏幕录制</h1>
+  <p class="lead">客户端自带录屏功能，可以录制整块屏幕、某个窗口、框选的区域或一块白板，也可以只录声音。录好的视频保存在本机，可以直接发到会话里，也可以保存到云端。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>系统要求：Windows 10 2004 或更高版本</li>
+    <li>保存到云端：需要企业开启「云端录制」开关</li>
+    <li>生成字幕：需要企业开启「语音字幕」开关</li>
+  </ul>
+
+  <h2 id="start">开始录制</h2>
+  <p>以下任一方式都可以开始录制：</p>
+  <ul>
+    <li>主面板系统菜单或托盘菜单里的 <span class="ui">发起录制</span>（录制中这一项变为「停止录制」）。</li>
+    <li>聊天窗输入工具栏上的 <span class="ui">屏幕录制</span> 按钮，在弹出的菜单里选 <span class="ui">开始录制…</span>。从聊天窗发起的录制，结束后可以一键发给这个会话。</li>
+    <li>按快捷键 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>，录制中再按一次即停止。这个快捷键可以在系统设置里关闭，见本章<a href="#settings">「录屏设置」</a>。</li>
+  </ul>
+
+  <h2 id="picker">选择录制内容</h2>
+  <figure class="shot center">
+    <img src="../img/u_record_picker.png" width="740" alt="选择要录制的内容">
+    <figcaption>「选择要录制的内容」窗口</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">屏幕</span> 页签里选一块显示器，或在 <span class="ui">窗口</span> 页签里选一个程序窗口。列表不是最新时点 <span class="ui">刷新</span>。</li>
+    <li>按需勾选下方的选项（见下表）。</li>
+    <li>点 <span class="ui">开始录制</span>。也可以改点 <span class="ui">框选区域</span>、<span class="ui">白板</span> 或 <span class="ui">只录声音</span>，说明见下表。</li>
+  </ol>
+  <table>
+    <tr><th style="min-width:7.5em">选项或按钮</th><th>作用</th></tr>
+    <tr><td>录制麦克风</td><td>录下你通过麦克风讲的话</td></tr>
+    <tr><td>录制电脑声音</td><td>录下电脑上播放的声音</td></tr>
+    <tr><td>摄像头画中画</td><td>把摄像头画面以小窗口的形式叠加在录像里</td></tr>
+    <tr><td>生成字幕</td><td>录制时把讲话识别成字幕，录完后可以编辑和导出，见<a href="20-captions.html">「字幕模式与字幕编辑」</a>；默认沿用上次的选择</td></tr>
+    <tr><td>保存到云端</td><td>录完后把录像上传到服务器，企业没有开通云端录制时不能勾选</td></tr>
+    <tr><td>框选区域</td><td>在屏幕上拖出一个矩形，只录这一块区域</td></tr>
+    <tr><td>白板</td><td>打开一块白板并录制它，适合边画边讲</td></tr>
+    <tr><td>只录声音</td><td>不录画面，只录麦克风或电脑声音，保存为音频文件；至少要勾选「录制麦克风」或「录制电脑声音」中的一项</td></tr>
+  </table>
+
+  <h3>框选区域</h3>
+  <p>点 <span class="ui">框选区域</span> 后，屏幕变暗，按住鼠标左键拖出要录制的矩形。选区左上角实时显示尺寸和提示「回车确认，Esc 取消」：按 <kbd>Enter</kbd> 或双击确认，按 <kbd>Esc</kbd> 或单击右键取消。</p>
+  <figure class="shot">
+    <img src="../img/u_record_region.png" width="880" alt="框选录制区域">
+    <figcaption>框选了一个 760 × 720 的区域</figcaption>
+  </figure>
+
+  <h2 id="bar">录制条</h2>
+  <p>录制开始后，屏幕上出现一条录制条，左侧显示「录制中」和已录的时长（暂停时为「已暂停」，只录声音时为「录音中」）。录制条默认不会被录进视频。</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/u_record_bar.png" width="523" alt="录制条">
+      <span class="pin" style="left:32.8%;top:12%">1</span>
+      <span class="pin" style="left:39.7%;top:12%">2</span>
+      <span class="pin" style="left:46.6%;top:12%">3</span>
+      <span class="pin" style="left:53.4%;top:12%">4</span>
+      <span class="pin" style="left:60.3%;top:12%">5</span>
+      <span class="pin" style="left:67.2%;top:12%">6</span>
+      <span class="pin" style="left:74.1%;top:12%">7</span>
+      <span class="pin" style="left:81%;top:12%">8</span>
+      <span class="pin" style="left:87.9%;top:12%">9</span>
+      <span class="pin" style="left:94.7%;top:12%">10</span>
+    </div>
+    <figcaption>录制条；蓝色的按钮表示该项正在开启</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>暂停 / 继续</b>：暂停期间的内容不会录进视频</li>
+    <li><b>鼠标效果</b>：设置鼠标光圈、点击效果和轨迹，见下图</li>
+    <li><b>画笔</b>：在屏幕上画图、写字，笔迹会录进视频</li>
+    <li><b>麦克风</b>：鼠标停在上面显示「麦克风：开」或「麦克风：关」，点击切换</li>
+    <li><b>电脑声音</b>：开关电脑声音的录制</li>
+    <li><b>摄像头</b>：开关摄像头画中画</li>
+    <li><b>字幕</b>：开关字幕；关闭期间的讲话不会生成字幕</li>
+    <li><b>停止</b>：结束录制并保存</li>
+    <li><b>隐藏</b>：完全隐藏录制条，鼠标移到屏幕边缘时重新出现</li>
+    <li><b>收起 / 固定</b>：把录制条收成小把手，鼠标移上去时临时展开</li>
+  </ol>
+  <div class="shot-row">
+    <figure class="shot" style="flex:0 0 151px"><img src="../img/u_record_mouse_menu.png" width="151" alt="鼠标效果菜单"><figcaption>鼠标效果菜单</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <p>点录制条上的鼠标效果按钮，可以勾选：</p>
+      <ul>
+        <li><span class="ui">鼠标光圈</span>：在鼠标周围显示一圈光圈，<span class="ui">光圈颜色</span> 可以另选。</li>
+        <li><span class="ui">点击效果</span>：单击时显示点击效果。</li>
+        <li><span class="ui">鼠标轨迹</span>：显示鼠标移动的轨迹，<span class="ui">轨迹颜色</span> 可以另选。</li>
+        <li><span class="ui">允许截图</span>：录制条默认不会出现在截图和录像里，勾选后可以被截取。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="done">录制完成</h2>
+  <p>停止录制后，屏幕右下角弹出「录制完成」提示，显示文件名、时长和文件大小：</p>
+  <figure class="shot center">
+    <img src="../img/u_record_done.png" width="400" alt="录制完成提示">
+    <figcaption>录制完成提示</figcaption>
+  </figure>
+  <ul>
+    <li><span class="ui">打开</span>：用系统默认的播放器播放这段录像。</li>
+    <li><span class="ui">打开所在文件夹</span>：在资源管理器里定位到录像文件。</li>
+    <li><span class="ui">打开我的录制</span>：打开「录制管理」窗口。</li>
+    <li><span class="ui">编辑字幕</span>：这次录制生成了字幕时才有，打开字幕编辑器。</li>
+    <li><span class="ui">发送到会话…</span>：选择会话，把录像作为文件发出去。从聊天窗发起的录制，这个按钮直接是 <span class="ui">发送</span>，提示标题为「录制完成，可发送给 某某」。</li>
+  </ul>
+  <p>录像默认保存在「视频」文件夹下的 <code>FlamingoRecords</code> 文件夹里，文件名形如 <code>FlamingoRecord_20261009_222211.mp4</code>。磁盘空间不足、录制的窗口被关闭等情况下录制会自动停止，提示标题会说明原因，已经录到的部分照常保存。</p>
+
+  <h2 id="manager">录制管理</h2>
+  <p>从主面板系统菜单的 <span class="ui">录制管理</span>、聊天窗「屏幕录制」菜单里的 <span class="ui">录制管理</span>，或录制完成提示上的 <span class="ui">打开我的录制</span>，都可以打开「录制管理」窗口。窗口分 <span class="ui">本机</span> 和 <span class="ui">云端</span> 两个页签。</p>
+
+  <h3>本机录像</h3>
+  <p>列表里每一行显示文件名、录制时间、时长、大小，以及是否有字幕（「有字幕」，导出过字幕时写明导出了哪几种）。选中一行后，可以用上方的按钮或右键菜单操作：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/u_record_manager.png" width="864" alt="录制管理"><figcaption>「本机」页签，右上角是录像总数</figcaption></figure>
+    <figure class="shot"><img src="../img/u_record_manager_menu.png" width="864" alt="录像的右键菜单"><figcaption>右键菜单多一项「上传到云端」</figcaption></figure>
+  </div>
+  <table>
+    <tr><th>操作</th><th>说明</th></tr>
+    <tr><td>播放</td><td>用系统默认的播放器播放</td></tr>
+    <tr><td>打开所在文件夹</td><td>在资源管理器里定位到文件</td></tr>
+    <tr><td>发送到会话…</td><td>选择会话，把录像发出去</td></tr>
+    <tr><td>重命名</td><td>直接在列表里修改文件名</td></tr>
+    <tr><td>删除</td><td>确认后把文件移到回收站；文件已经不存在时，这一项变为「从列表移除」</td></tr>
+    <tr><td>编辑字幕</td><td>打开字幕编辑器，见<a href="20-captions.html#editor">「字幕编辑器」</a></td></tr>
+    <tr><td>上传到云端</td><td>仅在右键菜单里，把这段录像保存到云端</td></tr>
+  </table>
+
+  <h3>云端录像</h3>
+  <p><span class="ui">云端</span> 页签列出保存在服务器上的录像，包括录屏时勾选了「保存到云端」的录像和屏幕共享中的云端录制。可以 <span class="ui">播放</span>、<span class="ui">下载…</span>、<span class="ui">发送到会话…</span>、<span class="ui">重命名</span> 和 <span class="ui">删除</span>。列表会显示「上传中」「合成中」等进度；云端录像有保存期限，列表里显示「N 天后到期」。删除云端录像后不能恢复，已经发到会话里的录像卡片也无法再观看。企业没有开通云端录制时，这一页显示「管理员没有开通云端录制」。</p>
+
+  <h2 id="settings">录屏设置</h2>
+  <p>在主面板系统菜单打开 <span class="ui">系统设置</span>，切到 <span class="ui">音视频</span> 页，可以修改以下几项（详见<a href="28-settings.html">「系统设置」</a>）：</p>
+  <ul>
+    <li><span class="ui">录屏画质</span>：<b>标准</b> 或 <b>高清</b>。高清的分辨率最高 2560，码率约为标准的 2 倍，画面更清晰，文件也更大。</li>
+    <li><span class="ui">录屏保存位置</span>：点 <span class="ui">更改</span> 选择其他文件夹，默认是「视频」文件夹下的 <code>FlamingoRecords</code>。</li>
+    <li><span class="ui">录屏快捷键</span>：开启后按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> 开始录屏，录制中再按一次停止。</li>
+  </ul>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

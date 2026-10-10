@@ -23,6 +23,7 @@
 #include "../../net/Protocol.h"                         // presence_type / conversation_type / message_type
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -598,7 +599,7 @@ void CMainPanelBench::BenchSearchTyping()
 
     //先逐字输入拼音（每一步都要对全部联系人做一次拼音匹配），再输入中文
     const wchar_t* const kPinyinSteps[] = { L"z", L"zh", L"zha", L"zhan", L"zhang" };
-    const wchar_t* const kHanziSteps[]  = { L"张", L"张伟" };
+    const wchar_t* const kHanziSteps[]  = { TR(L"张"), TR(L"张伟") };
 
     std::vector<double> pinyin;
     for (size_t i = 0; i < _countof(kPinyinSteps); ++i)

@@ -1,5 +1,5 @@
 /**
- *  「消息盒子」窗口布局契约单元测试（Suite ANB），AnnounceBoxLayoutTests.cpp
+ *  「公告中心」窗口布局契约单元测试（Suite ANB），AnnounceBoxLayoutTests.cpp
  *
  *  用 BuildAnnounceBoxBody / BuildAnnounceListContent 直接构树，覆盖：
  *    ANB1  固定控件点名齐全（顶部信息 / 列表 / 右栏三项 / 底部按钮）；
@@ -46,7 +46,7 @@ using balloonwjui::DuiButton;
 namespace {
 
 // ---- ANB11 用的几个尺寸常量 ----
-//测试窗口客户区尺寸（像素）。取消息盒子的默认开窗尺寸（见 BalloonAnnounceBoxWindow.cpp
+//测试窗口客户区尺寸（像素）。取公告中心的默认开窗尺寸（见 BalloonAnnounceBoxWindow.cpp
 //的 kAnnWindowWidth / kAnnWindowHeight），减去标题栏高度即为客户区高。
 const int kTestClientW = 820;
 const int kTestClientH = 520;
@@ -119,7 +119,7 @@ CString LabelTextById(DuiControl* root, UINT id)
 
 } // namespace
 
-TEST_CASE("ANB1 消息盒子固定控件点名齐全", "[announce][layout]")
+TEST_CASE("ANB1 公告中心固定控件点名齐全", "[announce][layout]")
 {
     AnnounceBoxViewData d = MakeData();
     std::unique_ptr<DuiControl> root = BuildAnnounceBoxBody(d);
@@ -394,9 +394,14 @@ TEST_CASE("ANB12 两栏滚动视口都是悬浮式自动隐藏的那种", "[anno
     REQUIRE(listSv != nullptr);
     REQUIRE(bodySv != nullptr);
 
-    //内置滚动条宽度必须是 0：它一旦占宽度，内容就用不满整个宽度了。
-    CHECK(listSv->GetScrollBarWidth() == 0);
-    CHECK(bodySv->GetScrollBarWidth() == 0);
+    //滚动条是 balloonui 统一的悬浮式细滑块（2026-10-04 起不再把基类宽度置 0 自绘）：自动隐藏、不占内容宽度。
+    REQUIRE(listSv->GetScrollBar() != nullptr);
+    REQUIRE(bodySv->GetScrollBar() != nullptr);
+    CHECK(listSv->GetScrollBar()->IsAutoHide());
+    CHECK(bodySv->GetScrollBar()->IsAutoHide());
+    //命中带保持默认宽度：置 0 就完全没有滚动条
+    CHECK(listSv->GetScrollBarWidth() == balloonwjui::DuiScrollBar::kOverlayBandPx);
+    CHECK(bodySv->GetScrollBarWidth() == balloonwjui::DuiScrollBar::kOverlayBandPx);
 
     //列表装的是一串定高的行，问得出总高，走自动测高；正文问不出，由窗口显式喂。
     CHECK(listSv->GetAutoContentHeight() == true);

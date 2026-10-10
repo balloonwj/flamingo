@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 10 章：录制、试听、发送与收听语音消息。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>语音消息 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c10">
+<article class="doc">
+  <h1>语音消息</h1>
+  <p class="lead">不方便打字时，可以录一段语音发给同事。本章介绍怎样录制、暂停、试听和发送语音消息，以及怎样收听别人发来的语音。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>单聊、群聊通用</li>
+    <li>需要：电脑接有麦克风</li>
+    <li>每条最长 2 分钟</li>
+  </ul>
+
+  <h2 id="record">录制语音</h2>
+  <p>点聊天窗口输入工具栏的麦克风按钮 <span class="ui">语音消息</span>，立即开始录音。输入框的位置换成录音条：左边是红点和录音时长，中间是随音量跳动的波形，右边是操作按钮。</p>
+  <figure class="shot center">
+    <img src="../img/f_voice_recording.png" width="760" alt="正在录音的录音条">
+    <figcaption>正在录音：红点、时长 0:02、波形，以及「暂停」「停止」「取消」「发送」</figcaption>
+  </figure>
+  <table>
+    <tr><th>按钮</th><th>作用</th></tr>
+    <tr><td>暂停 / 继续</td><td>暂时停止录音，红点变灰、计时停住，按钮变成「继续」；点「继续」接着录。暂停期间也可以点「试听」听一下已经录好的部分</td></tr>
+    <tr><td>停止</td><td>结束录音，进入试听状态，之后不能再接着录</td></tr>
+    <tr><td>取消</td><td>放弃这段录音，见下文<a href="#cancel">「放弃录音」</a></td></tr>
+    <tr><td>发送</td><td>把录好的语音发给对方</td></tr>
+  </table>
+  <p>录音条显示时，按 <kbd>Enter</kbd> 等于点 <span class="ui">发送</span>，按 <kbd>Esc</kbd> 等于点 <span class="ui">取消</span>。</p>
+
+  <h2 id="preview">停止与试听</h2>
+  <p>点 <span class="ui">停止</span> 后，录音条显示这段语音的总时长，按钮变为 <span class="ui">试听</span>、<span class="ui">取消</span> 和 <span class="ui">发送</span>。点 <span class="ui">试听</span> 从头播放刚录的内容，播放时按钮变为 <span class="ui">停止试听</span>。确认无误后点 <span class="ui">发送</span>。</p>
+  <figure class="shot center">
+    <img src="../img/f_voice_stopped.png" width="760" alt="停止录音后的试听状态">
+    <figcaption>停止后可以先试听，再决定发送还是取消</figcaption>
+  </figure>
+  <div class="callout note"><b>录满 2 分钟会自动停止</b>一条语音最长 2 分钟。录满时会自动停止并进入试听状态，等你确认后再发送，不会自动发出。</div>
+
+  <h2 id="cancel">放弃录音</h2>
+  <p>点 <span class="ui">取消</span>（或按 <kbd>Esc</kbd>）时，录音条会询问「放弃这段录音？」：点 <span class="ui">确认放弃</span> 删除这段录音并收起录音条；点 <span class="ui">返回</span> 回到刚才的状态，原来在录音的会接着录。录音不到 1 秒时点 <span class="ui">取消</span> 会直接放弃，不再询问。</p>
+  <figure class="shot center">
+    <img src="../img/f_voice_cancel.png" width="760" alt="放弃录音的确认">
+    <figcaption>放弃前的确认</figcaption>
+  </figure>
+
+  <h2 id="play">收听语音</h2>
+  <p>发出和收到的语音在聊天里显示为语音气泡，里面有播放图标、波形和时长，时长越长气泡越宽。</p>
+  <ul>
+    <li>点一下语音气泡开始播放，再点一下停止。同一时间只播放一条，开始播放另一条时，正在播放的会先停下。</li>
+    <li>对方发来、你还没有听过的语音，气泡旁边带一个红点，听过之后红点消失。红点只记录在本机。</li>
+    <li>一条听完后，如果紧挨着的下一条也是对方发来的未听语音，会接着自动播放；中间隔着别的消息时就停下。</li>
+    <li>消息记录窗口和合并转发的聊天记录里的语音也可以点击播放。</li>
+  </ul>
+
+  <h2 id="notes">注意事项</h2>
+  <ul>
+    <li>录音不到 1 秒就点 <span class="ui">停止</span> 或 <span class="ui">发送</span>，会提示「说话时间太短」并收起录音条，不会发出。</li>
+    <li>正在进行语音、视频通话时不能录制语音消息，会提示「通话中不能录制语音消息」；播放语音不受影响。</li>
+    <li>同一时间只能在一个聊天窗口里录音，另一个窗口正在录音时会提示「正在另一个会话里录音」。</li>
+    <li>麦克风无法打开时会提示检查麦克风是否连接，以及 Windows 设置里是否允许应用使用麦克风。</li>
+    <li>看不到麦克风按钮时，说明客户端的音视频组件没有加载，语音消息暂时不能使用。</li>
+  </ul>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

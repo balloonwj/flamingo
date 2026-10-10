@@ -2,7 +2,7 @@
 //
 // E:\flamingo\flamingoclient\Source\msxml3.tlh
 //
-// C++ source equivalent of Win32 type library msxml3.dll
+// C++ source equivalent of type library msxml3.dll
 // compiler-generated file - DO NOT EDIT!
 
 #pragma once
@@ -2382,7 +2382,7 @@ IXMLAttribute : IDispatch
         /*[out,retval]*/ BSTR * v ) = 0;
 };
 
-#pragma pack(push, 4)
+#pragma pack(push, 8)
 
 struct _xml_error
 {

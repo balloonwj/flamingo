@@ -12,8 +12,10 @@
  */
 
 #include "AboutDlgModel.h"
+#include "../../App/BrandText.h"   // kDefaultAppTitle（产品名称为空时的回退值）
 
 #include <cwchar>                 // swprintf_s（拼构建时间戳）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -112,23 +114,21 @@ const wchar_t* AboutBuildStamp()
 
 std::wstring AboutVersionLine()
 {
-    std::wstring line;
-    line.reserve(kBuildStampCapacity);
-    line += L"版本 ";
-    line += kAboutVersion;
-    line += L" (Build ";
-    line += AboutBuildStamp();
-    line += L")";
-    return line;
+    //{0} 为版本号，{1} 为编译时间戳
+    return TRF(L"版本 {0} (Build {1})", kAboutVersion, AboutBuildStamp());
 }
 
-std::wstring BuildAboutTitle(unsigned long processId)
+std::wstring BuildAboutCaption(const wchar_t* appName)
 {
-    // 形如「关于 FlamingoIM [12345]」：固定前缀「关于 」+ 应用名 +「 [」+ pid +「]」。
-    std::wstring title;
-    title.reserve(32);
-    title += L"关于 ";
-    title += kAboutAppName;
+    // 「关于 <产品名称>」；产品名称为空时回退到缺省名，避免只剩「关于 」两个字
+    const wchar_t* name = (appName != NULL && appName[0] != L'\0') ? appName : brandtext::kDefaultAppTitle;
+    return TRF(L"关于 {0}", name);
+}
+
+std::wstring BuildAboutTitle(const wchar_t* appName, unsigned long processId)
+{
+    // 形如「关于 FlamingoIM [12345]」：「关于 <产品名称>」+「 [」+ pid +「]」。
+    std::wstring title = BuildAboutCaption(appName);
     title += L" [";
     title += std::to_wstring(processId);
     title += L"]";

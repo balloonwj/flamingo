@@ -156,7 +156,7 @@ public:
     int32_t publishDueScheduled(std::vector<int64_t>* outPublishedIds = NULL);
 
     // ================================================================
-    // 投递侧：把已发布的公告送进 IM 客户端的「消息盒子」
+    // 投递侧：把已发布的公告送进 IM 客户端的「公告中心」
     //
     // 上面那些方法都是<u>管理控制台</u>视角——按状态分页列出全部公告、改内容与状态。
     // 下面三个是 <u>IM 普通用户</u>视角：他能看到哪些公告、他读了哪一条、以及一条新
@@ -164,17 +164,17 @@ public:
     //
     // 两组不要混用，尤其注意数据结构不同：管理侧用 AnnouncementInfo（带草稿状态、受众
     // 类型、投放目标、已读人数等运营字段），投递侧用 AnnouncementPushItem（只装普通用户
-    // 该看到的内容）。详见 docs/消息盒子接入方案.md。
+    // 该看到的内容）。详见 docs/公告中心接入方案.md。
     // ================================================================
 
     /**
-     *  取发给某个 IM 用户的平台公告，即「消息盒子」列表的数据源。
+     *  取发给某个 IM 用户的平台公告，即「公告中心」列表的数据源。
      *
      *  只返回<u>已发布</u>（f_status=1）且<u>受众命中</u>该用户的公告；草稿、已撤回、
      *  以及受众类型为「平台内部」的公告一律不返回——最后这条尤其重要，平台内部公告是
      *  给运营看的，漏投给普通用户是事故。
      *
-     *  结果按「置顶优先、再按发布时间倒序」排列，与消息盒子列表的展示顺序一致。
+     *  结果按「置顶优先、再按发布时间倒序」排列，与公告中心列表的展示顺序一致。
      *
      *    userid      目标用户的 userid。
      *    sinceId     增量游标：只返回公告ID大于它的；传 0 表示全量拉取。
@@ -215,7 +215,31 @@ public:
     void filterAudienceAmong(int64_t announcementId, const std::vector<int32_t>& candidates,
                              std::vector<int32_t>& outHitUserIds);
 
+    /**
+     *  与 filterAudienceAmong 相同，但只保留还没读过该公告的人（t_announcement_read 里没有
+     *  该用户的回执），供管理控制台「重新推送」决定推给谁。
+     *
+     *    announcementId  公告ID；公告不是「已发布」时筛不到任何人。
+     *    candidates      候选 userid 列表（一般是当前全部在线用户）；为空时直接返回。
+     *    outHitUserIds   [出参] 候选中命中受众且未读的 userid，先清空再填充。
+     */
+    void filterUnreadAudienceAmong(int64_t announcementId, const std::vector<int32_t>& candidates,
+                                   std::vector<int32_t>& outHitUserIds);
+
+    /**
+     *  检查一条公告能否「重新推送」：只有已发布的公告可以。
+     *    announcementId  公告ID。
+     *  @return error_code_ok 可以；error_code_announcement_notpublished 是草稿或已撤回；
+     *          error_code_unknown 公告不存在、ID 非法或查库失败。
+     */
+    int32_t checkRepushable(int64_t announcementId);
+
 private:
+    //filterAudienceAmong 与 filterUnreadAudienceAmong 的共同实现：一条 SQL 从候选里筛出受众，
+    //unreadOnly 为 true 时再排除已有已读回执的人。参数含义同两者。
+    void filterAudienceImpl(int64_t announcementId, const std::vector<int32_t>& candidates,
+                            bool unreadOnly, std::vector<int32_t>& outHitUserIds);
+
     //创建一个已 initialize 的数据库连接；失败返回 NULL，成功时所有权归调用方。
     IDatabase* createDbConnection();
 

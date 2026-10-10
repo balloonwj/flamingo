@@ -13,6 +13,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -43,7 +44,11 @@ struct LoginProfile
     std::string address;         //所在地
     std::string phonenumber;     //电话
     std::string mail;            //邮箱
+    std::string landline;        //座机，未填为空串
+    std::string post;            //岗位：本人填写的自由文本，与部门职位无关；未填为空串
     int64_t     enterpriseid;    //所属企业ID，0 表示无企业归属
+    int32_t     phonevisible;    //手机号对同事的公开范围，取值见 enum profile_visibility（登录应答只发给本人，总是下发）
+    int32_t     landlinevisible; //座机对同事的公开范围，取值同上
 };
 
 //cmd_get_devices 应答里的单个在线设备
@@ -79,11 +84,14 @@ public:
      *  @param userid     登录用户的 userid；按 v2 约定以字符串编码进 JSON
      *  @param profile    需下发的用户资料
      *  @param servertime 服务器当前时间，Unix 毫秒时间戳（UTC）
+     *  @param features   本人所属企业的功能开关（功能名 → 0 / 1，见 FeatureSwitchManager），写成 features 对象；
+     *                    为空时不写这个字段（客户端把缺这个字段视同全部关闭）
      *  @return 紧凑格式的应答 JSON 文本
      */
     static std::string buildLoginSuccessResponse(int64_t userid,
                                                  const LoginProfile& profile,
-                                                 int64_t servertime);
+                                                 int64_t servertime,
+                                                 const std::map<std::string, int>& features = std::map<std::string, int>());
 
     /**
      *  构造 cmd_login 失败应答 JSON。

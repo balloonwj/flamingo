@@ -24,6 +24,8 @@
 // 避免两边各定义一份结构相同的类型再来回拷贝。
 #include "../UI/BalloonChatWnd/GroupMentionModel.h"
 
+namespace Json { class Value; }   //jsoncpp 的值类型：批注读写函数的参数，这里只前置声明，不引入 jsoncpp 头文件
+
 namespace net {
 
 //文本消息的字体设置。随 content.font 子对象在收发双方之间传递，使对端与历史
@@ -52,6 +54,28 @@ struct TextFont
     {
     }
 };
+
+//文字消息的格式，随 content.format 在收发双方之间传递（docs/Markdown消息方案.md 第 4 节）。
+//服务端不认识也不改动这个字段，原样存储与转发；旧客户端忽略它，把 text 当纯文字显示。
+enum text_format
+{
+    text_format_plain    = 0,   //纯文字：content 不带 format 字段（现有行为），或带了不认识的取值
+    text_format_markdown = 1,   //Markdown：content.format 为 "markdown"，text 是 Markdown 源文本（表情标记照常）
+    text_format_code     = 2,   //代码片段：content.format 为 "code"，text 是代码原文（不做表情标记转义），
+                                //content.lang 为语言标识（docs/代码片段方案.md §4）
+};
+
+//content.format 取 Markdown 时的字面值
+extern const char* const kTextFormatMarkdownValue;
+
+//content.format 取代码片段时的字面值
+extern const char* const kTextFormatCodeValue;
+
+//代码片段的语言标识在 content 里的键名
+extern const char* const kCodeLangKey;
+
+//代码片段的批注在 content 里的键名（docs/代码片段方案.md 第 10.5 节）
+extern const char* const kCodeNotesKey;
 
 //发送回执（cmd_send_message=1503 的应答）解析结果。
 //发送成功（code==0）时 msgid/timestamp 有效；失败时仅 code/msg 有效。
@@ -125,6 +149,28 @@ struct ReplyQuote
     }
 };
 
+/**
+ *  代码片段的一条批注：content.notes 数组的一项 {"from":3,"to":5,"text":"...","userid":"100008","new":1}
+ *  （docs/代码片段方案.md 第 10.5 节、第 11.4 节）。行号从 1 起、包含两端，指规范化之后的代码。
+ *  服务端不认识这个字段，只把说明文字纳入敏感词检查。
+ */
+struct CodeNoteData
+{
+    int         m_from;     //起始行，从 1 起
+    int         m_to;       //结束行，从 1 起，包含这一行
+    std::string m_text;     //说明文字（UTF-8）
+    int64_t     m_userId;   //作者 userid（notes[].userid）；0 表示缺省，即作者是这条消息的发送者
+    bool        m_isNew;    //notes[].new 为 1：消息发送者在这一轮追加批注时新增或修改的批注
+
+    CodeNoteData()
+        : m_from(0)
+        , m_to(0)
+        , m_userId(0)
+        , m_isNew(false)
+    {
+    }
+};
+
 //走下载链路取原文件、按 m_fileName 命名落地）；其它类型上述字段均为空 / 0。
 struct MessageNotify
 {
@@ -137,8 +183,15 @@ struct MessageNotify
     int         m_msgtype;      //内容类型：见 enum message_type，文本=1、图片=2
     std::string m_text;         //文本正文（仅 m_msgtype==message_type_text 时有效，UTF-8）
     TextFont    m_font;         //文本字体设置（仅文本消息、且发送方设过字体时 m_valid 为 true）
+    int         m_textFormat;   //文本格式，取值见 enum text_format；只有文本消息可能为 Markdown 或代码片段，其余恒为纯文字
+    std::string m_codeLang;     //代码片段的语言标识（content.lang，如 "cpp"）；只在 m_textFormat 为 text_format_code 时有效，
+                                //缺省或不是字符串时为空，显示时按纯文本
+    std::vector<CodeNoteData> m_codeNotes;   //代码片段的批注（content.notes）；只在 m_textFormat 为 text_format_code 时读，
+                                             //格式不对的条目在这里就跳过，越界、相交等由显示端再整理
     int64_t     m_timestamp;    //消息时间（Unix 毫秒）
-    bool        m_recalled;     //是否已撤回（本轮恒为 false，预留）
+    bool        m_recalled;     //是否已撤回（拉历史时服务端照样下发已撤回的消息，聊天窗据此换成撤回提示行）
+    int64_t     m_recalledBy;   //撤回者 userid（recalledby）；0 表示未撤回，或服务端没有记录撤回者
+                                //（2026-10-03 服务端开始记录撤回者之前撤回的消息），此时按发送方处理
 
     //==== 图片消息字段（仅 m_msgtype==message_type_image 时有效）====
     std::string m_imageFileId;  //图片文件ID（字符串编码），下载原图时传给 cmd_request_download
@@ -152,6 +205,11 @@ struct MessageNotify
     std::string m_fileName;     //原始文件名（含扩展名，UTF-8），收方据此命名落地文件
     int64_t     m_fileSize;     //文件字节数（发送方写入，供收方显示大小与作下载进度分母）
     std::string m_fileMd5;      //文件内容MD5（小写十六进制），下载完成后校验完整性
+    //单聊单文件 P2P 直传留下的文件消息（content 带 direct=1，2026-10-04 起）：服务器上没有这个文件、没有 fileid
+    bool        m_fileDirect;            //是不是在线直传的文件消息
+    std::string m_fileDirectSessionId;   //直传的会话 id；聊天窗据它接管那条实时气泡
+    int         m_fileDirectResult;      //直传的结局：folder_state_completed(8) 或 folder_state_rejected(3)；非直传为 0
+    int         m_fileLinkPath;          //直传数据实际走的 P2P 链路路径（1 局域网直连、2 打洞直连、3 中转）；0=没有
 
     //==== 文件夹传输记录字段（仅 m_msgtype==message_type_folder 时有效）====
     //一次单聊「发送文件夹」走到终态后，服务端在双方会话里各留一条这样的记录条，
@@ -166,6 +224,7 @@ struct MessageNotify
     int64_t     m_folderTotalSize;   //全部文件字节数合计；单位：字节
     int         m_folderResult;      //结局，取值为 folder_transfer_state 的终态（3~8）；0=非文件夹记录
     int         m_folderErrCode;     //失败原因（error_code_folder_*）；仅结局为 7 时有意义
+    int         m_folderLinkPath;    //数据实际走的 P2P 链路路径（2026-10-04 起，1/2/3）；0=没有走 P2P 或老记录
 
     //==== 群聊 @提醒 字段（仅文本消息、且发送方 @ 过人时非空；见 docs/群聊@提醒方案.md）====
     //老版本客户端发来的消息没有 content.at，这两项保持默认（false / 空），按纯文本渲染。
@@ -188,6 +247,85 @@ struct MessageNotify
     //MessageProtocolClient::parseMergedContent 解析；嵌套的记录也是用到哪层解析哪层。
     std::string m_mergedContent;
 
+    //==== 群接龙卡片（仅 m_msgtype==message_type_relay 时有效）====
+    //content 原文（紧凑 JSON），形如 {"title","note","deadline","items",...}。与合并记录一样
+    //不在解析推送时展开，用到时经 CardProtocolClient::parseRelayCardContent 解析。同步、Pin 列表、
+    //搜索下发的卡片带服务端合并的名单与状态；实时推送的新卡片只有 title / note / deadline。
+    //本地库里的最新内容以 content 列为准（见 V2MsgQuery.h 的 NotifyFromRecord）
+    std::string m_relayContent;
+
+    //==== 文件共享卡片（仅 m_msgtype==message_type_fileshare 时有效）====
+    //content 原文（紧凑 JSON），形如 {"shareid","kind","name","displaypath","ownerid"}；同步与推送下发时服务端
+    //另按看的人合并了 sharestate / sharereason / myperms。用到时经 MessageProtocolClient::parseShareCardContent 解析
+    std::string m_shareContent;
+
+    //==== 屏幕共享卡片（仅 m_msgtype==message_type_screenshare 时有效）====
+    //content 原文（紧凑 JSON），形如 {"roomid","host","hostname","starttime"}，服务端发起共享时生成、此后不再变化。
+    //用到时经 MessageProtocolClient::parseScreenShareCardContent 解析
+    std::string m_screenShareContent;
+
+    //==== 通话记录卡片（仅 m_msgtype==message_type_rtc 时有效）====
+    //content 原文（紧凑 JSON），两种：群通话卡片（kind 为 groupcall，docs/协议设计-v2.md 21.5）形如
+    //{"kind":"groupcall","roomid","media","initiator","initiatorname","starttime"}，通话结束时服务端改写，另带 endtime 与 duration，
+    //用到时经 groupcall::GroupCallProtocolClient::parseCard 解析；一对一通话卡片（kind 为 call，7.8 节「一对一通话卡片」）形如
+    //{"kind":"call","sessionid","media","caller","callername","callee","starttime"}，结束时另带 result、endtime 与 duration（接通过才有），
+    //用到时经 balloonchatwnd::ParseCallCard 解析
+    std::string m_groupCallContent;
+
+    //==== 入群邀请卡片（仅 m_msgtype==message_type_group_invite 时有效，docs/邀请入群方案.md §4.3）====
+    //content 原文（紧凑 JSON），形如 {"inviteid","groupid","groupname","inviterid","inviter","inviteeid","invitee",
+    //"expiretime"}；同步与推送下发时服务端另合并了 state / membercount 与群的当前名字、头像。
+    //用到时经 balloonchatwnd::ApplyGroupInviteCard 解析
+    std::string m_groupInviteContent;
+
+    //==== 群公告卡片（仅 m_msgtype==message_type_announcement 时有效，docs/群公告接入方案.md §13.2）====
+    //content 原文（紧凑 JSON），形如 {"announcementid","groupid","title","body","severity","publisherid","publisher",
+    //"publishtime","republish","text"}；公告被删除后服务端改写为已删除形态（没有 body、带 deleted）。
+    //用到时经 balloonchatwnd::ApplyAnnouncementCard 解析
+    std::string m_announcementContent;
+
+    //==== 群备忘卡片（仅 m_msgtype==message_type_memo 时有效，docs/备忘与提醒方案.md §7.2）====
+    //content 原文（紧凑 JSON），形如 {"memoid","groupid","change","title","note","start","advance","repeat","weekdays",
+    //"count","targetall","targetcount","editorid","editor","text"}，是保存那一刻的快照、之后不变。
+    //用到时经 balloonchatwnd::ApplyMemoCard 解析
+    std::string m_memoCardContent;
+
+    //==== 帖子卡片与帖子动态卡片（仅 m_msgtype 为 message_type_thread_post / message_type_thread_reply 时有效，
+    //docs/帖子群方案.md 6.2）====
+    //content 原文（紧凑 JSON）：帖子卡片形如 {"postid","title","digest","imagecount"}，删帖后带 deleted；
+    //帖子动态卡片形如 {"postid","commentid","addid","posttitle","digest","kind"}。用到时经 parseThreadCardContent 解析
+    std::string m_threadCardContent;
+    //卡片 content.mentions 里被 @ 的人（帖子里的 @、留言回复补充里的 @）；没有时为空。服务端生成的卡片没有正文，
+    //普通消息那种带文字位置的 content.at 用不上，故单列（2026-10-07 实机联调发现卡片的 @ 提醒不生效）
+    std::vector<int64_t> m_threadMentions;
+    //卡片 content.mentionall：帖子、留言、回复或补充 @ 了所有人（docs/帖子群方案.md §15.1 第 2 条），此时除发布者外
+    //全体成员都按被 @ 处理（threadCardMentions 对任何人都返回 true，发布者本人由调用方排除）
+    bool m_threadMentionAll;
+
+    //==== 云端录像卡片（仅 m_msgtype==message_type_cloudrecord 时有效，docs/屏幕共享与录制方案.md 12.6.5）====
+    //content 原文（紧凑 JSON），形如 {"recordid","owner","title","durationms","bytes","audioonly"}，发出之后不变。
+    //用到时经 balloonchatwnd::ApplyCloudRecordCard 解析
+    std::string m_cloudRecordContent;
+
+    //==== 语音消息字段（仅 m_msgtype==message_type_voice 时有效，docs/语音消息方案.md 第 5 节）====
+    std::string m_voiceFileId;    //语音文件ID（字符串编码），下载时传给 cmd_request_download
+    std::string m_voiceMd5;       //语音文件MD5（小写十六进制），下载完成后校验，也是本机缓存文件名
+    int         m_voiceDuration;  //时长（整秒，1~120）
+    int64_t     m_voiceSize;      //文件字节数
+    std::string m_voiceWave;      //波形：40 个音量值的标准 Base64；老消息或发送方没写时为空串，用 net::VoiceWaveForDisplay 换算
+
+    //接龙相关的群系统提示（m_msgtype==message_type_system）所指的卡片消息 msgid，取自
+    //content.cardmsgid；服务端只在参与、修改、撤回、提前结束接龙的提示里带这个字段。
+    //非 0 时提示行可以点击并打开对应卡片的详情窗；其余系统提示与其它类型的消息恒为 0
+    int64_t m_cardMsgId;
+
+    //系统提示（m_msgtype==message_type_system）的结构化类型与参数（多语言第 5 期）：取自 content.tipkind 与
+    //content.tipargs（紧凑 JSON 文本），取值见 Protocol.h 的 kSystemTip*。解析时若认得类型，m_text 已换成当前
+    //界面语言的文字（net::FormatSystemTip）；这两项另存一份，供落本地库后消息记录窗按同样的规则重新生成。
+    //老服务端发的、或此前落库的系统提示没有这两个字段，两者都为空串，按服务端的 m_text 显示
+    std::string m_tipKind;
+    std::string m_tipArgs;
+
     //发送者昵称。只有合并记录里的子消息带（服务端转发时写入的 fromname，即转发当时
     //发送者的名字），普通推送与历史消息恒为空，调用方为空时按本地通讯录解析名字
     std::string m_fromName;
@@ -198,6 +336,16 @@ struct MessageNotify
     //手工构造、不经解析得到的消息为空串
     std::string m_rawJson;
 
+    //这条消息是不是发送方开启「离开 / 忙碌时自动回复」后由客户端自动发出的（content.autoreply 为 true）。
+    //只有文本消息可能为 true；收到这类消息时本端不再自动回复，避免两台都开着自动回复的客户端互相无限回复
+    bool m_autoReply;
+
+    //机器人标记（content.bot，只由服务端产生，docs/协议设计-v2.md 25.3）：群里机器人账号发的消息、单聊里个人机器人
+    //替主人代答的消息都带。没有这个字段时 m_botId 为 0
+    int64_t     m_botId;    //机器人 ID
+    std::string m_botName;  //机器人名称（UTF-8；单聊代答与群机器人消息都带，群里用于显示已删除机器人的名字）
+    std::string m_botKind;  //种类：群里为空串；单聊代答为 "personal"（个人机器人）或 "autoreply"（离开 / 忙碌自动回复）
+
     MessageNotify()
         : m_msgid(0)
         , m_ctype(0)
@@ -205,22 +353,38 @@ struct MessageNotify
         , m_from(0)
         , m_to(0)
         , m_msgtype(0)
+        , m_textFormat(text_format_plain)
         , m_timestamp(0)
         , m_recalled(false)
+        , m_recalledBy(0)
         , m_imageWidth(0)
         , m_imageHeight(0)
         , m_imageSize(0)
         , m_fileSize(0)
+        , m_fileDirect(false)
+        , m_fileDirectResult(0)
+        , m_fileLinkPath(0)
         , m_folderTotalDirs(0)
         , m_folderTotalFiles(0)
         , m_folderTotalSize(0)
         , m_folderResult(0)
         , m_folderErrCode(0)
+        , m_folderLinkPath(0)
         , m_atAll(false)
         , m_fileAckState(0)
+        , m_cardMsgId(0)
+        , m_autoReply(false)
+        , m_botId(0)
+        , m_voiceDuration(0)
+        , m_voiceSize(0)
+        , m_threadMentionAll(false)
     {
     }
 };
+
+//自动回复消息正文的前缀（UTF-8）：「[自动回复] 」，只做了标记（TR_NOOP），写入正文时用 TR8 取发送方界面语言的译文。前缀写进正文本身，PC、安卓、消息记录与会话列表摘要
+//里都能看出这是一条自动回复（2026-10-03 与用户确认）；是否为自动回复以 content.autoreply 为准，不按前缀判断
+extern const char* const kAutoReplyTextPrefix;
 
 //cmd_file_transfer_ack(1517) 推送解析结果：对方把我发的某个文件收到什么程度了。
 //本端作为文件发送方收到，据 m_msgid 定位那条文件气泡、按 m_state 更新其状态行。
@@ -339,10 +503,32 @@ struct DeleteMessagesByTimeResponse
 };
 
 /**
+ *  按会话清空聊天记录的应答（cmd_clear_conversation=1523）。失败应答只带 code / msg。
+ */
+struct ClearConversationResponse
+{
+    int         m_code;          //结果码，0 成功；非 0 见 enum error_code
+    std::string m_msg;           //结果描述
+    int         m_ctype;         //会话类型：1 单聊 2 群聊；失败应答不带时为 0
+    int64_t     m_cid;           //本人视角的会话ID；失败应答不带时为 0
+    int64_t     m_clearedMsgid;  //生效的清空锚点：该会话 msgid 不大于它的消息对本人隐藏；失败应答不带时为 0
+
+    ClearConversationResponse()
+        : m_code(-1)
+        , m_ctype(0)
+        , m_cid(0)
+        , m_clearedMsgid(0)
+    {
+    }
+};
+
+/**
  *  "本人删除了消息"的推送（cmd_messages_deleted_notify=1522），推给本人全部在线设备，
- *  发起删除的这一台也会收到。两种形式以 m_isRange 区分：
+ *  发起删除的这一台也会收到。三种形式以 m_isClear / m_isRange 区分：
  *    - 单条形式（来自 1512）：m_ctype / m_cid / m_msgids 有效；
- *    - 区间形式（来自 1521）：m_begintime / m_endtime 有效，作用于本人全部会话。
+ *    - 区间形式（来自 1521）：m_begintime / m_endtime 有效，作用于本人全部会话；
+ *    - 清空形式（来自 1523，m_isClear 为 true）：m_ctype / m_cid / m_clearedMsgid 有效，该会话里
+ *      msgid 不大于锚点的消息都已对本人隐藏。
  */
 struct MessagesDeletedNotify
 {
@@ -352,6 +538,8 @@ struct MessagesDeletedNotify
     std::vector<int64_t> m_msgids;     //被删除的消息 msgid（单条形式），当前恒为一条
     int64_t              m_begintime;  //区间开始，Unix毫秒（区间形式，含）
     int64_t              m_endtime;    //区间结束，Unix毫秒（区间形式，含）
+    bool                 m_isClear;    //true=清空形式（来自 1523）；此时 m_isRange 为 false
+    int64_t              m_clearedMsgid; //清空锚点（清空形式）：该会话 msgid 不大于它的消息都已清空；可为 0
 
     MessagesDeletedNotify()
         : m_isRange(false)
@@ -359,6 +547,56 @@ struct MessagesDeletedNotify
         , m_cid(0)
         , m_begintime(0)
         , m_endtime(0)
+        , m_isClear(false)
+        , m_clearedMsgid(0)
+    {
+    }
+};
+
+//屏幕共享卡片（msgtype 19）的内容，由 MessageProtocolClient::parseScreenShareCardContent 从 content 原文解析
+struct ScreenShareCardContent
+{
+    std::string m_roomId;      //房间号
+    int64_t     m_hostId;      //发起人 userid
+    std::string m_hostName;    //发起人显示名（UTF-8），发起时的快照
+    int64_t     m_startTime;   //发起时间，Unix 毫秒；正文里没有时为 0
+    bool        m_locked;      //加入是否需要密码（第 12 期）；正文里没有时为 false
+    bool        m_forced;      //是否强制模式（第 13 期）；正文里没有时为 false
+    std::string m_title;       //共享标题（第 15 期，UTF-8）；第 15 期之前的卡片没有，为空
+    std::string m_desc;        //共享描述（第 15 期，UTF-8）；没填或第 15 期之前的卡片为空
+
+    ScreenShareCardContent()
+        : m_hostId(0)
+        , m_startTime(0)
+        , m_locked(false)
+        , m_forced(false)
+    {
+    }
+};
+
+//文件共享卡片（msgtype 20）的内容，由 MessageProtocolClient::parseShareCardContent 从 content 原文解析
+struct ShareCardContent
+{
+    int64_t     m_shareId;       //共享 id
+    int         m_kind;          //共享类型：share_kind（1 磁盘 2 文件夹 3 文件）
+    std::string m_name;          //显示名（UTF-8）
+    std::string m_displayPath;   //显示路径（UTF-8）
+    int64_t     m_ownerId;       //分享者 userid
+    bool        m_hasState;      //是否带了服务端合并的状态（sharestate / sharereason）
+    int         m_state;         //合并的状态：share_state
+    int         m_reason;        //合并的原因
+    bool        m_hasPerms;      //是否带了 myperms（分享者本人与已失效的成员不带）
+    int         m_myPerms;       //看的人的写权限位
+
+    ShareCardContent()
+        : m_shareId(0)
+        , m_kind(0)
+        , m_ownerId(0)
+        , m_hasState(false)
+        , m_state(0)
+        , m_reason(0)
+        , m_hasPerms(false)
+        , m_myPerms(0)
     {
     }
 };
@@ -417,6 +655,21 @@ struct PinMessageResponse
 //Pin 是<u>会话内共享</u>的状态：单聊时服务端向双方各推一条（各自视角的 cid 不同），
 //群聊时向全体群成员推送、cid 取群 id。操作者本人也会收到 —— 界面改动一律等推送，
 //与撤回同口径，这样本端与对端看到的结果必然一致。
+//一对一通话卡片已改写的推送（cmd_call_card_notify=1717，docs/协议设计-v2.md 7.8「一对一通话卡片」）解析结果
+struct CallCardNotify
+{
+    std::string m_sessionId;   //通话会话 id
+    int64_t     m_msgid;       //卡片消息的 msgid（服务器分配，恒 >0）
+    int64_t     m_cid;         //收件方视角的会话 id：对方的 userid
+    std::string m_content;     //改写后的卡片 content 原文（紧凑 JSON），用到时经 balloonchatwnd::ParseCallCard 解析
+
+    CallCardNotify()
+        : m_msgid(0)
+        , m_cid(0)
+    {
+    }
+};
+
 struct MessagePinnedNotify
 {
     int     m_ctype;      //会话类型：见 enum conversation_type，单聊=1、群聊=2
@@ -513,6 +766,37 @@ struct SyncMessagesResult
     }
 };
 
+//cmd_sync_rewritten_messages（1526）应答里的一项：一条被改写过（或被撤回）的消息及其改写序号
+struct RewrittenMessageItem
+{
+    MessageNotify m_msg;   //消息本体，与 cmd_sync_messages 的元素同结构；m_ctype / m_cid 为本条所属会话（本人视角）
+    int64_t       m_rev;   //改写序号（字符串编码的 rev 字段）；缺失或非法时为 0
+
+    RewrittenMessageItem()
+        : m_rev(0)
+    {
+    }
+};
+
+//按改写序号同步（cmd_sync_rewritten_messages=1526）应答解析结果（docs/消息改写离线同步方案.md）
+struct SyncRewrittenResult
+{
+    int     m_code;     //结果码，0 成功；其余字段只在成功时有效
+    //本页条目，按改写序号升序；解析失败（缺 msgid / from 的脏数据）的条目已跳过
+    std::vector<RewrittenMessageItem> m_items;
+    int64_t m_rev;      //本页最后一项的序号，下一页以它为 since；本页为空时等于请求的 since
+    bool    m_more;     //后面是否还有
+    int64_t m_currev;   //服务端当前的最大改写序号；本地库为空时直接把水位设成它
+
+    SyncRewrittenResult()
+        : m_code(-1)
+        , m_rev(0)
+        , m_more(false)
+        , m_currev(0)
+    {
+    }
+};
+
 //合并转发的聊天记录（msgtype=15）的 content 解析结果。
 //典型用法：聊天窗画卡片时取标题、条数与前几条的摘要；查看窗逐条显示子消息。
 struct MergedRecord
@@ -570,13 +854,51 @@ public:
      *  @param text        文本正文（UTF-8 字节）；写入 content.text
      *  @param font        文本字体设置；m_valid 为 true 时写入 content.font，否则不写
      *  @param quote       引用回复快照；m_valid 为 true 时写入 content.quote，否则不写
+     *  @param textFormat  文本格式，取值见 enum text_format；为 Markdown 或代码片段时写 content.format，纯文字时不写
+     *  @param codeLang    代码片段的语言标识（如 "cpp"，见 codesnippet::CodeLanguageId）；textFormat 为代码片段
+     *                    且不为空时写 content.lang，其余情况不写（docs/代码片段方案.md §4）
+     *  @param codeNotes   代码片段的批注；textFormat 为代码片段且不为空时写 content.notes，其余情况不写
+     *                    （docs/代码片段方案.md 第 10.5 节）
      *  @return 紧凑格式的请求 JSON 文本
      */
     static std::string buildSendTextRequest(int64_t peerUserId,
                                             const std::string& clientMsgId,
                                             const std::string& text,
                                             const TextFont& font = TextFont(),
-                                            const ReplyQuote& quote = ReplyQuote());
+                                            const ReplyQuote& quote = ReplyQuote(),
+                                            int textFormat = text_format_plain,
+                                            const std::string& codeLang = std::string(),
+                                            const std::vector<CodeNoteData>& codeNotes = std::vector<CodeNoteData>());
+
+    /**
+     *  构造单聊自动回复的发送请求 JSON 包体（cmd_send_message=1503，msgtype=文本，紧凑 UTF-8）。
+     *  与普通单聊文本相同，区别有两点：content.text 为 kAutoReplyTextPrefix + replyText；content 另带
+     *  autoreply=true，收到的客户端据此不再自动回复。服务端原样存储并转发 content，不需要认识这个字段。
+     *  @param peerUserId  对端用户 userid（>0）；作为 JSON 的 cid 字段以字符串编码
+     *  @param clientMsgId 客户端消息ID（UUID，非空）；回执据此对回到主面板记下的那条自动回复
+     *  @param replyText   回复文字（UTF-8，不含前缀）；由调用方先经 NormalizeAutoReplyText 整理
+     *  @return 紧凑格式的请求 JSON 文本
+     */
+    static std::string buildSendAutoReplyRequest(int64_t peerUserId,
+                                                 const std::string& clientMsgId,
+                                                 const std::string& replyText);
+
+    /**
+     *  按服务端推送的格式拼出本人刚发出的那条自动回复，供回执成功后本端入库与显示。单聊消息服务端
+     *  只推给对方、不回推给发送方，所以发送方要自己补这一份；拼出的 JSON 再经 parseMessageNotify
+     *  同一套解析得到结果，m_rawJson 与服务端推来的消息格式一致，可以直接存进本地消息库。
+     *  @param selfId      本人 userid（>0），作为 from
+     *  @param peerUserId  对端 userid（>0），作为 cid 与 to（发送方视角下的会话 ID 就是对端）
+     *  @param clientMsgId 发送时用的客户端消息ID
+     *  @param msgid       回执里服务器分配的 msgid（>0）
+     *  @param timestamp   回执里的服务器时间（Unix 毫秒）
+     *  @param replyText   回复文字（UTF-8，不含前缀），与发送时传给 buildSendAutoReplyRequest 的相同
+     *  @param out         [出参] 拼出的消息；m_autoReply 为 true，m_text 带前缀
+     *  @return 参数合法且解析成功返回 true；selfId / peerUserId / msgid 不为正时返回 false，out 不可用
+     */
+    static bool buildAutoReplyEcho(int64_t selfId, int64_t peerUserId, const std::string& clientMsgId,
+                                   int64_t msgid, int64_t timestamp, const std::string& replyText,
+                                   MessageNotify& out);
 
     /**
      *  构造单聊"窗口抖动"的发送请求 JSON 包体（cmd_send_message=1503，紧凑 UTF-8）。
@@ -595,13 +917,22 @@ public:
      *  @param clientMsgId 客户端消息ID（UUID，非空）；服务器据此去重并在回执里回填
      *  @param text        文本正文（UTF-8 字节）；写入 content.text
      *  @param font        文本字体设置；m_valid 为 true 时写入 content.font，否则不写
+     *  @param quote       引用回复快照；m_valid 为 true 时写入 content.quote，否则不写
+     *  @param textFormat  文本格式，取值见 enum text_format；为 Markdown 或代码片段时写 content.format，纯文字时不写
+     *  @param codeLang    代码片段的语言标识（如 "cpp"，见 codesnippet::CodeLanguageId）；textFormat 为代码片段
+     *                    且不为空时写 content.lang，其余情况不写（docs/代码片段方案.md §4）
+     *  @param codeNotes   代码片段的批注；textFormat 为代码片段且不为空时写 content.notes，其余情况不写
+     *                    （docs/代码片段方案.md 第 10.5 节）
      *  @return 紧凑格式的请求 JSON 文本
      */
     static std::string buildSendGroupTextRequest(int64_t groupId,
                                                  const std::string& clientMsgId,
                                                  const std::string& text,
                                                  const TextFont& font = TextFont(),
-                                                 const ReplyQuote& quote = ReplyQuote());
+                                                 const ReplyQuote& quote = ReplyQuote(),
+                                                 int textFormat = text_format_plain,
+                                                 const std::string& codeLang = std::string(),
+                                                 const std::vector<CodeNoteData>& codeNotes = std::vector<CodeNoteData>());
 
     /**
      *  构造一条<u>带 @提醒</u>的群聊文本消息发送请求（cmd_send_message=1503）。
@@ -616,6 +947,12 @@ public:
      *                     须由调用方在发送前用 RescanMentions 按最终文本重算过
      *  @param atAll       是否 @所有人；为真时写 at.all=1
      *  @param font        文本字体设置；m_valid 为 true 时写入 content.font
+     *  @param quote       引用回复快照；m_valid 为 true 时写入 content.quote
+     *  @param textFormat  文本格式，取值见 enum text_format；为 Markdown 或代码片段时写 content.format，纯文字时不写
+     *  @param codeLang    代码片段的语言标识（如 "cpp"，见 codesnippet::CodeLanguageId）；textFormat 为代码片段
+     *                    且不为空时写 content.lang，其余情况不写（docs/代码片段方案.md §4）
+     *  @param codeNotes   代码片段的批注；textFormat 为代码片段且不为空时写 content.notes，其余情况不写
+     *                    （docs/代码片段方案.md 第 10.5 节）
      *  @return 紧凑格式的请求 JSON 文本
      */
     static std::string buildSendGroupTextRequest(int64_t groupId,
@@ -624,7 +961,10 @@ public:
                                                  const std::vector<balloonchatwnd::MentionSpan>& ats,
                                                  bool atAll,
                                                  const TextFont& font = TextFont(),
-                                                 const ReplyQuote& quote = ReplyQuote());
+                                                 const ReplyQuote& quote = ReplyQuote(),
+                                                 int textFormat = text_format_plain,
+                                                 const std::string& codeLang = std::string(),
+                                                 const std::vector<CodeNoteData>& codeNotes = std::vector<CodeNoteData>());
 
     /**
      *  计算一条文字消息 content 序列化后的字节数。口径与服务端检查单条消息体积时完全一致：
@@ -636,12 +976,35 @@ public:
      *  @param quote 引用回复快照；m_valid 为 true 时计入 content.quote
      *  @param ats   被 @ 的人及其片段；单聊或不带 @ 时传空
      *  @param atAll 是否 @所有人
+     *  @param textFormat 文本格式，取值见 enum text_format；为 Markdown 或代码片段时计入 content.format
+     *  @param codeLang   代码片段的语言标识；textFormat 为代码片段且不为空时计入 content.lang
+     *  @param codeNotes  代码片段的批注；textFormat 为代码片段且不为空时计入 content.notes
      *  @return content 紧凑 JSON 的字节数
      */
     static size_t textContentBytes(const std::string& text, const TextFont& font,
                                    const ReplyQuote& quote,
                                    const std::vector<balloonchatwnd::MentionSpan>& ats,
-                                   bool atAll);
+                                   bool atAll,
+                                   int textFormat = text_format_plain,
+                                   const std::string& codeLang = std::string(),
+                                   const std::vector<CodeNoteData>& codeNotes = std::vector<CodeNoteData>());
+
+    /**
+     *  把代码片段的批注写进 content.notes（数组，每项 from / to / text；m_userId 不为 0 时写 userid（十进制字符串），
+     *  m_isNew 为真时写 "new": 1）；批注为空时不写。文字消息的发送请求与本地库的 content 列共用，保证两边写法一致。
+     *  @param content [入参/出参] 要写入的 content 对象
+     *  @param notes   批注
+     */
+    static void writeCodeNotesToContent(Json::Value& content, const std::vector<CodeNoteData>& notes);
+
+    /**
+     *  从 content 读出代码片段的批注：notes 不是数组时为空；条目不是对象、from / to 不是正整数或 to 小于 from、
+     *  text 不是非空字符串、带了 userid 却不是正整数（字符串或整数）的跳过；new 为 1 或 true 时 m_isNew 为真。
+     *  越界、相交、超过条数与字数上限由显示端整理（codesnippet::SanitizeCodeNotes）。
+     *  @param content content 对象
+     *  @return 批注
+     */
+    static std::vector<CodeNoteData> readCodeNotesFromContent(const Json::Value& content);
 
     /**
      *  构造一条图片消息的发送请求 JSON 包体（cmd_send_message=1503，紧凑 UTF-8）。
@@ -688,6 +1051,43 @@ public:
                                             const std::string& md5);
 
     /**
+     *  构造一条语音消息的发送请求 JSON 包体（cmd_send_message=1503，紧凑 UTF-8），方案见 docs/语音消息方案.md。
+     *  语音文件须已经走聊天文件场景上传到 fileserver（拿到 fileid），本方法只把元信息打进 content（msgtype=4）。
+     *  @param ctype           会话类型（单聊=1、群聊=2）
+     *  @param cid             会话ID（单聊=对端 userid，群聊=群id，>0）；以字符串编码
+     *  @param clientMsgId     客户端消息ID（非空）；服务器据此去重并在回执里回填
+     *  @param fileid          语音文件ID（字符串编码，来自 cmd_request_upload 应答）
+     *  @param md5             文件内容MD5（小写十六进制）
+     *  @param durationSeconds 时长（整秒，1~120，见 net::VoiceDurationSeconds）
+     *  @param size            文件字节数（>0）
+     *  @param wave            波形的 Base64（见 net::EncodeVoiceWave）；为空串时不写 wave 字段
+     *  @return 紧凑格式的请求 JSON 文本（msgtype=message_type_voice）
+     */
+    static std::string buildSendVoiceRequest(int ctype, int64_t cid,
+                                             const std::string& clientMsgId,
+                                             const std::string& fileid,
+                                             const std::string& md5,
+                                             int durationSeconds, int64_t size,
+                                             const std::string& wave);
+
+    /**
+     *  构造一条卡片消息（投票 / 接龙 / 待办）的发送请求 JSON 包体（cmd_send_message=1503，
+     *  紧凑 UTF-8）。卡片 content 由各卡片的协议模块校验并拼好（接龙见
+     *  CardProtocolClient::buildRelayCardContent），本方法只套上与其它消息相同的外层信封。
+     *  @param ctype       会话类型，取值见 enum conversation_type（单聊=1、群聊=2）
+     *  @param cid         会话ID（单聊=对端 userid，群聊=群id）；须 >0，以字符串编码
+     *  @param clientMsgId 客户端消息ID（UUID）；不能为空，服务器据此去重并在回执里回填
+     *  @param msgtype     卡片的消息类型（message_type_poll / message_type_relay / message_type_todo）
+     *  @param contentJson 卡片 content 的 JSON 文本；必须是 JSON 对象
+     *  @return 紧凑 JSON 文本；cid 非正、clientMsgId 为空或 contentJson 不是 JSON 对象时返回<u>空串</u>，
+     *          调用方据此放弃发送
+     */
+    static std::string buildSendCardRequest(int ctype, int64_t cid,
+                                            const std::string& clientMsgId,
+                                            int msgtype,
+                                            const std::string& contentJson);
+
+    /**
      *  构造拉取历史消息的请求 JSON 包体（cmd_sync_messages=1502，紧凑 UTF-8）。
      *  "拉最近 N 条"：beforeMsgId 传 0（从最新开始往旧取），limit 传 N（服务端上限 100）。
      *  @param ctype       会话类型（1 单聊 2 群聊）
@@ -698,6 +1098,24 @@ public:
      */
     static std::string buildSyncMessagesRequest(int ctype, int64_t cid,
                                                 int64_t beforeMsgId, int limit);
+
+    /**
+     *  构造按改写序号同步的请求 JSON 包体（cmd_sync_rewritten_messages=1526，紧凑 UTF-8）。
+     *  @param since 本地已同步到的改写序号；首次为 0。以字符串编码，与服务端 getStringId 的契约一致
+     *  @param limit 本页最多几条（服务端上限 200，不大于 0 时取 200）
+     *  @return 紧凑格式的请求 JSON 文本
+     */
+    static std::string buildSyncRewrittenRequest(int64_t since, int limit);
+
+    /**
+     *  解析按改写序号同步的应答 JSON 包体（cmd_sync_rewritten_messages=1526 的应答）。
+     *  JSON 合法且含整型 code 即返回 true；code==0 时其余字段有效。items 每条按 cmd_sync_messages 的消息条目
+     *  同口径解析，另取字符串编码的 rev；应答的 rev / currev 同样是字符串，缺失时取 0，more 缺失时取 false。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 解析结果
+     *  @return JSON 合法且含 code 返回 true，否则 false
+     */
+    static bool parseSyncRewrittenResponse(const std::string& jsonbody, SyncRewrittenResult& out);
 
     /**
      *  构造上报已读位点的请求（cmd_mark_read=1506 的请求体）。用户查看会话后
@@ -734,6 +1152,57 @@ public:
      *  @return 预览文字（UTF-8）
      */
     static std::string digestForMsgType(int msgtype, const std::string& text);
+
+    /**
+     *  按一条已解析的消息算会话预览：接龙卡片（msgtype = 11）写成「[接龙] 标题」，标题取自
+     *  m_relayContent，与服务端 buildMessageDigest 一致（标题为空或 content 不可用时只写「[接龙]」）；
+     *  其余类型与 digestForMsgType(notify.m_msgtype, notify.m_text) 相同。
+     *  @param notify 已解析的消息
+     *  @return 预览文字（UTF-8）
+     */
+    static std::string digestForNotify(const MessageNotify& notify);
+
+    /**
+     *  帖子卡片（25）与帖子动态卡片（26）的会话摘要，按当前界面语言生成（docs/帖子群方案.md 4.5、6.2）。
+     *  不含发送者名字：主面板显示时在前面加上，成为「张三 发帖：周五团建报名」「李四 回复：我也去」。
+     *  @param msgtype 消息类型：message_type_thread_post 或 message_type_thread_reply
+     *  @param kind    帖子动态卡片的 kind（thread_reply_kind）；帖子卡片忽略
+     *  @param arg     接在后面的文字：帖子标题（没有标题时为正文摘要）或留言、回复、补充的内容摘要；可为空
+     *  @param deleted 卡片已改写为已删除形态（帖子卡片与动态卡片都可能，docs/帖子群方案.md 14.6）
+     *  @return 摘要（UTF-8），如「发帖：周五团建报名」「留言：我也去」「补充了帖子：报名截止改到周四」「帖子已删除」
+     *          「留言已删除」
+     */
+    static std::string threadCardDigest(int msgtype, int kind, const std::string& arg, bool deleted);
+
+    /**
+     *  从帖子卡片或帖子动态卡片的 content 取出摘要所需的字段（与服务端 MessageProtocol 的 threadCardDigestArg 同口径：
+     *  帖子卡片取标题，没有标题时取正文摘要；动态卡片取内容摘要，为空时取帖子标题；已删除时都为空）。
+     *  @param msgtype  消息类型
+     *  @param content  content 原文（JSON）
+     *  @param arg      [出参] 摘要里接在后面的文字
+     *  @param kind     [出参] 动态卡片的 kind；帖子卡片为 0
+     *  @param postId   [出参] 帖子 ID；取不到时为 0
+     *  @param deleted  [出参] 卡片是否已改写为已删除形态（帖子卡片与动态卡片）
+     *  @return content 是 JSON 对象时返回 true
+     */
+    static bool parseThreadCardContent(int msgtype, const std::string& content, std::string& arg, int& kind,
+                                       int64_t& postId, bool& deleted);
+
+    /**
+     *  一张帖子卡片或帖子动态卡片有没有 @ 到某人（看 MessageNotify::m_threadMentions；卡片 @ 了所有人
+     *  （m_threadMentionAll）时对任何人都返回 true，本人是不是发布者由调用方判断）。
+     *  @param notify 已解析的消息；不是这两种卡片时返回 false
+     *  @param userId 要判断的人（通常是本人）
+     */
+    static bool threadCardMentions(const MessageNotify& notify, int64_t userId);
+
+    /**
+     *  通话记录卡片（message_type_rtc）的摘要：群通话卡片写「[群视频通话]」「[群语音通话]」，一对一通话卡片写「[视频通话]」
+     *  「[语音通话]」，与服务端 buildMessageDigest 一致；content 两者都不是或解析不了时写「[通话]」。会话列表与消息记录窗共用。
+     *  @param contentJson 卡片 content 原文（UTF-8 JSON）
+     *  @return UTF-8 摘要（已按当前界面语言翻译）
+     */
+    static std::string groupCallDigest(const std::string& contentJson);
 
     /**
      *  检测并净化"内联表情"文本（UTF-8 字节级）：PC 端把系统表情以 /f["<数字>"] 标签
@@ -877,14 +1346,34 @@ public:
     /**
      *  解析"本人删除了消息"的推送 JSON（cmd_messages_deleted_notify=1522），
      *  与服务端 MessageProtocol::buildMessagesDeletedNotify / buildMessagesDeletedRangeNotify
-     *  互为镜像。带 msgids 的是单条形式，否则按区间形式解析。
+     *  / buildMessagesClearedNotify 互为镜像。带 clearedmsgid 的是清空形式，带 msgids 的是单条形式，
+     *  否则按区间形式解析。
      *  @param jsonbody 推送包体（UTF-8 JSON 文本）
      *  @param notify   [出参] 解析结果；返回 true 时对应形式的字段有效
      *  @return 解析成功返回 true。以下情形返回 false（此时 notify 内容未定义，调用方不得使用）：
      *          JSON 非法或不是对象；单条形式 cid 非正、msgids 为空或含非正的 msgid；
-     *          区间形式缺少起止时间、时间为负或结束早于开始
+     *          区间形式缺少起止时间、时间为负或结束早于开始；清空形式会话类型不是 1 / 2、
+     *          会话ID非正或锚点为负
      */
     static bool parseMessagesDeletedNotify(const std::string& jsonbody, MessagesDeletedNotify& notify);
+
+    /**
+     *  构造按会话清空聊天记录的请求 JSON（cmd_clear_conversation=1523）：{ "ctype": 1|2, "cid": "..." }。
+     *  @param ctype 会话类型：1 单聊 2 群聊
+     *  @param cid   本人视角的会话ID（单聊为对方 userid，群聊为群 id），须为正
+     *  @return 紧凑格式的请求 JSON 文本；会话类型不是 1 / 2 或会话ID非正时返回空串（调用方不应发送）
+     */
+    static std::string buildClearConversationRequest(int ctype, int64_t cid);
+
+    /**
+     *  解析按会话清空聊天记录的应答 JSON（cmd_clear_conversation=1523 的应答）。
+     *  失败应答只带 code / msg，此时会话与锚点保持为 0。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param resp     [出参] 解析结果；返回 true 时各字段有效
+     *  @return JSON 合法且含整型 code 返回 true，否则 false
+     */
+    static bool parseClearConversationResponse(const std::string& jsonbody,
+                                               ClearConversationResponse& resp);
 
     /**
      *  解析"对方已读你的消息"的推送 JSON 包体（cmd_message_read_notify=1507）。
@@ -928,6 +1417,15 @@ public:
      */
     static bool parseMessagePinnedNotify(const std::string& jsonbody,
                                          MessagePinnedNotify& notify);
+
+    /**
+     *  解析「一对一通话卡片已改写」的推送 JSON 包体（cmd_call_card_notify=1717）：{ sessionid, msgid, cid, content }。
+     *  与服务端 CallProtocol::buildCardNotify 互为镜像。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param notify   [出参] 解析结果；返回 true 时各字段有效，content 为紧凑 JSON 原文
+     *  @return 解析成功返回 true；JSON 非法、msgid 或 cid 缺失或非正、content 不是 JSON 对象时返回 false
+     */
+    static bool parseCallCardNotify(const std::string& jsonbody, CallCardNotify& notify);
 
     /**
      *  构造"拉取某会话被 Pin 的消息"的请求 JSON 包体（cmd_get_pinned_messages=1520）。
@@ -988,6 +1486,24 @@ public:
      *          调用方按"内容不可用"降级显示
      */
     static bool parseMergedContent(const std::string& contentJson, MergedRecord& out);
+
+    /**
+     *  解析文件共享卡片的 content（MessageNotify::m_shareContent）。字段与服务端 FileShareProtocol::buildCardContent /
+     *  augmentCardContent 逐字对应（docs/文件共享方案.md 5.6）。
+     *  @param contentJson content 原文（紧凑 JSON）
+     *  @param out         [出参] 卡片内容
+     *  @return shareid、ownerid 大于 0、kind 合法、name 为字符串时返回 true；否则返回 false，调用方按「内容不可用」降级显示
+     */
+    static bool parseShareCardContent(const std::string& contentJson, ShareCardContent& out);
+
+    /**
+     *  解析屏幕共享卡片的 content（MessageNotify::m_screenShareContent）。字段与服务端
+     *  ScreenShareProtocol::buildCardContent 逐字对应（docs/协议设计-v2.md 第 17 节）：64 位 id 与时间以字符串编码，也接受整数写法。
+     *  @param contentJson content 原文（紧凑 JSON）
+     *  @param out         [出参] 卡片内容
+     *  @return roomid 为非空字符串、host 大于 0 时返回 true；否则返回 false，调用方按「内容不可用」降级显示
+     */
+    static bool parseScreenShareCardContent(const std::string& contentJson, ScreenShareCardContent& out);
 
     /**
      *  判断一条消息当前是否还能撤回 —— 决定右键菜单里要不要出现"撤回"项。

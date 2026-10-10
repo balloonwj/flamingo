@@ -9,6 +9,11 @@
  *           为管理员后主面板右键群时没有「群管理」。
  *    RC6    群聊窗成员侧栏批量更新各行记录的"本人角色"（GroupMemberList::SetMyNetRoleForAll）。
  *           本人角色到达时侧栏各行若仍是旧值，成员右键菜单里该有的管理项不会出现。
+ *    JT8    收到名单里有本人的「加入」推送后补拉一次本人的群列表（grouprole::ShouldRefetchGroupListOnMemberChange，
+ *           标签 [grouprole][grouplist]，docs/邀请入群方案.md 第 1 期）。此前被邀请入群后「群聊」页要重新登录才出现这个群。
+ *    GC1    别人加入 / 退出 / 被移出时补拉该群资料（grouprole::ShouldRefetchGroupInfoForMemberCount），
+ *           GC2 收到群资料后把人数同步进群列表（balloonmain::SetUserGroupMemberCount），标签 [grouprole][grouplist]。
+ *           此前群主把人移出后，主面板「群聊」页这个群的人数要重新登录才变（2026-10-08 实测）。
  *
  *  用 Catch2 v3（amalgamated 形态）。全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义。
  *
@@ -21,6 +26,7 @@
 #include <vector>
 
 #include "../Session/GroupRoleRules.h"
+#include "../UI/BalloonMain/GroupListOps.h"   // GC2：群列表人数的同步
 #include "../UI/BalloonChatWnd/GroupMemberItem.h"
 #include "../UI/BalloonChatWnd/GroupMemberList.h"
 
@@ -114,4 +120,63 @@ TEST_CASE("RC6 成员侧栏批量更新各行记录的本人角色", "[grouprole
         REQUIRE(item != nullptr);
         CHECK(item->MyNetRole() == kNetRoleOwner);
     }
+}
+
+TEST_CASE("JT8 本人入群时补拉群列表：名单里有本人的「加入」才补拉", "[grouprole][grouplist]")
+{
+    // 本人被邀请入群（或自由加群、申请经审批、建群时被拉进来）：补拉，「群聊」页才会出现这个群
+    CHECK(ShouldRefetchGroupListOnMemberChange(kMemberChangeJoin, Ids(kSelf), kSelf));
+    CHECK(ShouldRefetchGroupListOnMemberChange(kMemberChangeJoin, Ids(kOther, kSelf), kSelf));
+    // 别人入群：本人的群列表没有变化
+    CHECK_FALSE(ShouldRefetchGroupListOnMemberChange(kMemberChangeJoin, Ids(kOther), kSelf));
+    // 其它类型的变更即使名单里有本人也不补拉（退群、被移出另有清理流程）
+    CHECK_FALSE(ShouldRefetchGroupListOnMemberChange(kChangeLeave, Ids(kSelf), kSelf));
+    CHECK_FALSE(ShouldRefetchGroupListOnMemberChange(kChangeKick, Ids(kSelf), kSelf));
+    CHECK_FALSE(ShouldRefetchGroupListOnMemberChange(kMemberChangeRole, Ids(kSelf), kSelf));
+    // 未登录（本人 id 为 0）不补拉
+    CHECK_FALSE(ShouldRefetchGroupListOnMemberChange(kMemberChangeJoin, Ids(kSelf), 0));
+    // 本端复制的取值须与协议的 changetype 一致
+    CHECK(kMemberChangeJoin == kChangeJoin);
+}
+
+TEST_CASE("GC1 别人加入、退出、被移出时补拉该群资料，主面板群列表的人数靠它刷新", "[grouprole][grouplist]")
+{
+    // 别人入群、主动退群、被移出：补拉
+    CHECK(ShouldRefetchGroupInfoForMemberCount(kChangeJoin, Ids(kOther), kSelf));
+    CHECK(ShouldRefetchGroupInfoForMemberCount(kChangeLeave, Ids(kOther), kSelf));
+    CHECK(ShouldRefetchGroupInfoForMemberCount(kChangeKick, Ids(kOther), kSelf));
+    // 名单里有本人：本人入群另有补拉群列表（JT8），本人退群、被移出另有清理流程，这里都不补拉
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kChangeJoin, Ids(kOther, kSelf), kSelf));
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kChangeLeave, Ids(kSelf), kSelf));
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kChangeKick, Ids(kSelf), kSelf));
+    // 人数不变的变更：不补拉
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kMemberChangeRole, Ids(kOther), kSelf));
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kChangeMute, Ids(kOther), kSelf));
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kChangeCard, Ids(kOther), kSelf));
+    // 未登录（本人 id 为 0）不补拉
+    CHECK_FALSE(ShouldRefetchGroupInfoForMemberCount(kChangeKick, Ids(kOther), 0));
+}
+
+TEST_CASE("GC2 收到群资料后把人数同步进群列表，人数没变时报告不需要重建", "[grouprole][grouplist]")
+{
+    // 两个群，人数各 6、3
+    const int64_t kGroupA = 268435456;
+    const int64_t kGroupB = 268435457;
+    const int64_t kGroupMissing = 268435999;
+    std::vector<net::UserGroupItem> groups(2);
+    groups[0].m_groupid = kGroupA;
+    groups[0].m_membercount = 6;
+    groups[1].m_groupid = kGroupB;
+    groups[1].m_membercount = 3;
+
+    // 人数变了：更新并返回 true，别的群不动
+    CHECK(balloonmain::SetUserGroupMemberCount(groups, kGroupA, 5));
+    CHECK(groups[0].m_membercount == 5);
+    CHECK(groups[1].m_membercount == 3);
+    // 人数没变：返回 false，调用方不必重建群列表
+    CHECK_FALSE(balloonmain::SetUserGroupMemberCount(groups, kGroupA, 5));
+    // 不在群列表里的群、无效的人数：不改动
+    CHECK_FALSE(balloonmain::SetUserGroupMemberCount(groups, kGroupMissing, 9));
+    CHECK_FALSE(balloonmain::SetUserGroupMemberCount(groups, kGroupB, -1));
+    CHECK(groups[1].m_membercount == 3);
 }

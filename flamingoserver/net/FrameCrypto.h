@@ -181,6 +181,8 @@ public:
 
 private:
     friend class ServerHandshake;
+    //服务端之间的连接（chatserver 主动连 imgserver，第 26 期云端录制）由主动连接的一方做客户端侧握手
+    friend class PeerClientHandshake;
 
     //由握手方在导出会话密钥后调用；txKey 用于发送、rxKey 用于接收
     //  streamHeaderOut：输出本端发送流的流头，须发给对端
@@ -321,6 +323,74 @@ private:
     State         m_state;
     FrameCipher   m_cipher;
     unsigned char m_rxKey[KX_SESSIONKEY_BYTES];   //接收方向会话密钥，等流头到达后才用
+};
+
+/**
+ *  服务端主动连另一个服务端时用的客户端侧握手状态机（第 26 期：chatserver 连 imgserver 的中转端口建云端录制的
+ *  控制连接）。与 PC 客户端的 ClientHandshake（flamingoclient/Source/net/FrameCrypto）逐字节同一套线上格式，
+ *  从那里移植而来；不同之处是一条连接一个实例、用完即弃，不提供重置。
+ *
+ *  用法（阻塞套接字上，同一线程内依次进行）：
+ *      PeerClientHandshake hs;
+ *      发送 cmd_handshake，包体 = hs.buildClientHello()，明文;
+ *      收到 cmd_handshake 应答后 hs.onServerHello(body, 对端身份公钥, err);
+ *      再发一帧 cmd_handshake，包体 = hs.buildClientStreamHeader()，<u>仍须明文发出</u>（此时 cipher() 已就绪，
+ *      不能交给 encodeFramePayload，否则会被加密）;
+ *      此后 hs.ready() 为真，业务帧经 encodeFramePayload / decodeFramePayload 配合 &hs.cipher() 收发。
+ *  有状态且非线程安全：握手阶段的三步须在同一线程依次调用；握手完成后 cipher() 的线程约束见 FrameCipher。
+ */
+class PeerClientHandshake
+{
+public:
+    PeerClientHandshake();
+    ~PeerClientHandshake();
+
+    /**
+     *  产出握手第 1 帧（ClientHello）的包体，并在内部生成本次连接的一次性密钥对。
+     *  @return 请求 JSON；状态不对或生成失败时返回空串（调用方应放弃这次连接）
+     */
+    std::string buildClientHello();
+
+    /**
+     *  处理握手第 2 帧（ServerHello）：验签并导出会话密钥。
+     *  @param responseBody 对端应答 JSON
+     *  @param serverPubKey 对端身份公钥（IDENTITY_PUBLICKEY_BYTES 字节；两台服务用同一份 server_key 时即本进程的
+     *                      cryptoServerIdentity().publicKey()）
+     *  @param errOut       失败原因（英文，可直接进日志）
+     *  @return 验签不过说明对端不是预期的服务器，调用方必须断开连接
+     */
+    bool onServerHello(const std::string& responseBody, const unsigned char* serverPubKey, std::string& errOut);
+
+    /**
+     *  产出握手第 3 帧的包体（本端发送流的流头）。成功后 ready() 变为 true。须在 onServerHello 成功之后调用。
+     *  @return 请求 JSON；状态不对时返回空串
+     */
+    std::string buildClientStreamHeader();
+
+    //握手是否已完成
+    bool ready() const { return m_state == state_done; }
+
+    //本连接的帧体加解密器；ready() 为 false 时不可用于业务帧
+    FrameCipher& cipher() { return m_cipher; }
+
+private:
+    enum State
+    {
+        state_init = 0,        //尚未发出 ClientHello
+        state_wait_server = 1, //已发出 ClientHello，等 ServerHello
+        state_wait_send = 2,   //已验签并导出密钥，待发出本端流头
+        state_done = 3,        //握手完成
+    };
+
+    PeerClientHandshake(const PeerClientHandshake&);
+    PeerClientHandshake& operator=(const PeerClientHandshake&);
+
+    State         m_state;                         //握手进行到哪一步
+    FrameCipher   m_cipher;                        //握手完成后的帧体加解密器
+    unsigned char m_pk[KX_PUBLICKEY_BYTES];        //本次连接的一次性公钥
+    unsigned char m_sk[KX_SECRETKEY_BYTES];        //本次连接的一次性私钥，导出会话密钥后立即擦除
+    unsigned char m_nonce[HANDSHAKE_NONCE_BYTES];  //本端随机数，验签时要用
+    std::string   m_streamHeader;                  //本端发送流的流头，第 3 帧发出
 };
 
 } // namespace net

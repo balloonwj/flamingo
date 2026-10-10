@@ -144,7 +144,7 @@ TEST_CASE("H2.2 ApplyUserDataToMainPanel 对 null root 返 false 不崩",
 TEST_CASE("H2.3 未读公告数与会话未读数各走各的，互不影响",
           "[p2][header][announce]")
 {
-    // Banner 底部那一行显示的是<u>未读公告</u>数（消息盒子的入口），而 SetUserData 的
+    // Banner 底部那一行显示的是<u>未读公告</u>数（公告中心的入口），而 SetUserData 的
     // unreadTotal 参数是<u>会话</u>未读总数。两者语义不同、来源不同（前者来自本地公告库
     // CAnnounceStore，后者现阶段恒为 0），本用例把这条边界钉住：将来谁想图省事把公告
     // 未读塞进 unreadTotal（或反过来），这里就会红。

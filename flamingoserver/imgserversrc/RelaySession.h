@@ -17,29 +17,49 @@
  *  业务鉴权仍完全依赖 relay 令牌（RelayToken），不登录、不查库；加密握手解决的是
  *  链路机密性与服务端身份，与令牌各管一段。
  *
+ *  屏幕共享（2026-10-02 起）也走这里，但不是两端配对而是一个房间挂多名成员：首帧
+ *  cmd_screenshare_relay_hello 带的令牌角色为 7 / 8，座位号取自令牌的 peeruid，登记到
+ *  ScreenShareRoomRelay；之后每个 cmd_screenshare_relay_data 读帧头、改写发送者座位号，再按
+ *  慢观看者丢帧策略转发给房间里的其他成员。为此本类额外记录「已交给本连接、还没写进 socket
+ *  的字节数」，供丢帧策略判断这名观看者是否积压。设计见 docs/屏幕共享与录制方案.md 5.4。
+ *
+ *  云端录制（第 26 期，屏幕共享与录制方案 12.6.2）的控制连接也走这里：chatserver 用角色为 role_server_control 的令牌
+ *  以 cmd_cloudrec_ctl_hello 报到后，本会话把自己登记为 CloudRecordControl 的发送出口，之后收到的 cmd_cloudrec_ctl_data
+ *  交给 CloudRecordControl 处理，它的事件也经本会话发回 chatserver。控制连接不能再做一对一报到或进房间，反之亦然。
+ *
  *  balloonwj@qq.com   2026-06-08
  */
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 #include <string>
 #include <memory>
+#include <atomic>
 #include "../net/ByteBuffer.h"
 #include "../fileserversrc/TcpSession.h"
 #include "RelayHub.h"
+#include "CloudRecordControl.h"
+
+//屏幕共享房间中转的调度，定义在 ScreenShareRoomRelay.h；它反过来要用到本类，故这里只做前向声明
+class ScreenShareRoomRelay;
 
 //继承 enable_shared_from_this 是为了在握手成功时把「自己」登记进 RelayHub：
 //配对表保存的是会话的弱引用，而会话对象由 RelayServer 的 std::shared_ptr 持有，
 //故这里必须能从 this 拿回那个 shared_ptr
-class RelaySession : public TcpSession, public std::enable_shared_from_this<RelaySession>
+//实现 ICloudRecordCtlSink 是为了在本会话是云端录制控制连接时，充当 CloudRecordControl 的发送出口
+class RelaySession : public TcpSession, public std::enable_shared_from_this<RelaySession>, public ICloudRecordCtlSink
 {
 public:
     /**
      *  @param conn     本会话所属连接
      *  @param tokenkey relay 令牌的 HMAC 校验密钥（imgserver.conf 的 relaytokenkey）
      *  @param hub      配对表指针（由 RelayServer 持有，生命周期长于本会话；非空）
+     *  @param roomRelay 屏幕共享房间中转的调度（由 RelayServer 持有，生命周期长于本会话；非空）
+     *  @param cloudControl 云端录制控制（由 RelayServer 持有，生命周期长于本会话）；为 NULL 时拒绝控制连接报到
      */
-    RelaySession(const std::shared_ptr<TcpConnection>& conn, const std::string& tokenkey, RelayHub* hub);
+    RelaySession(const std::shared_ptr<TcpConnection>& conn, const std::string& tokenkey, RelayHub* hub,
+                 ScreenShareRoomRelay* roomRelay, CloudRecordControl* cloudControl);
     ~RelaySession();
 
     RelaySession(const RelaySession& rhs) = delete;
@@ -64,6 +84,26 @@ public:
     void forwardFrame(uint16_t cmd, uint32_t seq, uint8_t srcFlags, uint32_t originlen,
                       const std::string& plainBody);
 
+    /**
+     *  已交给本连接、还没写进 socket 的字节数（屏幕共享丢帧策略的输入）。包括两部分：经 forwardFrame
+     *  投递、还在本连接 EventLoop 任务队列里的包体字节，以及最近一次发送后连接输出缓冲里的字节。
+     *  可从任意线程调用；是近似值，输出缓冲部分只在每次发送后与写完成时刷新。
+     *  @return 字节数
+     */
+    size_t pendingBytes() const;
+
+    /**
+     *  连接的输出缓冲已全部写进 socket（TcpConnection 的写完成回调，在本连接的 EventLoop 线程里调用）。
+     *  把输出缓冲部分的积压计数清零。
+     */
+    void onWriteComplete(const std::shared_ptr<TcpConnection>& conn);
+
+    //本会话是否是已报到的云端录制控制连接（RelayServer 在连接断开时据此通知 CloudRecordControl）
+    bool isCloudRecordControl() const;
+
+    //把一条云端录制控制消息发给 chatserver（CloudRecordControl 调用，任意线程）：以 cmd_cloudrec_ctl_data 发出
+    virtual void sendCloudRecordCtl(const std::string& body) override;
+
 private:
     //处理首帧握手（cmd_rd_relay_hello / cmd_av_relay_hello）：验令牌 + 配对；返回 false 表示应关连接
     //@param helloCmd 收到的握手 cmd（远程桌面 1853 或音视频 1855），用于回对应 cmd 的应答帧
@@ -75,6 +115,28 @@ private:
     //@param wireBody 线上包体（可能是密文），尚未解密
     bool onData(const std::shared_ptr<TcpConnection>& conn, uint16_t cmd, uint32_t seq,
                 uint8_t flags, uint32_t originlen, const std::string& wireBody);
+
+    //处理屏幕共享的首帧握手（cmd_screenshare_relay_hello）：验令牌、检查角色、按令牌里的座位号登记到房间；
+    //返回 false 表示应关连接
+    //@param body 已还原成明文的包体
+    bool onRoomHello(const std::shared_ptr<TcpConnection>& conn, const std::string& body);
+
+    //处理屏幕共享数据帧（cmd_screenshare_relay_data）：解密、读帧头、改写发送者座位号，再交给房间中转按丢帧
+    //策略转发；返回 false 表示流已不可恢复，调用方须关连接
+    //@param wireBody 线上包体（可能是密文），尚未解密
+    bool onRoomData(const std::shared_ptr<TcpConnection>& conn, uint16_t cmd, uint32_t seq,
+                    uint8_t flags, uint32_t originlen, const std::string& wireBody);
+
+    //处理云端录制控制连接的报到（cmd_cloudrec_ctl_hello）：验令牌、要求角色为 role_server_control，登记为控制出口；
+    //返回 false 表示应关连接
+    //@param body 已还原成明文的包体
+    bool onControlHello(const std::shared_ptr<TcpConnection>& conn, const std::string& body);
+
+    //处理云端录制控制命令（cmd_cloudrec_ctl_data）：还原包体后交给 CloudRecordControl，有回复时发回；
+    //未报到为控制连接就发来时返回 false（关连接）
+    //@param wireBody 线上包体（可能是密文），尚未解密
+    bool onControlData(const std::shared_ptr<TcpConnection>& conn, uint16_t cmd, uint32_t seq,
+                       uint8_t flags, uint32_t originlen, const std::string& wireBody);
 
     //回握手应答帧（包体 {code,msg}）；应答 cmd 与收到的握手 cmd 一致（1853 / 1855）
     void sendHelloAck(uint16_t helloCmd, int code, const std::string& msg);
@@ -95,4 +157,18 @@ private:
     bool        m_paired;      //是否已完成握手并登记到配对表
     std::string m_sessionId;   //本会话 id（握手后填）
     int         m_role;        //本端角色，见 RelayToken::role_*（握手后填）
+    int         m_pairKind;    //一对一报到的种类（relay_pair_kind，见 RelayHelloPolicy.h）：决定能转发哪些数据命令；报到前为 relay_pair_none
+
+    ScreenShareRoomRelay* m_roomRelay;         //屏幕共享房间中转的调度（不拥有）
+    bool                  m_inRoom;            //是否已完成屏幕共享握手并登记到房间（只在本连接的 I/O 线程读写）
+    std::string           m_roomId;            //屏幕共享房间号（握手后填）
+    int                   m_seat;              //屏幕共享座位号（握手后填）；未登记时为 -1
+    bool                  m_trackDropLogged;   //是否已记过「轨道不允许、丢弃」的日志（每条连接只记一次，只在本连接的 I/O 线程读写）
+    bool                  m_inputDropLogged;   //是否已记过「键鼠输入的目标座位不在房间里、丢弃」的日志（屏幕共享第 18 期；每条连接
+                                               //只记一次，只在本连接的 I/O 线程读写）
+    std::atomic<size_t>   m_queuedBytes;       //经 forwardFrame 投递、还在 EventLoop 任务队列里的包体字节数
+    std::atomic<size_t>   m_outputBytes;       //最近一次发送后连接输出缓冲里的字节数；写完成时清零
+
+    CloudRecordControl*   m_cloudControl;      //云端录制控制（不拥有）；为 NULL 时拒绝控制连接报到
+    std::atomic<bool>     m_control;           //是否已作为云端录制控制连接报到（I/O 线程写，断开回调读）
 };

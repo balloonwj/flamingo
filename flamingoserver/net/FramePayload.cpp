@@ -5,7 +5,7 @@
 #include "FramePayload.h"
 
 #include "../chatserversrc/Protocol.h"   //frame_header / frame_flag_* / COMPRESS_THRESHOLD
-#include "../zlib1.2.11/ZlibUtil.h"
+#include "../zlib1.3.2/ZlibUtil.h"
 
 namespace net {
 

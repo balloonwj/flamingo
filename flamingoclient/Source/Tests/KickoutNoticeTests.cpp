@@ -38,6 +38,7 @@ const int kAllKnownReasons[] =
     kKickoutReasonEnterpriseDeleted,
     kKickoutReasonAccountDeleted,
     kKickoutReasonKickedByAdmin,
+    kKickoutReasonPasswordResetByAdmin,
 };
 
 // 已知原因的条数。由数组自身算出而不是写死 —— 以后再加新原因时只需往上面数组里
@@ -62,6 +63,7 @@ TEST_CASE("KICK1 KickoutReasonValue 与协议 kickout_reason 逐条相等", "[ki
     CHECK((int)kKickoutReasonEnterpriseDeleted  == (int)kickout_reason_enterprise_deleted);
     CHECK((int)kKickoutReasonAccountDeleted     == (int)kickout_reason_account_deleted);
     CHECK((int)kKickoutReasonKickedByAdmin      == (int)kickout_reason_kicked_by_admin);
+    CHECK((int)kKickoutReasonPasswordResetByAdmin == (int)kickout_reason_password_reset_by_admin);
 
     // 未知值不来自协议，它只是本端的兜底档位，必须与任何一个协议取值都不同，
     // 否则真有一个原因会被当成"未知"。
@@ -108,9 +110,9 @@ TEST_CASE("KICK3 各已知原因的文案互不相同且均非空", "[kickout]")
 TEST_CASE("KICK4 未知与越界原因返回非空兜底文案", "[kickout]")
 {
     // 未知档位本身、服务端将来新增的取值、以及负数 / 极端值都必须有话可说。
-    // 这里的 10 是"本端尚未登记的下一个取值"——协议已用到 9（设备被管理员注销），
-    // 将来协议加了 10 就把这个数往后挪，保持它始终指向一个未登记值。
-    const int kOutOfRangeReasons[4] = { kKickoutReasonUnknown, 10, 999, -1 };
+    // 这里的 11 是"本端尚未登记的下一个取值"——协议已用到 10（密码被管理员重置，2026-10-07 起），
+    // 将来协议加了 11 就把这个数往后挪，保持它始终指向一个未登记值。
+    const int kOutOfRangeReasons[4] = { kKickoutReasonUnknown, 11, 999, -1 };
     for (int i = 0; i < 4; ++i)
     {
         INFO("reason = " << kOutOfRangeReasons[i]);
@@ -157,6 +159,18 @@ TEST_CASE("KO-A2 账号已登不上的两种被踢原因要清掉标志", "[kick
 
     // 账号已删除：账号本身没了，再登录会被判为未注册，同样不可恢复。
     CHECK(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonAccountDeleted));
+
+    // 密码被管理员重置（2026-10-07 起）：与"密码已修改"同理，本机存的密码已经失效。
+    CHECK(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonPasswordResetByAdmin));
+}
+
+TEST_CASE("KICK6 密码被管理员重置的提示告诉用户去向管理员获取新密码，与本人改密的提示不同", "[kickout]")
+{
+    const wchar_t* text = GetKickoutNoticeText(kKickoutReasonPasswordResetByAdmin);
+    REQUIRE(text != NULL);
+    CHECK(wcscmp(text, L"您的密码已被管理员重置，请向管理员获取新密码后重新登录。") == 0);
+    CHECK(wcscmp(text, GetKickoutNoticeText(kKickoutReasonPasswordChanged)) != 0);
+    CHECK(wcscmp(text, GetKickoutNoticeText(kKickoutReasonUnknown)) != 0);
 }
 
 TEST_CASE("KO-A3 其余被踢原因一律不动自动登录标志", "[kickout][autologin]")

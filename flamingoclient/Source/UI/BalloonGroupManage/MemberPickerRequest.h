@@ -40,9 +40,14 @@ struct MemberPickerRequest
     // 由群管理窗按自己的模型现造）。"邀请入群"留空，由主面板用通讯录填。
     std::vector<net::ContactItem> m_candidates;
 
+    // 目标群是否允许新成员查看入群前的历史（群设置 newseehistory）。仅"邀请入群"用得上：为 false 时
+    // 对话框里「入群后可查看的聊天记录」整组置灰（群设置优先，docs/邀请入群方案.md §3.2）。
+    bool m_groupAllowsHistory;
+
     MemberPickerRequest()
         : m_purpose(0)
         , m_groupId(0)
+        , m_groupAllowsHistory(true)
     {
     }
 };

@@ -1,0 +1,279 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1060" viewBox="0 0 1680 1060">
+  <!-- Flamingo PC 客户端模块架构图（英文版，供 README_en.md 使用；中文版为 flamingo-client-modules.svg，两份内容须保持一致）。
+       balloonwj@qq.com 2026-10-10
+       源文件，PNG 由 tools/render_diagrams.ps1 用 Edge 无头模式渲染生成，改图请改本文件后重新渲染。 -->
+  <defs>
+    <style>
+      text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif; fill: #1E293B; }
+      .title { font-size: 30px; font-weight: 700; fill: #0F172A; text-anchor: middle; }
+      .subtitle { font-size: 15px; fill: #64748B; text-anchor: middle; }
+      .gh { font-size: 17px; font-weight: 700; }
+      .name { font-size: 14.5px; font-weight: 700; fill: #0F172A; }
+      .desc { font-size: 12.5px; fill: #475569; }
+      .chip { font-size: 11.5px; font-weight: 700; text-anchor: middle; }
+      .lay { font-size: 16px; font-weight: 700; }
+      .b { font-size: 14px; font-weight: 700; }
+      .t { font-size: 13px; fill: #334155; }
+      .s { font-size: 12px; fill: #64748B; }
+      .c { text-anchor: middle; }
+      .r { text-anchor: end; }
+      .uichip { font-size: 12.5px; fill: #1E3A8A; text-anchor: middle; }
+    </style>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <marker id="aDark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1680" height="1060" fill="#FFFFFF"/>
+
+  <text class="title" x="840" y="50">Flamingo PC Client Modules</text>
+  <text class="subtitle" x="840" y="80">Flamingo.exe plus 13 plug-in DLLs, loaded in three batches: at startup, after the first sign-in, on first use</text>
+
+  <!-- ===================== 主程序与插件之间的加载 / 回调箭头 ===================== -->
+  <path d="M478,384 H414" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <path d="M412,408 H476" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s c" x="445" y="374">load</text>
+  <text class="s c" x="445" y="430">callback</text>
+
+  <path d="M1202,284 H1266" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <path d="M1268,308 H1204" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s c" x="1235" y="274">load</text>
+  <text class="s c" x="1235" y="330">callback</text>
+
+  <path d="M1202,594 H1266" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <path d="M1268,618 H1204" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s c" x="1235" y="584">load</text>
+  <text class="s c" x="1235" y="640">callback</text>
+
+  <!-- 主程序 → 本地数据 / 升级程序 / 服务端 -->
+  <path d="M520,700 V746" stroke="#475569" stroke-width="2.5" marker-start="url(#aDark)" marker-end="url(#aDark)"/>
+  <text class="s" x="528" y="728">read / write</text>
+  <path d="M840,700 V746" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+  <text class="s" x="848" y="728">starts it to update</text>
+  <path d="M1160,700 V746" stroke="#475569" stroke-width="2.5" marker-start="url(#aDark)" marker-end="url(#aDark)"/>
+  <text class="s" x="1168" y="728">TCP / UDP</text>
+
+  <!-- ===================== 左侧：启动时加载 ===================== -->
+  <rect x="30" y="110" width="380" height="590" rx="14" fill="#F0F9FF" stroke="#0284C7" stroke-width="2"/>
+  <text class="gh" x="48" y="140" style="fill:#0369A1">Loaded at startup</text>
+  <text class="s r" x="394" y="140">usable before sign-in</text>
+
+  <g>
+    <rect x="46" y="160" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="160" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="186">FlamingoLang</text>
+    <rect x="338" y="170" width="44" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="360" y="185.5" style="fill:#475569">no UI</text>
+    <text class="desc" x="62" y="210">UI translations: zh-TW, English, Japanese, Korean</text>
+
+    <rect x="46" y="236" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="236" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="262">FlamingoP2P</text>
+    <rect x="282" y="246" width="44" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="304" y="261.5" style="fill:#475569">no UI</text>
+    <rect x="332" y="246" width="50" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="357" y="261.5" style="fill:#C2410C">2300s</text>
+    <text class="desc" x="62" y="286">P2P links: direct, hole punching, relay fallback</text>
+
+    <rect x="46" y="312" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="312" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="338">FlamingoMedia</text>
+    <rect x="352" y="322" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="367" y="337.5" style="fill:#1D4ED8">UI</text>
+    <text class="desc" x="62" y="362">Calls, remote desktop, screen sharing, recording</text>
+
+    <rect x="46" y="388" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="388" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="414">FlamingoLock</text>
+    <rect x="352" y="398" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="367" y="413.5" style="fill:#1D4ED8">UI</text>
+    <text class="desc" x="62" y="438">Lock the screen from the tray, five animations</text>
+
+    <rect x="46" y="464" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="464" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="490">FlamingoScreenshot</text>
+    <rect x="352" y="474" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="367" y="489.5" style="fill:#1D4ED8">UI</text>
+    <text class="desc" x="62" y="514">Capture · annotate · copy / save / send</text>
+
+    <rect x="46" y="540" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="540" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="566">FlamingoOcr</text>
+    <rect x="338" y="550" width="44" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="360" y="565.5" style="fill:#475569">no UI</text>
+    <text class="desc" x="62" y="590">Image text recognition, preloaded in background</text>
+
+    <rect x="46" y="616" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BAE6FD" filter="url(#sh)"/>
+    <rect x="46" y="616" width="5" height="64" rx="2" fill="#0284C7"/>
+    <text class="name" x="62" y="642">FlamingoMarkdown</text>
+    <rect x="338" y="626" width="44" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="360" y="641.5" style="fill:#475569">no UI</text>
+    <text class="desc" x="62" y="666">Markdown parsing, layout and export, preloaded</text>
+  </g>
+
+  <!-- ===================== 右上：首次登录成功后加载 ===================== -->
+  <rect x="1270" y="110" width="380" height="360" rx="14" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+  <text class="gh" x="1288" y="140" style="fill:#15803D">Loaded after the first sign-in</text>
+
+  <g>
+    <rect x="1286" y="160" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="160" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="186">FlamingoFileShare</text>
+    <rect x="1536" y="170" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1551" y="185.5" style="fill:#1D4ED8">UI</text>
+    <rect x="1572" y="170" width="50" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1597" y="185.5" style="fill:#C2410C">2200s</text>
+    <text class="desc" x="1302" y="210">Share local disks, folders and files in a chat</text>
+
+    <rect x="1286" y="236" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="236" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="262">FlamingoSecretChat</text>
+    <rect x="1462" y="246" width="44" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="1484" y="261.5" style="fill:#475569">no UI</text>
+    <rect x="1512" y="246" width="50" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1537" y="261.5" style="fill:#C2410C">2600s</text>
+    <rect x="1568" y="246" width="54" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1595" y="261.5" style="fill:#15803D">switch</text>
+    <text class="desc" x="1302" y="286">E2E secret chat · capture-proof · memory only</text>
+
+    <rect x="1286" y="312" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="312" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="338">FlamingoThreadGroup</text>
+    <rect x="1476" y="322" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1491" y="337.5" style="fill:#1D4ED8">UI</text>
+    <rect x="1512" y="322" width="50" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1537" y="337.5" style="fill:#C2410C">2700s</text>
+    <rect x="1568" y="322" width="54" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1595" y="337.5" style="fill:#15803D">switch</text>
+    <text class="desc" x="1302" y="362">Thread groups: posts · comments · reactions</text>
+
+    <rect x="1286" y="388" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#BBF7D0" filter="url(#sh)"/>
+    <rect x="1286" y="388" width="5" height="64" rx="2" fill="#16A34A"/>
+    <text class="name" x="1302" y="414">FlamingoBot</text>
+    <rect x="1450" y="398" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1465" y="413.5" style="fill:#1D4ED8">UI</text>
+    <rect x="1486" y="398" width="76" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="1524" y="413.5" style="fill:#C2410C">2802–2809</text>
+    <rect x="1568" y="398" width="54" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1595" y="413.5" style="fill:#15803D">switch</text>
+    <text class="desc" x="1302" y="438">Management UI for group and personal bots</text>
+  </g>
+
+  <!-- ===================== 右下：首次使用时加载 ===================== -->
+  <rect x="1270" y="490" width="380" height="210" rx="14" fill="#FFFBEB" stroke="#D97706" stroke-width="2"/>
+  <text class="gh" x="1288" y="520" style="fill:#B45309">Loaded on first use</text>
+  <text class="s r" x="1634" y="520">first caption use</text>
+
+  <g>
+    <rect x="1286" y="540" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#FDE68A" filter="url(#sh)"/>
+    <rect x="1286" y="540" width="5" height="64" rx="2" fill="#D97706"/>
+    <text class="name" x="1302" y="566">FlamingoCaption</text>
+    <rect x="1532" y="550" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="1547" y="565.5" style="fill:#1D4ED8">UI</text>
+    <rect x="1568" y="550" width="54" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="1595" y="565.5" style="fill:#15803D">switch</text>
+    <text class="desc" x="1302" y="590">Voice captions: streaming ASR · editor · export</text>
+
+    <rect x="1286" y="616" width="348" height="64" rx="10" fill="#FFFFFF" stroke="#FDE68A" filter="url(#sh)"/>
+    <rect x="1286" y="616" width="5" height="64" rx="2" fill="#D97706"/>
+    <text class="name" x="1302" y="642">FlamingoCaptionModel</text>
+    <rect x="1550" y="626" width="72" height="22" rx="11" fill="#FEF3C7"/><text class="chip" x="1586" y="641.5" style="fill:#B45309">resources</text>
+    <text class="desc" x="1302" y="666">Speech model, loaded from memory, never unpacked</text>
+  </g>
+
+  <!-- ===================== 中间：主程序 Flamingo.exe ===================== -->
+  <rect x="480" y="110" width="720" height="590" rx="16" fill="#F8FAFF" stroke="#2563EB" stroke-width="2.5" filter="url(#sh)"/>
+  <text x="500" y="142"><tspan style="font-size:21px;font-weight:700;fill:#1D4ED8">Flamingo.exe main program</tspan></text>
+  <text class="s r" x="1180" y="142">Win32 + WTL · balloonui UI · Source/ in layers</text>
+
+  <!-- UI/ -->
+  <rect x="500" y="158" width="680" height="114" rx="10" fill="#EFF6FF" stroke="#BFDBFE"/>
+  <text class="lay" x="516" y="188" style="fill:#1D4ED8">UI/</text>
+  <text class="s" x="516" y="210">24 windows</text>
+  <g>
+    <rect x="620" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="671" y="188">Sign-in</text>
+    <rect x="730" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="781" y="188">Main panel</text>
+    <rect x="840" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="891" y="188">1:1 chat</text>
+    <rect x="950" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1001" y="188">Group chat</text>
+    <rect x="1060" y="170" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1111" y="188">Contacts</text>
+
+    <rect x="620" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="671" y="220">Group admin</text>
+    <rect x="730" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="781" y="220">History</text>
+    <rect x="840" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="891" y="220">Global search</text>
+    <rect x="950" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1001" y="220">Settings</text>
+    <rect x="1060" y="202" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1111" y="220">Profile</text>
+
+    <rect x="620" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="671" y="252">Memos</text>
+    <rect x="730" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="781" y="252">Announcements</text>
+    <rect x="840" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="891" y="252">Message box</text>
+    <rect x="950" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1001" y="252">Markdown</text>
+    <rect x="1060" y="234" width="102" height="26" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/><text class="uichip" x="1111" y="252">Code snippets</text>
+  </g>
+
+  <!-- Feature/ -->
+  <rect x="500" y="282" width="680" height="110" rx="10" fill="#EEF2FF" stroke="#C7D2FE"/>
+  <text class="lay" x="516" y="312" style="fill:#4338CA">Feature/</text>
+  <text class="s" x="516" y="334">plug-in hosts</text>
+  <text class="t" x="620" y="308">One host per plug-in: load the DLL, check the API version, add its entries</text>
+  <g>
+    <rect x="620" y="320" width="110" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="675" y="338" style="fill:#3730A3">Folder transfer</text>
+    <rect x="736" y="320" width="96" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="784" y="338" style="fill:#3730A3">Auto-update</text>
+    <rect x="838" y="320" width="116" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="896" y="338" style="fill:#3730A3">Cloud recordings</text>
+    <rect x="960" y="320" width="108" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="1014" y="338" style="fill:#3730A3">Voice messages</text>
+    <rect x="1074" y="320" width="96" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/><text class="uichip" x="1122" y="338" style="fill:#3730A3">Rewrite sync</text>
+  </g>
+  <text class="s" x="620" y="374">Plug-ins call back through host interfaces: logging, translation, sending frames</text>
+
+  <!-- Session/ 与 Common/ -->
+  <rect x="500" y="402" width="335" height="70" rx="10" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text class="lay" x="516" y="430" style="fill:#0F766E">Session/</text>
+  <text class="s" x="516" y="456">Current user · accounts · config · group roles</text>
+  <rect x="845" y="402" width="335" height="70" rx="10" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text class="lay" x="861" y="430" style="fill:#0F766E">Common/</text>
+  <text class="s" x="861" y="456">Logging · i18n · fonts and images · code lexer</text>
+
+  <!-- net/ -->
+  <rect x="500" y="482" width="680" height="118" rx="10" fill="#FFF7ED" stroke="#FED7AA"/>
+  <text class="lay" x="516" y="510" style="fill:#C2410C">net/</text>
+  <text class="s" x="516" y="532">protocol</text>
+  <text class="b" x="620" y="508" style="fill:#9A3412">CIUSocket long-lived connection: v2 protocol · JSON · libsodium</text>
+  <text class="t" x="620" y="532">Forwards frames by cmd range to plug-ins as-is, without parsing them:</text>
+  <g>
+    <rect x="620" y="542" width="104" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="672" y="559" style="fill:#9A3412;font-size:11.5px">2200s FileShare</text>
+    <rect x="729" y="542" width="72" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="765" y="559" style="fill:#9A3412;font-size:11.5px">2300s P2P</text>
+    <rect x="806" y="542" width="112" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="862" y="559" style="fill:#9A3412;font-size:11.5px">2600s SecretChat</text>
+    <rect x="923" y="542" width="122" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="984" y="559" style="fill:#9A3412;font-size:11.5px">2700s ThreadGroup</text>
+    <rect x="1050" y="542" width="96" height="24" rx="12" fill="#FFFFFF" stroke="#FDBA74"/><text class="uichip" x="1098" y="559" style="fill:#9A3412;font-size:11.5px">2802–2809 Bot</text>
+  </g>
+  <text class="s" x="620" y="588">File / image upload and download · Threading/ thread pool and background tasks</text>
+
+  <!-- App/ -->
+  <rect x="500" y="610" width="680" height="70" rx="10" fill="#F1F5F9" stroke="#CBD5E1"/>
+  <text class="lay" x="516" y="638" style="fill:#334155">App/</text>
+  <text class="s" x="516" y="660">process shell</text>
+  <text class="t" x="620" y="638">Process entry · CAppShell orders startup, shutdown and plug-in load / unload</text>
+  <text class="s" x="620" y="662">Tray icon and tray menu · hidden main window · crash dumps</text>
+
+  <!-- ===================== 底部：本地数据 / 升级程序 / 服务端 ===================== -->
+  <rect x="30" y="750" width="530" height="130" rx="12" fill="#FFFFFF" stroke="#475569" stroke-width="2" filter="url(#sh)"/>
+  <text class="gh" x="50" y="780" style="fill:#334155">Local data</text>
+  <text class="s r" x="544" y="780">one directory per account</text>
+  <text class="t" x="50" y="808">Users/&lt;user&gt;/ChatLog/msgv2.db　local message database (SQLite)</text>
+  <text class="t" x="50" y="832">ChatImage/ · ChatFile/ · Avatar/　images, files and avatars</text>
+  <text class="t" x="50" y="856">config/flamingo.ini　server addresses and branding text</text>
+
+  <rect x="600" y="750" width="480" height="130" rx="12" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2" filter="url(#sh)"/>
+  <text class="gh" x="620" y="780" style="fill:#6D28D9">FlamingoUpdater.exe</text>
+  <text class="s r" x="1064" y="780">separate process</text>
+  <text class="t" x="620" y="808">Started after an update package is downloaded;</text>
+  <text class="t" x="620" y="832">unzips it over the installation directory.</text>
+  <text class="t" x="620" y="856">Uses a %TEMP% copy of the language pack (--lang)</text>
+
+  <rect x="1120" y="750" width="530" height="130" rx="12" fill="#FFFFFF" stroke="#EA580C" stroke-width="2" filter="url(#sh)"/>
+  <text class="gh" x="1140" y="780" style="fill:#C2410C">Servers</text>
+  <text class="s r" x="1634" y="780">see the service architecture diagram</text>
+  <text class="t" x="1140" y="808">chatserver :20000　long-lived: sign-in, messages, signaling</text>
+  <text class="t" x="1140" y="832">fileserver :20001　files　·　imgserver :20002　images</text>
+  <text class="t" x="1140" y="856">imgserver :20003 relay　·　UDP 20004 / 20005 address probing</text>
+
+  <!-- ===================== 第三方库 ===================== -->
+  <rect x="30" y="905" width="1620" height="72" rx="12" fill="#1E293B"/>
+  <text class="b" x="50" y="933" style="fill:#FFFFFF">Main third-party libraries</text>
+  <text class="t" x="50" y="961" style="fill:#CBD5E1">balloonui control library (linked into the exe and each of the 7 plug-ins with a UI) · WTL 10.1 · jsoncpp 1.9.0 · zlib · SQLite 3.53.1 · libsodium 1.0.22 · opus 1.5.2 / speexdsp 1.2.1 · md4c 0.6.0 · sherpa-onnx</text>
+
+  <!-- ===================== 图例 ===================== -->
+  <g transform="translate(30,1012)">
+    <rect x="0" y="0" width="30" height="22" rx="11" fill="#DBEAFE"/><text class="chip" x="15" y="15.5" style="fill:#1D4ED8">UI</text>
+    <text class="s" x="38" y="16">has windows, own balloonui copy</text>
+    <rect x="250" y="0" width="44" height="22" rx="11" fill="#F1F5F9"/><text class="chip" x="272" y="15.5" style="fill:#475569">no UI</text>
+    <text class="s" x="302" y="16">logic only</text>
+    <rect x="380" y="0" width="50" height="22" rx="11" fill="#FFEDD5"/><text class="chip" x="405" y="15.5" style="fill:#C2410C">2700s</text>
+    <text class="s" x="438" y="16">frames in this cmd range are forwarded by the exe</text>
+    <rect x="760" y="0" width="54" height="22" rx="11" fill="#DCFCE7"/><text class="chip" x="787" y="15.5" style="fill:#15803D">switch</text>
+    <text class="s" x="822" y="16">enterprise feature switch; not loaded when off</text>
+    <rect x="1120" y="0" width="72" height="22" rx="11" fill="#FEF3C7"/><text class="chip" x="1156" y="15.5" style="fill:#B45309">resources</text>
+    <text class="s" x="1200" y="16">resources only</text>
+    <path d="M1300,11 H1340" stroke="#475569" stroke-width="2.5" marker-end="url(#aDark)"/>
+    <text class="s" x="1348" y="16">load / callback via host interfaces</text>
+  </g>
+</svg>

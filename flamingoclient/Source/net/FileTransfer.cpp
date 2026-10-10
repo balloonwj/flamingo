@@ -31,6 +31,25 @@ namespace net {
 //申请上传 / 下载信令应答的等待超时：15 秒。正常往返为毫秒级，留足余量兜底网络抖动。
 static const int kSignalTimeoutSec = 15;
 
+//语音下载连接 fileserver 的超时：5 秒，与聊天文件下载相同。
+static const int kVoiceConnectTimeoutSec = 5;
+
+//同一文件正在上传时，后来的上传最多等它多久（毫秒）：5 分钟。超过之后照常并行上传（服务端能
+//正确处理同一文件的并发上传，见服务端 fileserversrc/UploadPartPolicy.h），只是多传一份字节；等待中用户点「取消」立即放弃。
+//单聊发送只有一个串行 worker，它在这里等待期间，排在后面的单聊收发也要等，所以上限不宜再长。
+static const int kUploadGateWaitMs = 5 * 60 * 1000;
+
+//进入上传门闩之后记一条日志，只在确实等待过（结果不是 enter_first）时记。guard 为刚构造好的门闩守卫，
+//md5 为文件内容 MD5，who 为日志里标识本笔传输的文字（如 clientmsgid=xxx），waitedMs 为进入门闩的耗时（毫秒）
+static void LogUploadGateWait(const UploadInflightGuard& guard, const std::string& md5,
+                              const std::string& who, long long waitedMs)
+{
+    if (guard.Result() == UploadInflightGate::enter_first)
+        return;
+    LOG_INFO("FileTransfer: same file was being uploaded, waited %lld ms, gate result=%d, md5=%s, %s.",
+             waitedMs, (int)guard.Result(), md5.c_str(), who.c_str());
+}
+
 //注：字节流分片收发的单次超时 kChunkIoTimeoutSec 与卡死判定轮数 kMaxStreamStallRounds
 //已随流式收发实现一并移到 FileStreamTransfer.h，本文件经该头文件取用。
 
@@ -176,6 +195,26 @@ static std::wstring buildFileCachePath(const std::wstring& account, const std::s
     ::CreateDirectoryW(md5Dir.c_str(), NULL);
 
     return FileTransfer::CacheFilePathFor(account, md5, filename);
+}
+
+//逐级创建一个文件所在的目录（语音缓存 Users\<账号>\ChatVoice\ 首次使用时可能还不存在）。
+//CreateDirectoryW 只建最后一级，故从盘符之后按分隔符逐级调用；已存在会返回失败，忽略即可。
+//@return 建完之后该目录存在返回 true
+static bool ensureParentDirectories(const std::wstring& filePath)
+{
+    const size_t lastSep = filePath.find_last_of(L"\\/");
+    if (lastSep == std::wstring::npos || lastSep == 0)
+        return false;
+    const std::wstring dir = filePath.substr(0, lastSep);
+    for (size_t i = 0; i < dir.size(); ++i)
+    {
+        //跳过盘符后的第一个分隔符（"C:\"），其余每个分隔符之前的前缀都是一级目录
+        if ((dir[i] == L'\\' || dir[i] == L'/') && i > 0 && dir[i - 1] != L':')
+            ::CreateDirectoryW(dir.substr(0, i).c_str(), NULL);
+    }
+    ::CreateDirectoryW(dir.c_str(), NULL);
+    const DWORD attrs = ::GetFileAttributesW(dir.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
 //注：文件上传已改为 streamUploadFile 流式实现（分片从磁盘读、内联组帧发送），不再经
@@ -469,6 +508,60 @@ void FileTransfer::EnqueueDownload(int64_t msgid, const std::string& fileid,
              (long long)msgid, fileid.c_str());
 }
 
+void FileTransfer::EnqueueSendVoice(int ctype, int64_t cid, const std::string& clientMsgId,
+                                    const std::wstring& localPath, int durationSeconds,
+                                    const std::string& waveBase64)
+{
+    Task task;
+    task.m_kind          = task_send_voice;
+    task.m_ctype         = ctype;
+    task.m_cid           = cid;
+    task.m_clientmsgid   = clientMsgId;
+    task.m_localpath     = localPath;
+    task.m_voiceDuration = durationSeconds;
+    task.m_voiceWave     = waveBase64;
+
+    {
+        std::lock_guard<std::mutex> guard(m_queueMtx);
+        m_queue.push_back(task);
+    }
+    m_queueCv.notify_one();
+    LOG_INFO("FileTransfer enqueue voice send, ctype=%d, cid=%lld, clientmsgid=%s, duration=%d.",
+             ctype, (long long)cid, clientMsgId.c_str(), durationSeconds);
+}
+
+void FileTransfer::EnqueueVoiceDownload(const std::string& fileid, const std::string& md5, int64_t expectSize,
+                                        const std::wstring& destPath)
+{
+    if (fileid.empty() || md5.empty() || destPath.empty())
+    {
+        LOG_ERROR("FileTransfer: voice download rejected, missing fileid / md5 / path, md5=%s.", md5.c_str());
+        return;
+    }
+
+    Task task;
+    task.m_kind       = task_voice_download;
+    task.m_fileid     = fileid;
+    task.m_expectMd5  = md5;
+    task.m_expectSize = expectSize;
+    task.m_destPath   = destPath;
+
+    {
+        std::lock_guard<std::mutex> guard(m_queueMtx);
+        //去重：同一段语音已在队列里或正在下载，完成后按 md5 回投、所有该段语音的气泡一并更新
+        if (m_inflightVoices.find(md5) != m_inflightVoices.end())
+        {
+            LOG_INFO("FileTransfer skip duplicate voice download (in-flight), md5=%s.", md5.c_str());
+            return;
+        }
+        m_inflightVoices.insert(md5);
+        m_queue.push_back(task);
+    }
+    m_queueCv.notify_one();
+    LOG_INFO("FileTransfer enqueue voice download, fileid=%s, md5=%s, size=%lld.",
+             fileid.c_str(), md5.c_str(), (long long)expectSize);
+}
+
 int FileTransfer::EnqueueGroupFileUpload(int64_t groupId, const std::wstring& localPath,
                                          int64_t selfUserId)
 {
@@ -567,6 +660,10 @@ void FileTransfer::WorkerProc()
         }
         if (task.m_kind == task_download)
             ProcessDownload(task);
+        else if (task.m_kind == task_voice_download)
+            ProcessVoiceDownload(task);
+        else if (task.m_kind == task_send_voice)
+            ProcessSendVoice(task);
         else
             ProcessSend(task);
     }
@@ -652,6 +749,21 @@ void FileTransfer::ProcessSend(const Task& task)
     //2. 原始文件名（UTF-8，随消息发出并作上传申请的 name）+ 扩展名
     std::string filename = EncodeUtil::UnicodeToUtf8(extractFileNameW(task.m_localpath));
     std::string ext      = extractExtLower(task.m_localpath);
+
+    //同一文件只上传一份：群文件并发池正在传同一文件时（同时发给群和单聊），先等它传完，
+    //接下来申请上传时服务端已有该文件、直接秒传。守卫持有到本函数返回，期间排在后面的同一文件上传等待。
+    std::chrono::steady_clock::time_point gateT0 = std::chrono::steady_clock::now();
+    UploadInflightGuard uploadGuard(m_uploadGate, md5, kUploadGateWaitMs, cancel);
+    LogUploadGateWait(uploadGuard, md5, "clientmsgid=" + task.m_clientmsgid,
+                      (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - gateT0).count());
+    if (uploadGuard.Result() == UploadInflightGate::enter_cancelled)
+    {
+        LOG_INFO("FileTransfer: send cancelled while waiting for the same file, clientmsgid=%s.",
+                 task.m_clientmsgid.c_str());
+        PostSendResult(task, false, error_code_upload_fail, "cancelled by user", "", "", "", 0);
+        return;
+    }
 
     //3. 申请上传（异步信令，阻塞等应答）。归属标记为文件传输，使应答回路由到本类。
     uint32_t seq = CIUSocket::GetInstance().RequestUpload(
@@ -955,6 +1067,189 @@ void FileTransfer::PostDownloadResult(int64_t msgid, bool ok, int errcode,
         delete r;
 }
 
+void FileTransfer::ProcessSendVoice(const Task& task)
+{
+    //0. 录音文件的大小（同时拦掉打不开的、空的文件：录音文件被清理缓存删掉时走这里）
+    const int64_t size = getFileSizeOnDisk(task.m_localpath);
+    if (size <= 0)
+    {
+        LOG_ERROR("FileTransfer: open voice file failed or empty, clientmsgid=%s.", task.m_clientmsgid.c_str());
+        PostVoiceSendResult(task, false, error_code_upload_fail, "open voice file failed or empty", "", "");
+        return;
+    }
+
+    //1. 算 MD5（录音文件名本来就是 md5，这里按文件内容再算一次，申请上传时报给服务端做秒传判定与校验）
+    std::string md5;
+    if (!computeFileMd5Streaming(task.m_localpath, md5))
+    {
+        LOG_ERROR("FileTransfer: read voice file failed, clientmsgid=%s.", task.m_clientmsgid.c_str());
+        PostVoiceSendResult(task, false, error_code_upload_fail, "read voice file failed", "", "");
+        return;
+    }
+
+    //2. 申请上传：聊天文件场景（方案 V3），文件名就是 <md5>.ogg
+    const std::string filename = EncodeUtil::UnicodeToUtf8(extractFileNameW(task.m_localpath));
+    const std::string ext      = extractExtLower(task.m_localpath);
+    uint32_t seq = CIUSocket::GetInstance().RequestUpload(
+        file_scene_chat_file, md5, size, filename, ext, transfer_owner_file);
+    RequestUploadResult ru;
+    if (!WaitUploadSignal(seq, ru, kSignalTimeoutSec))
+    {
+        LOG_ERROR("FileTransfer: voice request-upload timeout, seq=%u, clientmsgid=%s.",
+                  seq, task.m_clientmsgid.c_str());
+        PostVoiceSendResult(task, false, error_code_upload_fail, "request upload timeout", "", md5);
+        return;
+    }
+    if (ru.m_code != error_code_ok)
+    {
+        LOG_ERROR("FileTransfer: voice request-upload rejected, code=%d, clientmsgid=%s.",
+                  ru.m_code, task.m_clientmsgid.c_str());
+        PostVoiceSendResult(task, false, ru.m_code, ru.m_msg, "", md5);
+        return;
+    }
+
+    //3. 服务端没有同内容的文件时传字节（与单聊发文件共用一条 file 连接，传完即断）
+    if (!ru.m_exists)
+    {
+        if (CIUSocket::GetInstance().IsFileServerClosed()
+            && !CIUSocket::GetInstance().ConnectToFileServer(kVoiceConnectTimeoutSec))
+        {
+            LOG_ERROR("FileTransfer: connect fileserver failed (voice send), clientmsgid=%s.",
+                      task.m_clientmsgid.c_str());
+            PostVoiceSendResult(task, false, error_code_upload_fail, "connect fileserver failed", "", md5);
+            return;
+        }
+        int errcode = 0;
+        std::string errmsg;
+        MainFileChannel channel(this);
+        const bool ok = FileStreamTransfer::uploadFile(channel, task.m_localpath, size, ru.m_chunksize,
+                                                       ru.m_uploadtoken, NULL, NULL, errcode, errmsg);
+        //传完即断开 file 连接，理由同 ProcessSend：避免会话状态残留到下一笔传输
+        CIUSocket::GetInstance().CloseFileServerConnection();
+        if (!ok)
+        {
+            LOG_ERROR("FileTransfer: upload voice bytes failed, errcode=%d, errmsg=%s, clientmsgid=%s.",
+                      errcode, errmsg.c_str(), task.m_clientmsgid.c_str());
+            PostVoiceSendResult(task, false, errcode, errmsg, "", md5);
+            return;
+        }
+    }
+    else
+    {
+        LOG_INFO("FileTransfer: voice instant-transfer hit, fileid=%s, clientmsgid=%s.",
+                 ru.m_fileid.c_str(), task.m_clientmsgid.c_str());
+    }
+
+    //4. 发语音消息（content 为 fileid、md5、duration、size、wave）；回执沿用 FMG_MSG_V2_SEND_CHATMSG_ACK
+    CIUSocket::GetInstance().SendChatVoiceMessage(task.m_ctype, task.m_cid, task.m_clientmsgid, ru.m_fileid, md5,
+                                                  task.m_voiceDuration, size, task.m_voiceWave);
+    LOG_INFO("FileTransfer: voice sent, fileid=%s, size=%lld, duration=%d, clientmsgid=%s.",
+             ru.m_fileid.c_str(), (long long)size, task.m_voiceDuration, task.m_clientmsgid.c_str());
+    PostVoiceSendResult(task, true, 0, "", ru.m_fileid, md5);
+}
+
+void FileTransfer::PostVoiceSendResult(const Task& task, bool ok, int errcode, const std::string& errmsg,
+                                       const std::string& fileid, const std::string& md5)
+{
+    HWND hUI = CIUSocket::GetInstance().GetUIProxyWnd();
+    VoiceSendResult* r = new VoiceSendResult();
+    r->m_clientmsgid = task.m_clientmsgid;
+    r->m_ctype       = task.m_ctype;
+    r->m_cid         = task.m_cid;
+    r->m_ok          = ok;
+    r->m_errcode     = errcode;
+    r->m_errmsg      = errmsg;
+    r->m_fileid      = fileid;
+    r->m_md5         = md5;
+    if (::IsWindow(hUI))
+        ::PostMessage(hUI, FMG_MSG_V2_VOICE_SEND_RESULT, 0, (LPARAM)r);
+    else
+        delete r;
+}
+
+void FileTransfer::ProcessVoiceDownload(const Task& task)
+{
+    //1. 申请下载（异步信令，阻塞等应答）。归属标记为文件传输，应答经 m_dlWaiters 按 seq 回到这里
+    uint32_t seq = CIUSocket::GetInstance().RequestDownload(task.m_fileid, transfer_owner_file);
+    RequestDownloadResult rd;
+    if (!WaitDownloadSignal(seq, rd, kSignalTimeoutSec))
+    {
+        LOG_ERROR("FileTransfer: voice request-download timeout, seq=%u, md5=%s.", seq, task.m_expectMd5.c_str());
+        PostVoiceDownloadResult(task.m_expectMd5, false, error_code_server_internal, std::wstring());
+        return;
+    }
+    if (rd.m_code != error_code_ok)
+    {
+        LOG_ERROR("FileTransfer: voice request-download rejected, code=%d, md5=%s.", rd.m_code,
+                  task.m_expectMd5.c_str());
+        PostVoiceDownloadResult(task.m_expectMd5, false, rd.m_code, std::wstring());
+        return;
+    }
+
+    //2. 落地目录（Users\<账号>\ChatVoice\）首次使用时还不存在：逐级建好。下载函数要求目录已存在
+    if (!ensureParentDirectories(task.m_destPath))
+    {
+        LOG_ERROR("FileTransfer: voice cache directory unavailable, md5=%s.", task.m_expectMd5.c_str());
+        PostVoiceDownloadResult(task.m_expectMd5, false, error_code_server_internal, std::wstring());
+        return;
+    }
+
+    //3. 连 fileserver（与单聊收发文件共用一条 file 连接）
+    if (CIUSocket::GetInstance().IsFileServerClosed())
+    {
+        if (!CIUSocket::GetInstance().ConnectToFileServer(kVoiceConnectTimeoutSec))
+        {
+            LOG_ERROR("FileTransfer: connect fileserver failed (voice download), md5=%s.", task.m_expectMd5.c_str());
+            PostVoiceDownloadResult(task.m_expectMd5, false, error_code_server_internal, std::wstring());
+            return;
+        }
+    }
+
+    //4. 流式下载：写 .downloading 临时文件、校验 MD5、原子改名到 m_destPath。语音文件小，不报进度，也不可取消
+    MainFileChannel channel(this);
+    std::wstring outLocalPath;
+    int          errcode = 0;
+    std::string  errmsg;
+    bool ok = FileStreamTransfer::downloadFile(channel, rd.m_downloadtoken, task.m_expectMd5, task.m_expectSize,
+                                               task.m_destPath, NULL, NULL, outLocalPath, errcode, errmsg);
+
+    //下完即断开 file 连接，理由同 ProcessDownload：避免会话状态残留到下一笔传输
+    CIUSocket::GetInstance().CloseFileServerConnection();
+
+    if (!ok)
+    {
+        LOG_ERROR("FileTransfer: voice download failed, errcode=%d, errmsg=%s, md5=%s.",
+                  errcode, errmsg.c_str(), task.m_expectMd5.c_str());
+        PostVoiceDownloadResult(task.m_expectMd5, false, errcode, std::wstring());
+        return;
+    }
+
+    LOG_INFO("FileTransfer: voice downloaded, md5=%s, size=%lld.", task.m_expectMd5.c_str(),
+             (long long)task.m_expectSize);
+    PostVoiceDownloadResult(task.m_expectMd5, true, 0, outLocalPath);
+}
+
+void FileTransfer::PostVoiceDownloadResult(const std::string& md5, bool ok, int errcode,
+                                           const std::wstring& localPath)
+{
+    //本段语音下载结束：移出在途集合，之后再收到同一段语音时可以重新下载（如上次失败）
+    {
+        std::lock_guard<std::mutex> guard(m_queueMtx);
+        m_inflightVoices.erase(md5);
+    }
+
+    HWND hUI = CIUSocket::GetInstance().GetUIProxyWnd();
+    VoiceDownloadResult* r = new VoiceDownloadResult();
+    r->m_md5       = md5;
+    r->m_ok        = ok;
+    r->m_errcode   = errcode;
+    r->m_localpath = localPath;
+    if (::IsWindow(hUI))
+        ::PostMessage(hUI, FMG_MSG_V2_VOICE_DOWNLOAD_RESULT, 0, (LPARAM)r);
+    else
+        delete r;
+}
+
 
 void FileTransfer::ProcessPooledUpload(const GroupTransferItem& item)
 {
@@ -996,6 +1291,21 @@ void FileTransfer::ProcessPooledUpload(const GroupTransferItem& item)
     //2. 原始文件名（UTF-8）+ 扩展名
     std::string filename = EncodeUtil::UnicodeToUtf8(extractFileNameW(item.m_localPath));
     std::string ext      = extractExtLower(item.m_localPath);
+
+    //同一文件只上传一份：单聊 worker 或另一个池线程正在传同一文件时（同时发给多个群，或群和
+    //单聊），先等它传完，接下来申请上传时服务端已有该文件、直接秒传。守卫持有到本函数返回。
+    std::chrono::steady_clock::time_point gateT0 = std::chrono::steady_clock::now();
+    UploadInflightGuard uploadGuard(m_uploadGate, md5, kUploadGateWaitMs, cancel);
+    LogUploadGateWait(uploadGuard, md5,
+                      "group=" + std::to_string((long long)groupId) + ", uploadId=" + std::to_string(uploadId),
+                      (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - gateT0).count());
+    if (uploadGuard.Result() == UploadInflightGate::enter_cancelled)
+    {
+        LOG_INFO("FileTransfer: group-file upload cancelled while waiting for the same file, uploadId=%d.", uploadId);
+        PostGroupFileUploadResult(groupId, uploadId, false, error_code_upload_fail, "cancelled", "", "", 0);
+        return;
+    }
 
     //3. 申请上传（scene=群文件；归属标文件传输；seq 唯一，应答经 m_waiters 按 seq 回到本笔）
     uint32_t seq = CIUSocket::GetInstance().RequestUpload(
@@ -1060,15 +1370,16 @@ void FileTransfer::ProcessPooledUpload(const GroupTransferItem& item)
     //6. 成功回投（不发聊天消息；群聊窗据 fileid 发 cmd_add_group_file 登记进群文件库）
     LOG_INFO("FileTransfer: group-file uploaded, fileid=%s, size=%lld, group=%lld, uploadId=%d.",
              ru.m_fileid.c_str(), (long long)size, (long long)groupId, uploadId);
-    PostGroupFileUploadResult(groupId, uploadId, true, 0, "", ru.m_fileid, filename, size);
+    PostGroupFileUploadResult(groupId, uploadId, true, 0, "", ru.m_fileid, filename, size, md5);
 }
 
 void FileTransfer::PostGroupFileUploadResult(int64_t groupId, int uploadId, bool ok, int errcode,
                                              const std::string& errmsg, const std::string& fileid,
-                                             const std::string& filename, int64_t size)
+                                             const std::string& filename, int64_t size, const std::string& md5)
 {
     HWND hUI = CIUSocket::GetInstance().GetUIProxyWnd();
     GroupFileUploadResult* r = new GroupFileUploadResult();
+    r->m_md5      = md5;
     r->m_groupid  = groupId;
     r->m_uploadid = uploadId;
     r->m_ok       = ok;

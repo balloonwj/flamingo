@@ -28,10 +28,13 @@ struct CreateGroupResponse
     int         m_code;     //结果码，0 成功，非 0 见 enum error_code（如建群失败=300）
     std::string m_msg;      //结果描述（成功为 "ok"，失败为诊断信息）
     int64_t     m_groupid;  //新群的群ID（全局自增），仅 code==0 时有效
+    uint32_t    m_seq;      //应答帧的 seq，与发出请求时 SendCreateGroup 的返回值相同；由接收线程填写，解析时不动它
+                            //（主面板据此区分文件共享代为发起的建群与用户自己点的建群）
 
     CreateGroupResponse()
         : m_code(-1)        //-1：尚未解析出有效结果码，避免被误判为成功
         , m_groupid(0)
+        , m_seq(0)
     {
     }
 };
@@ -57,7 +60,9 @@ struct GroupInfoResult
     int         m_facetype;      //群头像类型
     std::string m_customface;    //自定义群头像标识
 
-    //---- 以下七项为群管理页需要的群设置，与服务端 t_group 的同名列一一对应 ----
+    //---- 以下六项为群管理页需要的群设置，与服务端 t_group 的同名列一一对应 ----
+    //（原先还有群敏感词开关 m_sensitiveon，随群级敏感词于 2026-10-02 删除；旧服务端仍下发
+    // sensitiveon 时按未知字段忽略）
 
     std::string m_intro;          //群简介
     int         m_atallscope;     //谁能 @ 全体：0 仅群主和管理员，1 所有人
@@ -65,7 +70,6 @@ struct GroupInfoResult
     int         m_memberinvite;   //普通成员邀请好友是否免审批：0 否 1 是
     int         m_welcomeon;      //入群欢迎语开关：0 关 1 开
     std::string m_welcometext;    //入群欢迎语正文
-    int         m_sensitiveon;    //消息敏感词过滤开关：0 关 1 开
 
     //---- 以下三项为群公告功能新增，是"最新一条已发布公告"的冗余快照 ----
     //
@@ -76,6 +80,14 @@ struct GroupInfoResult
     int64_t     m_announceid;     //最新已发布公告的ID；0 表示本群还没有公告
     std::string m_announcetitle;  //最新已发布公告的标题（UTF-8），头部摘要行显示它
     int64_t     m_announcetime;   //最新已发布公告的发布时间，Unix毫秒；0 表示没有公告
+
+    //被设为入群必读的公告ID；0 表示本群没有设置（2026-10-07 起，docs/群公告接入方案.md §14）。
+    //老服务端不带该字段时为 0
+    int64_t     m_mustreadid;
+
+    //群类型：见 group_type（0 普通群 1 帖子群，2026-10-07 起，docs/帖子群方案.md 6.3）。建群时确定、之后不变；
+    //老服务端不带该字段时为 0
+    int         m_grouptype;
 
     GroupInfoResult()
         : m_code(-1)
@@ -92,9 +104,10 @@ struct GroupInfoResult
         , m_newseehistory(1)
         , m_memberinvite(0)
         , m_welcomeon(0)
-        , m_sensitiveon(0)
         , m_announceid(0)
         , m_announcetime(0)
+        , m_mustreadid(0)
+        , m_grouptype(0)
     {
     }
 };
@@ -120,6 +133,10 @@ struct GroupMemberItem
     int64_t     m_muteuntil;
     std::string m_mutereason;  //禁言原因；未禁言时为空串
 
+    //入群必读的确认状态：1 尚未确认（不能发言），0 无须确认或已确认（2026-10-07 起，docs/群公告接入方案.md §14）。
+    //老服务端不带该字段时为 0
+    int         m_mustread;
+
     GroupMemberItem()
         : m_userid(0)
         , m_role(0)
@@ -127,6 +144,7 @@ struct GroupMemberItem
         , m_facetype(0)
         , m_jointime(0)
         , m_muteuntil(0)
+        , m_mustread(0)
     {
     }
 };
@@ -143,6 +161,12 @@ struct UserGroupItem
     std::string m_customface;    //群头像标识（UTF-8）：字形头像为 "glyph|colorIdx"，自定义图为 fileid；空表示自动
     int         m_pinned;        //本人是否置顶了该群：1 是 0 否。老服务端不带该字段时为 0。
                                  //登录时随群列表下发，之后由本端切换置顶与多端同步推送更新
+    std::string m_intro;         //群简介（UTF-8，原文，可含换行）；老服务端不带该字段或群主没填时为空串。
+                                 //主面板据此写群信息缓存，新开的群聊窗头部立即显示，不必等 1303 应答
+    int         m_muteall;       //仅通知模式（原称全员禁言）：1 开 0 关。服务端一直随群列表下发（与群资料同一个 fillGroupValue），
+                                 //2026-10-06 起客户端才解析，主面板据此画「仅通知」徽章（docs/群管理接入方案.md §14）；老服务端不带时为 0
+    int         m_grouptype;     //群类型：见 group_type（0 普通群 1 帖子群，2026-10-07 起，docs/帖子群方案.md 6.3）；
+                                 //主面板据此决定帖子群显示与否、打开时交给帖子群模块。老服务端不带时为 0
 
     UserGroupItem()
         : m_groupid(0)
@@ -150,6 +174,8 @@ struct UserGroupItem
         , m_membercount(0)
         , m_facetype(0)
         , m_pinned(0)
+        , m_muteall(0)
+        , m_grouptype(0)
     {
     }
 };
@@ -192,9 +218,14 @@ struct GroupOpResult
 {
     int         m_code;  //结果码，0 成功；非 0 见服务端 enum error_code
     std::string m_msg;   //结果描述（成功为 "ok"，失败为诊断信息）
+    //以下三项只有邀请入群（cmd_invite_to_group）的应答带（docs/邀请入群方案.md §4.2），其余操作恒为 0
+    int         m_added;   //直接入群的人数
+    int         m_invited; //发出入群邀请卡片、等对方同意的人数
+    int         m_pending; //转为加群申请、等群主或管理员审批的人数
 
     GroupOpResult()
         : m_code(-1)     //-1：尚未解析出有效结果码，避免被误判为成功
+        , m_added(0), m_invited(0), m_pending(0)
     {
     }
 };
@@ -230,8 +261,6 @@ struct UpdateGroupInfoParams
     int         m_welcomeOn;         //入群欢迎语开关：0 关 1 开
     bool        m_hasWelcomeText;    //本次是否修改入群欢迎语正文
     std::string m_welcomeText;       //入群欢迎语正文（UTF-8）
-    bool        m_hasSensitiveOn;    //本次是否修改敏感词过滤开关
-    int         m_sensitiveOn;       //敏感词过滤开关：0 关 1 开
 
     UpdateGroupInfoParams()
         : m_groupid(0)
@@ -246,7 +275,6 @@ struct UpdateGroupInfoParams
         , m_hasMemberInvite(false), m_memberInvite(0)
         , m_hasWelcomeOn(false), m_welcomeOn(0)
         , m_hasWelcomeText(false)
-        , m_hasSensitiveOn(false), m_sensitiveOn(0)
     {
     }
 };
@@ -287,35 +315,6 @@ struct GroupJoinRequestsResult
     std::vector<GroupJoinRequestItem> m_requests; //待处理申请，按申请时间倒序
 
     GroupJoinRequestsResult()
-        : m_code(-1)
-        , m_groupid(0)
-    {
-    }
-};
-
-//一条群敏感词（cmd_get_sensitive_words=1321 应答里 words 数组的一项）。
-struct SensitiveWordItem
-{
-    int64_t     m_id;         //词条ID，删除时按它定位
-    std::string m_word;       //敏感词原文（UTF-8）
-    int64_t     m_timestamp;  //添加时间，Unix毫秒
-
-    SensitiveWordItem()
-        : m_id(0)
-        , m_timestamp(0)
-    {
-    }
-};
-
-//群敏感词库（cmd_get_sensitive_words=1321 的应答）解析结果。
-struct SensitiveWordsResult
-{
-    int                            m_code;     //结果码，0 成功
-    std::string                    m_msg;      //结果描述
-    int64_t                        m_groupid;  //群ID
-    std::vector<SensitiveWordItem> m_words;    //词条列表，按添加时间升序
-
-    SensitiveWordsResult()
         : m_code(-1)
         , m_groupid(0)
     {
@@ -409,10 +408,14 @@ struct GroupAnnouncementNotify
     int64_t               m_groupid;     //群ID
     int                   m_changetype;  //取值见 group_announcement_change_type
     GroupAnnouncementItem m_announcement; //变更涉及的那条公告（内容完整）
+    int64_t               m_cardMsgId;   //删除推送带的公告卡片 msgid（2026-10-05 起，docs/群公告接入方案.md §13.3）；
+                                         //发布推送、本功能上线前发布的公告、或老服务端都为 0，此时不改写任何卡片
+    std::string           m_cardContent; //删除推送带的改写后的卡片 content（紧凑 JSON，已删除形态）；没有时为空串
 
     GroupAnnouncementNotify()
         : m_groupid(0)
         , m_changetype(0)
+        , m_cardMsgId(0)
     {
     }
 };
@@ -429,6 +432,70 @@ struct GroupMemberChangedNotify
         : m_groupid(0)
         , m_changetype(0)
         , m_operatorid(0)
+    {
+    }
+};
+
+//入群邀请卡片的状态变化推送（cmd_group_invite_changed_notify=1328）解析结果（docs/邀请入群方案.md §4.5）。
+//推给邀请人与被邀请人的全部在线设备；客户端按两个 userid 里不是本人的那一方定位单聊会话，再按 msgid 找到卡片。
+struct GroupInviteChangedNotify
+{
+    int64_t m_inviteid;    //邀请 id
+    int64_t m_msgid;       //卡片消息的 msgid
+    int64_t m_inviterid;   //邀请人 userid
+    int64_t m_inviteeid;   //被邀请人 userid
+    int     m_state;       //新的显示状态，取值见 group_invite_state
+
+    GroupInviteChangedNotify()
+        : m_inviteid(0), m_msgid(0), m_inviterid(0), m_inviteeid(0), m_state(0)
+    {
+    }
+};
+
+//「加群申请已处理」推送（cmd_join_request_handled_notify=1329）解析结果（docs/邀请入群方案.md 第 4 期）。
+//推给该群全体群主与管理员（含处理人本人的其他设备），群管理窗据此重拉待审批列表
+struct JoinRequestHandledNotify
+{
+    int64_t     m_groupid;      //群ID
+    int64_t     m_requestid;    //申请ID
+    int         m_status;       //处理结果：1 已通过 2 已拒绝
+    int64_t     m_handler;      //处理人 userid
+    std::string m_handlerName;  //处理人昵称（UTF-8），可为空
+
+    JoinRequestHandledNotify()
+        : m_groupid(0), m_requestid(0), m_status(0), m_handler(0)
+    {
+    }
+};
+
+//点入群邀请卡片上的「加入群聊」（cmd_accept_group_invite=1327）的应答解析结果（docs/邀请入群方案.md §4.4）
+struct AcceptGroupInviteResult
+{
+    int         m_code;      //结果码，0 成功；305 已在群中、313 邀请已过期、314 邀请已失效等
+    std::string m_msg;       //结果描述
+    int64_t     m_inviteid;  //服务端回带的邀请 id，客户端据此找到点的是哪张卡片；请求非法时为 0
+    int64_t     m_groupid;   //目标群ID；未知时为 0
+    bool        m_joined;    //成功时是否已入群：true 已入群，false 已转为加群申请、等待审批
+
+    AcceptGroupInviteResult()
+        : m_code(-1), m_inviteid(0), m_groupid(0), m_joined(false)
+    {
+    }
+};
+
+//查询入群必读（cmd_get_must_read=1335）的应答解析结果（docs/群公告接入方案.md §14）
+struct MustReadResult
+{
+    int                   m_code;            //结果码，0 成功；302 不是群成员
+    std::string           m_msg;             //结果描述
+    int64_t               m_groupid;         //群ID
+    int64_t               m_mustreadid;      //被设为入群必读的公告ID；0 表示没有设置
+    bool                  m_pending;         //本人是否尚未确认：true 时不能发言，界面要求先阅读并点「我已阅读」
+    bool                  m_hasAnnouncement; //应答是否带了必读公告的内容；没有设置或公告已不存在时为 false
+    GroupAnnouncementItem m_announcement;    //必读公告（m_hasAnnouncement 为 true 时有效）
+
+    MustReadResult()
+        : m_code(-1), m_groupid(0), m_mustreadid(0), m_pending(false), m_hasAnnouncement(false)
     {
     }
 };
@@ -458,10 +525,13 @@ public:
      *  编码（避免 64 位精度丢失），不含创建者自己。
      *  @param groupname   群名称（UTF-8）；空串表示使用自动群名
      *  @param memberids   初始成员 userid 列表（不含创建者；可为空）
+     *  @param grouptype   群类型：取 group_type_thread（1）时请求带 "grouptype": 1 建帖子群；其余取值一律按普通群，
+     *                     请求里不带该字段（与 2026-10-07 之前的请求完全相同）
      *  @return 紧凑格式的请求 JSON 文本
      */
     static std::string buildCreateGroupRequest(const std::string& groupname,
-                                               const std::vector<int64_t>& memberids);
+                                               const std::vector<int64_t>& memberids,
+                                               int grouptype = 0);
 
     /**
      *  把用户在建群对话框、群管理基本信息页输入的群名规整成要发给服务端的值：
@@ -551,10 +621,21 @@ public:
      *  移出成员 cmd_kick_group_member=1310 两者同构，共用本构造器）。
      *  @param groupid 目标群ID
      *  @param userids 被邀请 / 被移出的 userid 列表，不可为空（服务端会拒绝空列表）
-     *  @return 紧凑 JSON：{ "groupid":"...", "userids":["...","..."] }
+     *  @param historyLimit 仅邀请用：新成员入群后可看的入群前消息条数（docs/邀请入群方案.md §4.2）。
+     *                      -1 表示全部，此时请求里不带这个字段；0 表示不同步；1 ~ 10000 表示最近 N 条
+     *  @return 紧凑 JSON：{ "groupid":"...", "userids":["...","..."][, "historylimit": N] }
      */
     static std::string buildGroupMembersOpRequest(int64_t groupid,
-                                                  const std::vector<int64_t>& userids);
+                                                  const std::vector<int64_t>& userids,
+                                                  int historyLimit = -1);
+
+    /**
+     *  从邀请入群（cmd_invite_to_group）的应答里读出三项统计：added / invited / pending。
+     *  老服务端的应答没有这三项，读不到的按 0 处理。
+     *  @param jsonbody 应答包体
+     *  @param out      [出参] 填 m_added / m_invited / m_pending；不修改 m_code / m_msg
+     */
+    static void parseInviteToGroupCounts(const std::string& jsonbody, GroupOpResult& out);
 
     /**
      *  构造修改群资料请求（cmd_update_group_info=1311）。
@@ -613,22 +694,6 @@ public:
      */
     static std::string buildHandleJoinGroupRequest(int64_t requestid, bool accept);
 
-    /**
-     *  构造新增敏感词请求（cmd_operate_sensitive_word=1322，operation=1）。
-     *  @param groupid 群ID
-     *  @param word    敏感词（UTF-8），不可为空
-     *  @return 紧凑 JSON
-     */
-    static std::string buildAddSensitiveWordRequest(int64_t groupid, const std::string& word);
-
-    /**
-     *  构造删除敏感词请求（cmd_operate_sensitive_word=1322，operation=2）。
-     *  @param groupid 群ID；与 id 一起发送，服务端据它防跨群删除
-     *  @param id      待删除的词条ID
-     *  @return 紧凑 JSON
-     */
-    static std::string buildDeleteSensitiveWordRequest(int64_t groupid, int64_t id);
-
     // ================================================================
     // 群管理：应答与推送解析
     // ================================================================
@@ -642,15 +707,6 @@ public:
      */
     static bool parseJoinRequestsResponse(const std::string& jsonbody,
                                           GroupJoinRequestsResult& out);
-
-    /**
-     *  解析群敏感词库应答（cmd_get_sensitive_words=1321）。id<=0 或词为空的项跳过。
-     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
-     *  @param out      [出参] 解析结果
-     *  @return JSON 合法且含整型 code 返回 true，否则 false
-     */
-    static bool parseSensitiveWordsResponse(const std::string& jsonbody,
-                                            SensitiveWordsResult& out);
 
     /**
      *  解析加群申请推送（cmd_join_group_request_notify=1307）。
@@ -670,6 +726,37 @@ public:
      */
     static bool parseGroupMemberChangedNotify(const std::string& jsonbody,
                                               GroupMemberChangedNotify& out);
+
+    /**
+     *  解析入群邀请卡片的状态变化推送（cmd_group_invite_changed_notify=1328）。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 解析结果
+     *  @return JSON 合法且 inviteid、msgid 为正、state 为整数时返回 true
+     */
+    static bool parseGroupInviteChangedNotify(const std::string& jsonbody, GroupInviteChangedNotify& out);
+
+    /**
+     *  解析「加群申请已处理」推送（cmd_join_request_handled_notify=1329）。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 解析结果；读不到的可选字段（handlername）保持默认值
+     *  @return JSON 合法、groupid 与 requestid 为正、status 为整数时返回 true
+     */
+    static bool parseJoinRequestHandledNotify(const std::string& jsonbody, JoinRequestHandledNotify& out);
+
+    /**
+     *  构造点「加入群聊」（cmd_accept_group_invite=1327）的请求 { inviteid }，id 写成字符串。
+     *  @param inviteid 卡片上的邀请 id
+     *  @return 紧凑 JSON 文本
+     */
+    static std::string buildAcceptGroupInviteRequest(int64_t inviteid);
+
+    /**
+     *  解析点「加入群聊」（cmd_accept_group_invite=1327）的应答 { code, msg, inviteid, groupid, joined }。
+     *  @param jsonbody 应答包体
+     *  @param out      [出参] 解析结果；读不到的可选字段保持默认值
+     *  @return JSON 合法且带整数 code 时返回 true
+     */
+    static bool parseAcceptGroupInviteResponse(const std::string& jsonbody, AcceptGroupInviteResult& out);
 
     /**
      *  解析群资料变更推送（cmd_group_info_changed_notify=1318）。
@@ -754,6 +841,22 @@ public:
      */
     static bool parseAnnouncementNotify(const std::string& jsonbody,
                                         GroupAnnouncementNotify& out);
+
+    /**
+     *  构造设置 / 取消入群必读的请求（cmd_set_must_read=1332）。
+     *  @param groupId    群ID
+     *  @param announceId 设为必读的公告ID；0 表示取消
+     *  @return 紧凑 JSON：{ "groupid":"...", "announcementid":"..." }
+     */
+    static std::string buildSetMustReadRequest(int64_t groupId, int64_t announceId);
+
+    /**
+     *  解析查询入群必读的应答（cmd_get_must_read=1335）。
+     *  @param jsonbody 应答包体
+     *  @param out      [出参] 解析结果；announcement 子对象存在且公告ID为正时 m_hasAnnouncement 为 true
+     *  @return JSON 合法且带 code 返回 true；成功应答还要求 groupid 为正
+     */
+    static bool parseGetMustReadResponse(const std::string& jsonbody, MustReadResult& out);
 
 private:
     GroupProtocolClient() = delete;

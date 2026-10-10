@@ -8,7 +8,9 @@
  *      描边按钮"检查"、左侧两行（标题 + "当前已是最新版本"）；其余四行右侧是 Text 变体
  *      链接式按钮（橙字）。行间 DuiSeparator。
  *    · 页脚：DuiLabel 版权串。
- *  固定文案取自 AboutDlgModel.h；标题栏标题（含进程 id）由 BuildAboutTitle 拼。
+ *  应用名、标语与页脚版权取 flamingo.ini 的配置（g_strAppTitle / g_strAppSlogan /
+ *  g_strAppCopyright），其余固定文案取自 AboutDlgModel.h；标题栏标题（含进程 id）由
+ *  BuildAboutTitle 拼。
  *  "官方网站"那一行的网址不写死，每次打开时从 flamingo.ini 的 [ui] websiteurl 读
  *  （读不到才回退 AboutDlgModel.h 的默认值），行上显示的就是网址原文、点击打开的
  *  也是它。
@@ -39,6 +41,8 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/I18n/I18nLayout.h"   // WidthForText：「官方网站」译文较长时加宽窗口
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 // 客户区宽。本对话框的布局常量是固定像素、不随 DPI 放大，而字体会按系统 DPI 放大，
@@ -125,6 +129,22 @@ static const int kTitleIconSize = 16;
 // =======================================================================
 // 文件作用域辅助
 // =======================================================================
+
+// 非简体中文界面下「官方网站」标题比 kRowTitleMinW 多出的宽度（像素）；简体中文界面或放得下时为 0。
+// 多语言第 4 期：窗口按它加宽，标题完整显示，网址可用的宽度与简体中文界面相同
+static int WebsiteTitleExtraWidth()
+{
+    const int titleW = i18n::WidthForText(TR(L"官方网站"), kRowTitleMinW, i18n::PointToPixelHeight(kRowTitlePt),
+                                          false, 0);
+    return titleW - kRowTitleMinW;
+}
+
+// 应用名一行的行高（像素）。kAppNameH 按微软雅黑设计；非简体中文界面换成行高更高的字体（如 Segoe UI）后，
+// 30 像素放不下一行粗体字，字母的下伸部分会被切掉，此时取字体行高，窗口高度相应加上差值（多语言第 4 期）
+static int AppNameRowHeight()
+{
+    return i18n::LineHeightForUiFont(kAppNameH, i18n::PointToPixelHeight(kAppNamePt), true);
+}
 
 // GDI+ 懒初始化（与 AvatarImageUtil.cpp / MainPanelAvatar.cpp 同款模式；本 TU
 // 留自己的 token，进程级只启动一次、不主动 Shutdown）。
@@ -322,7 +342,7 @@ void CBalloonAboutDlg::OpenAbout(HWND /*owner*/)
     if (!IsWindow())
     {
         // owner 传 NULL：让子控件通知自路由回本对话框（与改密 / 建群对话框同处理）。
-        if (Create(NULL, CWindow::rcDefault, _T("关于"),
+        if (Create(NULL, CWindow::rcDefault, TR(L"关于"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR(_T("关于对话框 Create 失败。"));
@@ -348,17 +368,22 @@ void CBalloonAboutDlg::OpenAbout(HWND /*owner*/)
         {
             SetIcon(m_titleIconBmp);
         }
+        //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         m_built = false;
         BuildUiOnce();
-        ResizeClient(kDlgWidth, kDlgHeight);
+        //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+        //「官方网站」译文较长时窗口相应加宽，应用名一行加高时窗口相应加高（简体中文界面都不变）
+        ResizeClient(kDlgWidth + WebsiteTitleExtraWidth(),
+                     kDlgHeight + (AppNameRowHeight() - kAppNameH) + kDlgTitleBarH);
         CenterWindow();
     }
 
     // 标题栏标题：每次打开都按当前进程 id 重置（用户要求标题带进程 id；多开 / 排障时
     // 区分实例）。BuildAboutTitle 返回 std::wstring，Unicode 工程下可直接喂 SetTitle。
     std::wstring title = balloonmain::BuildAboutTitle(
-        static_cast<unsigned long>(::GetCurrentProcessId()));
+        g_strAppTitle.c_str(), static_cast<unsigned long>(::GetCurrentProcessId()));
     SetTitle(title.c_str());
 
     ShowWindow(SW_SHOW);
@@ -429,7 +454,8 @@ void CBalloonAboutDlg::AddCenteredLabel(balloonwjui::DuiVBox* root, LPCTSTR text
     {
         lab->SetTextPointSize(pt, bold);
     }
-    lab->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    // DT_END_ELLIPSIS：应用名、版权文字取自配置文件，过长时以省略号收尾，不越出对话框
+    lab->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
     root->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Fixed(height));
 }
 
@@ -508,14 +534,14 @@ void CBalloonAboutDlg::AddCheckUpdateRow(balloonwjui::DuiVBox* root)
     left->AddChild(std::move(topPad), balloonwjui::DuiLayout::Hint().Weight(1));
 
     std::unique_ptr<balloonwjui::DuiLabel> titleLab(new balloonwjui::DuiLabel());
-    titleLab->SetText(_T("检查更新"));
+    titleLab->SetText(TR(L"检查更新"));
     titleLab->SetTextColor(kRowTitleColor);
     titleLab->SetTextPointSize(kRowTitlePt, false);
     titleLab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     left->AddChild(std::move(titleLab), balloonwjui::DuiLayout::Hint().Fixed(20));
 
     std::unique_ptr<balloonwjui::DuiLabel> subLab(new balloonwjui::DuiLabel());
-    subLab->SetText(_T("当前已是最新版本"));
+    subLab->SetText(TR(L"当前已是最新版本"));
     subLab->SetTextColor(kGrayTextColor);
     subLab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     left->AddChild(std::move(subLab), balloonwjui::DuiLayout::Hint().Fixed(18));
@@ -530,7 +556,7 @@ void CBalloonAboutDlg::AddCheckUpdateRow(balloonwjui::DuiVBox* root)
     btn->SetButtonType(balloonwjui::DuiButton::StylePushButton);
     btn->SetVariant(balloonwjui::DuiButton::Variant::Default);
     btn->SetCtrlId(kIdCheckUpdate);
-    btn->SetText(_T("检查"));
+    btn->SetText(TR(L"检查"));
     row->AddChild(std::move(btn),
                   balloonwjui::DuiLayout::Hint().Fixed(kCheckBtnW, kCheckBtnH)
                       .AlignC(balloonwjui::DuiLayout::AlignCenter));
@@ -597,10 +623,11 @@ void CBalloonAboutDlg::BuildUiOnce()
         root->AddChild(std::move(gap), balloonwjui::DuiLayout::Hint().Fixed(kBrandIconGap));
     }
 
-    AddCenteredLabel(root.get(), balloonmain::kAboutAppName, kAppNamePt, true, kAppNameColor, kAppNameH);
+    AddCenteredLabel(root.get(), g_strAppTitle.c_str(), kAppNamePt, true, kAppNameColor, AppNameRowHeight());
     const std::wstring versionLine = balloonmain::AboutVersionLine();
     AddCenteredLabel(root.get(), versionLine.c_str(), 0, false, kGrayTextColor, kVerLineH);
-    AddCenteredLabel(root.get(), balloonmain::kAboutSlogan, 0, false, kGrayTextColor, kSloganH);
+    // 标语配置为空时这一行留空：对话框是固定尺寸，保留行高可避免下方各行上移、底部留出空白
+    AddCenteredLabel(root.get(), g_strAppSlogan.c_str(), 0, false, kGrayTextColor, kSloganH);
 
     {
         std::unique_ptr<balloonwjui::DuiControl> gap(new balloonwjui::DuiControl());
@@ -611,13 +638,13 @@ void CBalloonAboutDlg::BuildUiOnce()
     AddSeparator(root.get());
     AddCheckUpdateRow(root.get());
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("用户协议"), _T("查看"), kIdAgreement, kLinkMinW);
+    AddLinkRow(root.get(), TR(L"用户协议"), TR(L"查看"), kIdAgreement, kLinkMinW);
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("隐私政策"), _T("查看"), kIdPrivacy, kLinkMinW);
+    AddLinkRow(root.get(), TR(L"隐私政策"), TR(L"查看"), kIdPrivacy, kLinkMinW);
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("开源许可"), _T("查看"), kIdLicense, kLinkMinW);
+    AddLinkRow(root.get(), TR(L"开源许可"), TR(L"查看"), kIdLicense, kLinkMinW);
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("官方网站"), (LPCTSTR)m_websiteUrl, kIdWebsite, kLinkMinW);
+    AddLinkRow(root.get(), TR(L"官方网站"), (LPCTSTR)m_websiteUrl, kIdWebsite, kLinkMinW);
     AddSeparator(root.get());
 
     // ---- 页脚版权 ----
@@ -625,7 +652,7 @@ void CBalloonAboutDlg::BuildUiOnce()
         std::unique_ptr<balloonwjui::DuiControl> gap(new balloonwjui::DuiControl());
         root->AddChild(std::move(gap), balloonwjui::DuiLayout::Hint().Fixed(kFooterTopGap));
     }
-    AddCenteredLabel(root.get(), balloonmain::kAboutCopyright, 0, false, kGrayTextColor, kFooterH);
+    AddCenteredLabel(root.get(), g_strAppCopyright.c_str(), 0, false, kGrayTextColor, kFooterH);
 
     SetClientContent(std::move(root));
     m_built = true;
@@ -674,8 +701,9 @@ LRESULT CBalloonAboutDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         case kIdPrivacy:
         case kIdLicense:
             // 用户协议 / 隐私政策 / 开源许可页面暂未接入，占位提示。
-            ::MessageBox(m_hWnd, _T("功能开发中，敬请期待。"),
-                         _T("关于 FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+            ::MessageBox(m_hWnd, TR(L"功能开发中，敬请期待。"),
+                         balloonmain::BuildAboutCaption(g_strAppTitle.c_str()).c_str(),
+                         MB_OK | MB_ICONINFORMATION);
             return 0;
 
         default:

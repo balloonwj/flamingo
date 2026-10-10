@@ -1,10 +1,11 @@
 /**
- *  「消息盒子」窗口实现，BalloonAnnounceBoxWindow.cpp
+ *  「公告中心」窗口实现，BalloonAnnounceBoxWindow.cpp
  *  设计与约定见 BalloonAnnounceBoxWindow.h。
  *  balloonwj@qq.com   2026-08-05
  */
 #include "stdafx.h"
 #include "BalloonAnnounceBoxWindow.h"
+#include "../../App/BrandText.h"   // g_strAppTitle（窗口与弹窗标题用的产品名称）
 
 #include "AnnounceRow.h"
 #include "../BalloonHistory/HistoryContentView.h"   //右栏正文控件（按实际宽度测高、命中链接）
@@ -24,14 +25,17 @@
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using namespace balloonannounce;
 
 namespace {
 
 // ---- 窗口尺寸（像素）----
-const int kAnnWindowWidth   = 820;   // 初始宽：左栏 268 + 右栏正文足够宽
-const int kAnnWindowHeight  = 560;   // 初始高
+// 含标题栏的整窗初始尺寸（逻辑像素）。2026-10-02 修复 ResizeClient 多叠加系统边框的问题时由 820×560 加上
+// 修复前多叠加的 18×47（120 DPI 实测），保持修复前的窗口大小。
+const int kAnnWindowWidth   = 838;   // 初始宽：左栏 268 + 右栏正文足够宽
+const int kAnnWindowHeight  = 607;   // 初始高
 const int kAnnMinWidth      = 640;   // 最小宽：再窄右栏正文就没法看了
 const int kAnnMinHeight     = 420;   // 最小高
 const int kAnnTitleBarH     = 38;    // 标题栏高
@@ -110,7 +114,7 @@ void CBalloonAnnounceBoxWindow::OpenBox(CBalloonMainPanel* pMainPanel)
         SelectRow(m_selectedIndex);
     }
 
-    LOG_INFO(_T("消息盒子窗口已创建并显示，公告 %d 条。"), (int)m_rows.size());
+    LOG_INFO("announce center window created and shown, %d announcements.", (int)m_rows.size());
 }
 
 void CBalloonAnnounceBoxWindow::RefreshIfOpen()
@@ -126,14 +130,14 @@ void CBalloonAnnounceBoxWindow::RefreshIfOpen()
 
 bool CBalloonAnnounceBoxWindow::BuildWindow()
 {
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
-        LOG_ERROR(_T("消息盒子窗口 Create 失败。"));
+        LOG_ERROR("announce center window Create failed.");
         return false;
     }
 
-    SetTitle(_T("消息盒子"));
+    SetTitle(TR(L"公告中心"));
     SetTitleBarHeight(kAnnTitleBarH);
     SetTitleBarTransparent(true);
     SetTitleTextColor(kAnnCaptionColor);
@@ -148,6 +152,8 @@ bool CBalloonAnnounceBoxWindow::BuildWindow()
     {
         SetIcon(m_hTitleIcon);
     }
+    //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+    m_taskIcons.ApplyTaskIcons(m_hWnd);
 
     SetButtons(true, true, true);   //最小化 / 最大化 / 关闭
     SetResizable(true);
@@ -258,8 +264,8 @@ void CBalloonAnnounceBoxWindow::BuildViewData(AnnounceBoxViewData& out) const
         out.m_detailBody  = m_bodies[m_selectedIndex];
     }
 
-    out.m_emptyTitle    = _T("暂无公告");
-    out.m_emptySubtitle = _T("平台发布公告后会出现在这里");
+    out.m_emptyTitle    = TR(L"暂无公告");
+    out.m_emptySubtitle = TR(L"平台发布公告后会出现在这里");
 }
 
 void CBalloonAnnounceBoxWindow::RefreshContent()
@@ -336,7 +342,7 @@ void CBalloonAnnounceBoxWindow::SelectRow(int index)
         m_rows[index].m_unread = false;
 
         CIUSocket::GetInstance().SendMarkAnnouncementRead(annId);
-        LOG_INFO(_T("消息盒子：公告 %lld 标记已读并上报。"), (long long)annId);
+        LOG_INFO("announce center: announcement %lld marked read and reported.", (long long)annId);
 
         //未读数变了，Banner 上的角标要跟着刷。
         if (m_pMainPanel != NULL)
@@ -373,7 +379,7 @@ void CBalloonAnnounceBoxWindow::MarkAllRead()
         ++marked;
     }
 
-    LOG_INFO(_T("消息盒子：全部标为已读，共 %d 条。"), marked);
+    LOG_INFO("announce center: marked all as read, %d announcements.", marked);
 
     if (marked > 0 && m_pMainPanel != NULL)
     {
@@ -494,7 +500,7 @@ LRESULT CBalloonAnnounceBoxWindow::OnChatOpenLinkMsg(UINT /*uMsg*/, WPARAM /*wPa
     }
     else
     {
-        LOG_ERROR("消息盒子拒绝打开非 http/https 链接。");
+        LOG_ERROR("announce center refused to open a non-http/https link.");
     }
     delete pUrl;
     return 0;
@@ -506,52 +512,6 @@ LRESULT CBalloonAnnounceBoxWindow::OnSyncBodyHeightMsg(UINT /*uMsg*/, WPARAM /*w
     SyncDetailBodyHeight();
     //尺寸变了，视口右缘与窗口缩放边框的相对关系也可能变，重算一次让位宽度。
     SyncScrollBarEdgeInset();
-    return 0;
-}
-
-LRESULT CBalloonAnnounceBoxWindow::OnScrollBarAnimTimer(UINT /*uMsg*/, WPARAM wParam,
-                                                        LPARAM /*lParam*/, BOOL& bHandled)
-{
-    if ((UINT_PTR)wParam != balloonmain::kScrollbarAnimTimerId)
-    {
-        //别人的定时器，放行给基类 / DefWindowProc。
-        bHandled = FALSE;
-        return 0;
-    }
-
-    bHandled = TRUE;
-
-    balloonwjui::DuiControl* content = GetClientContent();
-    if (content == NULL)
-    {
-        KillTimer(balloonmain::kScrollbarAnimTimerId);
-        return 0;
-    }
-
-    //左右两栏各推进一帧。只要还有一个需要下一帧，定时器就继续跑。
-    const UINT scrollIds[2] = { kIdAnnScroll, kIdAnnDetailScroll };
-    bool needMore = false;
-    for (int i = 0; i < 2; ++i)
-    {
-        balloonmain::MainPanelScrollView* sv =
-            dynamic_cast<balloonmain::MainPanelScrollView*>(
-                content->FindCtrlById(scrollIds[i]));
-        if (sv == NULL)
-        {
-            continue;
-        }
-        if (sv->TickScrollBarFade((int)balloonmain::kScrollbarAnimIntervalMs))
-        {
-            needMore = true;
-        }
-    }
-
-    if (!needMore)
-    {
-        //两条滚动条都已稳定（淡出到底 / 无内容可滚），停掉 pulse 省电；
-        //下次滚动或鼠标移到滚动条上时，视口会自己把它重新起起来。
-        KillTimer(balloonmain::kScrollbarAnimTimerId);
-    }
     return 0;
 }
 

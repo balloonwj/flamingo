@@ -43,9 +43,10 @@ struct GroupSenderRender
     CString  m_glyph;       // 头像字形；空表示按名字首字回退
     COLORREF m_color;       // 头像底色
     CString  m_imagePath;   // 真图头像本地路径；空表示画字形头像
+    bool     m_isBot;       // 发送者是机器人账号（本群机器人列表里查到），气泡名字后面画「机器人」徽章
 
     GroupSenderRender()
-        : m_color(0)
+        : m_color(0), m_isBot(false)
     {
     }
 };
@@ -65,6 +66,19 @@ GroupSenderRender ResolveGroupSender(int64_t userId, const GroupSenderRender* fo
                                      COLORREF fallbackColor);
 
 /**
+ *  按消息自带的机器人标记（content.bot）补出发送者的显示信息（docs/机器人方案.md §3.2）。
+ *
+ *  机器人删除、或改了范围不再用于本群之后，2801 不再返回它，群成员表与通讯录里也没有机器人账号，
+ *  它以前发的消息原先只能显示"用户<id>"。服务端发群机器人消息时把机器人名称写进 content.bot.name，
+ *  这里凭它显示名字，并标为机器人（气泡名字后面画「机器人」徽章）。
+ *    botId：  消息的 content.bot.id；0 表示不是机器人消息。
+ *    botName：content.bot.name（宽字符）。
+ *    out：    [出参] 补出的显示信息：名字为 botName、标为机器人，字形与底色留空，由 ResolveGroupSender 回退。
+ *  @return 补出了返回 true；不是机器人消息或名字为空时返回 false，out 不变。纯函数。
+ */
+bool SenderFromBotMark(int64_t botId, const CString& botName, GroupSenderRender& out);
+
+/**
  *  按 userid 查成员显示信息的回调。
  *    ctx：   调用方透传的上下文（一般是群聊窗 this）。
  *    userId：要查的成员 userid。
@@ -75,7 +89,7 @@ typedef bool (*GroupSenderLookup)(void* ctx, int64_t userId, GroupSenderRender& 
 
 /**
  *  ContactBriefQuery —— 群聊窗向主面板同步查询通讯录里某人的昵称与头像（FMG_MSG_QUERY_CONTACT_BRIEF
- *  的 lParam）。已经退群或被移出的人不在成员表里，他以前发的消息靠它显示真名（BUG-49）。
+ *  的 lParam）。已经退群或被移出的人不在成员表里，他以前发的消息靠它显示真名。
  *  调用方在栈上构造、填好 m_userId 后 SendMessage；主面板就地填写其余字段，不转移所有权。
  */
 struct ContactBriefQuery
@@ -98,7 +112,7 @@ struct ContactBriefQuery
  *  依次在成员表、通讯录里查一名发送者的显示信息。
  *
  *  成员表命中时以成员信息为准（群名片优先），不再查通讯录；成员表里没有时（已经退群或被移出）
- *  再查通讯录，取账号昵称与头像 —— 这些人以前发的消息原先一律显示"用户<id>"（BUG-49）。两处都
+ *  再查通讯录，取账号昵称与头像 —— 这些人以前发的消息原先一律显示"用户<id>"。两处都
  *  查不到返回 false，调用方再经 ResolveGroupSender 回退。
  *    userId：       要查的发送者 userid。
  *    memberLookup： 查本群成员表的回调；为 NULL 时跳过成员表。

@@ -4,7 +4,8 @@
  *  本机历史登录账号列表（CLoginAccountList）的读写测试（Suite LAL）。
  *
  *  覆盖：内存增删查、保存/加载往返、旧版账号文件（无姓名字段）的兼容读取、
- *  最后登录账号与自动登录标志。用临时目录下的 .dat 文件跑真实磁盘 I/O，
+ *  最后登录账号与自动登录标志，以及头像尾块（2026-10-04 起，LAL-AV1～AV5）、规范账号尾块与
+ *  用手机号登录时的列表键（2026-10-06 起，LAL-AN1～AN8）。用临时目录下的 .dat 文件跑真实磁盘 I/O，
  *  框架 Catch2 v3。
  *
  *  兼容性用例不复用产品结构体，而是自带一份"旧版磁盘布局"的定义与异或
@@ -20,6 +21,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>   //strcmp / strncpy_s：头像内容是 UTF-8 窄字符串
 #include <string>
 
 namespace {
@@ -109,6 +111,35 @@ void WriteNickTrailer(FILE* fp, const wchar_t* const* nicks, int nCount)
         TCHAR szNickName[kLoginAccountNickNameLen] = { 0 };
         wcsncpy_s(szNickName, _countof(szNickName), nicks[i], _TRUNCATE);
         WriteEncrypted(fp, szNickName, sizeof(szNickName));
+    }
+}
+
+// 头像尾块的起始魔数、版本号与头像内容的定长字节数 —— 与 LoginAccountList.cpp / .h 里的
+// 同名常量同值（2026-10-04 新增）。测试自带一份，理由同 kXorKey。
+const int kAvatarSectionMagic = 0x464C4132;
+const int kAvatarSectionVersion = 1;
+const int kAvatarCustomFaceBytes = 64;
+
+// 在手工拼出来的账号文件末尾追加头像尾块（须写在姓名尾块之后）。
+//   fp：          已打开的二进制写文件句柄，写入位置须停在姓名尾块之后；
+//   userIds：     逐条 userid，顺序与主体记录一一对应；
+//   faceTypes：   逐条头像类型；
+//   customFaces： 逐条头像内容（UTF-8）；
+//   nCount：      条数，须与主体里的记录条数一致。
+void WriteAvatarTrailer(FILE* fp, const long long* userIds, const int* faceTypes,
+                        const char* const* customFaces, int nCount)
+{
+    WriteEncrypted(fp, &kAvatarSectionMagic, sizeof(kAvatarSectionMagic));
+    WriteEncrypted(fp, &kAvatarSectionVersion, sizeof(kAvatarSectionVersion));
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+
+    for (int i = 0; i < nCount; ++i)
+    {
+        char szCustomFace[kAvatarCustomFaceBytes] = { 0 };
+        strncpy_s(szCustomFace, _countof(szCustomFace), customFaces[i], _TRUNCATE);
+        WriteEncrypted(fp, &userIds[i], sizeof(userIds[i]));
+        WriteEncrypted(fp, &faceTypes[i], sizeof(faceTypes[i]));
+        WriteEncrypted(fp, szCustomFace, sizeof(szCustomFace));
     }
 }
 
@@ -1154,4 +1185,484 @@ TEST_CASE("LAL-B5 读入后再落盘，坏文件被就地修好", "[lal][blank]"
     CHECK(wcscmp(lpAccount->szUser, L"alice") == 0);
 
     ::DeleteFileW(path.c_str());
+}
+
+// ---- 头像尾块（2026-10-04 起）：登录窗的账号下拉列表与大头像按它画该账号的头像 ----
+
+namespace {
+
+// 测试账号的 userid
+const long long kAvAliceId = 5127;
+const long long kAvBobId = 5308;
+const long long kAvCarolId = 5309;
+// 头像类型：字形头像、自定义照片（见 AvatarSpec.h 的 AvatarKind）
+const int kAvFaceGlyph = 1;
+const int kAvFacePhoto = 2;
+// 字形头像的头像内容「张|3」（UTF-8 字节）与一个照片文件 id
+const char* const kAvGlyphFace = "\xE5\xBC\xA0|3";
+const char* const kAvPhotoFace = "9f86d081884c7d65";
+
+} // namespace
+
+TEST_CASE("LAL-AV1 头像信息随账号一起落盘并能读回", "[lal][avatar]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_av1.dat");
+
+    {
+        CLoginAccountList list;
+        REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+        REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+        REQUIRE(list.SetNickName(_T("alice"), L"张三"));
+        REQUIRE(list.SetAvatar(_T("alice"), kAvAliceId, kAvFaceGlyph, kAvGlyphFace));
+        REQUIRE(list.SetAvatar(_T("bob"), kAvBobId, kAvFacePhoto, kAvPhotoFace));
+        REQUIRE(list.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    REQUIRE(loaded.GetCount() == 2);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = loaded.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->nUserId == kAvAliceId);
+    CHECK(lpAlice->nFaceType == kAvFaceGlyph);
+    CHECK(strcmp(lpAlice->szCustomFace, kAvGlyphFace) == 0);
+    // 姓名尾块不受头像尾块影响
+    CHECK(wcscmp(lpAlice->szNickName, L"张三") == 0);
+
+    LOGIN_ACCOUNT_INFO* lpBob = loaded.Find(_T("bob"));
+    REQUIRE(lpBob != NULL);
+    CHECK(lpBob->nUserId == kAvBobId);
+    CHECK(lpBob->nFaceType == kAvFacePhoto);
+    CHECK(strcmp(lpBob->szCustomFace, kAvPhotoFace) == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AV2 只有姓名尾块的文件读入后头像为空，补上头像后落盘两段都在", "[lal][avatar]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_av2.dat");
+
+    // 这次升级之前的客户端写的文件：主体 + 姓名尾块，没有头像尾块。
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+    int nCount = 2;
+    int nLastLoginUser = 0;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"bob", L"pwd_b", 1, TRUE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    const wchar_t* nicks[2] = { L"张三", L"李四" };
+    WriteNickTrailer(fp, nicks, 2);
+    fclose(fp);
+
+    {
+        CLoginAccountList loaded;
+        REQUIRE(loaded.LoadFile(path.c_str()));
+        LOGIN_ACCOUNT_INFO* lpAlice = loaded.Find(_T("alice"));
+        REQUIRE(lpAlice != NULL);
+        CHECK(lpAlice->nUserId == 0);
+        CHECK(lpAlice->nFaceType == 0);
+        CHECK(lpAlice->szCustomFace[0] == '\0');
+        CHECK(wcscmp(lpAlice->szNickName, L"张三") == 0);
+
+        // 下次登录成功后补上头像，再落盘
+        REQUIRE(loaded.SetAvatar(_T("bob"), kAvBobId, kAvFacePhoto, kAvPhotoFace));
+        REQUIRE(loaded.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpBob = reloaded.Find(_T("bob"));
+    REQUIRE(lpBob != NULL);
+    CHECK(lpBob->nUserId == kAvBobId);
+    CHECK(strcmp(lpBob->szCustomFace, kAvPhotoFace) == 0);
+    CHECK(wcscmp(lpBob->szNickName, L"李四") == 0);
+    LOGIN_ACCOUNT_INFO* lpAlice = reloaded.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->nUserId == 0);
+    CHECK(wcscmp(lpAlice->szNickName, L"张三") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AV3 SetAvatar 只认已存在的账号，头像内容为空指针时清空、超长时截断", "[lal][avatar]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    CHECK(list.SetAvatar(_T("nobody"), kAvAliceId, kAvFaceGlyph, kAvGlyphFace) == FALSE);
+    CHECK(list.SetAvatar(NULL, kAvAliceId, kAvFaceGlyph, kAvGlyphFace) == FALSE);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    REQUIRE(list.SetAvatar(_T("alice"), kAvAliceId, kAvFacePhoto, kAvPhotoFace));
+    CHECK(strcmp(lpAlice->szCustomFace, kAvPhotoFace) == 0);
+
+    // 头像内容传空指针：清空（回到自动头像）
+    REQUIRE(list.SetAvatar(_T("alice"), kAvAliceId, 0, NULL));
+    CHECK(lpAlice->nFaceType == 0);
+    CHECK(lpAlice->szCustomFace[0] == '\0');
+    CHECK(lpAlice->nUserId == kAvAliceId);
+
+    // 超长：截断到定长，并保留结束符
+    const std::string longFace(kAvatarCustomFaceBytes * 2, 'a');
+    REQUIRE(list.SetAvatar(_T("alice"), kAvAliceId, kAvFacePhoto, longFace.c_str()));
+    CHECK(strlen(lpAlice->szCustomFace) == static_cast<size_t>(kAvatarCustomFaceBytes - 1));
+}
+
+TEST_CASE("LAL-AV4 清理空记录与删除账号都不会让头像错位", "[lal][avatar]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_av4.dat");
+
+    // 主体三条，中间一条账号为空；姓名尾块与头像尾块都按位置对应三条
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+    int nCount = 3;
+    int nLastLoginUser = 0;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"", L"", 0, FALSE, FALSE);
+    LoginAccountRecordV1 rec2 = MakeV1Record(L"carol", L"pwd_c", 1, TRUE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    WriteEncrypted(fp, &rec2, sizeof(rec2));
+    const wchar_t* nicks[3] = { L"张三", L"", L"王五" };
+    WriteNickTrailer(fp, nicks, 3);
+    const long long ids[3] = { kAvAliceId, 0, kAvCarolId };
+    const int faces[3] = { kAvFaceGlyph, 0, kAvFacePhoto };
+    const char* customFaces[3] = { kAvGlyphFace, "", kAvPhotoFace };
+    WriteAvatarTrailer(fp, ids, faces, customFaces, 3);
+    fclose(fp);
+
+    {
+        CLoginAccountList loaded;
+        REQUIRE(loaded.LoadFile(path.c_str()));
+        REQUIRE(loaded.GetCount() == 2);
+        LOGIN_ACCOUNT_INFO* lpCarol = loaded.Find(_T("carol"));
+        REQUIRE(lpCarol != NULL);
+        CHECK(lpCarol->nUserId == kAvCarolId);
+        CHECK(strcmp(lpCarol->szCustomFace, kAvPhotoFace) == 0);
+
+        // 删掉排在前面的 alice 后落盘：carol 的头像跟着 carol 走
+        REQUIRE(loaded.Del(0));
+        REQUIRE(loaded.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    REQUIRE(reloaded.GetCount() == 1);
+    LOGIN_ACCOUNT_INFO* lpCarol = reloaded.GetAccountInfo(0);
+    REQUIRE(lpCarol != NULL);
+    CHECK(wcscmp(lpCarol->szUser, L"carol") == 0);
+    CHECK(lpCarol->nUserId == kAvCarolId);
+    CHECK(lpCarol->nFaceType == kAvFacePhoto);
+    CHECK(strcmp(lpCarol->szCustomFace, kAvPhotoFace) == 0);
+    CHECK(wcscmp(lpCarol->szNickName, L"王五") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AV5 登录成功再次记入已有账号时，已存的头像保持不变", "[lal][avatar]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.SetAvatar(_T("alice"), kAvAliceId, kAvFacePhoto, kAvPhotoFace));
+
+    // 登录窗采集的信息里没有头像
+    LOGIN_ACCOUNT_INFO info;
+    memset(&info, 0, sizeof(info));
+    wcscpy_s(info.szUser, _countof(info.szUser), L"alice");
+    wcscpy_s(info.szPwd, _countof(info.szPwd), L"pwd_new");
+    info.nStatus = 1;
+    info.bRememberPwd = TRUE;
+    REQUIRE(list.RecordLoginSuccess(&info));
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcscmp(lpAlice->szPwd, L"pwd_new") == 0);
+    CHECK(lpAlice->nUserId == kAvAliceId);
+    CHECK(lpAlice->nFaceType == kAvFacePhoto);
+    CHECK(strcmp(lpAlice->szCustomFace, kAvPhotoFace) == 0);
+}
+
+// ---------------------------------------------------------------------------
+// 规范账号尾块（2026-10-06 起，docs/登录账号与手机号登录方案.md）：账号与手机号都能登录、
+// 账号不区分大小写之后，历史列表的键（登录窗里输入的原文）可能与服务端返回的账号不同，
+// 而本地数据目录 Users\<账号>\ 按后者建。
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// 规范账号尾块的起始魔数、版本号与每条的定长字符数 —— 与 LoginAccountList.cpp / .h 里的
+// 同名常量同值。测试自带一份，理由同 kXorKey。
+const int kAcctNameSectionMagic = 0x464C4133;
+const int kAcctNameSectionVersion = 1;
+const int kAcctNameLen = 32;
+
+// 用手机号登录的那条记录：键是手机号，服务端返回的规范账号是带前缀的随机账号
+const wchar_t* const kAnPhone = L"13591257075";
+const wchar_t* const kAnAccount = L"FL.43350744";
+
+// 在手工拼出来的账号文件末尾追加规范账号尾块（须写在头像尾块之后）。
+//   fp：      已打开的二进制写文件句柄，写入位置须停在头像尾块之后；
+//   names：   逐条规范账号，顺序与主体记录一一对应；
+//   nCount：  条数，须与主体里的记录条数一致；
+//   nVersion：写入的版本号，正常为 kAcctNameSectionVersion，测「不认识的版本」时传别的值。
+void WriteAccountNameTrailer(FILE* fp, const wchar_t* const* names, int nCount, int nVersion)
+{
+    WriteEncrypted(fp, &kAcctNameSectionMagic, sizeof(kAcctNameSectionMagic));
+    WriteEncrypted(fp, &nVersion, sizeof(nVersion));
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+
+    for (int i = 0; i < nCount; ++i)
+    {
+        TCHAR szName[kAcctNameLen] = { 0 };
+        wcsncpy_s(szName, _countof(szName), names[i], _TRUNCATE);
+        WriteEncrypted(fp, szName, sizeof(szName));
+    }
+}
+
+// 写一个带姓名、头像两个尾块的三条记录文件（中间一条账号为空），可选再带规范账号尾块。
+//   path：         目标文件全路径；
+//   withNames：    true 时追加规范账号尾块；
+//   nNameVersion： 规范账号尾块的版本号（withNames 为 false 时忽略）。
+void WriteThreeRecordFile(const std::wstring& path, bool withNames, int nNameVersion)
+{
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+    int nCount = 3;
+    int nLastLoginUser = 2;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"", L"", 0, FALSE, FALSE);
+    LoginAccountRecordV1 rec2 = MakeV1Record(kAnPhone, L"pwd_p", 1, TRUE, TRUE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    WriteEncrypted(fp, &rec2, sizeof(rec2));
+    const wchar_t* nicks[3] = { L"张三", L"", L"手机号登录者" };
+    WriteNickTrailer(fp, nicks, 3);
+    const long long ids[3] = { kAvAliceId, 0, kAvCarolId };
+    const int faces[3] = { kAvFaceGlyph, 0, kAvFacePhoto };
+    const char* customFaces[3] = { kAvGlyphFace, "", kAvPhotoFace };
+    WriteAvatarTrailer(fp, ids, faces, customFaces, 3);
+    if (withNames)
+    {
+        const wchar_t* names[3] = { L"", L"", kAnAccount };
+        WriteAccountNameTrailer(fp, names, 3, nNameVersion);
+    }
+    fclose(fp);
+}
+
+} // namespace
+
+TEST_CASE("LAL-AN1 规范账号随账号一起落盘并能读回，姓名与头像不受影响", "[lal][acctname]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_an1.dat");
+
+    {
+        CLoginAccountList list;
+        REQUIRE(list.Add(kAnPhone, _T("pwd_p"), 1, TRUE, TRUE));
+        REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+        REQUIRE(list.SetNickName(kAnPhone, L"手机号登录者"));
+        REQUIRE(list.SetAvatar(kAnPhone, kAvCarolId, kAvFacePhoto, kAvPhotoFace));
+        REQUIRE(list.SetAccountName(kAnPhone, kAnAccount));
+        REQUIRE(list.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    REQUIRE(loaded.GetCount() == 2);
+
+    LOGIN_ACCOUNT_INFO* lpPhone = loaded.Find(kAnPhone);
+    REQUIRE(lpPhone != NULL);
+    CHECK(wcscmp(lpPhone->szAccountName, kAnAccount) == 0);
+    CHECK(wcscmp(LoginAccountDataName(lpPhone), kAnAccount) == 0);
+    CHECK(wcscmp(lpPhone->szNickName, L"手机号登录者") == 0);
+    CHECK(lpPhone->nUserId == kAvCarolId);
+    CHECK(strcmp(lpPhone->szCustomFace, kAvPhotoFace) == 0);
+    CHECK(lpPhone->bAutoLogin == TRUE);
+
+    // 没存规范账号的记录：读回为空串，本地数据目录名按键本身
+    LOGIN_ACCOUNT_INFO* lpBob = loaded.Find(_T("bob"));
+    REQUIRE(lpBob != NULL);
+    CHECK(lpBob->szAccountName[0] == _T('\0'));
+    CHECK(wcscmp(LoginAccountDataName(lpBob), L"bob") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AN2 2026-10-04 版文件（姓名、头像两个尾块）读入后规范账号为空，补上后落盘三段都在", "[lal][acctname]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_an2.dat");
+    WriteThreeRecordFile(path, false, kAcctNameSectionVersion);
+
+    {
+        CLoginAccountList loaded;
+        REQUIRE(loaded.LoadFile(path.c_str()));
+        REQUIRE(loaded.GetCount() == 2);
+        LOGIN_ACCOUNT_INFO* lpPhone = loaded.Find(kAnPhone);
+        REQUIRE(lpPhone != NULL);
+        CHECK(lpPhone->szAccountName[0] == _T('\0'));
+        CHECK(wcscmp(LoginAccountDataName(lpPhone), kAnPhone) == 0);
+        CHECK(lpPhone->nUserId == kAvCarolId);
+        CHECK(wcscmp(lpPhone->szNickName, L"手机号登录者") == 0);
+
+        // 下次登录成功后补上规范账号，再落盘
+        REQUIRE(loaded.SetAccountName(kAnPhone, kAnAccount));
+        REQUIRE(loaded.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpPhone = reloaded.Find(kAnPhone);
+    REQUIRE(lpPhone != NULL);
+    CHECK(wcscmp(lpPhone->szAccountName, kAnAccount) == 0);
+    CHECK(wcscmp(lpPhone->szNickName, L"手机号登录者") == 0);
+    CHECK(lpPhone->nUserId == kAvCarolId);
+    CHECK(strcmp(lpPhone->szCustomFace, kAvPhotoFace) == 0);
+    LOGIN_ACCOUNT_INFO* lpAlice = reloaded.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->szAccountName[0] == _T('\0'));
+    CHECK(wcscmp(lpAlice->szNickName, L"张三") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AN3 SetAccountName 只认已存在的账号，传空指针即清空，超长时截断", "[lal][acctname]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(kAnPhone, _T("pwd_p"), 1, TRUE, FALSE));
+    CHECK(list.SetAccountName(_T("nobody"), kAnAccount) == FALSE);
+    CHECK(list.SetAccountName(NULL, kAnAccount) == FALSE);
+
+    LOGIN_ACCOUNT_INFO* lpPhone = list.Find(kAnPhone);
+    REQUIRE(lpPhone != NULL);
+    REQUIRE(list.SetAccountName(kAnPhone, kAnAccount));
+    CHECK(wcscmp(lpPhone->szAccountName, kAnAccount) == 0);
+
+    REQUIRE(list.SetAccountName(kAnPhone, NULL));
+    CHECK(lpPhone->szAccountName[0] == _T('\0'));
+
+    const std::wstring longName(kAcctNameLen * 2, L'A');
+    REQUIRE(list.SetAccountName(kAnPhone, longName.c_str()));
+    CHECK(wcslen(lpPhone->szAccountName) == static_cast<size_t>(kAcctNameLen - 1));
+}
+
+TEST_CASE("LAL-AN4 清理空记录与删除账号都不会让规范账号错位", "[lal][acctname]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_an4.dat");
+    WriteThreeRecordFile(path, true, kAcctNameSectionVersion);
+
+    {
+        CLoginAccountList loaded;
+        REQUIRE(loaded.LoadFile(path.c_str()));
+        REQUIRE(loaded.GetCount() == 2);
+        LOGIN_ACCOUNT_INFO* lpPhone = loaded.Find(kAnPhone);
+        REQUIRE(lpPhone != NULL);
+        CHECK(wcscmp(lpPhone->szAccountName, kAnAccount) == 0);
+        LOGIN_ACCOUNT_INFO* lpAlice = loaded.Find(_T("alice"));
+        REQUIRE(lpAlice != NULL);
+        CHECK(lpAlice->szAccountName[0] == _T('\0'));
+
+        // 删掉排在前面的 alice 后落盘：规范账号跟着手机号那条走
+        REQUIRE(loaded.Del(0));
+        REQUIRE(loaded.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    REQUIRE(reloaded.GetCount() == 1);
+    LOGIN_ACCOUNT_INFO* lpPhone = reloaded.GetAccountInfo(0);
+    REQUIRE(lpPhone != NULL);
+    CHECK(wcscmp(lpPhone->szUser, kAnPhone) == 0);
+    CHECK(wcscmp(lpPhone->szAccountName, kAnAccount) == 0);
+    CHECK(wcscmp(lpPhone->szNickName, L"手机号登录者") == 0);
+    CHECK(lpPhone->nUserId == kAvCarolId);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AN5 规范账号尾块版本不认识时整块忽略，其余数据照常读出", "[lal][acctname]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_an5.dat");
+    WriteThreeRecordFile(path, true, kAcctNameSectionVersion + 1);
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    REQUIRE(loaded.GetCount() == 2);
+    LOGIN_ACCOUNT_INFO* lpPhone = loaded.Find(kAnPhone);
+    REQUIRE(lpPhone != NULL);
+    CHECK(lpPhone->szAccountName[0] == _T('\0'));
+    CHECK(lpPhone->nUserId == kAvCarolId);
+    CHECK(wcscmp(lpPhone->szNickName, L"手机号登录者") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-AN6 登录成功再次记入已有账号时，已存的规范账号保持不变", "[lal][acctname]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(kAnPhone, _T("pwd_p"), 1, TRUE, FALSE));
+    REQUIRE(list.SetAccountName(kAnPhone, kAnAccount));
+
+    // 登录窗采集的信息里没有规范账号
+    LOGIN_ACCOUNT_INFO info;
+    memset(&info, 0, sizeof(info));
+    wcscpy_s(info.szUser, _countof(info.szUser), kAnPhone);
+    wcscpy_s(info.szPwd, _countof(info.szPwd), L"pwd_new");
+    info.nStatus = 1;
+    info.bRememberPwd = TRUE;
+    REQUIRE(list.RecordLoginSuccess(&info));
+
+    LOGIN_ACCOUNT_INFO* lpPhone = list.Find(kAnPhone);
+    REQUIRE(lpPhone != NULL);
+    CHECK(wcscmp(lpPhone->szPwd, L"pwd_new") == 0);
+    CHECK(wcscmp(lpPhone->szAccountName, kAnAccount) == 0);
+}
+
+TEST_CASE("LAL-AN7 取列表键与本地数据目录名的两个函数", "[lal][acctname]")
+{
+    // 输入的原文非空时用原文
+    CHECK(wcscmp(PickLoginAccountListKey(kAnPhone, kAnAccount), kAnPhone) == 0);
+    // 原文为空串或空指针时退回规范账号
+    CHECK(wcscmp(PickLoginAccountListKey(L"", kAnAccount), kAnAccount) == 0);
+    CHECK(wcscmp(PickLoginAccountListKey(NULL, kAnAccount), kAnAccount) == 0);
+    // 两者都取不到时为空串，不是空指针
+    LPCTSTR lpszNone = PickLoginAccountListKey(NULL, NULL);
+    REQUIRE(lpszNone != NULL);
+    CHECK(lpszNone[0] == _T('\0'));
+
+    LPCTSTR lpszNoRecord = LoginAccountDataName(NULL);
+    REQUIRE(lpszNoRecord != NULL);
+    CHECK(lpszNoRecord[0] == _T('\0'));
+}
+
+TEST_CASE("LAL-AN8 用手机号登录后退出：按输入的原文能清掉自动登录，按规范账号查不到这条记录", "[lal][acctname]")
+{
+    // 复现会话控制器的流程：登录成功记入手机号那条（勾了自动登录），再记下规范账号
+    CLoginAccountList list;
+    LOGIN_ACCOUNT_INFO info;
+    memset(&info, 0, sizeof(info));
+    wcscpy_s(info.szUser, _countof(info.szUser), kAnPhone);
+    wcscpy_s(info.szPwd, _countof(info.szPwd), L"pwd_p");
+    info.nStatus = 1;
+    info.bRememberPwd = TRUE;
+    info.bAutoLogin = TRUE;
+    REQUIRE(list.RecordLoginSuccess(&info));
+    REQUIRE(list.SetAccountName(kAnPhone, kAnAccount));
+
+    // 登录后本人资料里的账号是规范账号；拿它查历史列表查不到（修复前退出时就是这样漏清的）
+    CHECK(list.Find(kAnAccount) == NULL);
+
+    // 修复后退出时用输入的原文查
+    LOGIN_ACCOUNT_INFO* lpAccount = list.Find(PickLoginAccountListKey(info.szUser, kAnAccount));
+    REQUIRE(lpAccount != NULL);
+    lpAccount->bAutoLogin = FALSE;
+    CHECK(list.IsAutoLogin() == FALSE);
+    // 删除账号连同本地数据时，目录按规范账号
+    CHECK(wcscmp(LoginAccountDataName(lpAccount), kAnAccount) == 0);
 }

@@ -85,6 +85,16 @@ public:
                std::vector<net::GroupFileEntry>& outItems,
                int& outTotalFiltered, int& outPageCount, int& outCurPage) const;
 
+    /**
+     *  纯查询：某个条目在给定分类 + 搜索的筛选结果里落在第几页（口径与 Query 完全相同，
+     *  主面板全局搜索点群文件结果后，群聊窗据此翻到那一页并高亮它）。
+     *    category / search / pageSize：同 Query；pageSize<=0 视为 1。
+     *    entryid：要找的条目 id。
+     *  返回：页码（0-based）；条目不在库里、或被分类 / 搜索筛掉时返回 -1。
+     */
+    int PageOfEntry(int category, const std::string& search, const std::string& entryid,
+                    int pageSize) const;
+
     // ---- 静态纯工具（便于单测） ----
 
     // 取一条目的「有效扩展名」（小写）：优先用 m_ext，为空则从文件名取最后一个点之后。

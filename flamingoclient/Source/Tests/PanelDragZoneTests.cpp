@@ -3,7 +3,7 @@
  *
  *  "按住空白处拖动窗口"命中判定（PanelDragZone）的测试：验证纯函数
  *  IsPointInDragZone() —— 顶部渐变 Banner 与底部栏的空白处可拖、两块里的可点击
- *  子区域（头像 / 昵称 / 签名 / 状态胶囊 / 消息盒子 / 汉堡菜单按钮 / 主操作按钮）
+ *  子区域（头像 / 昵称 / 签名 / 状态胶囊 / 公告中心 / 消息盒子 / 汉堡菜单按钮 / 主操作按钮）
  *  不可拖、可拖区之外的列表区不可拖，以及边界与退化输入（空矩形、空数组、空指针）
  *  的处理。
  *
@@ -41,12 +41,13 @@ POINT MakePt(long x, long y)
 const RECT kHeaderRc    = {   0,  32, 320, 140 };   // 顶部渐变 Banner
 const RECT kBottomBarRc = {   0, 636, 320, 680 };   // 底部栏
 
-// Banner 里 5 块可点击区域（Banner 自己在 OnPaint 里按实际绘制位置算出来的）。
+// Banner 里 6 块可点击区域（Banner 自己在 OnPaint 里按实际绘制位置算出来的）。
 const RECT kAvatarRc = {  14,  44,  66,  96 };      // 头像（含外圈）
 const RECT kNameRc   = {  78,  50, 150,  70 };      // 昵称文字
 const RECT kStatusRc = {  78,  72, 140,  90 };      // 在线状态胶囊
 const RECT kSignRc   = {  78,  95, 200, 113 };      // 个性签名文字
-const RECT kBellRc   = {  14, 106, 120, 130 };      // 消息盒子（通知盒 + 文字）
+const RECT kBellRc   = {  16, 103,  43, 130 };      // 公告中心按钮（通知盒 + 溢出的角标）
+const RECT kMsgBoxRc = {  48, 103,  75, 130 };      // 消息盒子按钮（2026-10-04 起，铃铛右侧，含溢出的角标）
 
 // 底部栏里 2 个按钮：左padding 8 + 汉堡按钮宽 34；主操作按钮宽 80、右padding 8。
 const RECT kMenuBtnRc    = {   8, 636,  42, 680 };  // 汉堡菜单按钮
@@ -55,7 +56,7 @@ const RECT kActionBtnRc  = { 232, 636, 312, 680 };  // "查找" / "建群"按钮
 // 按 CollectDragZoneRects 的顺序拼出完整的两组矩形。
 const RECT kDragRects[] = { kHeaderRc, kBottomBarRc };
 const RECT kExcludeRects[] = { kAvatarRc, kNameRc, kSignRc, kStatusRc, kBellRc,
-                               kMenuBtnRc, kActionBtnRc };
+                               kMsgBoxRc, kMenuBtnRc, kActionBtnRc };
 
 const int kDragCount    = (int)(sizeof(kDragRects) / sizeof(kDragRects[0]));
 const int kExcludeCount = (int)(sizeof(kExcludeRects) / sizeof(kExcludeRects[0]));
@@ -88,18 +89,20 @@ TEST_CASE("DZ2 底部栏两个按钮上不可拖动", "[dragzone]")
 TEST_CASE("DZ3 Banner 空白渐变区可拖动", "[dragzone]")
 {
     CHECK(CanDrag(280, 60));     // 昵称右侧的空白
-    CHECK(CanDrag(280, 120));    // 消息盒子右侧的空白
-    CHECK(CanDrag(40,  100));    // 头像下方、消息盒子上方的空隙
+    CHECK(CanDrag(280, 120));    // 底部两个按钮右侧的空白
+    CHECK(CanDrag(100, 118));    // 原先铃铛右侧文字的位置：文字改成悬停提示后可以拖动
+    CHECK(CanDrag(40,  100));    // 头像下方、公告中心上方的空隙
     CHECK(CanDrag(160, 36));     // 紧贴 Banner 顶边（标题栏之下第一行）
 }
 
-TEST_CASE("DZ4 Banner 里 5 块可点击区域不可拖动", "[dragzone]")
+TEST_CASE("DZ4 Banner 里 6 块可点击区域不可拖动", "[dragzone]")
 {
     CHECK_FALSE(CanDrag(40,  70));     // 头像
     CHECK_FALSE(CanDrag(100, 60));     // 昵称
     CHECK_FALSE(CanDrag(100, 80));     // 状态胶囊
     CHECK_FALSE(CanDrag(100, 104));    // 个性签名
-    CHECK_FALSE(CanDrag(30,  118));    // 消息盒子
+    CHECK_FALSE(CanDrag(30,  118));    // 公告中心按钮
+    CHECK_FALSE(CanDrag(60,  118));    // 消息盒子按钮
 }
 
 TEST_CASE("DZ5 可拖区之外一律不可拖动", "[dragzone]")

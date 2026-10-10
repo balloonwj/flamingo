@@ -55,6 +55,16 @@ public:
         m_label = label;
     }
 
+    // 改文字（按角色改名用，如「企业管理」→「本企业」）。
+    void SetLabel(LPCTSTR label)
+    {
+        m_label = label;
+        Invalidate();
+    }
+
+    // 取文字。
+    CString GetLabel() const { return m_label; }
+
     // 设置选中态。
     void SetActive(bool active)
     {
@@ -163,20 +173,34 @@ Sidebar::Sidebar()
                   Hint().Fixed(kNavItemHeight));
     nav->AddChild(MakeNavItem(kIdNavAudit,         ui::Icon::Shield,    _T("审计日志")),
                   Hint().Fixed(kNavItemHeight));
+    // 敏感词：平台超管与企业管理员都可见，排在「审计日志」之后（同属安全合规类）。
+    // 侧栏里的位置与导航 ID 无关，界面映射只看 kIdNavSensitiveWords 的数值。
+    nav->AddChild(MakeNavItem(kIdNavSensitiveWords, ui::Icon::ShieldAlert, _T("敏感词")),
+                  Hint().Fixed(kNavItemHeight));
+    // 文件共享：平台超管与企业管理员都可见，紧接「敏感词」（同属合规管控类）。2026-10-08 起「共享审计」并入
+    // 文件共享页成为它的第二个页签，侧栏不再单列（kIdNavFileShareAudit 的编号保留，不建导航项）。
+    nav->AddChild(MakeNavItem(kIdNavFileShares, ui::Icon::Folder, _T("文件共享")),
+                  Hint().Fixed(kNavItemHeight));
+    // 企业问答：平台超管与企业管理员都可见，显示在群聊「问答」页签里（docs/群问答方案.md）
+    nav->AddChild(MakeNavItem(kIdNavEnterpriseQa, ui::Icon::Info, _T("企业问答")),
+                  Hint().Fixed(kNavItemHeight));
+    // 机器人：平台超管与企业管理员都可见，与「企业问答」并列（docs/机器人方案.md 4.1）
+    nav->AddChild(MakeNavItem(kIdNavEnterpriseBot, ui::Icon::Bot, _T("机器人")),
+                  Hint().Fixed(kNavItemHeight));
     nav->AddChild(MakeNavItem(kIdNavSettings,      ui::Icon::Settings,  _T("平台设置")),
                   Hint().Fixed(kNavItemHeight));
-    // 客户端版本：升级包是平台级资产，不属于任何一家企业，故只给平台超管看。
-    // 侧栏在登录成功后才构建，此时 AdminSession 已填好。
-    if (AdminSession::Instance().IsPlatformAdmin())
-    {
-        nav->AddChild(MakeNavItem(kIdNavClientVersions, ui::Icon::Download, _T("客户端版本")),
-                      Hint().Fixed(kNavItemHeight));
-    }
-    // 高度按实际添加的项数算：企业级管理员少一项，写死会多出一块空白。
+    // 客户端版本：升级包是平台级资产，不属于任何一家企业，只给平台超管看。一律建出来，
+    // 显隐由 ApplyRole 按当前登录者决定 —— 侧栏只建一次，换账号登录时角色可能变。
+    nav->AddChild(MakeNavItem(kIdNavClientVersions, ui::Icon::Download, _T("客户端版本")),
+                  Hint().Fixed(kNavItemHeight));
+    // 高度按全部导航项算。企业管理员隐藏的几项让出的位置落在导航区底部，与下面的
+    // 留白连成一片，看不出差别。
     const int navCount = static_cast<int>(m_navItems.size());
     const int navAreaHeight = kNavPadV * 2 + kNavItemHeight * navCount
                               + kNavGap * (navCount - 1);
+    m_nav = nav.get();
     AddChild(std::move(nav), Hint().Fixed(navAreaHeight));
+    ApplyRole(AdminSession::Instance().IsPlatformAdmin());
 
     // 弹性空白，占住导航项以下的全部剩余高度。
     // 原本这里的作用是"把页脚顶到底部"，2026-08-12 页脚（管理员姓名/角色 + 登出
@@ -221,6 +245,55 @@ std::unique_ptr<DuiControl> Sidebar::MakeNavItem(int navId, ui::Icon icon,
     item->Setup(icon, label);
     m_navItems.push_back(item.get());
     return item;
+}
+
+SidebarNavItem* Sidebar::FindNavItem(int navId) const
+{
+    for (size_t i = 0; i < m_navItems.size(); ++i)
+    {
+        if (m_navItems[i] != nullptr && static_cast<int>(m_navItems[i]->GetCtrlId()) == navId)
+        {
+            return m_navItems[i];
+        }
+    }
+    return nullptr;
+}
+
+void Sidebar::ApplyRole(bool platformAdmin)
+{
+    SidebarNavItem* ents = FindNavItem(kIdNavEnterprises);
+    if (ents != nullptr)
+    {
+        ents->SetLabel(platformAdmin ? _T("企业管理") : _T("本企业"));
+    }
+    SidebarNavItem* ann = FindNavItem(kIdNavAnnouncements);
+    if (ann != nullptr)
+    {
+        ann->SetVisible(platformAdmin);
+    }
+    SidebarNavItem* cv = FindNavItem(kIdNavClientVersions);
+    if (cv != nullptr)
+    {
+        cv->SetVisible(platformAdmin);
+    }
+    // SetVisible 不会触发重排，导航区的矩形没变时 SetRect 也不会往下排，必须 ForceLayout。
+    if (m_nav != nullptr)
+    {
+        m_nav->ForceLayout(m_nav->GetRect());
+    }
+    Invalidate();
+}
+
+bool Sidebar::IsNavVisible(int navId) const
+{
+    SidebarNavItem* item = FindNavItem(navId);
+    return item != nullptr && item->IsVisible();
+}
+
+CString Sidebar::GetNavLabel(int navId) const
+{
+    SidebarNavItem* item = FindNavItem(navId);
+    return (item != nullptr) ? item->GetLabel() : CString();
 }
 
 void Sidebar::SetActiveNav(int navId)

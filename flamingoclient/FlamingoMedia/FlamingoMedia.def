@@ -1,0 +1,5 @@
+; FlamingoMedia.dll 的导出表：固定导出名，不受调用约定与名称修饰影响（32 位与 64 位相同）。
+; balloonwj@qq.com   2026-10-02
+LIBRARY FlamingoMedia
+EXPORTS
+    FlamingoMedia_Create

@@ -13,21 +13,22 @@
 #include "../../net/Protocol.h"   // error_code：失败原因按错误码区分
 
 #include <stdio.h>   // swprintf_s（带错误码的失败原因）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonsettings {
 
 namespace {
 
 //各种情况下按钮下方的提示文字
-const wchar_t* const kHintOffline      = L"未连接服务器，连接后才能清理";
-const wchar_t* const kHintDisconnected = L"与服务器的连接已断开，请重连后重试";
-const wchar_t* const kHintTimeout      = L"服务器没有响应，请稍后重试";
-const wchar_t* const kHintBadRequest   = L"清理范围无效，请重新选择";
-const wchar_t* const kHintServerError  = L"服务器处理失败，请稍后重试";
+const wchar_t* const kHintOffline      = TR_NOOP(L"未连接服务器，连接后才能清理");
+const wchar_t* const kHintDisconnected = TR_NOOP(L"与服务器的连接已断开，请重连后重试");
+const wchar_t* const kHintTimeout      = TR_NOOP(L"服务器没有响应，请稍后重试");
+const wchar_t* const kHintBadRequest   = TR_NOOP(L"清理范围无效，请重新选择");
+const wchar_t* const kHintServerError  = TR_NOOP(L"服务器处理失败，请稍后重试");
 
 //按钮文字
-const wchar_t* const kButtonIdle    = L"清理";
-const wchar_t* const kButtonRunning = L"清理中…";
+const wchar_t* const kButtonIdle    = TR_NOOP(L"清理");
+const wchar_t* const kButtonRunning = TR_NOOP(L"清理中…");
 
 //带错误码的失败原因的缓冲区长度（文字加上一个十进制整数，留足余量）
 const int kHintBufLen = 64;
@@ -63,7 +64,7 @@ void ChatCleanFlow::SetConnected(bool connected)
     {
         m_stage = kCleanStageIdle;
         m_awaitingResult = false;
-        m_hint = kHintDisconnected;
+        m_hint = TR(kHintDisconnected);
         return;
     }
     //等待操作期间断线：后续应答同样不会到达
@@ -165,19 +166,19 @@ bool ChatCleanFlow::OnResult(int code)
     {
     //报文或时间范围不合法：正常操作不会出现，出现时请用户重新选择
     case error_code_bad_request:
-        m_hint = kHintBadRequest;
+        m_hint = TR(kHintBadRequest);
         break;
 
     //服务端写库失败等内部错误
     case error_code_server_internal:
-        m_hint = kHintServerError;
+        m_hint = TR(kHintServerError);
         break;
 
     //其他错误（如登录态失效）：带上错误码，便于用户反馈问题
     default:
         {
             wchar_t buf[kHintBufLen] = { 0 };
-            swprintf_s(buf, kHintBufLen, L"清理失败（错误码 %d），请稍后重试", code);
+            swprintf_s(buf, kHintBufLen, TR(L"清理失败（错误码 %d），请稍后重试"), code);
             m_hint = buf;
         }
         break;
@@ -192,7 +193,7 @@ void ChatCleanFlow::OnTimeout()
 
     //这次请求仍算在途：服务端可能只是处理得慢，之后应答到了照常处理
     m_stage = kCleanStageIdle;
-    m_hint = kHintTimeout;
+    m_hint = TR(kHintTimeout);
 }
 
 int ChatCleanFlow::Stage() const
@@ -207,7 +208,7 @@ bool ChatCleanFlow::IsCleanEnabled() const
 
 const wchar_t* ChatCleanFlow::CleanButtonText() const
 {
-    return (m_stage == kCleanStageRunning) ? kButtonRunning : kButtonIdle;
+    return (m_stage == kCleanStageRunning) ? TR(kButtonRunning) : TR(kButtonIdle);
 }
 
 const std::wstring& ChatCleanFlow::Hint() const
@@ -220,15 +221,15 @@ void ChatCleanFlow::RefreshOfflineHint()
     if (!m_connected)
     {
         //断线原因比笼统的"未连接"更具体，已经在显示时保留
-        if (m_hint != kHintDisconnected)
+        if (m_hint != TR(kHintDisconnected))
         {
-            m_hint = kHintOffline;
+            m_hint = TR(kHintOffline);
         }
         return;
     }
 
     //已连接：清掉与连接有关的两种提示，其余提示（区间不合法、失败原因等）保留
-    if (m_hint == kHintOffline || m_hint == kHintDisconnected)
+    if (m_hint == TR(kHintOffline) || m_hint == TR(kHintDisconnected))
     {
         m_hint.clear();
     }

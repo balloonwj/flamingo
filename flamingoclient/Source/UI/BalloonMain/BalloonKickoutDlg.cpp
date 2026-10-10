@@ -20,6 +20,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth     = 360;   // 客户区宽（正文按此宽度折行）
@@ -271,7 +272,7 @@ int CBalloonKickoutDlg::BuildUi(int reason)
         ok->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         ok->SetVariant(balloonwjui::DuiButton::Variant::Primary);
         ok->SetCtrlId(kIdOk);
-        ok->SetText(_T("确定"));
+        ok->SetText(TR(L"确定"));
         bottom->AddChild(std::move(ok), balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth));
 
         root->AddChild(std::move(bottom), balloonwjui::DuiLayout::Hint().Fixed(kBottomBarH));

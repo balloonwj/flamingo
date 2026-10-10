@@ -35,6 +35,7 @@ extern CAppModule _Module;
 
 #include "GroupManagePaint.h"
 #include "../../../third-party/balloonui/balloonui/DuiDpi.h"   // Scale / GetSystemDpi
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloongroupmanage {
 
@@ -169,7 +170,7 @@ HFONT CreateGmFont(int pixelHeight, int weight)
         ToGdiWeight(weight),
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
 }
 
 } // anonymous namespace

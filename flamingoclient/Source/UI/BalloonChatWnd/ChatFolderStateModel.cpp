@@ -10,6 +10,7 @@
 //（此前还有一条理由：协议头与 v1 的 net/Msg.h 枚举名冲突、不得同处一个编译单元。
 // v1 协议头已于 2026-08-14 删除，那条限制不复存在。）
 #include "../../net/Protocol.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -151,72 +152,76 @@ const wchar_t* FolderErrorText(int errcode)
     {
     //接收端在气泡上点了「拒绝」，会话立即结束，一条中转连接都不会建立
     case error_code_folder_rejected:
-        return L"对方拒绝接收这个文件夹";
+        return TR(L"对方拒绝接收这个文件夹");
 
     //发起邀请时对方无在线连接，或响铃 / 传输期间对方退出登录
     case error_code_folder_peer_offline:
-        return L"对方不在线，文件夹传输已结束";
+        return TR(L"对方不在线，文件夹传输已结束");
 
     //邀请在服务端配置的时限内无人应答，服务端自动结束了会话
     case error_code_folder_invite_timeout:
-        return L"对方一直没有响应，邀请已超时";
+        return TR(L"对方一直没有响应，邀请已超时");
 
     //文件数超过服务端配置的上限。上限值由服务端在应答里回带，具体数字由界面另行拼接，
     //本函数只给出通用措辞，不硬编码任何阈值
     case error_code_folder_too_many_files:
-        return L"文件夹内的文件数超出服务器允许的上限";
+        return TR(L"文件夹内的文件数超出服务器允许的上限");
 
     //总字节数超过服务端配置的上限，同样不在本函数里写死阈值
     case error_code_folder_too_large:
-        return L"文件夹总大小超出服务器允许的上限";
+        return TR(L"文件夹总大小超出服务器允许的上限");
 
     //接收端在传字节之前就建目录失败：目标位置无写权限、只读、路径过长、含非法字符等
     case error_code_folder_mkdir_fail:
-        return L"对方创建目录失败，请确认保存位置可写";
+        return TR(L"对方创建目录失败，请确认保存位置可写");
 
     //接收端本机磁盘剩余空间装不下整个文件夹
     case error_code_folder_disk_full:
-        return L"对方磁盘剩余空间不足";
+        return TR(L"对方磁盘剩余空间不足");
 
     //接收端写盘失败：磁盘 I/O 出错、文件被别的程序占用、目标文件中途被删等
     case error_code_folder_write_fail:
-        return L"对方保存文件失败，传输已中断";
+        return TR(L"对方保存文件失败，传输已中断");
 
     //发送端读源文件失败：文件在扫描之后被删除、被移走或被独占打开
     case error_code_folder_read_fail:
-        return L"读取本地文件失败，文件可能已被移动或删除";
+        return TR(L"读取本地文件失败，文件可能已被移动或删除");
+
+    //发起时文件夹名命中发送者所属企业的敏感词库，服务端拒绝了邀请（docs/敏感词方案.md 8.6）
+    case error_code_file_sensitive_word:
+        return TR(L"文件夹名包含敏感词，未能发出");
 
     //接收端校验收到的内容不符：字节数与清单不等，或 MD5 与发送端给出的不一致
     case error_code_folder_verify_fail:
-        return L"文件内容校验不通过，传输的数据与原文件不一致";
+        return TR(L"文件内容校验不通过，传输的数据与原文件不一致");
 
     //任一条中转通道断链即整个会话失败，本功能不做自动重连，由用户决定是否重试
     case error_code_folder_relay_broken:
-        return L"传输通道已断开，网络可能不稳定";
+        return TR(L"传输通道已断开，网络可能不稳定");
 
     //任一端在传输过程中点了「取消」，双方气泡都显示已取消
     case error_code_folder_canceled:
-        return L"传输已取消";
+        return TR(L"传输已取消");
 
     //会话已超出保留期（默认 10 分钟），续传位点作废，只能重新发起一次完整传输
     case error_code_folder_session_expired:
-        return L"本次传输已超过可续传的时限，请重新发送";
+        return TR(L"本次传输已超过可续传的时限，请重新发送");
 
     //整台服务器同时进行的文件夹传输会话数已达上限，新会话被拒绝
     case error_code_folder_server_busy:
-        return L"服务器正忙，请稍后再试";
+        return TR(L"服务器正忙，请稍后再试");
 
     //发起方或接收方参与中的文件夹传输笔数已达上限（服务端 foldermaxperuser，默认 5 笔，
     //发送与接收各算一笔；失败待重试的会话在保留期内仍占名额）。文案里不写死具体笔数 ——
     //上限由服务端配置决定，界面另有一处按当前配置拼提示，这里只给通用说法
     case error_code_folder_busy:
-        return L"同时进行的文件夹传输已达上限，请等其中一笔结束后再试";
+        return TR(L"同时进行的文件夹传输已达上限，请等其中一笔结束后再试");
 
     //未收录的取值：包括 0、非文件夹域的错误码，以及今后服务端新增而本表尚未跟上的码。
     //给一句通用措辞，保证界面上不会出现空白的一行（那种情况下用户只会看到「传输失败」
     //四个字下面空着，无从判断发生了什么）
     default:
-        return L"文件夹传输失败";
+        return TR(L"文件夹传输失败");
     }
 }
 

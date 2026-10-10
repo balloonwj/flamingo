@@ -57,6 +57,22 @@ enum CtrlId : UINT
     kIdHdrRemoteDesktop = 412,   // 远程桌面（点击向对端发起远程桌面邀请；设计图工具栏第 3 个）
     kIdHdrMore       = 413,   // 更多 / 详情
     kIdHdrHistory    = 414,   // 消息记录（点击打开与对端的历史消息记录窗）
+    // 416 原为头部「清空聊天记录」按钮（扫帚），2026-10-03 起「清空聊天记录」从聊天窗移到消息记录窗（底部「导出」左边与行右键菜单），不再使用
+    kIdHdrScreenShare = 417,  // 共享屏幕（紧挨在「远程桌面」右边；点击经 FlamingoMedia.dll 弹出共享内容选择窗；模块没有加载时隐藏）
+    kIdHdrSubtitle   = 441,   // 字幕模式：紧挨在「消息记录」左边，点一下进入、再点一下退出（docs/聊天字幕模式方案.md）
+    kIdVoiceBar      = 432,   // 录音条（语音消息第 3b 步）：输入框后面的横向布局占位，建好后隐藏；录音时代替输入框与
+                              // 底部发送行显示，控件由 CVoiceRecordBar::Build 填入
+    kIdVoiceCancel   = 433,   // 录音条上的「取消」按钮（DuiButton）
+    kIdVoiceSend     = 434,   // 录音条上的「发送」按钮（DuiButton，主色）
+    kIdInputBottomRow = 435,  // 输入区底部「提示文字 + 发送按钮」那一行（横向布局）；录音时隐藏
+    kIdVoicePause    = 436,   // 录音条上的「暂停 / 继续」按钮（语音消息第 6g 步，文字随状态切换）
+    kIdVoiceStop     = 437,   // 录音条上的「停止」按钮：停止录音并进入试听
+    kIdVoicePreview  = 438,   // 录音条上的「试听 / 停止试听」按钮（只在停止后的试听状态显示）
+    kIdVoiceConfirm  = 439,   // 录音条上的「确认放弃」按钮（点「取消」后的确认状态显示）
+    kIdVoiceBack     = 440,   // 录音条上的「返回」按钮：不放弃，回到点「取消」之前的状态
+    kIdHdrShare      = 431,   // 文件共享：紧挨在「共享屏幕」右边，弹出本会话的共享列表浮层（FlamingoFileShare.dll 提供），
+                              // 模块没有加载或本企业关闭了文件共享时隐藏。2026-10-03 之前在输入框工具栏（发送文件夹之后），
+                              // 按用户要求挪到头部；编号沿用原值，没有改成 41x
     kIdPinBanner     = 415,   // 头部信息行下方的「已 Pin N 条」提示带（ChatBannerLabel，
                               // ModeLink 可点）。本会话没有被 Pin 的消息时整条隐藏、不占位；
                               // 点它打开消息记录窗并切到 Pin 分类。
@@ -68,12 +84,41 @@ enum CtrlId : UINT
     kIdTbImage       = 421,   // 图片
     kIdTbFile        = 422,   // 文件
     kIdTbScreenshot  = 423,   // 截图
+    kIdTbScreenshotMenu = 442, // 截图选项下拉按钮（▾）：紧挨在截图右边，点了弹出「截图 / 截取全屏 / 截图时隐藏当前窗口」
+                              // 菜单（docs/截图快捷键与隐藏当前窗口方案.md）
     kIdTbVoice       = 424,   // 语音
     kIdTbPlus        = 425,   // 更多
     kIdTbShake       = 426,   // 窗口抖动
     kIdTbFont        = 427,   // 字体设置（AF）
     kIdTbFolder      = 428,   // 发送文件夹（选一个本地目录整体发给对方，走 cmd_folder_* 1810~1817
                               // 那条独立链路；与 kIdTbFile 的单个文件传输不是一回事）
+    kIdTbRecord      = 429,   // 屏幕录制：紧挨在截图右边，点了开始独立录屏，录完可一键发到本会话
+                              // （FlamingoMedia.dll 提供，模块没有加载时隐藏；docs/屏幕共享与录制方案.md 6.2）
+    kIdTbCode        = 448,   // 发送代码：紧挨在 Markdown 开关右边，点了打开「发送代码」窗口（docs/代码片段方案.md 第 3.1 节；
+                              // 443~447、450~461 已被 Markdown 模式占用）
+
+    // ---- Markdown（docs/Markdown消息方案.md 第 11.3 节）----
+    kIdTbMarkdown    = 443,   // 工具栏的「Markdown 编辑器」按钮：紧挨在字体设置右边，打开独立的 Markdown 编辑器并预选本会话；
+                              // FlamingoMarkdown.dll 不可用时隐藏
+    // 444 ~ 447、450 ~ 461 已作废（2026-10-06 去掉输入区的 Markdown 模式时删除）：原为格式条占位、预览占位、
+    // 「编辑 / 预览」页签与 12 个格式按钮，不得复用
+
+    // ---- 粘贴识别提示条（docs/代码片段方案.md 第 3.1 节）----
+    kIdCodePasteBar     = 462,   // 引用条与输入框之间的「看起来是一段代码」提示条（DuiVBox 套一行 DuiHBox；默认隐藏，往空输入框里
+                                 // 粘贴像代码的文字时出现，继续输入、发送或点「不用了」时收起）
+    kIdCodePasteText    = 463,   // 提示条左侧的说明文字
+    kIdCodePasteSend    = 464,   // 提示条上的「以代码片段发送」链接：把输入框里的文字移进发送代码窗口
+    kIdCodePasteDismiss = 465,   // 提示条上的「不用了」链接：只收起提示条
+
+    // ---- 单聊密聊（docs/密聊方案.md 4.7、6.2）----
+    kIdHdrSecret        = 466,   // 头部「密聊」按钮（锁形图标），放在「更多」左边；密聊 DLL 不可用、企业关闭开关、
+                                 // 服务端没有确认开启或对方是本人时隐藏；密聊状态下也隐藏
+    kIdSecretBanner     = 467,   // 窗口顶部的深色密聊头部条（DuiVBox，默认隐藏）：密聊中、只能查看两种状态下显示
+    kIdSecretBannerText = 468,   // 头部条左侧的状态文字（「密聊中 · 消息不会被记录，退出后全部清除」等）
+    kIdSecretBannerWarn = 469,   // 头部条第二行的防截图提示（醒目的橙色文字），双方都能防截图时隐藏
+    kIdSecretSafety     = 470,   // 头部条上的「安全码」链接：密聊中才显示
+    kIdSecretReinvite   = 471,   // 头部条上的「重新邀请」链接：只能查看、且入口可用时才显示
+    kIdSecretExit       = 472,   // 头部条上的「退出密聊」链接
 };
 
 /**
@@ -91,7 +136,13 @@ std::unique_ptr<balloonwjui::DuiControl> BuildChatWindowBody(bool loadMockMessag
 // 输入区块（工具栏 + 输入框 + 提示/发送行）的默认高度（像素）。用户从未拖动
 // 分隔条时聊天窗用它布局；与改造前输入区固定高度保持一致。须与各窗口 XML 里
 // splitter 的 split-fraction 默认值大致对应（默认窗口尺寸下约为本值）。
-const int kChatInputBlockDefaultPx = 172;
+// 2026-10-06 按用户要求由 172 调高为 212（加了「代码」入口，输入区也调大一些，见 docs/代码片段方案.md 第 3.1 节）。
+const int kChatInputBlockDefaultPx = 212;
+
+// 单聊窗允许缩放到的最小整窗尺寸（逻辑像素，含标题栏；见 UI 约定第 7 条）。CBalloonChatWindow 据此调用
+// SetMinSize；布局单测按这个宽度检查 Markdown 格式条的两个页签仍完整显示（2026-10-06 从 BalloonChatWindow.cpp 移来）。
+const int kChatWindowMinWidth  = 460;
+const int kChatWindowMinHeight = 420;
 
 /**
  *  会话内"输入区块高度"的进程级记忆（像素）。
@@ -136,6 +187,24 @@ std::wstring MakePinBannerText(int count);
  *  副作用：修改该控件的可见性与配色。
  */
 void ApplyPinBannerStyle(balloonwjui::DuiControl* banner);
+
+/**
+ *  把粘贴识别提示条（docs/代码片段方案.md 第 3.1 节）调成统一样式：浅蓝底圆角、灰色说明文字、两个可点击的链接，
+ *  初始隐藏；非简体中文界面下链接按译文宽度加宽。由两个窗口的 Build*Body 在建好控件树后各调一次。
+ *    root：客户区根控件；传 NULL 直接返回。所有权不转移。
+ *    barId / textId / sendId / dismissId：提示条、说明文字、「以代码片段发送」「不用了」两个链接的控件 id
+ *      （单聊传 kIdCodePaste*，群聊传 kGIdCodePaste*）。找不到的控件跳过。
+ *  副作用：修改这几个控件的可见性、配色、链接模式与宽度。
+ */
+void ApplyCodePasteBarStyle(balloonwjui::DuiControl* root, UINT barId, UINT textId, UINT sendId, UINT dismissId);
+
+/**
+ *  把密聊头部条（kIdSecretBanner）调成统一样式并收起：深色底、浅色状态文字、橙色防截图提示、三个可点击的链接；
+ *  头部的「密聊」按钮（kIdHdrSecret）同时收起。由 BuildChatWindowBody 在建好控件树后调用一次（docs/密聊方案.md 4.7）。
+ *    root：客户区根控件；传 NULL 直接返回。所有权不转移。
+ *  副作用：修改这几个控件的可见性、配色、链接模式与宽度。
+ */
+void ApplySecretBannerStyle(balloonwjui::DuiControl* root);
 
 /**
  *  按最新的 Pin 条数刷新提示带：有 Pin 就显示并写上条数，一条没有就整条收起。

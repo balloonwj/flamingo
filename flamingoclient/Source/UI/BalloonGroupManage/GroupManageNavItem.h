@@ -46,6 +46,13 @@ public:
     void SetActive(bool active);
     bool IsActive() const { return m_active; }
 
+    // 量出本项把文字完整显示出来所需的宽度（当前 DPI 下的像素，多语言第 4 期用于加宽导航栏）。
+    // 文字按选中态的半粗体量，选中与否宽度都够用；图标、左缩进、文字与徽章间距、徽章右缩进都计算在内。
+    //   reserveBadge：true = 按两位数徽章预留宽度（成员数、待审批数等随时可能到达或变化的计数项），
+    //                 false = 只在当前确有徽章时按当前计数计算。
+    // @return 所需宽度（像素）；取不到屏幕 DC 时返回 0。只量不改，无副作用。
+    int MeasureRequiredWidth(bool reserveBadge) const;
+
     // DuiControl 覆写：绘制高亮底 + 图标 + 文字 + 计数徽章。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 

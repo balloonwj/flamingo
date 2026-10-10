@@ -60,6 +60,46 @@ OrgNode BuildOrgTree(const std::vector<OrgDeptRaw>& depts,
 // 出现这个字符串；这里保留它只是为了兼容尚未迁移的存量数据。
 extern const wchar_t* const kSyntheticRootId;
 
+// ---- 部门负责人选择器（新增部门弹窗）----
+
+// 负责人候选人：本企业的一名员工。
+struct LeaderCandidate
+{
+    CString m_userId;    // 员工 ID（组织树节点 ID，即服务端 userid 的十进制文字）
+    CString m_name;      // 姓名，作为下拉项的主文字
+    CString m_subText;   // 副文字「部门 · 职务」（没有职务时只有部门），用来区分同名的人
+};
+
+// 下拉框第 0 项的文字：不设置负责人。
+extern const wchar_t* const kLeaderNoneText;
+
+// ResolveLeaderChoice 的返回值：所选内容无法确定为某一名员工（手输的姓名对不上，或对上了
+// 多个同名的人），调用方应拦下提交并提示「请从列表中选择负责人」。
+const long long kLeaderInvalid = -1;
+
+/**
+ *  从组织树收集负责人候选人：深度优先遍历，按员工 ID 去重（同一员工挂在多个部门时只取
+ *  第一次出现处的部门与职务）。
+ *  @param root 企业组织树根节点（借用，可为 nullptr —— 组织树尚未加载时返回空表）。
+ *  @return 候选人列表，顺序与组织树一致。
+ */
+std::vector<LeaderCandidate> CollectLeaderCandidates(const OrgNode* root);
+
+/**
+ *  把负责人下拉框的状态换算成员工 ID。下拉框第 0 项是 kLeaderNoneText，第 i + 1 项对应
+ *  candidates[i]；下拉框可输入，文字可能与选中项不一致，因此以文字为准：
+ *    · 文字去掉首尾空白后为空，或选中第 0 项且文字就是 kLeaderNoneText：返回 0（不设置）；
+ *    · 选中项的姓名与文字相同：返回该员工 ID；
+ *    · 否则按文字在候选人里找姓名完全相同的人，恰好一个时返回其 ID；
+ *    · 其余情况返回 kLeaderInvalid。
+ *  @param candidates CollectLeaderCandidates 的结果。
+ *  @param comboSel   下拉框当前选中项序号（-1 表示没有选中项）。
+ *  @param comboText  下拉框当前显示的文字。
+ *  @return 员工 ID；0 表示不设置；kLeaderInvalid 表示无法确定。
+ */
+long long ResolveLeaderChoice(const std::vector<LeaderCandidate>& candidates,
+                              int comboSel, const CString& comboText);
+
 } // namespace orgtree
 
 } // namespace flamingoadmin

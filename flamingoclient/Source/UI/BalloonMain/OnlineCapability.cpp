@@ -14,6 +14,7 @@
 #include "OnlineCapability.h"
 #include "MainPanelStatusMenu.h"    // NormalizePresenceForMenu（未知 presence 的兜底口径）
 #include "../../net/Protocol.h"        // presence_type（在线状态取值的单一事实来源）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -66,22 +67,22 @@ const wchar_t* GetBlockedActionTip(int action)
     switch (action)
     {
     case kActionSendMessage:
-        return L"当前为离线状态，消息未发送。恢复在线后可以继续聊天。";
+        return TR(L"当前为离线状态，消息未发送。恢复在线后可以继续聊天。");
     case kActionTransferFile:
-        return L"当前为离线状态，无法传输文件和图片。请先恢复在线。";
+        return TR(L"当前为离线状态，无法传输文件和图片。请先恢复在线。");
     case kActionShakeWindow:
-        return L"当前为离线状态，窗口抖动未发送。请先恢复在线。";
+        return TR(L"当前为离线状态，窗口抖动未发送。请先恢复在线。");
     case kActionRealtimeCall:
-        return L"当前为离线状态，无法发起通话或远程协助。请先恢复在线。";
+        return TR(L"当前为离线状态，无法发起通话或远程协助。请先恢复在线。");
     case kActionAccountOp:
-        return L"当前为离线状态，该操作需要连接服务器。请先恢复在线。";
+        return TR(L"当前为离线状态，该操作需要连接服务器。请先恢复在线。");
     case kActionChangePresence:
         // 这一条不能照抄上面几条的"当前为离线状态"：切换在线状态被拦住时，用户既可能
         // 主动离线、也可能正在断线重连，后者说成"离线"会让他以为要自己动手恢复。
-        return L"当前处于离线状态或正在连接服务器，无法切换在线状态。连接恢复后可以再切换。";
+        return TR(L"当前处于离线状态或正在连接服务器，无法切换在线状态。连接恢复后可以再切换。");
     default:
         // 越界类别的通用兜底文案。正常流程不会走到这里。
-        return L"当前为离线状态，该操作需要连接服务器。请先恢复在线。";
+        return TR(L"当前为离线状态，该操作需要连接服务器。请先恢复在线。");
     }
 }
 
@@ -93,9 +94,9 @@ const wchar_t* GetConnectionBannerText(int state)
         // 明确告诉用户离线期间的消息不会丢（服务端存为离线消息、上线后补推），
         // 否则用户容易以为这段时间别人发来的消息没了。提示带只作告知、不可点击，
         // 恢复在线统一走托盘 / 主面板的状态菜单那个唯一入口。
-        return L"当前为离线状态，无法收发消息。离线期间的消息会在恢复在线后收到。";
+        return TR(L"当前为离线状态，无法收发消息。离线期间的消息会在恢复在线后收到。");
     case kConnUiConnecting:
-        return L"正在连接服务器，请稍候……";
+        return TR(L"正在连接服务器，请稍候……");
     case kConnUiOnline:
     default:
         // 在线态不显示提示条。调用方须判空。
@@ -150,7 +151,7 @@ PresenceVisual GetConnectionPresenceVisual(int presence, int connUiState)
         // 发不出去，照抄 presence 会骗人；说成"离线"又不对 —— 用户并没有主动离线，
         // 而且马上就会自己连回来。圆点色沿用"离线"的灰，与灰色托盘图标观感一致。
         PresenceVisual v;
-        v.text     = L"正在连接";
+        v.text     = TR(L"正在连接");
         v.dotColor = GetPresenceVisual(presence_offline).dotColor;
         return v;
     }
@@ -186,12 +187,12 @@ const wchar_t* GetConnectionMenuLabel(int presence, int connUiState)
         // 掉线重连中，或刚从离线切回在线正在登录。这里写成完整字面量而不是运行时拼接，
         // 是为了让返回值仍是进程级生命周期的静态常量串 —— 这是 TrayMenuEntry::label
         // 对调用方的承诺（同 GetPresenceMenuLabel 的做法）。
-        return L"正在连接（当前）";
+        return TR(L"正在连接（当前）");
     }
 
     // kConnUiOffline，以及一切越界取值：一律"离线（当前）"，兜底方向与
     // GetConnectionPresenceVisual / GetConnectionBadgePresence 保持一致。
-    return L"离线（当前）";
+    return TR(L"离线（当前）");
 }
 
 bool ShouldGrayAvatar(int connUiState)
@@ -200,14 +201,58 @@ bool ShouldGrayAvatar(int connUiState)
     return connUiState != kConnUiOnline;
 }
 
-bool ShouldAutoReconnect(bool userWentOffline, bool enableReconnect)
+bool ShouldGrayUserAvatar(bool isSelf, int presence, int selfConnUiState)
 {
+    // 自己的头像只看本端连接态，与主面板顶部头像、托盘图标同一个判断。
+    if (isSelf)
+    {
+        return ShouldGrayAvatar(selfConnUiState);
+    }
+
+    // 别人：状态未知时画彩色，不把可能在线的人画成离线。
+    if (presence < 0)
+    {
+        return false;
+    }
+
+    // 在线、离开、忙碌三种都是在线，画彩色；离线与越界值（含已作废的 4）置灰。
+    const bool onlineLike = (presence == presence_online
+                             || presence == presence_away
+                             || presence == presence_busy);
+    return !onlineLike;
+}
+
+bool ShouldAutoReconnect(bool alreadyLogin, bool userWentOffline, bool enableReconnect)
+{
+    if (!alreadyLogin)
+    {
+        // 停在登录窗：没有要连回去的会话，登录由用户在登录窗上发起。
+        return false;
+    }
     if (userWentOffline)
     {
         // 用户主动离线的语义就是"别再连了"，此时无论配置如何都不重连。
         return false;
     }
     return enableReconnect;
+}
+
+int ResolveSessionPresence(bool alreadyLogin, bool userWentOffline, bool hasPanel,
+                           int panelPresence, int recordPresence)
+{
+    if (!alreadyLogin)
+    {
+        return presence_offline;
+    }
+    if (hasPanel)
+    {
+        return panelPresence;
+    }
+    if (userWentOffline)
+    {
+        return presence_offline;
+    }
+    return recordPresence;
 }
 
 } // namespace balloonmain

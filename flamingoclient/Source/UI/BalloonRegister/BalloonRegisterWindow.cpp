@@ -19,33 +19,27 @@
 #include "../../App/CustomMsgDef.h"          // WM_CLOSE_MAINDLG
 #include "../../Common/Log/IULog.h"                 // LOG_INFO / LOG_WARNING / LOG_ERROR
 #include "../../Common/Util/EncodeUtil.h"            // Unicode <-> UTF-8 互转
+#include "../../App/BrandText.h"             // g_strAppTitle / g_strAppSlogan（产品名称与标语）
 #include "RegisterLayout.h"           // BuildRegisterBody / RegCtrlId / SetRegisterText
 #include "RegisterModel.h"            // RegisterModel / RegisterStep
 #include "../../net/IUSocket.h"          // CIUSocket::Register
 #include "../../net/Protocol.h"          // enum error_code
 #include "../../net/RegisterProtocolClient.h"   // 注册报文编解码
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 公司名称组合框
+#include "../../Common/I18n/I18n.h"      // TR / TRF / TR_NOOP：界面文字的多语言查找
+#include "../BalloonAuth/WindowFlipTransition.h"   // 登录窗与注册窗之间的翻转过渡
 
 using namespace balloonwjui;
 using namespace balloonregister;
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
-// 注册窗固定客户区尺寸（逻辑像素）。宽度沿用设计稿 AuthShell 的 380；
-// 高度自 520 增至 610 —— 填写页由原来的 4 个输入框变成 5 个（手机号并入本页、
-// 新增公司名称，同时去掉了自定义账号），每个输入框占 40 + 10(gap) = 50 像素。
-// 具体的高度核算见 RegisterLayout.cpp 里 kRegBodyStep1Xml 上方的注释，
-// 改动其一必须连带核对另一处。
-static const int kRegWindowWidth  = 380;
-static const int kRegWindowHeight = 610;
+// 注册窗的窗口尺寸与标题栏高度（kRegWindowWidth / kRegWindowHeight / kRegWindowTitleBarH）
+// 定义在 RegisterLayout.h，与布局单测共用同一份。
 
 // 注册请求的收发超时（秒）。与登录一致（CBalloonLoginDlg 走的也是 3 秒）。
 static const int kRegRequestTimeoutSec = 3;
-
-// 标题栏高度（逻辑像素）。标题栏透明、只承载 min/close 按钮；其同高的
-// 橙色区由窗体 9-grid 背景图透出，与下方 banner 渐变衔接，使 banner
-// 视觉上直抵窗口顶端。须与 RegisterLayout.cpp 的 kRegTitleBarH 保持一致。
-static const int kRegWindowTitleBarH = 32;
 
 // 完整橙色 banner 的高度（design AuthShell banner = 160）。
 static const int kRegBannerHeight = 160;
@@ -166,6 +160,8 @@ CBalloonRegisterWindow::CBalloonRegisterWindow(CFlamingoClient* pFMGClient)
     , m_hBgBitmap(NULL)
     , m_modalRunning(false)
     , m_modalResult(IDCANCEL)
+    , m_quitReceived(false)
+    , m_returnLogin(NULL)
     , m_submitting(false)
     , m_registered(false)
 {
@@ -175,6 +171,14 @@ CBalloonRegisterWindow::CBalloonRegisterWindow(CFlamingoClient* pFMGClient)
 
 CBalloonRegisterWindow::~CBalloonRegisterWindow()
 {
+    // 调用方没有调用 ReturnToLogin（例如提前 return）时，登录窗还隐藏且禁用着：直接恢复它，
+    // 不留下两个窗口都看不见的状态。
+    if (m_returnLogin != NULL)
+    {
+        LOG_WARNING(_T("register window: destroyed without ReturnToLogin, restoring the login window directly."));
+        RestoreLoginDirectly();
+    }
+
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。窗体背景图
     // 由本类持有，需在此释放。
     if (m_hBgBitmap != NULL)
@@ -188,20 +192,25 @@ CBalloonRegisterWindow::~CBalloonRegisterWindow()
 // 创建 / 显示
 // =======================================================================
 
-bool CBalloonRegisterWindow::BuildWindow(HWND hWndParent)
+bool CBalloonRegisterWindow::BuildWindow(HWND hWndParent, bool show)
 {
     // 创建无边框 DUI 顶层窗口。WS_THICKFRAME 须保留 —— DuiFrameWindow 靠
     // WM_NCCALCSIZE 抠掉系统 chrome，但需要它维持 Aero snap / 最大化动画。
-    if (Create(hWndParent, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(hWndParent, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
-        LOG_ERROR(_T("注册窗口 Create 失败。"));
+        LOG_ERROR(_T("register window: Create failed."));
         return false;
     }
 
     ConfigureFrame();
     RebuildStepUi(m_model.CurrentStep());
     ResizeClient(kRegWindowWidth, kRegWindowHeight);
+    if (!show)
+    {
+        // 由调用方摆好位置再切换过来（翻转过渡要先截取隐藏着的本窗口）
+        return true;
+    }
     CenterWindow();
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -213,48 +222,123 @@ void CBalloonRegisterWindow::CreateAndShow(HWND hMainDlg)
 {
     // 调试入口（命令行 --register）：无父窗口、非模态。
     m_hMainDlg = hMainDlg;
-    if (!BuildWindow(NULL))
+    if (!BuildWindow(NULL, true))
         return;
 
-    LOG_INFO(_T("注册窗口已创建并显示 (step=%d)."), m_model.CurrentStep());
+    LOG_INFO(_T("register window: created and shown (step=%d)."), m_model.CurrentStep());
 }
 
-INT_PTR CBalloonRegisterWindow::DoModal(HWND hWndParent)
+INT_PTR CBalloonRegisterWindow::RunModalFromLogin(balloonwjui::DuiFrameWindow& login)
 {
-    // 接入登录流程：模态于父窗口（登录窗），跑独立消息循环，直至
-    // EndModal 把 m_modalRunning 置 false。
+    // 接入登录流程：模态于登录窗，跑独立消息循环，直至 EndModal 把 m_modalRunning 置 false。
     m_modalResult  = IDCANCEL;
     m_modalRunning = true;
+    m_quitReceived = false;
 
-    if (!BuildWindow(hWndParent))
+    if (!BuildWindow(login.m_hWnd, false))
     {
         m_modalRunning = false;
         return IDCANCEL;
     }
+    // 从登录窗翻转过来时去掉最小化按钮：登录窗此时隐藏着，注册窗没有任务栏按钮（它归登录窗所有），
+    // 最小化之后屏幕上只剩桌面左下角一小条标题栏，看上去像程序消失了。只留关闭按钮，关闭即翻回登录窗。
+    SetButtons(false, false, true);
 
-    if (::IsWindow(hWndParent))
-        ::EnableWindow(hWndParent, FALSE);
+    // 摆在登录窗的位置上：上边缘对齐、水平居中；注册窗比登录窗高，超出工作区时挪回工作区之内
+    RECT rcLogin;
+    login.GetWindowRect(&rcLogin);
+    RECT rcSelf;
+    GetWindowRect(&rcSelf);
+    MONITORINFO mi;
+    ::ZeroMemory(&mi, sizeof(mi));
+    mi.cbSize = sizeof(mi);
+    RECT work = rcLogin;
+    if (::GetMonitorInfo(::MonitorFromWindow(login.m_hWnd, MONITOR_DEFAULTTONEAREST), &mi))
+    {
+        work = mi.rcWork;
+    }
+    const RECT target = balloonauth::AlignTopCenter(rcLogin, rcSelf.right - rcSelf.left,
+                                                    rcSelf.bottom - rcSelf.top, work);
+    SetWindowPos(NULL, target.left, target.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
+    // 模态期间登录窗禁用：即使用户从托盘把它唤出来，也不能在注册窗开着时操作它
+    m_returnLogin = &login;
+    login.EnableWindow(FALSE);
+    const bool flipped = balloonauth::SwitchDuiWindows(login, *this, balloonauth::kFlipForward,
+                                                       balloonauth::IsFlipAnimationEnabled(), NULL);
+    LOG_INFO(_T("register window: opened from the login window (flip=%d, pos=%ld,%ld)."),
+             (int)flipped, target.left, target.top);
+
+    // 取到 WM_QUIT 时 GetMessage 返回 0，它会被本循环消费掉；转投给外层循环，否则进程退不出去
+    // （与 CBalloonLoginDlg::DoModal 的处理相同）。
     MSG msg;
-    while (::GetMessage(&msg, NULL, 0, 0))
+    BOOL bGot = TRUE;
+    while ((bGot = ::GetMessage(&msg, NULL, 0, 0)) > 0)
     {
         ::TranslateMessage(&msg);
         ::DispatchMessage(&msg);
         if (!m_modalRunning)
             break;
     }
-
-    if (::IsWindow(hWndParent))
+    if (bGot == 0)
     {
-        ::EnableWindow(hWndParent, TRUE);
-        ::SetForegroundWindow(hWndParent);
+        LOG_INFO("register window modal loop got WM_QUIT, re-post it for the outer loop.");
+        ::PostQuitMessage((int)msg.wParam);
+        m_quitReceived = true;
+        m_modalResult  = IDCANCEL;
+    }
+    m_modalRunning = false;
+    return m_modalResult;
+}
+
+void CBalloonRegisterWindow::ReturnToLogin()
+{
+    if (m_returnLogin == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiFrameWindow& login = *m_returnLogin;
+    m_returnLogin = NULL;
+    if (!login.IsWindow())
+    {
+        // 登录窗已经不在了（进程正在退出）：只销毁本窗口
+        if (IsWindow())
+            DestroyWindow();
+        return;
     }
 
-    // 模态循环结束后统一销毁窗口。
+    // 先恢复登录窗可用，再切换：切换的最后一步要激活登录窗
+    login.EnableWindow(TRUE);
+    bool flipped = false;
+    if (IsWindow())
+    {
+        const bool animate = !m_quitReceived && balloonauth::IsFlipAnimationEnabled();
+        flipped = balloonauth::SwitchDuiWindows(*this, login, balloonauth::kFlipBackward, animate, NULL);
+    }
+    else
+    {
+        login.ShowWindow(SW_SHOW);
+        ::SetForegroundWindow(login.m_hWnd);
+    }
+    LOG_INFO(_T("register window: returned to the login window (flip=%d)."), (int)flipped);
+
+    // 登录窗已显示并激活，再销毁本窗口
     if (IsWindow())
         DestroyWindow();
+}
 
-    return m_modalResult;
+void CBalloonRegisterWindow::RestoreLoginDirectly()
+{
+    balloonwjui::DuiFrameWindow* login = m_returnLogin;
+    m_returnLogin = NULL;
+    if (login != NULL && login->IsWindow())
+    {
+        login->EnableWindow(TRUE);
+        login->ShowWindow(SW_SHOW);
+        ::SetForegroundWindow(login->m_hWnd);
+    }
+    if (IsWindow())
+        DestroyWindow();
 }
 
 void CBalloonRegisterWindow::EndModal(INT_PTR result)
@@ -271,6 +355,10 @@ void CBalloonRegisterWindow::ConfigureFrame()
 {
     // 标题栏：透明、无标题文字、白色 min/close glyph、无最大化按钮。
     SetTitle(_T(""));
+    // SetTitle 会把系统窗口文字一并清空（见 DuiFrameWindow::SetTitle）。透明标题栏不显示文字，
+    // 但任务栏与 Alt+Tab 显示的是系统窗口文字，这里单独设回产品名称；标题栏控件另存一份文字，
+    // 不受影响。
+    ::SetWindowText(m_hWnd, g_strAppTitle.c_str());
     SetTitleBarHeight(kRegWindowTitleBarH);
     SetTitleBarTransparent(true);
     SetCaptionGlyphColor(RGB(255, 255, 255));
@@ -304,16 +392,23 @@ void CBalloonRegisterWindow::RebuildStepUi(int step)
     if (!root)
     {
         // 内嵌 XML 为编译期常量、形态固定，正常情况下不会解析失败。
-        LOG_ERROR(_T("BuildRegisterBody 返回空 —— 注册窗客户区未能构建 (step=%d)."),
+        LOG_ERROR(_T("register window: BuildRegisterBody returned null, the client area could not be built (step=%d)."),
                   step);
         return;
+    }
+
+    // banner 的产品名称、标语与「<产品名称> 服务协议」链接取 flamingo.ini 的配置。
+    // 须在交给窗口排版之前调用：链接宽度按文字实际宽度重设，排版时才生效。
+    if (!ApplyRegisterBrand(root.get(), g_strAppTitle.c_str(), g_strAppSlogan.c_str()))
+    {
+        LOG_ERROR("register window: brand banner not found in step %d layout.", step);
     }
     SetClientContent(std::move(root));
 
     DuiControl* content = GetClientContent();
     if (content == NULL)
     {
-        LOG_ERROR(_T("SetClientContent 之后 GetClientContent 仍为空。"));
+        LOG_ERROR(_T("register window: GetClientContent is still null after SetClientContent."));
         return;
     }
 
@@ -323,39 +418,45 @@ void CBalloonRegisterWindow::RebuildStepUi(int step)
     case kRegStepFillInfo:
         SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditNick)),
-            _T("昵称"), false, m_model.Nickname());
+            TR(L"昵称"), false, m_model.Nickname());
         SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditPwd)),
-            _T("设置密码"), true, m_model.Password());
+            TR(L"设置密码"), true, m_model.Password());
         SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditPwd2)),
-            _T("确认密码"), true, m_model.ConfirmPassword());
+            TR(L"确认密码"), true, m_model.ConfirmPassword());
         SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditPhone)),
-            _T("手机号"), false, m_model.Phone());
-        // 占位文字里直接点明"须与公司全称一致" —— 服务端是按这个名字做精确
-        // 匹配的，不提醒的话用户很容易填简称然后收到一句"公司不存在"。
-        SetupRegisterEdit(dynamic_cast<DuiEdit*>(
-            content->FindCtrlById(kRegIdEditCompany)),
-            _T("公司名称（须与公司全称一致）"), false, m_model.Company());
+            TR(L"手机号"), false, m_model.Phone());
+        // 公司名称是可编辑组合框（下拉里是默认公司，占位文字由布局层设好），这里只回填
+        // 模型里的值：首次打开是默认公司，步骤来回切换时是用户改过的内容。
+        {
+            DuiComboBox* company = dynamic_cast<DuiComboBox*>(content->FindCtrlById(kRegIdComboCompany));
+            if (company != NULL)
+            {
+                company->SetText(m_model.Company());
+            }
+            else
+            {
+                LOG_ERROR("register window: company combo (id=%d) not found.", (int)kRegIdComboCompany);
+            }
+        }
         break;
 
     case kRegStepDone:
         // 完成页无输入框，把服务端返回的账号与公司名回填到两行结果文字上。
         // 文案在 XML 里留空，值只可能来自服务端应答。
         {
-            CString strAccount;
-            strAccount.Format(_T("你的账号是 %s"), (LPCTSTR)m_resultAccount);
+            CString strAccount(TRF(L"你的账号是 {0}", (LPCTSTR)m_resultAccount).c_str());
             if (!SetRegisterText(content, kRegIdTextAccount, strAccount))
             {
-                LOG_ERROR(_T("注册完成页未找到账号文字控件 (id=%d)。"), (int)kRegIdTextAccount);
+                LOG_ERROR(_T("register window: account text control not found on the done page (id=%d)."), (int)kRegIdTextAccount);
             }
 
-            CString strCompany;
-            strCompany.Format(_T("已加入 %s"), (LPCTSTR)m_resultCompany);
+            CString strCompany(TRF(L"已加入 {0}", (LPCTSTR)m_resultCompany).c_str());
             if (!SetRegisterText(content, kRegIdTextCompany, strCompany))
             {
-                LOG_ERROR(_T("注册完成页未找到公司文字控件 (id=%d)。"), (int)kRegIdTextCompany);
+                LOG_ERROR(_T("register window: company text control not found on the done page (id=%d)."), (int)kRegIdTextCompany);
             }
         }
         break;
@@ -364,7 +465,7 @@ void CBalloonRegisterWindow::RebuildStepUi(int step)
         break;
     }
 
-    LOG_INFO(_T("注册窗客户区已重建 (step=%d)."), step);
+    LOG_INFO(_T("register window: client area rebuilt (step=%d)."), step);
 }
 
 void CBalloonRegisterWindow::PostRebuildStepUi(int step)
@@ -426,8 +527,9 @@ void CBalloonRegisterWindow::CommitFormToModel()
     {
         m_model.SetPhone(phone->GetText());
     }
-    DuiEdit* company = dynamic_cast<DuiEdit*>(
-        content->FindCtrlById(kRegIdEditCompany));
+    // 公司名称读组合框的当前文字：选了默认公司是它，手动输入的是输入内容
+    DuiComboBox* company = dynamic_cast<DuiComboBox*>(
+        content->FindCtrlById(kRegIdComboCompany));
     if (company != NULL)
     {
         m_model.SetCompany(company->GetText());
@@ -454,7 +556,7 @@ void CBalloonRegisterWindow::DoSubmitRegister()
     // 两个账号，也可能第二次撞上"账号已存在"把用户搞糊涂。
     if (m_submitting)
     {
-        LOG_WARNING(_T("注册请求正在进行中，忽略重复的提交点击。"));
+        LOG_WARNING(_T("register window: a request is in progress, ignoring the repeated submit."));
         return;
     }
 
@@ -464,9 +566,9 @@ void CBalloonRegisterWindow::DoSubmitRegister()
     if (vr != kRegValidOk)
     {
         // 客户端格式校验失败 —— 打日志并弹框提示，停留在填写页。
-        LOG_WARNING(_T("注册表单校验失败 (result=%d)."), vr);
+        LOG_WARNING(_T("register window: form validation failed (result=%d)."), vr);
         ::MessageBox(m_hWnd, RegisterModel::ValidateMessage(vr),
-                     _T("注册"), MB_OK | MB_ICONINFORMATION);
+                     TR(L"注册"), MB_OK | MB_ICONINFORMATION);
         return;
     }
 
@@ -488,9 +590,9 @@ void CBalloonRegisterWindow::DoSubmitRegister()
                                               param.get(), 0, &threadId);
     if (hThread == NULL)
     {
-        LOG_ERROR(_T("注册：创建工作线程失败。"));
-        ::MessageBox(m_hWnd, _T("注册失败，请稍后重试。"),
-                     _T("注册"), MB_OK | MB_ICONWARNING);
+        LOG_ERROR(_T("register window: failed to create the worker thread."));
+        ::MessageBox(m_hWnd, TR(L"注册失败，请稍后重试。"),
+                     TR(L"注册"), MB_OK | MB_ICONWARNING);
         return;
     }
 
@@ -500,7 +602,7 @@ void CBalloonRegisterWindow::DoSubmitRegister()
 
     m_submitting = true;
     // 账号此刻还不存在（服务端建号时生成），用手机号与公司名定位这次请求。
-    LOG_INFO(_T("注册：已提交请求 (phone=%s, company=%s)."),
+    LOG_INFO(_T("register window: request submitted (phone=%s, company=%s)."),
              (LPCTSTR)m_model.Phone(), (LPCTSTR)company);
 }
 
@@ -586,12 +688,12 @@ void CBalloonRegisterWindow::OnRegisterSucceeded(const RegisterResult& result)
     // （见本文件 kRegStepFillInfo 的判断），GoNextStep 也只改步骤号，故进入
     // 完成页后 m_model.Password() 仍是用户填的密码，不会被空串覆盖。
     m_resultPassword = m_model.Password();
-    // 记下"已注册成功"，关窗时据此让 DoModal 返回 IDOK，登录窗才知道要把
+    // 记下"已注册成功"，关窗时据此让 RunModalFromLogin 返回 IDOK，登录窗才知道要把
     // 账号与密码回填进登录框。用户在完成页直接点叉关窗也算数——账号已经发下来了。
     m_registered = true;
 
     // 日志只记账号与公司名，密码是敏感信息，任何情况下都不进日志。
-    LOG_INFO(_T("注册成功 (userid=%I64d, account=%s, company=%s)."),
+    LOG_INFO(_T("register window: registration succeeded (userid=%I64d, account=%s, company=%s)."),
              result.m_userid, (LPCTSTR)m_resultAccount, (LPCTSTR)m_resultCompany);
 
     m_model.GoNextStep();
@@ -604,44 +706,20 @@ void CBalloonRegisterWindow::OnRegisterFailed(const RegisterResult& result)
 {
     if (!result.m_transportOk)
     {
-        LOG_ERROR(_T("注册失败：未能与服务器完成一次完整的请求应答。"));
-        ::MessageBox(m_hWnd, _T("网络异常，注册失败，请检查网络后重试。"),
-                     _T("注册"), MB_OK | MB_ICONWARNING);
+        LOG_ERROR(_T("register window: registration failed, no complete request/response with the server."));
+        ::MessageBox(m_hWnd, TR(L"网络异常，注册失败，请检查网络后重试。"),
+                     TR(L"注册"), MB_OK | MB_ICONWARNING);
         return;
     }
 
-    LOG_WARNING(_T("注册被服务端拒绝 (code=%d)."), result.m_code);
-    ::MessageBox(m_hWnd, RegisterErrorMessage(result.m_code),
-                 _T("注册"), MB_OK | MB_ICONINFORMATION);
-}
-
-LPCTSTR CBalloonRegisterWindow::RegisterErrorMessage(int code)
-{
-    // 服务端应答里的 msg 是英文诊断串，只进日志；给用户看的中文文案由客户端
-    // 按错误码本地化。取值见 net/Protocol.h 的 enum error_code。
-    switch (code)
-    {
-    case error_code_enterprise_not_exist:
-        return _T("找不到这家公司，请核对公司全称是否填写正确；\n")
-               _T("若确认无误，请联系公司管理员确认企业是否已开通。");
-    case error_code_enterprise_disabled:
-        return _T("这家公司当前不可加入（尚未开通或已停用），请联系公司管理员。");
-    case error_code_enterprise_no_root_dept:
-        return _T("这家公司的组织架构尚未初始化，暂时无法加入，请联系公司管理员。");
-    case error_code_already_registered:
-        return _T("该账号或手机号已被注册，请更换后重试。");
-    case error_code_register_fail:
-        return _T("自定义账号需为 6-12 位，请修改后重试。");
-    case error_code_bad_request:
-        return _T("提交的信息不完整，请检查各项内容后重试。");
-    default:
-        return _T("注册失败，请稍后重试。");
-    }
+    LOG_WARNING(_T("register window: registration refused by the server (code=%d)."), result.m_code);
+    ::MessageBox(m_hWnd, RegisterModel::ServerErrorMessage(result.m_code),
+                 TR(L"注册"), MB_OK | MB_ICONINFORMATION);
 }
 
 void CBalloonRegisterWindow::DoCloseWindow()
 {
-    LOG_INFO(_T("注册窗口请求关闭。"));
+    LOG_INFO(_T("register window: close requested."));
     if (IsWindow())
     {
         // 走标准关闭路径，统一由 OnCloseMsg 收尾。
@@ -656,7 +734,7 @@ void CBalloonRegisterWindow::DoCloseWindow()
 LRESULT CBalloonRegisterWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                            LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 模态接入登录流程时：仅结束模态循环，窗口由 DoModal 统一销毁，
+    // 模态接入登录流程时：仅结束模态循环，窗口由 ReturnToLogin 翻回登录窗之后统一销毁，
     // 控制权回到登录窗。注册成功过就返回 IDOK，登录窗据此回填账号。
     if (m_modalRunning)
     {
@@ -705,9 +783,9 @@ LRESULT CBalloonRegisterWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             // 对话框里同名两项保持一致（见 BalloonMain/BalloonAboutDlg.cpp）。
             // 日后拿到正式地址后，可直接给这两个 DuiLabel 设 URL 并打开
             // SetAutoNavigate(true)，由控件自己 ShellExecute，无需改这里。
-            LOG_INFO(_T("注册页协议链接被点击 (id=%d)，页面尚未接入。"), (int)pNotify->ctrlId);
-            ::MessageBox(m_hWnd, _T("功能开发中，敬请期待。"),
-                         _T("注册"), MB_OK | MB_ICONINFORMATION);
+            LOG_INFO(_T("register window: agreement link clicked (id=%d), page not available yet."), (int)pNotify->ctrlId);
+            ::MessageBox(m_hWnd, TR(L"功能开发中，敬请期待。"),
+                         TR(L"注册"), MB_OK | MB_ICONINFORMATION);
             return 0;
         case kRegIdBtnLogin:
             // "立即登录" —— 注册完成，关闭注册窗。

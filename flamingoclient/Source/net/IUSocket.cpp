@@ -10,25 +10,29 @@
 #include "FrameCodec.h"             // v2 帧编解码（内含 net/Protocol.h）
 #include "SocketRecvDrain.h"        // 主连接收包循环 net::DrainSocketRecv
 #include "FramePayload.h"           // 包体的压缩与加密管线
-#include "HandshakeRunner.h"         // 三帧握手的共用流程（四条链路复用同一份）
+#include "HandshakeRunner.h"         // 三帧握手的共用流程（连到三个服务的各条链路复用同一份）
 #include "Sha256.h"                 // 口令 SHA-256 哈希
 #include "LoginProtocolClient.h"    // v2 登录报文编解码
 #include "RegisterProtocolClient.h" // v2 注册报文编解码
 #include "MessageProtocolClient.h"  // v2 单聊消息报文编解码
+#include "CardProtocolClient.h"     // v2 群互动卡片（接龙）报文编解码
 #include "ContactsProtocolClient.h" // v2 通讯录报文编解码
 #include "ConversationsProtocolClient.h" // v2 会话列表报文编解码
 #include "GroupProtocolClient.h"         // v2 群组报文编解码（建群）
-#include "RemoteDesktopProtocolClient.h" // v2 远程桌面信令编解码
-#include "CallProtocolClient.h"          // v2 音视频通话信令编解码
+#include "GroupQaProtocolClient.h"       // 群问答报文编解码（1336~1339）
+#include "BotProtocolClient.h"           // 机器人报文编解码（2801、2810、2811、2820）与交给 FlamingoBot.dll 的帧范围
+#include "GroupLinkProtocolClient.h"     // 加群链接报文编解码（1340~1344）
+#include "MediaSignalPolicy.h"           // FlamingoMedia.dll 可经主连接收发的信令白名单
 #include "FolderProtocolClient.h"        // v2 单聊文件夹传输信令编解码
 #include "GroupFileProtocolClient.h"     // v2 群文件库报文编解码（列表/变更推送）
+#include "GlobalSearchProtocolClient.h"  // v2 全局搜索报文编解码（cmd_global_search）
 #include "AccountProtocolClient.h"       // v2 账号报文编解码（修改密码）
-#include "ProfileProtocolClient.h"       // v2 账号资料报文编解码（更新个性签名）
+#include "ProfileProtocolClient.h"       // v2 账号资料报文编解码（改签名、改资料）
 #include "FavoriteProtocolClient.h"      // v2「我的收藏」报文编解码（cmd_set_favorite）
-#include "StarredProtocolClient.h"       // v2「特别关注」报文编解码（cmd_set_starred）
 #include "FriendProtocolClient.h"        // v2 好友管理报文编解码（cmd_set_friend_remark 设置备注名）
 #include "ContactTagProtocolClient.h"    // v2「联系人标签」报文编解码（cmd_set_contact_tags）
-#include "AnnounceProtocolClient.h"      // v2 平台公告报文编解码（消息盒子：2101/2102/2103）
+#include "AnnounceProtocolClient.h"      // v2 平台公告报文编解码（公告中心：2101/2102/2103）
+#include "MemoProtocolClient.h"          // 备忘与提醒报文编解码（2401~2404）
 #include "FileProtocolClient.h"          // v2 文件/图片信令报文编解码（申请上传/下载）
 #include "ImageTransfer.h"               // 聊天图片传输管理器（发图工作线程）
 #include "FileTransfer.h"                // 聊天文件传输管理器（收发文件工作线程）
@@ -41,6 +45,14 @@
 #pragma comment(lib, "ole32.lib")   // CoCreateGuid
 
 #include "../ClientVersion.h"
+#include "../Feature/FileShare/FileShareHost.h"   // 2200 段帧转交 FlamingoFileShare.dll
+#include "../Feature/FileShare/ShareChannel.h"    // 代 DLL 发送共享信令的放行规则
+#include "../Feature/P2P/P2PHost.h"              // 2300 段帧转交 FlamingoP2P.dll
+#include "../Feature/P2P/P2PChannel.h"           // 代 DLL 发送 P2P 信令的放行规则
+#include "../Feature/SecretChat/SecretChatHost.h" // 2600 段帧转交 FlamingoSecretChat.dll
+#include "../Feature/SecretChat/SecretChatGate.h" // 代 DLL 发送密聊信令的放行规则
+#include "../Feature/ThreadGroup/ThreadGroupHost.h" // 2700 段帧转交 FlamingoThreadGroup.dll
+#include "../Feature/ThreadGroup/ThreadGroupGate.h" // 代 DLL 发送帖子群信令的放行规则
 #include "UpdateProtocolClient.h"
 #include "../Feature/Update/UpdateManager.h"
 
@@ -1535,6 +1547,68 @@ void CIUSocket::EnqueueFrame(uint16_t cmd, uint32_t seq, const std::string& body
 
 void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& body)
 {
+    //音视频类信令（白名单见 net::IsMediaSignalCmd，目前为一对一通话 1701~1709、远程桌面 1710~1716 与屏幕共享 1720~1731）在这里不解析，
+    //原样经代理窗转交主面板，再由主面板交给 FlamingoMedia.dll 的模块处理。堆对象由收件方处理后 delete
+    if (net::IsMediaSignalCmd(cmd))
+    {
+        HWND hUI = GetUIProxyWnd();
+        if (!::IsWindow(hUI))
+        {
+            LOG_WARNING("Drop media signal: UI proxy window not ready, cmd=%u, seq=%u.", static_cast<unsigned>(cmd), seq);
+            return;
+        }
+        net::MediaSignalPacket* pPacket = new net::MediaSignalPacket();
+        pPacket->m_cmd = cmd;
+        pPacket->m_body = body;
+        LOG_INFO("Recv media signal, cmd=%u, seq=%u, len=%u, forward to media module.", static_cast<unsigned>(cmd), seq,
+                 static_cast<unsigned>(body.size()));
+        if (!::PostMessage(hUI, FMG_MSG_MEDIA_SIGNAL, 0, (LPARAM)pPacket))
+        {
+            LOG_ERROR("Post media signal failed, cmd=%u, err=%lu.", static_cast<unsigned>(cmd), ::GetLastError());
+            delete pPacket;
+        }
+        return;
+    }
+
+    //文件共享信令（2200~2299）同样不解析：就在本网络接收线程上原样交给 FlamingoFileShare.dll，DLL 拷贝包体后
+    //投递到自己的消息窗口，不在这里做耗时工作（docs/文件共享方案.md 7.3）。DLL 未加载时由宿主记日志后丢弃
+    if (fileshare::IsShareCommand(cmd))
+    {
+        balloonfileshare::CFileShareHost::GetInstance().OnServerFrame(cmd, seq, body);
+        return;
+    }
+
+    //P2P 信令（2300~2399）同样不解析：就在本网络接收线程上原样交给 FlamingoP2P.dll，DLL 拷贝包体后交给自己的
+    //线程处理，不在这里做耗时工作（docs/P2P通信方案.md 8.4）。DLL 未加载时由宿主记日志后丢弃
+    if (p2p::IsP2PCommand(cmd))
+    {
+        balloonp2p::CP2PHost::GetInstance().OnServerFrame(cmd, seq, body);
+        return;
+    }
+
+    //密聊信令（2600~2699）同样不解析，原样交给 FlamingoSecretChat.dll，由它拷贝后投递到自己的消息窗口
+    //（docs/密聊方案.md 6.2）。包体里是密文与临时公钥，这里不记包体
+    if (secretchat::IsSecretCommand(cmd))
+    {
+        balloonsecret::CSecretChatHost::GetInstance().OnServerFrame(cmd, seq, body);
+        return;
+    }
+
+    //帖子群信令（2700~2799）同样不解析，原样交给 FlamingoThreadGroup.dll，由它拷贝后投递到自己的消息窗口
+    //（docs/帖子群方案.md 7.2）。DLL 未加载时由宿主记日志后丢弃
+    if (balloonthread::IsThreadFrame(cmd))
+    {
+        balloonthread::CThreadGroupHost::GetInstance().OnServerFrame(cmd, seq, body);
+        return;
+    }
+
+    //2802～2809：机器人详情、群机器人与个人机器人的增删改、试一试，原样交给 FlamingoBot.dll 宿主登记的回调
+    if (net::BotProtocolClient::isDllFrame(cmd))
+    {
+        DispatchBotFrame(cmd, seq, body);
+        return;
+    }
+
     switch (cmd)
     {
     case cmd_request_upload:
@@ -1808,6 +1882,32 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
+    //按会话清空的应答：成功时界面不做任何事（等清空形式的 1522 推送），失败时主面板按 seq
+    //对回是哪个会话并提示原因
+    case cmd_clear_conversation:
+    {
+        net::ClearConversationResponse* pResp = new net::ClearConversationResponse();
+        if (!net::MessageProtocolClient::parseClearConversationResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 clear-conversation response failed, seq=%u, body=%s.", seq, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 clear-conversation response, seq=%u, code=%d, ctype=%d, cid=%lld, clearedmsgid=%lld.",
+                     seq, pResp->m_code, pResp->m_ctype, (long long)pResp->m_cid,
+                     (long long)pResp->m_clearedMsgid);
+            ::PostMessage(hUI, FMG_MSG_V2_CLEAR_CONVERSATION_RESULT, (WPARAM)seq, (LPARAM)pResp);
+        }
+        else
+        {
+            delete pResp;
+        }
+        break;
+    }
+
     //本人删除了消息的推送：服务端推给本人全部在线设备（含发起删除的这一台）。本地库删行、
     //移除或重新加载已打开窗口里的消息，统一在 UI 线程收到本推送时做
     case cmd_messages_deleted_notify:
@@ -1822,7 +1922,13 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         HWND hUI = GetUIProxyWnd();
         if (::IsWindow(hUI))
         {
-            if (pNotify->m_isRange)
+            if (pNotify->m_isClear)
+            {
+                //清空形式没有 msgids，不能走下面单条形式那一句（会读 m_msgids[0]）
+                LOG_INFO("Recv v2 messages-deleted notify (clear), ctype=%d, cid=%lld, clearedmsgid=%lld.",
+                         pNotify->m_ctype, (long long)pNotify->m_cid, (long long)pNotify->m_clearedMsgid);
+            }
+            else if (pNotify->m_isRange)
             {
                 LOG_INFO("Recv v2 messages-deleted notify (range), range=[%lld, %lld].",
                          (long long)pNotify->m_begintime, (long long)pNotify->m_endtime);
@@ -1834,6 +1940,30 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
                          (unsigned)pNotify->m_msgids.size(), (long long)pNotify->m_msgids[0]);
             }
             ::PostMessage(hUI, FMG_MSG_V2_MESSAGES_DELETED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_features_notify:
+    {
+        //本人所属企业的功能开关有变化（管理员在后台改了开关）：包体与登录应答里的 features 同构。
+        //解析后投递到 UI 线程，由主面板交给文件共享宿主。堆对象由 UI 处理后 delete
+        net::FeaturesNotify* pNotify = new net::FeaturesNotify();
+        if (!net::LoginProtocolClient::parseFeaturesNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 features notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 features notify, body=%s.", body.c_str());
+            ::PostMessage(hUI, FMG_MSG_V2_FEATURES_NOTIFY, 0, (LPARAM)pNotify);
         }
         else
         {
@@ -1861,6 +1991,62 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
                      pNotify->m_ctype, (long long)pNotify->m_cid,
                      (long long)pNotify->m_readmsgid, pNotify->m_readcount);
             ::PostMessage(hUI, FMG_MSG_V2_MESSAGE_READ_NOTIFY, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_join_relay:
+    case cmd_withdraw_relay:
+    case cmd_close_relay:
+    {
+        //接龙三种操作的应答：只用于失败时提示原因。成功时界面改动一律等下面的
+        //cmd_relay_changed_notify 推送再做，与 Pin 同口径。wParam 带命令号区分是哪种操作；
+        //堆对象由 UI 处理后 delete
+        net::RelayOpResponse* pResp = new net::RelayOpResponse();
+        if (!net::CardProtocolClient::parseRelayOpResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 relay op ack failed, cmd=%u, body=%s.", (unsigned)cmd, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 relay op ack, cmd=%u, code=%d, msg=%s, ctype=%d, cid=%lld, msgid=%lld.",
+                     (unsigned)cmd, pResp->m_code, pResp->m_msg.c_str(), pResp->m_ctype,
+                     (long long)pResp->m_cid, (long long)pResp->m_msgid);
+            ::PostMessage(hUI, FMG_MSG_V2_RELAY_OP_RESULT, (WPARAM)cmd, (LPARAM)pResp);
+        }
+        else
+        {
+            //UI 未就绪（理论上不会发生），丢弃以免泄漏
+            delete pResp;
+        }
+        break;
+    }
+
+    case cmd_relay_changed_notify:
+    {
+        //接龙名单或状态变化：服务端推给卡片所在会话全体，操作者本人也会收到，带的是完整名单。
+        //解析后投递到 UI 线程统一处理（合并进本地库的卡片内容、刷新界面）。堆对象由 UI 处理后 delete
+        net::RelayChangedNotify* pNotify = new net::RelayChangedNotify();
+        if (!net::CardProtocolClient::parseRelayChangedNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 relay changed notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 relay changed notify, ctype=%d, cid=%lld, msgid=%lld, items=%u, state=%d.",
+                     pNotify->m_ctype, (long long)pNotify->m_cid, (long long)pNotify->m_msgid,
+                     (unsigned)pNotify->m_items.size(), pNotify->m_state);
+            ::PostMessage(hUI, FMG_MSG_V2_RELAY_CHANGED, 0, (LPARAM)pNotify);
         }
         else
         {
@@ -2029,101 +2215,6 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
-    case cmd_rd_invite:
-    {
-        //远程桌面邀请应答：成功带 sessionid，失败（对方离线/忙）带 code/msg。堆对象由 UI 处理后 delete。
-        net::RDInviteResponse* pResp = new net::RDInviteResponse();
-        if (!net::RemoteDesktopProtocolClient::parseInviteResponse(body, *pResp))
-        {
-            LOG_ERROR("Parse v2 rd invite-ack failed, body=%s.", body.c_str());
-            delete pResp;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 rd invite-ack, code=%d, sessionid=%s.", pResp->m_code, pResp->m_sessionId.c_str());
-            ::PostMessage(hUI, FMG_MSG_V2_RD_INVITE_ACK, 0, (LPARAM)pResp);
-        }
-        else
-        {
-            delete pResp;
-        }
-        break;
-    }
-
-    case cmd_rd_invite_notify:
-    {
-        //远程桌面邀请推送：被控端据此弹授权窗。堆对象由 UI 处理后 delete。
-        net::RDInviteNotify* pNotify = new net::RDInviteNotify();
-        if (!net::RemoteDesktopProtocolClient::parseInviteNotify(body, *pNotify))
-        {
-            LOG_ERROR("Parse v2 rd invite-notify failed, body=%s.", body.c_str());
-            delete pNotify;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 rd invite-notify, from=%lld, session=%s.",
-                     (long long)pNotify->m_fromId, pNotify->m_sessionId.c_str());
-            ::PostMessage(hUI, FMG_MSG_V2_RD_INVITE_NOTIFY, 0, (LPARAM)pNotify);
-        }
-        else
-        {
-            delete pNotify;
-        }
-        break;
-    }
-
-    case cmd_rd_relay_info:
-    {
-        //远程桌面中转参数下发：双方据此连 imgserver 中转通道。堆对象由 UI 处理后 delete。
-        net::RDRelayInfo* pInfo = new net::RDRelayInfo();
-        if (!net::RemoteDesktopProtocolClient::parseRelayInfo(body, *pInfo))
-        {
-            LOG_ERROR("Parse v2 rd relay-info failed, body=%s.", body.c_str());
-            delete pInfo;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 rd relay-info, session=%s, role=%d, %s:%d.",
-                     pInfo->m_sessionId.c_str(), pInfo->m_role, pInfo->m_relayIp.c_str(), pInfo->m_relayPort);
-            ::PostMessage(hUI, FMG_MSG_V2_RD_RELAY_INFO, 0, (LPARAM)pInfo);
-        }
-        else
-        {
-            delete pInfo;
-        }
-        break;
-    }
-
-    case cmd_rd_state_notify:
-    {
-        //远程桌面状态推送：拒绝/取消/对方离线/超时/断开。堆对象由 UI 处理后 delete。
-        net::RDStateNotify* pState = new net::RDStateNotify();
-        if (!net::RemoteDesktopProtocolClient::parseStateNotify(body, *pState))
-        {
-            LOG_ERROR("Parse v2 rd state-notify failed, body=%s.", body.c_str());
-            delete pState;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 rd state-notify, session=%s, state=%d.",
-                     pState->m_sessionId.c_str(), pState->m_state);
-            ::PostMessage(hUI, FMG_MSG_V2_RD_STATE_NOTIFY, 0, (LPARAM)pState);
-        }
-        else
-        {
-            delete pState;
-        }
-        break;
-    }
-
     case cmd_folder_invite:
     {
         //文件夹传输邀请应答：成功带 sessionid；规模超限时另带服务端配置的上限值，
@@ -2260,152 +2351,6 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
-    case cmd_call_invite:
-    {
-        //音视频通话邀请应答：成功带 sessionid，失败（对方离线/忙）带 code/msg。堆对象由 UI 处理后 delete。
-        net::CallInviteResponse* pResp = new net::CallInviteResponse();
-        if (!net::CallProtocolClient::parseInviteResponse(body, *pResp))
-        {
-            LOG_ERROR("Parse v2 call invite-ack failed, body=%s.", body.c_str());
-            delete pResp;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 call invite-ack, code=%d, sessionid=%s.", pResp->m_code, pResp->m_sessionId.c_str());
-            ::PostMessage(hUI, FMG_MSG_V2_CALL_INVITE_ACK, 0, (LPARAM)pResp);
-        }
-        else
-        {
-            delete pResp;
-        }
-        break;
-    }
-
-    case cmd_call_invite_notify:
-    {
-        //音视频通话邀请推送：被叫据此弹来电窗。堆对象由 UI 处理后 delete。
-        net::CallInviteNotify* pNotify = new net::CallInviteNotify();
-        if (!net::CallProtocolClient::parseInviteNotify(body, *pNotify))
-        {
-            LOG_ERROR("Parse v2 call invite-notify failed, body=%s.", body.c_str());
-            delete pNotify;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 call invite-notify, from=%lld, session=%s.",
-                     (long long)pNotify->m_fromId, pNotify->m_sessionId.c_str());
-            ::PostMessage(hUI, FMG_MSG_V2_CALL_INVITE_NOTIFY, 0, (LPARAM)pNotify);
-        }
-        else
-        {
-            delete pNotify;
-        }
-        break;
-    }
-
-    case cmd_call_signaling:
-    {
-        //音视频通话中转参数下发：双方据此连 imgserver 中转通道。堆对象由 UI 处理后 delete。
-        net::CallSignalingInfo* pInfo = new net::CallSignalingInfo();
-        if (!net::CallProtocolClient::parseSignaling(body, *pInfo))
-        {
-            LOG_ERROR("Parse v2 call signaling failed, body=%s.", body.c_str());
-            delete pInfo;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 call signaling, session=%s, role=%d, %s:%d.",
-                     pInfo->m_sessionId.c_str(), pInfo->m_role, pInfo->m_relayIp.c_str(), pInfo->m_relayPort);
-            ::PostMessage(hUI, FMG_MSG_V2_CALL_SIGNALING, 0, (LPARAM)pInfo);
-        }
-        else
-        {
-            delete pInfo;
-        }
-        break;
-    }
-
-    case cmd_call_switch_media:
-    {
-        //切换媒体类型的应答：只用于失败时提示原因。成功时界面与引擎改动一律等下面的
-        //cmd_call_media_changed_notify 推送再做，避免"应答改一次、推送又改一次"。
-        net::CallSwitchMediaResponse* pResp = new net::CallSwitchMediaResponse();
-        if (!net::CallProtocolClient::parseSwitchMediaResponse(body, *pResp))
-        {
-            LOG_ERROR("Parse v2 call switch-media ack failed, body=%s.", body.c_str());
-            delete pResp;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 call switch-media ack, code=%d, msg=%s.",
-                     pResp->m_code, pResp->m_msg.c_str());
-            ::PostMessage(hUI, FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT, 0, (LPARAM)pResp);
-        }
-        else
-        {
-            delete pResp;
-        }
-        break;
-    }
-
-    case cmd_call_media_changed_notify:
-    {
-        //通话媒体类型已变更：双方（含发起者本人）都会收到。投到 UI 线程统一处理
-        //（重建通话窗媒体层、按 operator 决定是否自动开摄像头、启停视频引擎）。
-        net::CallMediaChangedNotify* pNotify = new net::CallMediaChangedNotify();
-        if (!net::CallProtocolClient::parseMediaChangedNotify(body, *pNotify))
-        {
-            LOG_ERROR("Parse v2 call media-changed notify failed, body=%s.", body.c_str());
-            delete pNotify;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 call media-changed notify, session=%s, media=%d, operator=%lld.",
-                     pNotify->m_sessionId.c_str(), pNotify->m_media,
-                     (long long)pNotify->m_operator);
-            ::PostMessage(hUI, FMG_MSG_V2_CALL_MEDIA_CHANGED, 0, (LPARAM)pNotify);
-        }
-        else
-        {
-            delete pNotify;
-        }
-        break;
-    }
-
-    case cmd_call_state_notify:
-    {
-        //音视频通话状态推送：响铃/拒绝/取消/对方离线/超时/接通/结束/忙。堆对象由 UI 处理后 delete。
-        net::CallStateNotify* pState = new net::CallStateNotify();
-        if (!net::CallProtocolClient::parseStateNotify(body, *pState))
-        {
-            LOG_ERROR("Parse v2 call state-notify failed, body=%s.", body.c_str());
-            delete pState;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 call state-notify, session=%s, state=%d.",
-                     pState->m_sessionId.c_str(), pState->m_state);
-            ::PostMessage(hUI, FMG_MSG_V2_CALL_STATE_NOTIFY, 0, (LPARAM)pState);
-        }
-        else
-        {
-            delete pState;
-        }
-        break;
-    }
-
     case cmd_get_contacts:
     {
         //通讯录应答：解析后投递到 UI 线程，填充联系人面板。堆对象由 UI 处理后 delete。
@@ -2465,10 +2410,11 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             delete pResp;
             break;
         }
+        pResp->m_seq = seq;
         HWND hUI = GetUIProxyWnd();
         if (::IsWindow(hUI))
         {
-            LOG_INFO("Recv v2 create-group result, code=%d, groupid=%lld.",
+            LOG_INFO("Recv v2 create-group result, seq=%u, code=%d, groupid=%lld.", seq,
                      pResp->m_code, (long long)pResp->m_groupid);
             ::PostMessage(hUI, FMG_MSG_V2_CREATE_GROUP_RESULT, 0, (LPARAM)pResp);
         }
@@ -2652,7 +2598,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
-    //群管理的十条写操作：应答体都是通用 { code, msg }，处理方式也完全一致，
+    //群管理的九条写操作：应答体都是通用 { code, msg }，处理方式也完全一致，
     //故合并到一个分支里，用 wParam 把"是哪条协议的应答"带给界面层。
     case cmd_invite_to_group:
     case cmd_kick_group_member:
@@ -2663,12 +2609,19 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
     case cmd_transfer_owner:
     case cmd_dismiss_group:
     case cmd_handle_join_group:
-    case cmd_operate_sensitive_word:
     //发布公告的应答体是 { code, msg, id }，比通用形态多一个 id。界面上用不到它
     //（发布成功后靠 1326 推送整体刷新列表，新公告的内容推送里都有），故这里按
     //通用形态解析，多出来的 id 直接忽略。
     case cmd_publish_group_announcement:
     case cmd_delete_group_announcement:
+    //入群必读的设置、确认、放行，群问答的保存与删除，作废加群链接：应答都是 { code, msg }（保存问答多一个 id，
+    //界面用不到），成功后各有推送刷新界面，同样按通用形态处理（2026-10-07 起）
+    case cmd_set_must_read:
+    case cmd_confirm_must_read:
+    case cmd_release_must_read:
+    case cmd_save_group_qa:
+    case cmd_delete_group_qa:
+    case cmd_revoke_group_link:
     {
         net::GroupOpResult* pResult = new net::GroupOpResult();
         if (!net::GroupProtocolClient::parseCodeMsgResponse(body, pResult->m_code, pResult->m_msg))
@@ -2677,6 +2630,13 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
                       (uint32_t)cmd, (uint32_t)body.size());
             delete pResult;
             break;
+        }
+        //邀请入群的应答另带三项统计，界面据此提示「等待审批」「等对方同意」
+        if (cmd == cmd_invite_to_group)
+        {
+            net::GroupProtocolClient::parseInviteToGroupCounts(body, *pResult);
+            LOG_INFO("Recv v2 invite-to-group counts, added=%d, invited=%d, pending=%d.",
+                     pResult->m_added, pResult->m_invited, pResult->m_pending);
         }
         HWND hUI = GetUIProxyWnd();
         if (::IsWindow(hUI))
@@ -2688,6 +2648,109 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         else
         {
             delete pResult;
+        }
+        break;
+    }
+
+    case cmd_accept_group_invite:
+    {
+        //点入群邀请卡片「加入群聊」的应答：成功时主面板打开群聊窗或提示等待审批，失败时提示原因并恢复卡片按钮；
+        //卡片状态的变化另由 cmd_group_invite_changed_notify 推送。堆对象由 UI 处理后 delete
+        net::AcceptGroupInviteResult* pResult = new net::AcceptGroupInviteResult();
+        if (!net::GroupProtocolClient::parseAcceptGroupInviteResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 accept-group-invite response failed, body=%s.", body.c_str());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 accept-group-invite ack, code=%d, msg=%s, inviteid=%lld, groupid=%lld, joined=%d.",
+                     pResult->m_code, pResult->m_msg.c_str(), (long long)pResult->m_inviteid,
+                     (long long)pResult->m_groupid, pResult->m_joined ? 1 : 0);
+            ::PostMessage(hUI, FMG_MSG_V2_ACCEPT_GROUP_INVITE, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_call_card_notify:
+    {
+        //一对一通话卡片已改写成结束状态：推给主叫与被叫的全部在线设备。主面板据此改本地库里的卡片、
+        //刷新已打开的单聊窗与消息记录窗。堆对象由 UI 处理后 delete
+        net::CallCardNotify* pNotify = new net::CallCardNotify();
+        if (!net::MessageProtocolClient::parseCallCardNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 call card notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 call card notify, session=%s, msgid=%lld, cid=%lld.", pNotify->m_sessionId.c_str(),
+                     (long long)pNotify->m_msgid, (long long)pNotify->m_cid);
+            ::PostMessage(hUI, FMG_MSG_V2_CALL_CARD_CHANGED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_group_invite_changed_notify:
+    {
+        //入群邀请卡片的状态变化：推给邀请人与被邀请人的全部在线设备。主面板据此改本地库里的卡片状态、
+        //刷新已打开的单聊窗。堆对象由 UI 处理后 delete
+        net::GroupInviteChangedNotify* pNotify = new net::GroupInviteChangedNotify();
+        if (!net::GroupProtocolClient::parseGroupInviteChangedNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 group-invite changed notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group-invite changed notify, inviteid=%lld, msgid=%lld, inviter=%lld, invitee=%lld, "
+                     "state=%d.", (long long)pNotify->m_inviteid, (long long)pNotify->m_msgid,
+                     (long long)pNotify->m_inviterid, (long long)pNotify->m_inviteeid, pNotify->m_state);
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_INVITE_CHANGED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_join_request_handled_notify:
+    {
+        //一条加群申请已被处理（同意或拒绝）：推给该群全体群主与管理员（含处理人本人的其他设备）。主面板转给开着的
+        //群管理窗重拉待审批列表，避免再去处理一条已处理过的申请。堆对象由 UI 处理后 delete
+        net::JoinRequestHandledNotify* pNotify = new net::JoinRequestHandledNotify();
+        if (!net::GroupProtocolClient::parseJoinRequestHandledNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 join-request handled notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 join-request handled notify, groupid=%lld, requestid=%lld, status=%d, handler=%lld.",
+                     (long long)pNotify->m_groupid, (long long)pNotify->m_requestid, pNotify->m_status,
+                     (long long)pNotify->m_handler);
+            ::PostMessage(hUI, FMG_MSG_V2_JOIN_REQUEST_HANDLED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
         }
         break;
     }
@@ -2717,30 +2780,6 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
-    case cmd_get_sensitive_words:
-    {
-        net::SensitiveWordsResult* pResult = new net::SensitiveWordsResult();
-        if (!net::GroupProtocolClient::parseSensitiveWordsResponse(body, *pResult))
-        {
-            LOG_ERROR("Parse v2 sensitive-words response failed, bodylen=%u.", (uint32_t)body.size());
-            delete pResult;
-            break;
-        }
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 sensitive words, code=%d, groupid=%lld, count=%u.",
-                     pResult->m_code, (long long)pResult->m_groupid,
-                     (uint32_t)pResult->m_words.size());
-            ::PostMessage(hUI, FMG_MSG_V2_SENSITIVE_WORDS, 0, (LPARAM)pResult);
-        }
-        else
-        {
-            delete pResult;
-        }
-        break;
-    }
-
     case cmd_get_group_announcements:
     {
         net::GroupAnnouncementsResult* pResult = new net::GroupAnnouncementsResult();
@@ -2757,6 +2796,247 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
                      pResult->m_code, (long long)pResult->m_groupid,
                      (uint32_t)pResult->m_announcements.size(), pResult->m_total);
             ::PostMessage(hUI, FMG_MSG_V2_GROUP_ANNOUNCEMENTS, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_get_must_read:
+    {
+        //查询入群必读的应答：主面板按 groupid 转给打开着的群聊窗，决定是否锁住输入区并弹出必读公告
+        net::MustReadResult* pResult = new net::MustReadResult();
+        if (!net::GroupProtocolClient::parseGetMustReadResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 get-must-read response failed, body=%s.", body.c_str());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 must-read, code=%d, groupid=%lld, mustreadid=%lld, pending=%d.", pResult->m_code,
+                     (long long)pResult->m_groupid, (long long)pResult->m_mustreadid, pResult->m_pending ? 1 : 0);
+            ::PostMessage(hUI, FMG_MSG_V2_MUST_READ, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_get_group_qa:
+    {
+        //群问答列表的应答：主面板按 groupid 转给打开着的群聊窗的「问答」页签
+        net::GroupQaResult* pResult = new net::GroupQaResult();
+        if (!net::GroupQaProtocolClient::parseGetResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 group-qa response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group qa, code=%d, groupid=%lld, count=%u.", pResult->m_code,
+                     (long long)pResult->m_groupid, (uint32_t)pResult->m_items.size());
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_QA, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_get_group_bots:
+    {
+        //本群可用的机器人：主面板按 groupid 转给打开着的群聊窗
+        net::GroupBotsResult* pResult = new net::GroupBotsResult();
+        if (!net::BotProtocolClient::parseGetGroupBotsResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 group-bots response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group bots, code=%d, groupid=%lld, count=%u.", pResult->m_code,
+                     (long long)pResult->m_groupid, (uint32_t)pResult->m_bots.size());
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_BOTS, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_group_bots_changed_notify:
+    {
+        //本群可用的机器人有变化（groupid 为 0 表示本企业全部群）：打开着的群聊窗重拉
+        int64_t groupId = 0;
+        if (!net::BotProtocolClient::parseGroupBotsChangedNotify(body, groupId))
+        {
+            LOG_ERROR("Parse v2 group-bots changed notify failed, body=%s.", body.c_str());
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group bots changed notify, groupid=%lld.", (long long)groupId);
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_BOTS_CHANGED, 0, (LPARAM)new int64_t(groupId));
+        }
+        break;
+    }
+
+    case cmd_get_auto_reply:
+    {
+        //本人的「离开 / 忙碌自动回复」设置：主面板据此刷新本地设置，或把本机旧设置上传一次
+        net::AutoReplyResult* pResult = new net::AutoReplyResult();
+        if (!net::BotProtocolClient::parseGetAutoReplyResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 auto-reply response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 auto reply, code=%d, exists=%d, allowed=%d.", pResult->m_code,
+                     pResult->m_exists ? 1 : 0, pResult->m_allowed ? 1 : 0);
+            ::PostMessage(hUI, FMG_MSG_V2_AUTO_REPLY, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_set_auto_reply:
+    {
+        //保存自动回复设置的结果：wParam 为结果码，失败时主面板提示原因
+        int code = -1;
+        std::string msg;
+        net::BotProtocolClient::parseSimpleResponse(body, code, msg);
+        HWND hUI = GetUIProxyWnd();
+        LOG_INFO("Recv v2 set auto reply, code=%d, msg=%s.", code, msg.c_str());
+        if (::IsWindow(hUI))
+            ::PostMessage(hUI, FMG_MSG_V2_SET_AUTO_REPLY_RESULT, (WPARAM)code, 0);
+        break;
+    }
+
+    case cmd_group_qa_changed_notify:
+    {
+        //本群问答有增删改：只带群ID，打开着「问答」页签的群聊窗收到后重拉
+        int64_t groupId = 0;
+        if (!net::GroupQaProtocolClient::parseChangedNotify(body, groupId))
+        {
+            LOG_ERROR("Parse v2 group-qa changed notify failed, body=%s.", body.c_str());
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group qa changed notify, groupid=%lld.", (long long)groupId);
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_QA_CHANGED, 0, (LPARAM)new int64_t(groupId));
+        }
+        break;
+    }
+
+    case cmd_create_group_link:
+    {
+        //生成加群链接的应答：主面板转给打开着的「加群链接」窗口显示链接
+        net::CreateGroupLinkResult* pResult = new net::CreateGroupLinkResult();
+        if (!net::GroupLinkProtocolClient::parseCreateResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 create-group-link response failed, body=%s.", body.c_str());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 create-group-link ack, code=%d, groupid=%lld, id=%lld.", pResult->m_code,
+                     (long long)pResult->m_link.m_groupid, (long long)pResult->m_link.m_id);
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_LINK_CREATED, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_get_group_links:
+    {
+        //本群加群链接列表的应答：主面板转给群管理窗的「加群链接」页
+        net::GroupLinksResult* pResult = new net::GroupLinksResult();
+        if (!net::GroupLinkProtocolClient::parseListResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 group-links response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group links, code=%d, groupid=%lld, count=%u.", pResult->m_code,
+                     (long long)pResult->m_groupid, (uint32_t)pResult->m_links.size());
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_LINKS, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_get_group_link_info:
+    {
+        //按随机码查群的应答：主面板据此弹出「加入群聊」确认框，或提示链接不可用
+        net::GroupLinkInfoResult* pResult = new net::GroupLinkInfoResult();
+        if (!net::GroupLinkProtocolClient::parseInfoResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 group-link-info response failed, body=%s.", body.c_str());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group link info, code=%d, groupid=%lld, joinmode=%d, member=%d.", pResult->m_code,
+                     (long long)pResult->m_groupid, pResult->m_joinmode, pResult->m_member ? 1 : 0);
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_LINK_INFO, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_join_group_by_link:
+    {
+        //凭链接加群的应答：主面板据 joined 打开群聊窗或提示已提交加群申请
+        net::JoinGroupByLinkResult* pResult = new net::JoinGroupByLinkResult();
+        if (!net::GroupLinkProtocolClient::parseJoinResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 join-group-by-link response failed, body=%s.", body.c_str());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 join-group-by-link ack, code=%d, groupid=%lld, joined=%d.", pResult->m_code,
+                     (long long)pResult->m_groupid, pResult->m_joined ? 1 : 0);
+            ::PostMessage(hUI, FMG_MSG_V2_JOIN_GROUP_BY_LINK, 0, (LPARAM)pResult);
         }
         else
         {
@@ -2929,10 +3209,112 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         HWND hUI = GetUIProxyWnd();
         if (::IsWindow(hUI))
         {
-            LOG_INFO("Recv v2 conversation-changed notify, ctype=%d, cid=%lld, pinned=%d, mute=%d, deleted=%d.",
+            LOG_INFO("Recv v2 conversation-changed notify, ctype=%d, cid=%lld, pinned=%d, notifymode=%d, deleted=%d, unreadmark=%d.",
                      pNotify->m_ctype, (long long)pNotify->m_cid,
-                     pNotify->m_pinned, pNotify->m_mute, pNotify->m_deleted);
+                     pNotify->m_pinned, pNotify->m_notifyMode, pNotify->m_deleted, (int)pNotify->m_unreadMark);
             ::PostMessage(hUI, FMG_MSG_V2_CONVERSATION_CHANGED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_set_group_follow:
+    {
+        //设置群关注名单的应答：成功时界面不做任何事（名单以 1331 推送为准），失败时把结果码经
+        //wParam 投到 UI，由主面板提示（docs/消息提醒模式与消息盒子方案.md §12）。没有堆负载
+        int code = -1;
+        std::string msg;
+        if (!net::GroupProtocolClient::parseCodeMsgResponse(body, code, msg))
+        {
+            LOG_ERROR("Parse v2 set group follow ack failed, bodylen=%u.", (uint32_t)body.size());
+            break;
+        }
+        if (code == 0)
+        {
+            LOG_INFO("Recv v2 set group follow ack ok.");
+            break;
+        }
+        LOG_WARNING("Recv v2 set group follow ack failed, code=%d, msg=%s.", code, msg.c_str());
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            ::PostMessage(hUI, FMG_MSG_V2_SET_GROUP_FOLLOW_RESULT, (WPARAM)code, 0);
+        }
+        break;
+    }
+
+    case cmd_group_follow_changed_notify:
+    {
+        //本人在某个群里关注的成员变了（整份名单），多端同步用；发起设置的这一端也会收到。
+        //解析后投到 UI 线程，由主面板覆盖缓存。堆对象由 UI 处理后 delete
+        net::GroupFollowEntry* pNotify = new net::GroupFollowEntry();
+        if (!net::ConversationsProtocolClient::parseGroupFollowChangedNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 group follow changed notify failed, bodylen=%u.", (uint32_t)body.size());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 group follow changed notify, groupid=%lld, count=%u.",
+                     (long long)pNotify->m_groupid, (uint32_t)pNotify->m_targets.size());
+            ::PostMessage(hUI, FMG_MSG_V2_GROUP_FOLLOW_CHANGED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_set_notify_modes:
+    {
+        //批量设置提醒模式的应答：逐条结果码投到 UI 线程，由主面板对失败的条目提示原因。
+        //改成功的条目另有 cmd_notify_modes_changed_notify 推送，界面改动以推送为准。
+        //堆对象由 UI 处理后 delete
+        net::SetNotifyModesResult* pResult = new net::SetNotifyModesResult();
+        if (!net::ConversationsProtocolClient::parseSetNotifyModesResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 set notify modes ack failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 set notify modes ack, code=%d, msg=%s, results=%u.",
+                     pResult->m_code, pResult->m_msg.c_str(), (uint32_t)pResult->m_results.size());
+            ::PostMessage(hUI, FMG_MSG_V2_SET_NOTIFY_MODES_RESULT, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            //UI 未就绪（理论上不会发生），丢弃以免泄漏
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_notify_modes_changed_notify:
+    {
+        //本人一批会话的提醒模式变了（批量设置成功的条目），多端同步用；发起批量设置的
+        //这一端也会收到。解析后投到 UI 线程，由主面板覆盖模式表并刷新列表。
+        //堆对象由 UI 处理后 delete
+        net::NotifyModesChangedNotify* pNotify = new net::NotifyModesChangedNotify();
+        if (!net::ConversationsProtocolClient::parseNotifyModesChangedNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 notify modes changed notify failed, bodylen=%u.", (uint32_t)body.size());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 notify modes changed notify, items=%u.", (uint32_t)pNotify->m_items.size());
+            ::PostMessage(hUI, FMG_MSG_V2_NOTIFY_MODES_CHANGED, 0, (LPARAM)pNotify);
         }
         else
         {
@@ -3004,34 +3386,6 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
-    case cmd_set_starred:
-    {
-        //「特别关注」标记 / 取消的应答。与上面的收藏同理：原样回带 target/starred，
-        //用户连点几个人时会有多条请求在途，不带这两项就对不上号、失败时也没法
-        //回滚到正确的那一条，故单独走一条投递路径。
-        net::SetStarredResult* pResult = new net::SetStarredResult();
-        if (!net::StarredProtocolClient::parseSetStarredResponse(body, *pResult))
-        {
-            LOG_ERROR("Parse v2 set starred response failed, bodylen=%u.",
-                      (uint32_t)body.size());
-            delete pResult;
-            break;
-        }
-
-        HWND hUI = GetUIProxyWnd();
-        if (::IsWindow(hUI))
-        {
-            LOG_INFO("Recv v2 set starred result, code=%d, target=%lld, starred=%d.",
-                     pResult->m_code, (long long)pResult->m_target, pResult->m_starred);
-            ::PostMessage(hUI, FMG_MSG_V2_SET_STARRED_RESULT, 0, (LPARAM)pResult);
-        }
-        else
-        {
-            delete pResult;
-        }
-        break;
-    }
-
     //设置联系人标签的应答。除 userid 外还回带服务端<u>归一后</u>的最终列表（失败时
     //回带服务端当前实际存着的那一份），主面板两种情形下都直接拿它覆盖本地缓存，
     //不必自己维护回滚快照、也不必猜服务端把哪些标签去重或去空白了。
@@ -3091,7 +3445,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
 
     case cmd_get_announcements:
     {
-        //平台公告列表应答（消息盒子的数据源）。解析后投递到 UI 线程，由主面板逐条
+        //平台公告列表应答（公告中心的数据源）。解析后投递到 UI 线程，由主面板逐条
         //落本地库 announce.db、刷新铃铛角标；hasmore 为 true 时主面板会接着再拉一批。
         //注意与群公告的 cmd_get_group_announcements 不是一回事。
         net::AnnouncementsResult* pResult = new net::AnnouncementsResult();
@@ -3150,7 +3504,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
     case cmd_announcement_notify:
     {
         //平台公告推送：changetype=1 新发布（带完整内容），=2 已撤回（只带公告ID）。
-        //解析后投递到 UI 线程，由主面板落本地库、刷新铃铛角标与消息盒子窗口。
+        //解析后投递到 UI 线程，由主面板落本地库、刷新铃铛角标与公告中心窗口。
         net::AnnouncementNotify* pNotify = new net::AnnouncementNotify();
         if (!net::AnnounceProtocolClient::parseAnnouncementNotify(body, *pNotify))
         {
@@ -3174,6 +3528,154 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
+    //备忘与提醒：拉取本人可见的全部备忘的应答
+    case cmd_memo_list:
+    {
+        //备忘列表应答：本人可见的全部备忘。投给 UI 后由备忘中枢整体替换备忘簿、补出错过的提醒
+        net::MemoListResult* pResult = new net::MemoListResult();
+        if (!net::MemoProtocolClient::parseListResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 memo list response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 memo list, code=%d, count=%u.", pResult->m_code, (uint32_t)pResult->m_memos.size());
+            ::PostMessage(hUI, FMG_MSG_V2_MEMO_LIST, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    //备忘与提醒：新建或修改备忘的应答
+    case cmd_memo_save:
+    {
+        //保存备忘的应答：成功时带回服务端保存后的完整备忘
+        net::MemoSaveResult* pResult = new net::MemoSaveResult();
+        if (!net::MemoProtocolClient::parseSaveResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 memo save response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 memo save result, code=%d, memoid=%lld.", pResult->m_code,
+                     (long long)(pResult->m_hasMemo ? pResult->m_memo.m_memoid : 0));
+            ::PostMessage(hUI, FMG_MSG_V2_MEMO_SAVE_RESULT, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    //备忘与提醒：删除备忘的应答
+    case cmd_memo_delete:
+    {
+        //删除备忘的应答，原样回带 memoid
+        net::MemoDeleteResult* pResult = new net::MemoDeleteResult();
+        if (!net::MemoProtocolClient::parseDeleteResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 memo delete response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 memo delete result, code=%d, memoid=%lld.", pResult->m_code, (long long)pResult->m_memoid);
+            ::PostMessage(hUI, FMG_MSG_V2_MEMO_DELETE_RESULT, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    //备忘与提醒：备忘新增、修改或删除的推送
+    case cmd_memo_notify:
+    {
+        //备忘推送：changetype=1 新增或修改（带完整备忘），=2 删除或从此看不到（只带 memoid）
+        net::MemoNotify* pNotify = new net::MemoNotify();
+        if (!net::MemoProtocolClient::parseNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 memo notify failed, bodylen=%u.", (uint32_t)body.size());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 memo notify, changetype=%d, memoid=%lld.", pNotify->m_changeType,
+                     (long long)pNotify->m_memoid);
+            ::PostMessage(hUI, FMG_MSG_V2_MEMO_NOTIFY, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_global_search:
+    {
+        //全局搜索的应答：解析后投递到 UI 线程，由主面板转给搜索下拉显示在「消息」标签末尾。
+        net::GlobalSearchResult* pResult = new net::GlobalSearchResult();
+        if (!net::GlobalSearchProtocolClient::parseResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 global-search response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 global search, code=%d, keyword bytes=%u, conversations=%u, announcements=%u.",
+                     pResult->m_code, (uint32_t)pResult->m_keyword.size(),
+                     (uint32_t)pResult->m_conversations.size(), (uint32_t)pResult->m_announcements.size());
+            ::PostMessage(hUI, FMG_MSG_V2_GLOBAL_SEARCH, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_search_group_files:
+    {
+        //按文件名搜索群文件的应答：解析后投递到 UI 线程，由主面板转给搜索下拉显示在「文件」标签里。
+        net::SearchGroupFilesResult* pResult = new net::SearchGroupFilesResult();
+        if (!net::GroupFileProtocolClient::parseSearchGroupFilesResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 search-group-files response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 search group files, code=%d, keyword bytes=%u, hasmore=%d, count=%u.",
+                     pResult->m_code, (uint32_t)pResult->m_keyword.size(),
+                     pResult->m_hasmore ? 1 : 0, (uint32_t)pResult->m_files.size());
+            ::PostMessage(hUI, FMG_MSG_V2_SEARCH_GROUP_FILES, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
     case cmd_get_group_files:
     {
         //群文件列表应答：解析后投递到 UI 线程，由群聊窗按 groupid 累积分页、拉全后渲染。
@@ -3184,12 +3686,14 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             delete pResult;
             break;
         }
+        //服务端原样带回请求的序号，主面板据此把应答交给发出请求的那一方
+        pResult->m_seq = seq;
         HWND hUI = GetUIProxyWnd();
         if (::IsWindow(hUI))
         {
-            LOG_INFO("Recv v2 group files, code=%d, groupid=%s, total=%d, hasmore=%d, count=%u.",
+            LOG_INFO("Recv v2 group files, code=%d, groupid=%s, total=%d, hasmore=%d, count=%u, seq=%u.",
                      pResult->m_code, pResult->m_groupid.c_str(), pResult->m_total,
-                     pResult->m_hasmore ? 1 : 0, (uint32_t)pResult->m_files.size());
+                     pResult->m_hasmore ? 1 : 0, (uint32_t)pResult->m_files.size(), seq);
             ::PostMessage(hUI, FMG_MSG_V2_GROUP_FILES, 0, (LPARAM)pResult);
         }
         else
@@ -3306,6 +3810,27 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
+    case cmd_sync_rewritten_messages:
+    {
+        //按改写序号同步的应答：解析后投递到 UI 线程，由主面板覆盖本地库里已有的行、推进水位并续拉
+        net::SyncRewrittenResult* pResult = new net::SyncRewrittenResult();
+        if (!net::MessageProtocolClient::parseSyncRewrittenResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 sync-rewritten response failed, bodylen=%u.", (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+        LOG_INFO("Recv v2 sync rewritten messages, code=%d, items=%u, rev=%lld, more=%d, currev=%lld.",
+                 pResult->m_code, (uint32_t)pResult->m_items.size(), (long long)pResult->m_rev,
+                 pResult->m_more ? 1 : 0, (long long)pResult->m_currev);
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+            ::PostMessage(hUI, FMG_MSG_V2_SYNC_REWRITTEN, 0, (LPARAM)pResult);
+        else
+            delete pResult;
+        break;
+    }
+
     default:
         //其余 v2 cmd 属后续阶段功能、尚未迁移，仅记录不处理
         LOG_INFO("Recv unhandled v2 frame, cmd=%u (feature not migrated yet).", cmd);
@@ -3389,6 +3914,31 @@ bool CIUSocket::DeleteMessagesByTime(int64_t begintime, int64_t endtime)
     return true;
 }
 
+uint32_t CIUSocket::ClearConversation(int ctype, int64_t cid)
+{
+    //会话类型不是 1 / 2 或会话ID非正时 buildClearConversationRequest 返回空串：服务端必判非法，直接放弃发送
+    std::string body = net::MessageProtocolClient::buildClearConversationRequest(ctype, cid);
+    if (body.empty())
+    {
+        LOG_ERROR("Skip v2 clear-conversation: invalid ctype=%d, cid=%lld.", ctype, (long long)cid);
+        return 0;
+    }
+
+    //EnqueueFrame 在离线或未连接时丢弃帧且不告知调用方；这里提前判断，返回 0 让调用方
+    //立即按失败处理，而不是一直等一个不会到来的应答
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 clear-conversation: not connected, ctype=%d, cid=%lld.", ctype, (long long)cid);
+        return 0;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_clear_conversation, seq, body);
+    LOG_INFO("Request v2 clear-conversation (cmd_clear_conversation), ctype=%d, cid=%lld, seq=%u.",
+             ctype, (long long)cid, seq);
+    return seq;
+}
+
 void CIUSocket::PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin)
 {
     //cid / msgid 非正时 buildPinMessageRequest 返回空串，说明这个请求服务端必判非法，
@@ -3405,6 +3955,79 @@ void CIUSocket::PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin)
     EnqueueFrame(cmd_pin_message, seq, body);
     LOG_INFO("Request v2 pin-message (cmd_pin_message), ctype=%d, cid=%lld, msgid=%lld, pin=%d.",
              ctype, (long long)cid, (long long)msgid, pin ? 1 : 0);
+}
+
+bool CIUSocket::EnqueueRelayRequest(uint16_t cmd, const char* opName, int ctype, int64_t cid,
+                                    int64_t msgid, const std::string& body)
+{
+    //请求拼不出来：入参不合契约，服务端必判非法，直接放弃发送
+    if (body.empty())
+    {
+        LOG_ERROR("Skip v2 %s: invalid ctype=%d, cid=%lld, msgid=%lld.",
+                  opName, ctype, (long long)cid, (long long)msgid);
+        return false;
+    }
+
+    //EnqueueFrame 在离线或未连接时丢弃帧且不告知调用方；这里提前判断并返回 false，
+    //让界面立即提示失败，而不是一直等一个不会到来的应答
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 %s: not connected, ctype=%d, cid=%lld, msgid=%lld.",
+                  opName, ctype, (long long)cid, (long long)msgid);
+        return false;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd, seq, body);
+    LOG_INFO("Request v2 %s, cmd=%u, ctype=%d, cid=%lld, msgid=%lld, seq=%u.",
+             opName, (unsigned)cmd, ctype, (long long)cid, (long long)msgid, seq);
+    return true;
+}
+
+bool CIUSocket::SendRelayCard(int ctype, int64_t cid, const std::string& clientMsgId,
+                              const std::string& contentJson)
+{
+    //组 cmd_send_message 卡片请求体（msgtype=11）。回执与其它消息同路径，按 clientmsgid
+    //回投到 UI（FMG_MSG_V2_SEND_CHATMSG_ACK）
+    std::string body = net::MessageProtocolClient::buildSendCardRequest(
+        ctype, cid, clientMsgId, message_type_relay, contentJson);
+    if (body.empty())
+    {
+        LOG_ERROR("Skip v2 relay card: invalid ctype=%d, cid=%lld, clientmsgid=%s.",
+                  ctype, (long long)cid, clientMsgId.c_str());
+        return false;
+    }
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 relay card: not connected, ctype=%d, cid=%lld, clientmsgid=%s.",
+                  ctype, (long long)cid, clientMsgId.c_str());
+        return false;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_send_message, seq, body);
+    LOG_INFO("Send v2 relay card, ctype=%d, cid=%lld, clientmsgid=%s, seq=%u.",
+             ctype, (long long)cid, clientMsgId.c_str(), seq);
+    return true;
+}
+
+bool CIUSocket::JoinRelay(int ctype, int64_t cid, int64_t msgid, const std::string& text)
+{
+    //接龙文本不写进日志：它是用户填写的内容，日志里只记定位字段
+    return EnqueueRelayRequest(cmd_join_relay, "join-relay", ctype, cid, msgid,
+                               net::CardProtocolClient::buildJoinRelayRequest(ctype, cid, msgid, text));
+}
+
+bool CIUSocket::WithdrawRelay(int ctype, int64_t cid, int64_t msgid)
+{
+    return EnqueueRelayRequest(cmd_withdraw_relay, "withdraw-relay", ctype, cid, msgid,
+                               net::CardProtocolClient::buildRelayTargetRequest(ctype, cid, msgid));
+}
+
+bool CIUSocket::CloseRelay(int ctype, int64_t cid, int64_t msgid)
+{
+    return EnqueueRelayRequest(cmd_close_relay, "close-relay", ctype, cid, msgid,
+                               net::CardProtocolClient::buildRelayTargetRequest(ctype, cid, msgid));
 }
 
 uint32_t CIUSocket::ForwardMessage(const std::string& clientMsgId, int toctype, int64_t tocid,
@@ -3501,53 +4124,31 @@ void CIUSocket::RequestContacts()
 
 void CIUSocket::SendChatTextMessage(int64_t peerUserId, const std::string& clientMsgId,
                                     const std::string& text, const net::TextFont& font,
-                                    const net::ReplyQuote& quote)
+                                    const net::ReplyQuote& quote, int textFormat,
+                                    const std::string& codeLang,
+                                    const std::vector<net::CodeNoteData>& codeNotes)
 {
     //组装 cmd_send_message 请求体并编码成 v2 帧发出。seq 仅作帧序号，回执
     //的对回靠 clientmsgid 而非 seq，故此处取自增值即可。font.m_valid 为 true 时
-    //把字体写进 content.font，使对端与历史看到相同字体效果。
+    //把字体写进 content.font，使对端与历史看到相同字体效果；Markdown 消息与代码片段另带 content.format。
     std::string body = net::MessageProtocolClient::buildSendTextRequest(
-        peerUserId, clientMsgId, text, font, quote);
+        peerUserId, clientMsgId, text, font, quote, textFormat, codeLang, codeNotes);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_send_message, seq, body);
-    LOG_INFO("Send v2 chat text message, to=%lld, clientmsgid=%s, bodylen=%u.",
+    LOG_INFO("Send v2 chat text message, to=%lld, clientmsgid=%s, format=%d, lang=%s, notes=%u, bodylen=%u.",
+             (long long)peerUserId, clientMsgId.c_str(), textFormat, codeLang.c_str(), (uint32_t)codeNotes.size(),
+             (uint32_t)body.size());
+}
+
+void CIUSocket::SendAutoReplyMessage(int64_t peerUserId, const std::string& clientMsgId,
+                                     const std::string& replyText)
+{
+    //与 SendChatTextMessage 同一条发送路径，只是请求体换成带 autoreply 标记与前缀的那份
+    std::string body = net::MessageProtocolClient::buildSendAutoReplyRequest(peerUserId, clientMsgId, replyText);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_send_message, seq, body);
+    LOG_INFO("Send v2 auto-reply message, to=%lld, clientmsgid=%s, bodylen=%u.",
              (long long)peerUserId, clientMsgId.c_str(), (uint32_t)body.size());
-}
-
-void CIUSocket::SendRemoteDesktopInvite(int64_t peerUserId)
-{
-    //发起远程桌面邀请：应答（带 sessionid 或错误）经 cmd_rd_invite 回投 FMG_MSG_V2_RD_INVITE_ACK。
-    std::string body = net::RemoteDesktopProtocolClient::buildInviteRequest(peerUserId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_rd_invite, seq, body);
-    LOG_INFO("Send v2 rd invite, to=%lld.", (long long)peerUserId);
-}
-
-void CIUSocket::SendRemoteDesktopResponse(const std::string& sessionId, bool accept)
-{
-    //被控端应答邀请：接受则双方收 cmd_rd_relay_info，拒绝则控制端收 cmd_rd_state_notify。
-    std::string body = net::RemoteDesktopProtocolClient::buildResponse(sessionId, accept);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_rd_response, seq, body);
-    LOG_INFO("Send v2 rd response, session=%s, accept=%d.", sessionId.c_str(), accept ? 1 : 0);
-}
-
-void CIUSocket::SendRemoteDesktopCancel(const std::string& sessionId)
-{
-    //控制端在被控端应答前取消邀请。
-    std::string body = net::RemoteDesktopProtocolClient::buildCancel(sessionId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_rd_cancel, seq, body);
-    LOG_INFO("Send v2 rd cancel, session=%s.", sessionId.c_str());
-}
-
-void CIUSocket::SendRemoteDesktopClose(const std::string& sessionId)
-{
-    //任一端结束远程桌面会话。
-    std::string body = net::RemoteDesktopProtocolClient::buildClose(sessionId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_rd_close, seq, body);
-    LOG_INFO("Send v2 rd close, session=%s.", sessionId.c_str());
 }
 
 uint32_t CIUSocket::SendFolderInvite(int64_t peerUserId, const std::string& folderName,
@@ -3571,6 +4172,24 @@ uint32_t CIUSocket::SendFolderInvite(int64_t peerUserId, const std::string& fold
     LOG_INFO("Send v2 folder invite, to=%lld, dirs=%lld, files=%lld, bytes=%lld, seq=%u.",
              (long long)peerUserId, (long long)totalDirs,
              (long long)totalFiles, (long long)totalSize, seq);
+    return seq;
+}
+
+uint32_t CIUSocket::SendFolderFileInvite(int64_t peerUserId, const std::string& fileName, int64_t fileSize)
+{
+    //单聊单文件直传邀请：与文件夹传输共用 1810，带 kind=1；应答同样按帧 seq 对回发起的那一笔
+    std::string body = net::FolderProtocolClient::buildFileInviteRequest(peerUserId, fileName, fileSize);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 direct file invite failed, to=%lld, bytes=%lld.", (long long)peerUserId,
+                  (long long)fileSize);
+        return 0;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_invite, seq, body);
+    LOG_INFO("Send v2 direct file invite, to=%lld, bytes=%lld, seq=%u.", (long long)peerUserId, (long long)fileSize,
+             seq);
     return seq;
 }
 
@@ -3602,6 +4221,44 @@ void CIUSocket::SendFolderCancel(const std::string& sessionId)
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_folder_cancel, seq, body);
     LOG_INFO("Send v2 folder cancel, session=%s.", sessionId.c_str());
+}
+
+void CIUSocket::SendFolderCancel(const std::string& sessionId, bool toOffline)
+{
+    if (!toOffline)
+    {
+        SendFolderCancel(sessionId);
+        return;
+    }
+
+    //单文件直传的发送方改为上传服务器：服务端向接收方推「已改为离线发送」
+    std::string body = net::FolderProtocolClient::buildCancel(sessionId, true);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 direct file cancel (to offline) failed, session=%s.", sessionId.c_str());
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_cancel, seq, body);
+    LOG_INFO("Send v2 direct file cancel, session=%s, tooffline=1.", sessionId.c_str());
+}
+
+void CIUSocket::SendFolderClose(const std::string& sessionId, bool success, int errCode, const std::string& errMsg,
+                                int linkPath, const std::string& md5)
+{
+    std::string body = net::FolderProtocolClient::buildClose(sessionId, success, errCode, errMsg, linkPath, md5);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 folder close failed, session=%s, success=%d, errcode=%d, linkpath=%d.",
+                  sessionId.c_str(), success ? 1 : 0, errCode, linkPath);
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_close, seq, body);
+    LOG_INFO("Send v2 folder close, session=%s, success=%d, errcode=%d, linkpath=%d, md5=%s, errmsg=%s.",
+             sessionId.c_str(), success ? 1 : 0, errCode, linkPath, md5.c_str(), errMsg.c_str());
 }
 
 void CIUSocket::SendFolderClose(const std::string& sessionId, bool success,
@@ -3637,58 +4294,86 @@ void CIUSocket::SendFolderRetry(const std::string& sessionId)
     LOG_INFO("Send v2 folder retry, session=%s.", sessionId.c_str());
 }
 
-void CIUSocket::SendCallInvite(int64_t peerUserId, int media)
+bool CIUSocket::SendMediaSignal(uint16_t cmd, const std::string& body)
 {
-    //发起音视频通话邀请：应答（带 sessionid 或错误）经 cmd_call_invite 回投 FMG_MSG_V2_CALL_INVITE_ACK。
-    std::string body = net::CallProtocolClient::buildInviteRequest(peerUserId, media);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_call_invite, seq, body);
-    LOG_INFO("Send v2 call invite, to=%lld, media=%d.", (long long)peerUserId, media);
-}
-
-void CIUSocket::SendCallResponse(const std::string& sessionId, bool accept)
-{
-    //被叫应答邀请：接听则双方收 cmd_call_signaling + 接通态，拒绝则主叫收 cmd_call_state_notify。
-    std::string body = net::CallProtocolClient::buildResponse(sessionId, accept);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_call_response, seq, body);
-    LOG_INFO("Send v2 call response, session=%s, accept=%d.", sessionId.c_str(), accept ? 1 : 0);
-}
-
-void CIUSocket::SendCallCancel(const std::string& sessionId)
-{
-    //主叫在被叫应答前取消呼叫。
-    std::string body = net::CallProtocolClient::buildCancel(sessionId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_call_cancel, seq, body);
-    LOG_INFO("Send v2 call cancel, session=%s.", sessionId.c_str());
-}
-
-void CIUSocket::SendCallHangup(const std::string& sessionId)
-{
-    //接通后任一端挂断通话。
-    std::string body = net::CallProtocolClient::buildHangup(sessionId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_call_hangup, seq, body);
-    LOG_INFO("Send v2 call hangup, session=%s.", sessionId.c_str());
-}
-
-void CIUSocket::SwitchCallMedia(const std::string& sessionId, int media)
-{
-    //sessionId 为空或 media 非法时 buildSwitchMedia 返回空串，说明服务端必判非法请求，
-    //直接放弃发送，省一次必然失败的往返。
-    std::string body = net::CallProtocolClient::buildSwitchMedia(sessionId, media);
+    //包体由 FlamingoMedia.dll 编好，这里只校验命令号是否在白名单内，防止 DLL 借主连接发出任意命令
+    if (!net::IsMediaSignalCmd(cmd))
+    {
+        LOG_WARNING("Reject media signal: cmd=%u is not in the media whitelist.", static_cast<unsigned>(cmd));
+        return false;
+    }
     if (body.empty())
     {
-        LOG_ERROR("Skip v2 call switch-media: invalid session=%s, media=%d.",
-                  sessionId.c_str(), media);
-        return;
+        LOG_WARNING("Reject media signal: cmd=%u has an empty body.", static_cast<unsigned>(cmd));
+        return false;
     }
-
     uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_call_switch_media, seq, body);
-    LOG_INFO("Send v2 call switch-media, session=%s, media=%d.",
-             sessionId.c_str(), media);
+    EnqueueFrame(cmd, seq, body);
+    LOG_INFO("Send v2 media signal, cmd=%u, seq=%u, len=%u.", static_cast<unsigned>(cmd), seq,
+             static_cast<unsigned>(body.size()));
+    return true;
+}
+
+uint32_t CIUSocket::SendShareCommand(uint16_t cmd, const std::string& body)
+{
+    //包体由 FlamingoFileShare.dll 编好，这里只按放行规则校验，防止 DLL 借主连接发出任意命令
+    if (!balloonfileshare::ShareChannelPolicy::CanSendShareCommand(cmd, static_cast<uint32_t>(body.size()), m_bConnected))
+    {
+        LOG_WARNING("Reject share command: cmd=%u, len=%u, connected=%d.", static_cast<unsigned>(cmd),
+                    static_cast<unsigned>(body.size()), m_bConnected ? 1 : 0);
+        return 0;
+    }
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd, seq, body);
+    LOG_INFO("Send v2 share command, cmd=%u, seq=%u, len=%u.", static_cast<unsigned>(cmd), seq,
+             static_cast<unsigned>(body.size()));
+    return seq;
+}
+
+uint32_t CIUSocket::SendSecretCommand(uint16_t cmd, const std::string& body)
+{
+    //包体由 FlamingoSecretChat.dll 编好，这里只按放行规则校验，防止 DLL 借主连接发出任意命令；日志不记包体
+    if (!balloonsecret::CanSendSecretCommand(cmd, static_cast<uint32_t>(body.size()), m_bConnected))
+    {
+        LOG_WARNING("Reject secret command: cmd=%u, len=%u, connected=%d.", static_cast<unsigned>(cmd),
+                    static_cast<unsigned>(body.size()), m_bConnected ? 1 : 0);
+        return 0;
+    }
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd, seq, body);
+    return seq;
+}
+
+uint32_t CIUSocket::SendThreadCommand(uint16_t cmd, const std::string& body)
+{
+    //包体由 FlamingoThreadGroup.dll 编好，这里只按放行规则校验，防止 DLL 借主连接发出任意命令；包体里有帖子正文，日志不记包体
+    if (!balloonthread::CanSendThreadCommand(cmd, static_cast<uint32_t>(body.size()), m_bConnected))
+    {
+        LOG_WARNING("Reject thread command: cmd=%u, len=%u, connected=%d.", static_cast<unsigned>(cmd),
+                    static_cast<unsigned>(body.size()), m_bConnected ? 1 : 0);
+        return 0;
+    }
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd, seq, body);
+    LOG_INFO("Send v2 thread command, cmd=%u, seq=%u, len=%u.", static_cast<unsigned>(cmd), seq,
+             static_cast<unsigned>(body.size()));
+    return seq;
+}
+
+uint32_t CIUSocket::SendP2PCommand(uint16_t cmd, const std::string& body)
+{
+    //包体由 FlamingoP2P.dll 编好，这里只按放行规则校验，防止 DLL 借主连接发出任意命令
+    if (!balloonp2p::P2PChannelPolicy::CanSendP2PCommand(cmd, static_cast<uint32_t>(body.size()), m_bConnected))
+    {
+        LOG_WARNING("Reject p2p command: cmd=%u, len=%u, connected=%d.", static_cast<unsigned>(cmd),
+                    static_cast<unsigned>(body.size()), m_bConnected ? 1 : 0);
+        return 0;
+    }
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd, seq, body);
+    LOG_INFO("Send v2 p2p command, cmd=%u, seq=%u, len=%u.", static_cast<unsigned>(cmd), seq,
+             static_cast<unsigned>(body.size()));
+    return seq;
 }
 
 void CIUSocket::SendChatShakeMessage(int64_t peerUserId, const std::string& clientMsgId)
@@ -3703,30 +4388,46 @@ void CIUSocket::SendChatShakeMessage(int64_t peerUserId, const std::string& clie
              (long long)peerUserId, clientMsgId.c_str(), (uint32_t)body.size());
 }
 
-void CIUSocket::SendCreateGroup(const std::string& groupName, const std::vector<int64_t>& memberIds)
+uint32_t CIUSocket::SendCreateGroup(const std::string& groupName, const std::vector<int64_t>& memberIds, int groupType)
 {
     //组装 cmd_create_group 请求体并编码成 v2 帧发出。应答经 cmd_create_group
     //异步回投到 UI（FMG_MSG_V2_CREATE_GROUP_RESULT）。
-    std::string body = net::GroupProtocolClient::buildCreateGroupRequest(groupName, memberIds);
+    std::string body = net::GroupProtocolClient::buildCreateGroupRequest(groupName, memberIds, groupType);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_create_group, seq, body);
-    LOG_INFO("Send v2 create group, name-bytes=%u, members=%u, bodylen=%u.",
-             (uint32_t)groupName.size(), (uint32_t)memberIds.size(), (uint32_t)body.size());
+    LOG_INFO("Send v2 create group, seq=%u, name-bytes=%u, members=%u, grouptype=%d, bodylen=%u.", seq,
+             (uint32_t)groupName.size(), (uint32_t)memberIds.size(), groupType, (uint32_t)body.size());
+    return seq;
+}
+
+void CIUSocket::SendSetNotifyModes(const std::vector<net::NotifyModeEntry>& items)
+{
+    //超过单次上限时按顺序拆批，每批一帧；服务端逐批应答，各批互不影响
+    std::vector<std::vector<net::NotifyModeEntry> > batches;
+    net::ConversationsProtocolClient::splitNotifyModeBatches(items, net::kNotifyModeBatchMax, batches);
+    for (size_t i = 0; i < batches.size(); ++i)
+    {
+        std::string body = net::ConversationsProtocolClient::buildSetNotifyModesRequest(batches[i]);
+        uint32_t seq = (uint32_t)(++m_seq);
+        EnqueueFrame(cmd_set_notify_modes, seq, body);
+        LOG_INFO("Send v2 set notify modes, batch=%u/%u, items=%u, seq=%u.",
+                 (uint32_t)(i + 1), (uint32_t)batches.size(), (uint32_t)batches[i].size(), seq);
+    }
 }
 
 void CIUSocket::SendSetConversation(int ctype, int64_t cid,
                                     bool hasPinned, bool pinned,
-                                    bool hasMute, bool mute)
+                                    bool hasNotifyMode, int notifyMode)
 {
-    //组装 cmd_set_conversation 请求体（只带本次要改的 pinned / mute 字段）并编码成
+    //组装 cmd_set_conversation 请求体（只带本次要改的 pinned / notifymode 字段）并编码成
     //v2 帧发出。应答（通用 {code,msg}）经 cmd_set_conversation 异步回投到 UI
     //（FMG_MSG_V2_SET_CONVERSATION_RESULT）。
     std::string body = net::ConversationsProtocolClient::buildSetConversationRequest(
-        ctype, cid, hasPinned, pinned, hasMute, mute);
+        ctype, cid, hasPinned, pinned, hasNotifyMode, notifyMode);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_set_conversation, seq, body);
-    LOG_INFO("Send v2 set conversation, ctype=%d, cid=%lld, hasPinned=%d/%d, hasMute=%d/%d.",
-             ctype, (long long)cid, (int)hasPinned, (int)pinned, (int)hasMute, (int)mute);
+    LOG_INFO("Send v2 set conversation, ctype=%d, cid=%lld, hasPinned=%d/%d, hasNotifyMode=%d/%d.",
+             ctype, (long long)cid, (int)hasPinned, (int)pinned, (int)hasNotifyMode, notifyMode);
 }
 
 void CIUSocket::SendDeleteConversation(int ctype, int64_t cid)
@@ -3739,6 +4440,23 @@ void CIUSocket::SendDeleteConversation(int ctype, int64_t cid)
     LOG_INFO("Send v2 delete conversation, ctype=%d, cid=%lld.", ctype, (long long)cid);
 }
 
+void CIUSocket::SendSetUnreadMark(int ctype, int64_t cid, bool mark)
+{
+    //只带 unreadmark 一个字段；应答与置顶 / 删除共用 cmd_set_conversation 的回投路径
+    std::string body = net::ConversationsProtocolClient::buildSetUnreadMarkRequest(ctype, cid, mark);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_set_conversation, seq, body);
+    LOG_INFO("Send v2 set unread mark, ctype=%d, cid=%lld, mark=%d.", ctype, (long long)cid, (int)mark);
+}
+
+void CIUSocket::SendSetGroupFollow(int64_t groupid, const std::vector<uint32_t>& targets)
+{
+    std::string body = net::ConversationsProtocolClient::buildSetGroupFollowRequest(groupid, targets);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_set_group_follow, seq, body);
+    LOG_INFO("Send v2 set group follow, groupid=%lld, count=%u.", (long long)groupid, (uint32_t)targets.size());
+}
+
 void CIUSocket::SendSetFavorite(int ctype, int64_t cid, bool favorite)
 {
     //组装 cmd_set_favorite 请求体并编码成 v2 帧发出。应答经同一 cmd 异步回投到 UI
@@ -3748,17 +4466,6 @@ void CIUSocket::SendSetFavorite(int ctype, int64_t cid, bool favorite)
     EnqueueFrame(cmd_set_favorite, seq, body);
     LOG_INFO("Send v2 set favorite, ctype=%d, cid=%lld, favorite=%d.",
              ctype, (long long)cid, (int)favorite);
-}
-
-void CIUSocket::SendSetStarred(int64_t target, bool starred)
-{
-    //组装 cmd_set_starred 请求体并编码成 v2 帧发出。应答经同一 cmd 异步回投到 UI
-    //（FMG_MSG_V2_SET_STARRED_RESULT），主面板据其中回带的 target/starred 对上号。
-    std::string body = net::StarredProtocolClient::buildSetStarredRequest(target, starred);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_set_starred, seq, body);
-    LOG_INFO("Send v2 set starred, target=%lld, starred=%d.",
-             (long long)target, (int)starred);
 }
 
 void CIUSocket::SendSetFriendRemark(int64_t userid, const std::string& remarkUtf8)
@@ -3783,6 +4490,57 @@ void CIUSocket::SendSetContactTags(int64_t userid, const std::vector<std::string
     //标签可能含用户隐私，日志只记条数不记内容。
     LOG_INFO("Send v2 set contact tags, userid=%lld, tagcount=%u.",
              (long long)userid, (uint32_t)tagsUtf8.size());
+}
+
+bool CIUSocket::SendMemoList()
+{
+    //应答经 FMG_MSG_V2_MEMO_LIST 回投，由备忘中枢整体替换备忘簿
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 memo list: not connected.");
+        return false;
+    }
+    const std::string body = net::MemoProtocolClient::buildListRequest(0);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_memo_list, seq, body);
+    LOG_INFO("Send v2 memo list, seq=%u.", seq);
+    return true;
+}
+
+bool CIUSocket::SendMemoSave(const net::MemoItem& memo)
+{
+    //应答经 FMG_MSG_V2_MEMO_SAVE_RESULT 回投。标题与备注可能是个人隐私，日志只记 ID 与规则
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 memo save: not connected, memoid=%lld.", (long long)memo.m_memoid);
+        return false;
+    }
+    const std::string body = net::MemoProtocolClient::buildSaveRequest(memo);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_memo_save, seq, body);
+    LOG_INFO("Send v2 memo save, memoid=%lld, ctype=%d, groupid=%lld, start=%lld, repeat=%d, targets=%u, seq=%u.",
+             (long long)memo.m_memoid, memo.m_ctype, (long long)memo.m_groupid, (long long)memo.m_start,
+             memo.m_repeat, (uint32_t)memo.m_targets.size(), seq);
+    return true;
+}
+
+bool CIUSocket::SendMemoDelete(int64_t memoid)
+{
+    //应答经 FMG_MSG_V2_MEMO_DELETE_RESULT 回投
+    if (memoid <= 0)
+    {
+        return false;
+    }
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 memo delete: not connected, memoid=%lld.", (long long)memoid);
+        return false;
+    }
+    const std::string body = net::MemoProtocolClient::buildDeleteRequest(memoid);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_memo_delete, seq, body);
+    LOG_INFO("Send v2 memo delete, memoid=%lld, seq=%u.", (long long)memoid, seq);
+    return true;
 }
 
 void CIUSocket::SendGetAnnouncements(int64_t sinceId, int limit)
@@ -3849,13 +4607,21 @@ void CIUSocket::SendHandleJoinGroup(int64_t requestId, bool accept)
              (long long)requestId, (int)accept, seq);
 }
 
-void CIUSocket::SendInviteToGroup(int64_t groupId, const std::vector<int64_t>& userIds)
+void CIUSocket::SendInviteToGroup(int64_t groupId, const std::vector<int64_t>& userIds, int historyLimit)
 {
-    std::string body = net::GroupProtocolClient::buildGroupMembersOpRequest(groupId, userIds);
+    std::string body = net::GroupProtocolClient::buildGroupMembersOpRequest(groupId, userIds, historyLimit);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_invite_to_group, seq, body);
-    LOG_INFO("Send v2 invite-to-group, groupid=%lld, count=%u, seq=%u.",
-             (long long)groupId, (uint32_t)userIds.size(), seq);
+    LOG_INFO("Send v2 invite-to-group, groupid=%lld, count=%u, historylimit=%d, seq=%u.",
+             (long long)groupId, (uint32_t)userIds.size(), historyLimit, seq);
+}
+
+void CIUSocket::SendAcceptGroupInvite(int64_t inviteId)
+{
+    std::string body = net::GroupProtocolClient::buildAcceptGroupInviteRequest(inviteId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_accept_group_invite, seq, body);
+    LOG_INFO("Send v2 accept-group-invite, inviteid=%lld, seq=%u.", (long long)inviteId, seq);
 }
 
 void CIUSocket::SendKickGroupMembers(int64_t groupId, const std::vector<int64_t>& userIds)
@@ -3947,31 +4713,6 @@ void CIUSocket::SendDismissGroup(int64_t groupId)
     LOG_INFO("Send v2 dismiss-group, groupid=%lld, seq=%u.", (long long)groupId, seq);
 }
 
-void CIUSocket::SendGetSensitiveWords(int64_t groupId)
-{
-    std::string body = net::GroupProtocolClient::buildGroupIdRequest(groupId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_get_sensitive_words, seq, body);
-    LOG_INFO("Send v2 get-sensitive-words, groupid=%lld, seq=%u.", (long long)groupId, seq);
-}
-
-void CIUSocket::SendAddSensitiveWord(int64_t groupId, const std::string& wordUtf8)
-{
-    std::string body = net::GroupProtocolClient::buildAddSensitiveWordRequest(groupId, wordUtf8);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_operate_sensitive_word, seq, body);
-    LOG_INFO("Send v2 add-sensitive-word, groupid=%lld, seq=%u.", (long long)groupId, seq);
-}
-
-void CIUSocket::SendDeleteSensitiveWord(int64_t groupId, int64_t wordId)
-{
-    std::string body = net::GroupProtocolClient::buildDeleteSensitiveWordRequest(groupId, wordId);
-    uint32_t seq = (uint32_t)(++m_seq);
-    EnqueueFrame(cmd_operate_sensitive_word, seq, body);
-    LOG_INFO("Send v2 delete-sensitive-word, groupid=%lld, wordid=%lld, seq=%u.",
-             (long long)groupId, (long long)wordId, seq);
-}
-
 void CIUSocket::SendGetGroupAnnouncements(int64_t groupId, int offset, int count)
 {
     std::string body = net::GroupProtocolClient::buildGetAnnouncementsRequest(
@@ -4014,6 +4755,177 @@ void CIUSocket::SendDeleteGroupAnnouncement(int64_t groupId, int64_t announceId)
              (long long)groupId, (long long)announceId, seq);
 }
 
+void CIUSocket::SendSetMustRead(int64_t groupId, int64_t announceId)
+{
+    std::string body = net::GroupProtocolClient::buildSetMustReadRequest(groupId, announceId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_set_must_read, seq, body);
+    LOG_INFO("Send v2 set-must-read, groupid=%lld, announcement=%lld, seq=%u.",
+             (long long)groupId, (long long)announceId, seq);
+}
+
+void CIUSocket::SendConfirmMustRead(int64_t groupId)
+{
+    std::string body = net::GroupProtocolClient::buildGroupIdRequest(groupId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_confirm_must_read, seq, body);
+    LOG_INFO("Send v2 confirm-must-read, groupid=%lld, seq=%u.", (long long)groupId, seq);
+}
+
+void CIUSocket::SendReleaseMustRead(int64_t groupId, const std::vector<int64_t>& userIds)
+{
+    //请求体与移出成员同构（群ID + userid 列表）
+    std::string body = net::GroupProtocolClient::buildGroupMembersOpRequest(groupId, userIds);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_release_must_read, seq, body);
+    LOG_INFO("Send v2 release-must-read, groupid=%lld, count=%u, seq=%u.",
+             (long long)groupId, (uint32_t)userIds.size(), seq);
+}
+
+void CIUSocket::SendGetMustRead(int64_t groupId)
+{
+    std::string body = net::GroupProtocolClient::buildGroupIdRequest(groupId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_get_must_read, seq, body);
+    LOG_INFO("Send v2 get-must-read, groupid=%lld, seq=%u.", (long long)groupId, seq);
+}
+
+void CIUSocket::SendGetGroupBots(int64_t groupId)
+{
+    std::string body = net::BotProtocolClient::buildGetGroupBotsRequest(groupId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_get_group_bots, seq, body);
+    LOG_INFO("Send v2 get-group-bots, groupid=%lld, seq=%u.", (long long)groupId, seq);
+}
+
+void CIUSocket::SendGetAutoReply()
+{
+    std::string body = net::BotProtocolClient::buildGetAutoReplyRequest();
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_get_auto_reply, seq, body);
+    LOG_INFO("Send v2 get-auto-reply, seq=%u.", seq);
+}
+
+void CIUSocket::SendSetAutoReply(const net::AutoReplyWire& s)
+{
+    std::string body = net::BotProtocolClient::buildSetAutoReplyRequest(s);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_set_auto_reply, seq, body);
+    LOG_INFO("Send v2 set-auto-reply, away=%d, busy=%d, seq=%u.", s.m_awayOn ? 1 : 0, s.m_busyOn ? 1 : 0, seq);
+}
+
+namespace {
+
+std::mutex                g_botSinkMutex;   //保护下面两项
+CIUSocket::BotFrameSink   g_botSink = NULL; //机器人帧的接收回调；NULL 表示没有登记
+void*                     g_botSinkCtx = NULL; //回调的上下文指针
+
+} // anonymous namespace
+
+void CIUSocket::SetBotFrameSink(BotFrameSink sink, void* ctx)
+{
+    std::lock_guard<std::mutex> guard(g_botSinkMutex);
+    g_botSink = sink;
+    g_botSinkCtx = ctx;
+}
+
+void CIUSocket::DispatchBotFrame(uint16_t cmd, uint32_t seq, const std::string& body)
+{
+    BotFrameSink sink = NULL;
+    void* ctx = NULL;
+    {
+        std::lock_guard<std::mutex> guard(g_botSinkMutex);
+        sink = g_botSink;
+        ctx = g_botSinkCtx;
+    }
+    if (sink == NULL)
+    {
+        LOG_WARNING("Drop bot frame without sink, cmd=%u, seq=%u.", static_cast<unsigned>(cmd), seq);
+        return;
+    }
+    sink(ctx, cmd, seq, body);
+}
+
+uint32_t CIUSocket::SendBotCommand(uint16_t cmd, const std::string& body)
+{
+    //包体由 FlamingoBot.dll 编好，这里只按命令范围、包体非空与连接状态放行，防止 DLL 借主连接发出任意命令
+    if (!net::BotProtocolClient::isDllFrame(cmd) || body.empty() || !m_bConnected)
+    {
+        LOG_WARNING("Reject bot command: cmd=%u, len=%u, connected=%d.", static_cast<unsigned>(cmd),
+                    static_cast<unsigned>(body.size()), m_bConnected ? 1 : 0);
+        return 0;
+    }
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd, seq, body);
+    LOG_INFO("Send v2 bot command, cmd=%u, seq=%u, len=%u.", static_cast<unsigned>(cmd), seq,
+             static_cast<unsigned>(body.size()));
+    return seq;
+}
+
+void CIUSocket::SendGetGroupQa(int64_t groupId)
+{
+    std::string body = net::GroupQaProtocolClient::buildGetRequest(groupId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_get_group_qa, seq, body);
+    LOG_INFO("Send v2 get-group-qa, groupid=%lld, seq=%u.", (long long)groupId, seq);
+}
+
+void CIUSocket::SendSaveGroupQa(int64_t groupId, int64_t id, const std::string& question, const std::string& answer)
+{
+    std::string body = net::GroupQaProtocolClient::buildSaveRequest(groupId, id, question, answer);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_save_group_qa, seq, body);
+    LOG_INFO("Send v2 save-group-qa, groupid=%lld, id=%lld, seq=%u.", (long long)groupId, (long long)id, seq);
+}
+
+void CIUSocket::SendDeleteGroupQa(int64_t groupId, int64_t id)
+{
+    std::string body = net::GroupQaProtocolClient::buildDeleteRequest(groupId, id);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_delete_group_qa, seq, body);
+    LOG_INFO("Send v2 delete-group-qa, groupid=%lld, id=%lld, seq=%u.", (long long)groupId, (long long)id, seq);
+}
+
+void CIUSocket::SendCreateGroupLink(int64_t groupId, int days)
+{
+    std::string body = net::GroupLinkProtocolClient::buildCreateRequest(groupId, days);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_create_group_link, seq, body);
+    LOG_INFO("Send v2 create-group-link, groupid=%lld, days=%d, seq=%u.", (long long)groupId, days, seq);
+}
+
+void CIUSocket::SendGetGroupLinks(int64_t groupId)
+{
+    std::string body = net::GroupProtocolClient::buildGroupIdRequest(groupId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_get_group_links, seq, body);
+    LOG_INFO("Send v2 get-group-links, groupid=%lld, seq=%u.", (long long)groupId, seq);
+}
+
+void CIUSocket::SendRevokeGroupLink(int64_t groupId, int64_t linkId)
+{
+    std::string body = net::GroupLinkProtocolClient::buildRevokeRequest(groupId, linkId);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_revoke_group_link, seq, body);
+    LOG_INFO("Send v2 revoke-group-link, groupid=%lld, id=%lld, seq=%u.", (long long)groupId, (long long)linkId, seq);
+}
+
+void CIUSocket::SendGetGroupLinkInfo(const std::string& code)
+{
+    std::string body = net::GroupLinkProtocolClient::buildCodeRequest(code);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_get_group_link_info, seq, body);
+    LOG_INFO("Send v2 get-group-link-info, seq=%u.", seq);
+}
+
+void CIUSocket::SendJoinGroupByLink(const std::string& code)
+{
+    std::string body = net::GroupLinkProtocolClient::buildCodeRequest(code);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_join_group_by_link, seq, body);
+    LOG_INFO("Send v2 join-group-by-link, seq=%u.", seq);
+}
+
 void CIUSocket::SendChangePassword(const std::string& oldHashHex, const std::string& newHashHex)
 {
     //组装 cmd_change_password 请求体并编码成 v2 帧发出。请求体里只放口令的
@@ -4035,16 +4947,11 @@ void CIUSocket::SendUpdateSignature(const std::string& signatureUtf8)
     LOG_INFO("Send v2 update signature, bodylen=%u.", (uint32_t)body.size());
 }
 
-void CIUSocket::SendUpdateProfile(const std::string& nicknameUtf8,
-                                  const std::string& signatureUtf8,
-                                  int gender, long birthday,
-                                  const std::string& addressUtf8,
-                                  const std::string& mailUtf8)
+void CIUSocket::SendUpdateProfile(const net::ProfileUpdateFields& fields)
 {
-    //组装 cmd_update_profile 请求体（全 6 字段）并编码成 v2 帧发出。应答同样经
+    //组装 cmd_update_profile 请求体（只带改动过的字段）并编码成 v2 帧发出。应答同样经
     //cmd_update_profile 异步回投到 UI（FMG_MSG_V2_UPDATE_PROFILE_RESULT）。
-    std::string body = net::ProfileProtocolClient::buildUpdateProfileRequest(
-        nicknameUtf8, signatureUtf8, gender, birthday, addressUtf8, mailUtf8);
+    std::string body = net::ProfileProtocolClient::buildUpdateProfileRequest(fields);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_update_profile, seq, body);
     LOG_INFO("Send v2 update profile, bodylen=%u.", (uint32_t)body.size());
@@ -4076,33 +4983,37 @@ void CIUSocket::SendChangePresence(int presence)
 
 void CIUSocket::SendGroupTextMessage(int64_t groupId, const std::string& clientMsgId,
                                      const std::string& text, const net::TextFont& font,
-                                     const net::ReplyQuote& quote)
+                                     const net::ReplyQuote& quote, int textFormat,
+                                     const std::string& codeLang,
+                                     const std::vector<net::CodeNoteData>& codeNotes)
 {
     //组装群聊 cmd_send_message 请求体（ctype=2、cid=群id）并发出。回执与单聊同路径。
-    //font.m_valid 为 true 时把字体写进 content.font。
+    //font.m_valid 为 true 时把字体写进 content.font；Markdown 消息与代码片段另带 content.format。
     std::string body = net::MessageProtocolClient::buildSendGroupTextRequest(
-        groupId, clientMsgId, text, font, quote);
+        groupId, clientMsgId, text, font, quote, textFormat, codeLang, codeNotes);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_send_message, seq, body);
-    LOG_INFO("Send v2 group text message, group=%lld, clientmsgid=%s, bodylen=%u.",
-             (long long)groupId, clientMsgId.c_str(), (uint32_t)body.size());
+    LOG_INFO("Send v2 group text message, group=%lld, clientmsgid=%s, format=%d, lang=%s, notes=%u, bodylen=%u.",
+             (long long)groupId, clientMsgId.c_str(), textFormat, codeLang.c_str(), (uint32_t)codeNotes.size(),
+             (uint32_t)body.size());
 }
 
 void CIUSocket::SendGroupTextMessageWithMentions(
     int64_t groupId, const std::string& clientMsgId,
     const std::string& text,
     const std::vector<balloonchatwnd::MentionSpan>& ats,
-    bool atAll, const net::TextFont& font, const net::ReplyQuote& quote)
+    bool atAll, const net::TextFont& font, const net::ReplyQuote& quote, int textFormat,
+    const std::string& codeLang)
 {
     //与上面的普通群文本同路径，只是 content 里多一个 at 对象（@提醒）。
     std::string body = net::MessageProtocolClient::buildSendGroupTextRequest(
-        groupId, clientMsgId, text, ats, atAll, font, quote);
+        groupId, clientMsgId, text, ats, atAll, font, quote, textFormat, codeLang);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_send_message, seq, body);
     LOG_INFO("Send v2 group text message with mentions, group=%lld, clientmsgid=%s, "
-             "ats=%u, atall=%d, bodylen=%u.",
+             "ats=%u, atall=%d, format=%d, bodylen=%u.",
              (long long)groupId, clientMsgId.c_str(), (uint32_t)ats.size(),
-             (int)atAll, (uint32_t)body.size());
+             (int)atAll, textFormat, (uint32_t)body.size());
 }
 
 uint32_t CIUSocket::RequestUpload(int scene, const std::string& md5, int64_t size,
@@ -4183,6 +5094,20 @@ void CIUSocket::SendChatFileMessage(int ctype, int64_t cid, const std::string& c
              ctype, (long long)cid, clientMsgId.c_str(), fileid.c_str(), (long long)size);
 }
 
+void CIUSocket::SendChatVoiceMessage(int ctype, int64_t cid, const std::string& clientMsgId,
+                                     const std::string& fileid, const std::string& md5,
+                                     int durationSeconds, int64_t size, const std::string& waveBase64)
+{
+    //组 cmd_send_message 语音请求体（msgtype=4）并发出。回执与文本 / 图片 / 文件同路径，按
+    //clientmsgid 回投到 UI（FMG_MSG_V2_SEND_CHATMSG_ACK）。
+    std::string body = net::MessageProtocolClient::buildSendVoiceRequest(
+        ctype, cid, clientMsgId, fileid, md5, durationSeconds, size, waveBase64);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_send_message, seq, body);
+    LOG_INFO("Send v2 voice message, ctype=%d, cid=%lld, clientmsgid=%s, fileid=%s, duration=%d, size=%lld.",
+             ctype, (long long)cid, clientMsgId.c_str(), fileid.c_str(), durationSeconds, (long long)size);
+}
+
 HWND CIUSocket::GetUIProxyWnd()
 {
     return m_hProxyWnd;
@@ -4204,14 +5129,35 @@ void CIUSocket::RequestGroupMembers(int64_t groupId)
     LOG_INFO("Request v2 group members, group=%lld.", (long long)groupId);
 }
 
-void CIUSocket::RequestGroupFiles(int64_t groupId, int filetype, int offset, int count)
+uint32_t CIUSocket::RequestGroupFiles(int64_t groupId, int filetype, int offset, int count)
 {
     std::string body = net::GroupFileProtocolClient::buildGetGroupFilesRequest(
         groupId, filetype, offset, count);
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_get_group_files, seq, body);
-    LOG_INFO("Request v2 group files, group=%lld, filetype=%d, offset=%d, count=%d.",
-             (long long)groupId, filetype, offset, count);
+    LOG_INFO("Request v2 group files, group=%lld, filetype=%d, offset=%d, count=%d, seq=%u.",
+             (long long)groupId, filetype, offset, count, seq);
+    return seq;
+}
+
+void CIUSocket::GlobalSearch(const std::string& keywordUtf8, int limit, int announcementLimit)
+{
+    std::string body = net::GlobalSearchProtocolClient::buildRequest(keywordUtf8, limit, announcementLimit);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_global_search, seq, body);
+    //关键字是用户输入的内容，日志只记字节数
+    LOG_INFO("Request v2 global search, keyword bytes=%u, limit=%d, announcement limit=%d, seq=%u.",
+             (uint32_t)keywordUtf8.size(), limit, announcementLimit, seq);
+}
+
+void CIUSocket::SearchGroupFiles(const std::string& keywordUtf8, int limit)
+{
+    std::string body = net::GroupFileProtocolClient::buildSearchGroupFilesRequest(keywordUtf8, limit);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_search_group_files, seq, body);
+    //关键字是用户输入的内容，日志只记字节数
+    LOG_INFO("Request v2 search group files, keyword bytes=%u, limit=%d, seq=%u.",
+             (uint32_t)keywordUtf8.size(), limit, seq);
 }
 
 void CIUSocket::RequestAddGroupFile(int64_t groupId, const std::string& fileid)
@@ -4238,6 +5184,14 @@ void CIUSocket::RequestUserGroups()
     uint32_t seq = (uint32_t)(++m_seq);
     EnqueueFrame(cmd_get_user_groups, seq, "{}");
     LOG_INFO("Request v2 user groups (cmd_get_user_groups).");
+}
+
+void CIUSocket::RequestSyncRewritten(int64_t since, int limit)
+{
+    std::string body = net::MessageProtocolClient::buildSyncRewrittenRequest(since, limit);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_sync_rewritten_messages, seq, body);
+    LOG_INFO("Request v2 sync rewritten messages, since=%lld, limit=%d.", (long long)since, limit);
 }
 
 void CIUSocket::RequestSyncMessages(int ctype, int64_t cid, int64_t beforeMsgId, int limit)

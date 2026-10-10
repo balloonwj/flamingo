@@ -3,12 +3,14 @@
  *  balloonwj@qq.com   2026-06-01
  */
 #include "MessageProtocolClient.h"
+#include "SystemTipText.h"   // FormatSystemTip：系统提示按当前界面语言生成文字
 #include "Protocol.h"                   // conversation_single / message_type_text
 //文件夹传输记录条（msgtype=18）的 content 校验与归一只有这一份实现，本文件转调它，
 //不在这里另抄一遍字段名。
 #include "FolderProtocolClient.h"       // net::FolderRecordContent / parseRecordContent
 #include <stdlib.h>                     // strtoll
 #include "../third-party/jsoncpp-1.9.0/json.h"
+#include "../Common/I18n/I18n.h"   // TR8 / TR_NOOP：UTF-8 界面文字的多语言查找
 
 namespace net {
 
@@ -258,44 +260,173 @@ static std::string buildSendRequest(int ctype, int64_t cid, const std::string& c
     return writeCompact(root);
 }
 
+const char* const kTextFormatMarkdownValue = "markdown";
+const char* const kTextFormatCodeValue = "code";
+const char* const kCodeLangKey = "lang";
+const char* const kCodeNotesKey = "notes";
+
+//批注每一项的键名
+static const char* const kCodeNoteFromKey = "from";
+static const char* const kCodeNoteToKey = "to";
+static const char* const kCodeNoteTextKey = "text";
+static const char* const kCodeNoteUserIdKey = "userid";   //作者，缺省为消息发送者（第 11.4 节）
+static const char* const kCodeNoteNewKey = "new";         //这一轮新增或修改的批注，取值 1
+
+//content.format 的键名
+static const char* const kTextFormatKey = "format";
+
 //组装文字消息的 content：正文写进 text；设过字体写 font；带 @ 写 at（ats 为空且不是
-//@所有人时不写）；带引用写 quote。三种文本发送请求与 textContentBytes 共用这一段，
-//保证发送前计量的体积与真正发出去的 content 逐字节相同。
+//@所有人时不写）；带引用写 quote；Markdown 与代码片段写 format（纯文字不写，与旧消息逐字节相同），
+//代码片段另写 lang（语言标识为空时不写，接收方按纯文本显示）与 notes（没有批注时不写）。
+//三种文本发送请求与 textContentBytes 共用这一段，保证发送前计量的体积与真正发出去的 content 逐字节相同。
 static Json::Value buildTextContent(const std::string& text, const TextFont& font,
                                     const ReplyQuote& quote,
                                     const std::vector<balloonchatwnd::MentionSpan>& ats,
-                                    bool atAll)
+                                    bool atAll, int textFormat, const std::string& codeLang,
+                                    const std::vector<CodeNoteData>& codeNotes)
 {
     Json::Value content;
     content["text"] = text;
     writeFontToContent(content, font);
     writeMentionsToContent(content, ats, atAll);
     writeQuoteToContent(content, quote);
+    if (textFormat == text_format_markdown)
+    {
+        content[kTextFormatKey] = kTextFormatMarkdownValue;
+    }
+    else if (textFormat == text_format_code)
+    {
+        content[kTextFormatKey] = kTextFormatCodeValue;
+        if (!codeLang.empty())
+            content[kCodeLangKey] = codeLang;
+        MessageProtocolClient::writeCodeNotesToContent(content, codeNotes);
+    }
     return content;
+}
+
+void MessageProtocolClient::writeCodeNotesToContent(Json::Value& content, const std::vector<CodeNoteData>& notes)
+{
+    if (notes.empty())
+        return;
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < notes.size(); ++i)
+    {
+        Json::Value item;
+        item[kCodeNoteFromKey] = notes[i].m_from;
+        item[kCodeNoteToKey] = notes[i].m_to;
+        item[kCodeNoteTextKey] = notes[i].m_text;
+        //64 位 id 按协议约定写成字符串
+        if (notes[i].m_userId != 0)
+            item[kCodeNoteUserIdKey] = std::to_string(static_cast<long long>(notes[i].m_userId));
+        if (notes[i].m_isNew)
+            item[kCodeNoteNewKey] = 1;
+        arr.append(item);
+    }
+    content[kCodeNotesKey] = arr;
+}
+
+std::vector<CodeNoteData> MessageProtocolClient::readCodeNotesFromContent(const Json::Value& content)
+{
+    std::vector<CodeNoteData> notes;
+    if (!content.isObject() || !content.isMember(kCodeNotesKey) || !content[kCodeNotesKey].isArray())
+        return notes;
+    const Json::Value& arr = content[kCodeNotesKey];
+    for (Json::ArrayIndex i = 0; i < arr.size(); ++i)
+    {
+        const Json::Value& item = arr[i];
+        if (!item.isObject() || !item[kCodeNoteFromKey].isInt() || !item[kCodeNoteToKey].isInt()
+            || !item[kCodeNoteTextKey].isString())
+            continue;
+        CodeNoteData note;
+        note.m_from = item[kCodeNoteFromKey].asInt();
+        note.m_to = item[kCodeNoteToKey].asInt();
+        note.m_text = item[kCodeNoteTextKey].asString();
+        if (note.m_from < 1 || note.m_to < note.m_from || note.m_text.empty())
+            continue;
+        //作者：带了却不是正整数时整条跳过，不按缺省归到消息发送者名下
+        if (item.isMember(kCodeNoteUserIdKey))
+        {
+            note.m_userId = jsonToInt64(item[kCodeNoteUserIdKey]);
+            if (note.m_userId <= 0)
+                continue;
+        }
+        const Json::Value& isNew = item[kCodeNoteNewKey];
+        note.m_isNew = (isNew.isIntegral() && isNew.asInt64() == 1) || (isNew.isBool() && isNew.asBool());
+        notes.push_back(note);
+    }
+    return notes;
+}
+
+//读 content.format：只有文本消息才认，"markdown" 为 Markdown、"code" 为代码片段，其余（缺省、不认识的取值）都按纯文字
+static int readTextFormatFromContent(const Json::Value& content, int msgtype)
+{
+    if (msgtype != message_type_text || !content.isMember(kTextFormatKey) || !content[kTextFormatKey].isString())
+        return text_format_plain;
+    const std::string format = content[kTextFormatKey].asString();
+    if (format == kTextFormatMarkdownValue)
+        return text_format_markdown;
+    if (format == kTextFormatCodeValue)
+        return text_format_code;
+    return text_format_plain;
+}
+
+//读代码片段的 content.lang：只有代码片段才读，缺省或不是字符串时为空（显示时按纯文本）
+static std::string readCodeLangFromContent(const Json::Value& content, int textFormat)
+{
+    if (textFormat != text_format_code || !content.isMember(kCodeLangKey) || !content[kCodeLangKey].isString())
+        return std::string();
+    return content[kCodeLangKey].asString();
 }
 
 std::string MessageProtocolClient::buildSendTextRequest(int64_t peerUserId,
                                                         const std::string& clientMsgId,
                                                         const std::string& text,
                                                         const TextFont& font,
-                                                        const ReplyQuote& quote)
+                                                        const ReplyQuote& quote,
+                                                        int textFormat,
+                                                        const std::string& codeLang,
+                                                        const std::vector<CodeNoteData>& codeNotes)
 {
     //文本内容承载在 content 对象的 text 字段里；单聊 ctype=conversation_single。
     //发送方若设过字体，再写入 content.font（对端与历史据此渲染相同效果）。单聊没有 @。
     const Json::Value content = buildTextContent(text, font, quote,
-                                                 std::vector<balloonchatwnd::MentionSpan>(), false);
+                                                 std::vector<balloonchatwnd::MentionSpan>(), false, textFormat,
+                                                 codeLang, codeNotes);
     return buildSendRequest(conversation_single, peerUserId, clientMsgId, message_type_text, content);
+}
+
+const char* const kAutoReplyTextPrefix = TR_NOOP(u8"[自动回复] ");
+
+//自动回复消息的 content：正文带前缀，另带 autoreply 标记。发送请求与本端回显共用，保证两份逐字相同
+static Json::Value buildAutoReplyContent(const std::string& replyText)
+{
+    Json::Value content;
+    content["text"] = TR8(kAutoReplyTextPrefix) + replyText;
+    content["autoreply"] = true;
+    return content;
+}
+
+std::string MessageProtocolClient::buildSendAutoReplyRequest(int64_t peerUserId,
+                                                             const std::string& clientMsgId,
+                                                             const std::string& replyText)
+{
+    return buildSendRequest(conversation_single, peerUserId, clientMsgId, message_type_text,
+                            buildAutoReplyContent(replyText));
 }
 
 std::string MessageProtocolClient::buildSendGroupTextRequest(int64_t groupId,
                                                              const std::string& clientMsgId,
                                                              const std::string& text,
                                                              const TextFont& font,
-                                                             const ReplyQuote& quote)
+                                                             const ReplyQuote& quote,
+                                                             int textFormat,
+                                                             const std::string& codeLang,
+                                                             const std::vector<CodeNoteData>& codeNotes)
 {
     //群聊文本：ctype=conversation_group、cid=群id，其余与单聊文本一致。
     const Json::Value content = buildTextContent(text, font, quote,
-                                                 std::vector<balloonchatwnd::MentionSpan>(), false);
+                                                 std::vector<balloonchatwnd::MentionSpan>(), false, textFormat,
+                                                 codeLang, codeNotes);
     return buildSendRequest(conversation_group, groupId, clientMsgId, message_type_text, content);
 }
 
@@ -306,19 +437,25 @@ std::string MessageProtocolClient::buildSendGroupTextRequest(
     const std::vector<balloonchatwnd::MentionSpan>& ats,
     bool atAll,
     const TextFont& font,
-    const ReplyQuote& quote)
+    const ReplyQuote& quote,
+    int textFormat,
+    const std::string& codeLang,
+    const std::vector<CodeNoteData>& codeNotes)
 {
-    const Json::Value content = buildTextContent(text, font, quote, ats, atAll);
+    const Json::Value content = buildTextContent(text, font, quote, ats, atAll, textFormat, codeLang, codeNotes);
     return buildSendRequest(conversation_group, groupId, clientMsgId, message_type_text, content);
 }
 
 size_t MessageProtocolClient::textContentBytes(const std::string& text, const TextFont& font,
                                                const ReplyQuote& quote,
                                                const std::vector<balloonchatwnd::MentionSpan>& ats,
-                                               bool atAll)
+                                               bool atAll,
+                                               int textFormat,
+                                               const std::string& codeLang,
+                                               const std::vector<CodeNoteData>& codeNotes)
 {
     //与服务端同一口径：content 对象的紧凑 JSON 字节数（服务端解析请求后按同样的写法重新序列化）
-    return writeCompact(buildTextContent(text, font, quote, ats, atAll)).size();
+    return writeCompact(buildTextContent(text, font, quote, ats, atAll, textFormat, codeLang, codeNotes)).size();
 }
 
 std::string MessageProtocolClient::buildSendImageRequest(int ctype, int64_t cid,
@@ -354,6 +491,47 @@ std::string MessageProtocolClient::buildSendFileRequest(int ctype, int64_t cid,
     content["filesize"] = static_cast<Json::Int64>(filesize);
     content["md5"]      = md5;
     return buildSendRequest(ctype, cid, clientMsgId, message_type_file, content);
+}
+
+std::string MessageProtocolClient::buildSendVoiceRequest(int ctype, int64_t cid,
+                                                         const std::string& clientMsgId,
+                                                         const std::string& fileid,
+                                                         const std::string& md5,
+                                                         int durationSeconds, int64_t size,
+                                                         const std::string& wave)
+{
+    //语音消息 content：fileid（字符串编码）+ md5 + duration（整秒）+ size（字节数）+ wave（可选，
+    //40 个音量值的 Base64）。服务端按 docs/语音消息方案.md 第 5 节校验，不合格回 code=3
+    Json::Value content;
+    content["fileid"]   = fileid;
+    content["md5"]      = md5;
+    content["duration"] = durationSeconds;
+    content["size"]     = static_cast<Json::Int64>(size);
+    if (!wave.empty())
+        content["wave"] = wave;
+    return buildSendRequest(ctype, cid, clientMsgId, message_type_voice, content);
+}
+
+std::string MessageProtocolClient::buildSendCardRequest(int ctype, int64_t cid,
+                                                        const std::string& clientMsgId,
+                                                        int msgtype,
+                                                        const std::string& contentJson)
+{
+    if (cid <= 0 || clientMsgId.empty())
+        return std::string();
+
+    //卡片 content 已由各卡片的协议模块校验并拼好，这里只解析回 Json::Value 再套上外层信封，
+    //使它与其它消息一样作为 JSON 对象嵌入（而不是被当成一个字符串字段）
+    Json::Value content;
+    Json::CharReaderBuilder b;
+    JSONCPP_STRING errs;
+    Json::CharReader* reader = b.newCharReader();
+    const bool ok = reader->parse(contentJson.c_str(), contentJson.c_str() + contentJson.size(),
+                                  &content, &errs);
+    delete reader;
+    if (!ok || !errs.empty() || !content.isObject())
+        return std::string();
+    return buildSendRequest(ctype, cid, clientMsgId, msgtype, content);
 }
 
 std::string MessageProtocolClient::buildSendShakeRequest(int64_t peerUserId,
@@ -396,7 +574,7 @@ bool MessageProtocolClient::tryNormalizeInlineFaceText(const std::string& text, 
                 }
                 if (hasDigit && j + 1 < n && text[j] == '"' && text[j + 1] == ']')
                 {
-                    result += u8"[表情]";
+                    result += TR8(u8"[表情]");
                     hasFace = true;
                     i = j + 2;
                     continue;
@@ -435,7 +613,7 @@ std::string MessageProtocolClient::digestForMsgType(int msgtype, const std::stri
             }
             return text;
         }
-        return u8"[消息]";
+        return TR8(u8"[消息]");
     }
 
     //其余类型返回占位文案。本轮单聊只新增表情/抖动，其余类型预留同款占位，
@@ -443,26 +621,235 @@ std::string MessageProtocolClient::digestForMsgType(int msgtype, const std::stri
     switch (msgtype)
     {
     case message_type_image:
-        return u8"[图片]";
+        return TR8(u8"[图片]");
     case message_type_file:
-        return u8"[文件]";
+        return TR8(u8"[文件]");
     case message_type_voice:
-        return u8"[语音]";
+        return TR8(u8"[语音]");
     case message_type_emoji:
-        return u8"[表情]";
+        return TR8(u8"[表情]");
     case message_type_shake:
-        return u8"[抖一抖]";
+        return TR8(u8"[抖一抖]");
+    //位置、名片、投票、待办：与服务端 buildMessageDigest 的措辞一致（多语言第 5 期补齐，此前落到「[消息]」）
+    case message_type_location:
+        return TR8(u8"[位置]");
+    case message_type_card:
+        return TR8(u8"[名片]");
+    case message_type_poll:
+        return TR8(u8"[投票]");
+    case message_type_todo:
+        return TR8(u8"[待办]");
     case message_type_folder:
         //文件夹传输记录：这里只给类型占位。会话列表上真正显示的是"[文件夹] 项目资料"
         //那种带名字的写法，由 balloonmain::BuildFolderInviteDigest 在主面板那一层拼出来
         //（本函数拿不到文件夹名，它在 content 里而不在正文里）。两处的方括号措辞一致。
-        return u8"[文件夹]";
+        return TR8(u8"[文件夹]");
     case message_type_merged:
         //合并转发的聊天记录，与服务端 buildMessageDigest 的措辞一致
-        return u8"[聊天记录]";
+        return TR8(u8"[聊天记录]");
+    case message_type_relay:
+        //群接龙卡片：这里只给类型占位，带标题的写法见 digestForNotify（标题在 content 里而不在正文里）
+        return TR8(u8"[接龙]");
+    case message_type_fileshare:
+        //文件共享卡片：这里只给类型占位，带共享名的写法见 digestForNotify，与服务端 buildMessageDigest 一致
+        return TR8(u8"[共享]");
+    case message_type_screenshare:
+        //屏幕共享卡片：与服务端 buildMessageDigest 一致，不带发起人名（会话列表本身已显示发送者）
+        return TR8(u8"[屏幕共享]");
+    case message_type_rtc:
+        //通话记录：这里只给类型占位，群通话卡片按媒体类型的写法见 digestForNotify，与服务端 buildMessageDigest 一致
+        return TR8(u8"[通话]");
+    case message_type_group_invite:
+        //入群邀请卡片：这里只给类型占位，带群名的写法见 digestForNotify，与服务端 buildMessageDigest 一致
+        return TR8(u8"[入群邀请]");
+    case message_type_announcement:
+        //群公告卡片：这里只给类型占位，带标题的写法见 digestForNotify，与服务端 buildMessageDigest 一致
+        return TR8(u8"[群公告]");
+    case message_type_memo:
+        //群备忘卡片：这里只给类型占位，带标题的写法见 digestForNotify，与服务端 buildMessageDigest 一致
+        return TR8(u8"[群备忘]");
+    case message_type_cloudrecord:
+        //云端录像卡片：这里只给类型占位，带标题的写法见 digestForNotify，与服务端 buildMessageDigest 一致
+        return TR8(u8"[云端录像]");
+    case message_type_thread_post:
+        //帖子卡片：这里只给类型占位，带标题的写法见 threadCardDigest
+        return TR8(u8"[帖子]");
+    case message_type_thread_reply:
+        //帖子动态卡片（留言、回复、补充）：这里只给类型占位，带内容的写法见 threadCardDigest
+        return TR8(u8"[帖子动态]");
     default:
-        return u8"[消息]";
+        return TR8(u8"[消息]");
     }
+}
+
+std::string MessageProtocolClient::threadCardDigest(int msgtype, int kind, const std::string& arg, bool deleted)
+{
+    //帖子卡片：「发帖：标题」；已删除时写「帖子已删除」
+    if (msgtype == message_type_thread_post)
+    {
+        if (deleted)
+            return TR8(u8"帖子已删除");
+        return arg.empty() ? TRC8("帖子动态摘要", u8"发帖") : TRF8(u8"发帖：{0}", arg);
+    }
+    switch (kind)
+    {
+    //有人在帖子下留言；留言被删除后（或所在的帖子被删除后）写「留言已删除」
+    case thread_reply_comment:
+        if (deleted)
+            return TR8(u8"留言已删除");
+        return arg.empty() ? TRC8("帖子动态摘要", u8"留言") : TRF8(u8"留言：{0}", arg);
+
+    //有人回复了一条留言；被删除后写「回复已删除」
+    case thread_reply_reply:
+        if (deleted)
+            return TR8(u8"回复已删除");
+        return arg.empty() ? TRC8("帖子动态摘要", u8"回复") : TRF8(u8"回复：{0}", arg);
+
+    //楼主追加了补充；被删除后写「补充已删除」
+    case thread_reply_addendum:
+        if (deleted)
+            return TR8(u8"补充已删除");
+        return arg.empty() ? TR8(u8"补充了帖子") : TRF8(u8"补充了帖子：{0}", arg);
+
+    //不认识的 kind（新服务端加了新的动作）：只写类型
+    default:
+        return digestForMsgType(msgtype, std::string());
+    }
+}
+
+bool MessageProtocolClient::threadCardMentions(const MessageNotify& notify, int64_t userId)
+{
+    if (notify.m_msgtype != message_type_thread_post && notify.m_msgtype != message_type_thread_reply)
+        return false;
+    //@ 了所有人：每个成员都算被 @ 到
+    if (notify.m_threadMentionAll)
+        return true;
+    for (size_t i = 0; i < notify.m_threadMentions.size(); ++i)
+    {
+        if (notify.m_threadMentions[i] == userId)
+            return true;
+    }
+    return false;
+}
+
+bool MessageProtocolClient::parseThreadCardContent(int msgtype, const std::string& content, std::string& arg, int& kind,
+                                                   int64_t& postId, bool& deleted)
+{
+    arg.clear();
+    kind = 0;
+    postId = 0;
+    deleted = false;
+    Json::Value card;
+    if (!parseObject(content, card))
+        return false;
+    if (card["postid"].isString())
+        postId = static_cast<int64_t>(strtoll(card["postid"].asString().c_str(), NULL, 10));
+    else if (card["postid"].isIntegral())
+        postId = card["postid"].asInt64();
+    //帖子卡片与动态卡片都可能被改写为已删除形态（docs/帖子群方案.md 14.6），此时不带原文
+    deleted = card["deleted"].isIntegral() && card["deleted"].asInt() != 0;
+    if (msgtype == message_type_thread_post)
+    {
+        if (deleted)
+            return true;
+        if (card["title"].isString() && !card["title"].asString().empty())
+            arg = card["title"].asString();
+        else if (card["digest"].isString())
+            arg = card["digest"].asString();
+        return true;
+    }
+    kind = card["kind"].isIntegral() ? card["kind"].asInt() : 0;
+    if (deleted)
+        return true;
+    if (card["digest"].isString() && !card["digest"].asString().empty())
+        arg = card["digest"].asString();
+    else if (card["posttitle"].isString())
+        arg = card["posttitle"].asString();
+    return true;
+}
+
+std::string MessageProtocolClient::groupCallDigest(const std::string& contentJson)
+{
+    //通话卡片 content 的 kind 与媒体类型取值：群通话卡片 groupcall（docs/协议设计-v2.md 21.5）、一对一通话卡片 call
+    //（7.8 节「一对一通话卡片」），视频都为 2
+    const char* const kGroupCallKind = "groupcall";
+    const char* const kCallKind = "call";
+    const int kCardVideo = 2;
+    Json::Value card;
+    if (!parseObject(contentJson, card) || !card["kind"].isString())
+        return TR8(u8"[通话]");
+    const bool video = card["media"].isInt() && card["media"].asInt() == kCardVideo;
+    if (card["kind"].asString() == kGroupCallKind)
+        return video ? TR8(u8"[群视频通话]") : TR8(u8"[群语音通话]");
+    if (card["kind"].asString() == kCallKind)
+        return video ? TR8(u8"[视频通话]") : TR8(u8"[语音通话]");
+    return TR8(u8"[通话]");
+}
+
+std::string MessageProtocolClient::digestForNotify(const MessageNotify& notify)
+{
+    //帖子卡片、帖子动态卡片：「发帖：标题」「回复：内容」等，与会话同步时在本地生成的写法一致
+    if (notify.m_msgtype == message_type_thread_post || notify.m_msgtype == message_type_thread_reply)
+    {
+        std::string arg;
+        int kind = 0;
+        int64_t postId = 0;
+        bool deleted = false;
+        parseThreadCardContent(notify.m_msgtype, notify.m_threadCardContent, arg, kind, postId, deleted);
+        return threadCardDigest(notify.m_msgtype, kind, arg, deleted);
+    }
+    //文件共享卡片：「[共享] 共享名」，与服务端 buildMessageDigest 一致；content 不可用时只写「[共享]」
+    if (notify.m_msgtype == message_type_fileshare)
+    {
+        ShareCardContent card;
+        if (parseShareCardContent(notify.m_shareContent, card) && !card.m_name.empty())
+            return digestForMsgType(notify.m_msgtype, notify.m_text) + " " + card.m_name;
+        return digestForMsgType(notify.m_msgtype, notify.m_text);
+    }
+    //群通话卡片：按媒体类型写「[群语音通话]」「[群视频通话]」，与服务端 buildMessageDigest 一致；content 不可用时只写类型
+    if (notify.m_msgtype == message_type_rtc)
+        return groupCallDigest(notify.m_groupCallContent);
+    //入群邀请卡片：「[入群邀请] 群名」，与服务端 buildMessageDigest 一致；content 不可用或没有群名时只写类型
+    if (notify.m_msgtype == message_type_group_invite)
+    {
+        Json::Value card;
+        if (parseObject(notify.m_groupInviteContent, card) && card["groupname"].isString()
+            && !card["groupname"].asString().empty())
+        {
+            return digestForMsgType(notify.m_msgtype, notify.m_text) + " " + card["groupname"].asString();
+        }
+        return digestForMsgType(notify.m_msgtype, notify.m_text);
+    }
+    //群公告卡片、群备忘卡片、云端录像卡片：「[群公告] 标题」「[群备忘] 标题」「[云端录像] 标题」，与服务端
+    //buildMessageDigest 一致；content 不可用或没有标题时只写类型
+    if (notify.m_msgtype == message_type_announcement || notify.m_msgtype == message_type_memo
+        || notify.m_msgtype == message_type_cloudrecord)
+    {
+        const std::string& cardJson = (notify.m_msgtype == message_type_announcement) ? notify.m_announcementContent
+                                      : (notify.m_msgtype == message_type_memo)       ? notify.m_memoCardContent
+                                                                                      : notify.m_cloudRecordContent;
+        Json::Value card;
+        if (parseObject(cardJson, card) && card["title"].isString() && !card["title"].asString().empty())
+            return digestForMsgType(notify.m_msgtype, notify.m_text) + " " + card["title"].asString();
+        return digestForMsgType(notify.m_msgtype, notify.m_text);
+    }
+    if (notify.m_msgtype != message_type_relay)
+    {
+        return digestForMsgType(notify.m_msgtype, notify.m_text);
+    }
+    //接龙卡片：「[接龙] 标题」，与服务端 buildMessageDigest 一致；content 不可用或标题为空时只写「[接龙]」
+    std::string digest = digestForMsgType(notify.m_msgtype, notify.m_text);
+    Json::Value root;
+    if (parseObject(notify.m_relayContent, root) && root["title"].isString())
+    {
+        const std::string title = root["title"].asString();
+        if (!title.empty())
+        {
+            digest += " ";
+            digest += title;
+        }
+    }
+    return digest;
 }
 
 std::string MessageProtocolClient::buildFileTransferAckRequest(int64_t peerUserId, int64_t msgid, int state)
@@ -579,10 +966,15 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
     notify.m_msgtype = root["msgtype"].isInt() ? root["msgtype"].asInt() : 0;
     if (notify.m_msgid <= 0)
         return false;
-    //发送者须为正；唯一的例外是服务端生成的系统消息（发布公告、入群欢迎语、退出群聊、转让群主等），
-    //它们没有真实发送人，from 统一为 0（服务端 kSystemMessageSenderId）。若一律要求 from > 0，
-    //这类消息在推送与拉历史时都会被当成脏数据丢掉，群里永远看不到
-    const bool systemFromServer = (notify.m_msgtype == message_type_system && notify.m_from == 0);
+    //发送者须为正；例外是服务端以系统名义写入的两类消息，from 统一为 0（服务端 kSystemMessageSenderId）：
+    //一是系统提示（发布公告、入群欢迎语、退出群聊、转让群主等）；二是入群必读卡片（公告卡片且 content 带
+    //mustread，只发给新成员本人，docs/群公告接入方案.md §14）。若一律要求 from > 0，这两类消息在推送与拉历史时
+    //都会被当成脏数据丢掉（2026-10-07 实测必读卡片即因此没有显示）。普通公告卡片以发布人的名义发出，from 为 0 时仍判为脏数据
+    const Json::Value& rawContent = root["content"];
+    const bool mustReadCard = (notify.m_msgtype == message_type_announcement && rawContent.isObject()
+                               && rawContent["mustread"].isBool() && rawContent["mustread"].asBool());
+    const bool systemFromServer = (notify.m_from == 0
+                                   && (notify.m_msgtype == message_type_system || mustReadCard));
     if (notify.m_from <= 0 && !systemFromServer)
         return false;
 
@@ -592,6 +984,8 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
     notify.m_to          = jsonToInt64(root["to"]);
     notify.m_timestamp   = root["timestamp"].isNumeric() ? root["timestamp"].asInt64() : 0;
     notify.m_recalled    = root["recalled"].isBool() ? root["recalled"].asBool() : false;
+    //撤回者：只有已撤回且服务端记录了撤回者时才有这个字段，其余情形取 0
+    notify.m_recalledBy  = jsonToInt64(root["recalledby"]);
     //文件收取状态：服务端只对"拉取者自己发出的文件消息"回填，其余情形无此字段（保持 0）。
     //发送方离线期间对方的接收 / 拒绝，就是靠拉历史时的这个字段补看到的。
     notify.m_fileAckState = root["fileackstate"].isInt() ? root["fileackstate"].asInt() : 0;
@@ -629,6 +1023,33 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
             notify.m_fileName = content["filename"].isString() ? content["filename"].asString() : std::string();
             notify.m_fileSize = content["filesize"].isNumeric() ? content["filesize"].asInt64() : 0;
             notify.m_fileMd5  = content["md5"].isString() ? content["md5"].asString() : std::string();
+
+            //单聊单文件 P2P 直传留下的文件消息（content 带 direct=1）：校验与归一集中在
+            //FolderProtocolClient::parseDirectFileContent，与服务端的产出逐字对应。普通离线文件消息解析不出来，字段保持默认
+            DirectFileContent direct;
+            if (FolderProtocolClient::parseDirectFileContent(writeCompact(content), direct))
+            {
+                notify.m_fileDirect          = true;
+                notify.m_fileDirectSessionId = direct.m_sessionId;
+                notify.m_fileDirectResult    = direct.m_result;
+                notify.m_fileLinkPath        = direct.m_linkPath;
+                notify.m_fileMd5             = direct.m_md5;
+            }
+        }
+        else if (notify.m_msgtype == message_type_voice)
+        {
+            //语音消息：fileid / md5 / duration / size / wave（fileid 容错字符串或数字编码，与图片、文件同口径；
+            //wave 可选，老消息或发送方没写时为空串，画气泡时换成均匀波形）
+            const Json::Value& fid = content["fileid"];
+            if (fid.isString())
+                notify.m_voiceFileId = fid.asString();
+            else if (fid.isIntegral())
+                notify.m_voiceFileId = std::to_string(fid.asInt64());
+
+            notify.m_voiceMd5      = content["md5"].isString() ? content["md5"].asString() : std::string();
+            notify.m_voiceDuration = content["duration"].isInt() ? content["duration"].asInt() : 0;
+            notify.m_voiceSize     = content["size"].isNumeric() ? content["size"].asInt64() : 0;
+            notify.m_voiceWave     = content["wave"].isString() ? content["wave"].asString() : std::string();
         }
         else if (notify.m_msgtype == message_type_folder)
         {
@@ -647,6 +1068,7 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
                 notify.m_folderTotalSize  = record.m_totalSize;
                 notify.m_folderResult     = record.m_result;
                 notify.m_folderErrCode    = record.m_errCode;
+                notify.m_folderLinkPath   = record.m_linkPath;
             }
             //解析不出来时各字段保持默认（m_folderResult 为 0），调用方据此按"内容不可用"
             //降级渲染；整条消息仍然有效，不因 content 脏了就把它从聊天记录里抹掉
@@ -655,6 +1077,65 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
         {
             //合并转发的聊天记录：content 原文整体保留，用到时再经 parseMergedContent 展开
             notify.m_mergedContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_relay)
+        {
+            //群接龙卡片：content 原文整体保留，用到时再经 CardProtocolClient::parseRelayCardContent 解析
+            notify.m_relayContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_fileshare)
+        {
+            //文件共享卡片：content 原文整体保留，用到时再经 parseShareCardContent 解析
+            notify.m_shareContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_screenshare)
+        {
+            //屏幕共享卡片：content 原文整体保留，用到时再经 parseScreenShareCardContent 解析
+            notify.m_screenShareContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_group_invite)
+        {
+            //入群邀请卡片：content 原文整体保留，用到时再经 balloonchatwnd::ApplyGroupInviteCard 解析
+            notify.m_groupInviteContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_announcement)
+        {
+            //群公告卡片：content 原文整体保留，用到时再经 balloonchatwnd::ApplyAnnouncementCard 解析。
+            //content 里的 text 只给老客户端兜底，这里不取，否则会走进下面的文本分支
+            notify.m_announcementContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_memo)
+        {
+            //群备忘卡片：content 原文整体保留，用到时再经 balloonchatwnd::ApplyMemoCard 解析
+            notify.m_memoCardContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_cloudrecord)
+        {
+            //云端录像卡片：content 原文整体保留，用到时再经 balloonchatwnd::ApplyCloudRecordCard 解析
+            notify.m_cloudRecordContent = writeCompact(content);
+        }
+        else if (notify.m_msgtype == message_type_thread_post || notify.m_msgtype == message_type_thread_reply)
+        {
+            //帖子卡片、帖子动态卡片：content 原文整体保留，用到时再经 parseThreadCardContent 解析；
+            //被 @ 的人另读进 m_threadMentions，主面板据此判断这张卡片有没有 @ 到本人
+            notify.m_threadCardContent = writeCompact(content);
+            const Json::Value& mentions = content["mentions"];
+            if (mentions.isArray())
+            {
+                for (Json::ArrayIndex i = 0; i < mentions.size(); ++i)
+                {
+                    const int64_t uid = jsonToInt64(mentions[i]);
+                    if (uid > 0)
+                        notify.m_threadMentions.push_back(uid);
+                }
+            }
+            //@ 了所有人（docs/帖子群方案.md §15）：服务端只在为真时写这个字段
+            notify.m_threadMentionAll = content["mentionall"].isBool() && content["mentionall"].asBool();
+        }
+        else if (notify.m_msgtype == message_type_rtc)
+        {
+            //通话记录（目前只有群通话卡片）：content 原文整体保留，用到时再经 GroupCallProtocolClient::parseCard 解析
+            notify.m_groupCallContent = writeCompact(content);
         }
         else if (content["text"].isString())
         {
@@ -669,6 +1150,40 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
             //可选 引用回复：发送方引用过某条消息时 content.quote 存在。无该字段
             //（老版本消息 / 普通消息）则 m_quote.m_valid 保持 false，按无引用渲染。
             readQuoteFromContent(content, notify.m_quote);
+            //可选 文本格式：Markdown 消息带 content.format = "markdown"，代码片段带 "code"；缺省或不认识的取值按纯文字
+            notify.m_textFormat = readTextFormatFromContent(content, notify.m_msgtype);
+            //代码片段的语言标识：content.lang；不是代码片段或没有这个字段时为空
+            notify.m_codeLang = readCodeLangFromContent(content, notify.m_textFormat);
+            //代码片段的批注：content.notes（docs/代码片段方案.md 第 10.5 节）
+            if (notify.m_textFormat == text_format_code)
+                notify.m_codeNotes = MessageProtocolClient::readCodeNotesFromContent(content);
+            if (notify.m_msgtype == message_type_system)
+            {
+                //接龙相关的群系统提示另带 cardmsgid（卡片所在消息 id，字符串编码），提示行据此可点击
+                notify.m_cardMsgId = jsonToInt64(content["cardmsgid"]);
+                //结构化提示（多语言第 5 期）：认得类型时正文换成当前界面语言的文字；认不出的类型仍用服务端的 text
+                if (content["tipkind"].isString() && content["tipargs"].isObject())
+                {
+                    notify.m_tipKind = content["tipkind"].asString();
+                    notify.m_tipArgs = writeCompact(content["tipargs"]);
+                    std::string localized;
+                    if (FormatSystemTip(notify.m_tipKind, content["tipargs"], localized))
+                        notify.m_text = localized;
+                }
+            }
+            //可选 自动回复标记：发送方开着「离开 / 忙碌时自动回复」时由客户端自动发出的文本带这个字段。
+            //只认文本消息、只认布尔 true，其余一律按普通消息处理
+            notify.m_autoReply = (notify.m_msgtype == message_type_text)
+                && content["autoreply"].isBool() && content["autoreply"].asBool();
+            //可选 机器人标记：只认文本消息、只认对象；单聊代答的正文带「[机器人] 」或「[自动回复] 」前缀，供老客户端阅读，
+            //这里原样保留，由显示层按 m_botKind 去掉前缀并加上标记
+            const Json::Value& botMark = content["bot"];
+            if (notify.m_msgtype == message_type_text && botMark.isObject())
+            {
+                notify.m_botId = jsonToInt64(botMark["id"]);
+                notify.m_botName = botMark["name"].isString() ? botMark["name"].asString() : std::string();
+                notify.m_botKind = botMark["kind"].isString() ? botMark["kind"].asString() : std::string();
+            }
         }
     }
 
@@ -687,6 +1202,33 @@ bool MessageProtocolClient::parseMessageNotify(const std::string& jsonbody, Mess
     return fillMessageFromObject(root, notify);
 }
 
+bool MessageProtocolClient::buildAutoReplyEcho(int64_t selfId, int64_t peerUserId,
+                                               const std::string& clientMsgId, int64_t msgid,
+                                               int64_t timestamp, const std::string& replyText,
+                                               MessageNotify& out)
+{
+    if (selfId <= 0 || peerUserId <= 0 || msgid <= 0)
+        return false;
+
+    //字段与服务端 messageBodyValue 一致：id 以字符串编码；单聊没有 @，mentions 为空数组
+    Json::Value root;
+    root["msgid"]       = std::to_string(msgid);
+    root["clientmsgid"] = clientMsgId;
+    root["ctype"]       = conversation_single;
+    root["cid"]         = std::to_string(peerUserId);
+    root["from"]        = std::to_string(selfId);
+    root["to"]          = std::to_string(peerUserId);
+    root["msgtype"]     = message_type_text;
+    root["content"]     = buildAutoReplyContent(replyText);
+    root["mentions"]    = Json::Value(Json::arrayValue);
+    root["mentionall"]  = false;
+    root["timestamp"]   = static_cast<Json::Int64>(timestamp);
+    root["recalled"]    = false;
+
+    out = MessageNotify();
+    return fillMessageFromObject(root, out);
+}
+
 std::string MessageProtocolClient::buildSyncMessagesRequest(int ctype, int64_t cid,
                                                             int64_t beforeMsgId, int limit)
 {
@@ -696,6 +1238,15 @@ std::string MessageProtocolClient::buildSyncMessagesRequest(int ctype, int64_t c
     root["cid"]         = std::to_string(cid);
     root["beforemsgid"] = std::to_string(beforeMsgId);
     root["limit"]       = limit;
+    return writeCompact(root);
+}
+
+std::string MessageProtocolClient::buildSyncRewrittenRequest(int64_t since, int limit)
+{
+    Json::Value root;
+    //since 以字符串编码，与服务端 getStringId 的契约一致
+    root["since"] = std::to_string(since);
+    root["limit"] = limit;
     return writeCompact(root);
 }
 
@@ -831,6 +1382,40 @@ bool MessageProtocolClient::parseDeleteMessagesByTimeResponse(const std::string&
     return true;
 }
 
+std::string MessageProtocolClient::buildClearConversationRequest(int ctype, int64_t cid)
+{
+    //服务端只接受单聊与群聊、会话ID为正；这里提前挡住，省一次必然失败的往返
+    if ((ctype != conversation_single && ctype != conversation_group) || cid <= 0)
+    {
+        return std::string();
+    }
+    Json::Value root;
+    root["ctype"] = ctype;
+    //cid 以字符串编码，避免大整数精度丢失（与服务端 getStringId 契约一致）
+    root["cid"] = std::to_string(cid);
+    return writeCompact(root);
+}
+
+bool MessageProtocolClient::parseClearConversationResponse(const std::string& jsonbody,
+                                                           ClearConversationResponse& resp)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+
+    //与其它应答同口径：没有整型 code 就认为报文不可用，调用方不得据此判成功
+    if (!root["code"].isIntegral())
+        return false;
+
+    resp.m_code = root["code"].asInt();
+    resp.m_msg  = root["msg"].isString() ? root["msg"].asString() : std::string();
+    //失败应答只有 code / msg，会话与锚点保持为 0
+    resp.m_ctype        = root["ctype"].isInt() ? root["ctype"].asInt() : 0;
+    resp.m_cid          = jsonToInt64(root["cid"]);
+    resp.m_clearedMsgid = jsonToInt64(root["clearedmsgid"]);
+    return true;
+}
+
 bool MessageProtocolClient::parseMessagesDeletedNotify(const std::string& jsonbody,
                                                        MessagesDeletedNotify& notify)
 {
@@ -839,6 +1424,36 @@ bool MessageProtocolClient::parseMessagesDeletedNotify(const std::string& jsonbo
         return false;
 
     notify.m_msgids.clear();
+    notify.m_isClear = false;
+    notify.m_clearedMsgid = 0;
+
+    //带 clearedmsgid 的是清空形式（来自 cmd_clear_conversation）：会话与锚点都要合法，
+    //清错会话无法挽回，宁可不删
+    if (root.isMember("clearedmsgid"))
+    {
+        if (!root["ctype"].isInt())
+            return false;
+        const int ctype = root["ctype"].asInt();
+        if (ctype != conversation_single && ctype != conversation_group)
+            return false;
+        const int64_t cid = jsonToInt64(root["cid"]);
+        if (cid <= 0)
+            return false;
+        //锚点可以为 0（清空的是一个没有任何消息的会话），不能为负；jsonToInt64 解析失败时返回 0，
+        //故先排除字符串以 '-' 开头的负值
+        const Json::Value& anchorValue = root["clearedmsgid"];
+        if (anchorValue.isString() && !anchorValue.asString().empty() && anchorValue.asString()[0] == '-')
+            return false;
+        if (anchorValue.isIntegral() && anchorValue.asInt64() < 0)
+            return false;
+
+        notify.m_isClear = true;
+        notify.m_isRange = false;
+        notify.m_ctype = ctype;
+        notify.m_cid = cid;
+        notify.m_clearedMsgid = jsonToInt64(anchorValue);
+        return true;
+    }
 
     //带 msgids 的是单条形式（来自 cmd_delete_message）
     if (root.isMember("msgids"))
@@ -939,6 +1554,21 @@ bool MessageProtocolClient::parsePinResponse(const std::string& jsonbody,
     resp.m_cid   = jsonToInt64(root["cid"]);
     resp.m_msgid = jsonToInt64(root["msgid"]);
     resp.m_pin   = root["pin"].isInt() ? root["pin"].asInt() : 0;
+    return true;
+}
+
+bool MessageProtocolClient::parseCallCardNotify(const std::string& jsonbody, CallCardNotify& notify)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+    //msgid / cid 定位「哪个会话的哪条消息」，content 是改写后的内容，三者缺一则整条推送不可用
+    notify.m_msgid = jsonToInt64(root["msgid"]);
+    notify.m_cid = jsonToInt64(root["cid"]);
+    if (notify.m_msgid <= 0 || notify.m_cid <= 0 || !root["content"].isObject())
+        return false;
+    notify.m_sessionId = root["sessionid"].isString() ? root["sessionid"].asString() : std::string();
+    notify.m_content = writeCompact(root["content"]);
     return true;
 }
 
@@ -1121,6 +1751,62 @@ bool MessageProtocolClient::parseForwardMessageResponse(const std::string& jsonb
     return true;
 }
 
+bool MessageProtocolClient::parseShareCardContent(const std::string& contentJson, ShareCardContent& out)
+{
+    out = ShareCardContent();
+    Json::Value root;
+    if (!parseObject(contentJson, root))
+        return false;
+    //64 位 ID 写成十进制字符串；也接受整数写法
+    out.m_shareId = jsonToInt64(root["shareid"]);
+    out.m_ownerId = jsonToInt64(root["ownerid"]);
+    if (out.m_shareId <= 0 || out.m_ownerId <= 0 || !root["kind"].isInt() || !root["name"].isString())
+        return false;
+    out.m_kind = root["kind"].asInt();
+    if (out.m_kind != share_kind_disk && out.m_kind != share_kind_folder && out.m_kind != share_kind_file)
+        return false;
+    out.m_name = root["name"].asString();
+    out.m_displayPath = root["displaypath"].isString() ? root["displaypath"].asString() : std::string();
+    //服务端按看的人合并的状态与权限：可能都不带（本地库里的旧内容、实时推送给分享者本人的那一份）
+    if (root["sharestate"].isInt())
+    {
+        out.m_hasState = true;
+        out.m_state = root["sharestate"].asInt();
+        out.m_reason = root["sharereason"].isInt() ? root["sharereason"].asInt() : 0;
+    }
+    if (root["myperms"].isInt())
+    {
+        out.m_hasPerms = true;
+        out.m_myPerms = root["myperms"].asInt();
+    }
+    return true;
+}
+
+bool MessageProtocolClient::parseScreenShareCardContent(const std::string& contentJson, ScreenShareCardContent& out)
+{
+    out = ScreenShareCardContent();
+    Json::Value root;
+    if (!parseObject(contentJson, root))
+        return false;
+    if (!root["roomid"].isString() || root["roomid"].asString().empty())
+        return false;
+    //64 位 ID 与时间写成十进制字符串；也接受整数写法
+    out.m_hostId = jsonToInt64(root["host"]);
+    if (out.m_hostId <= 0)
+        return false;
+    out.m_roomId = root["roomid"].asString();
+    out.m_hostName = root["hostname"].isString() ? root["hostname"].asString() : std::string();
+    out.m_startTime = jsonToInt64(root["starttime"]);
+    //locked 为整数 0 / 1（第 12 期）；第 12 期之前的卡片没有这一项
+    out.m_locked = root["locked"].isIntegral() && root["locked"].asInt() != 0;
+    //forced 为整数 0 / 1（第 13 期）；第 13 期之前的卡片没有这一项
+    out.m_forced = root["forced"].isIntegral() && root["forced"].asInt() != 0;
+    //共享标题与描述（第 15 期）；第 15 期之前的卡片没有这两项
+    out.m_title = root["title"].isString() ? root["title"].asString() : std::string();
+    out.m_desc = root["desc"].isString() ? root["desc"].asString() : std::string();
+    return true;
+}
+
 bool MessageProtocolClient::parseMergedContent(const std::string& contentJson, MergedRecord& out)
 {
     out.m_title.clear();
@@ -1170,6 +1856,43 @@ bool MessageProtocolClient::canRecallMessage(int64_t msgid, int64_t msgTimestamp
         return false;
     }
 
+    return true;
+}
+
+bool MessageProtocolClient::parseSyncRewrittenResponse(const std::string& jsonbody, SyncRewrittenResult& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+
+    if (!root["code"].isInt())
+        return false;
+
+    out.m_code = root["code"].asInt();
+    if (out.m_code != 0)
+        return true;
+
+    out.m_rev    = jsonToInt64(root["rev"]);
+    out.m_more   = root["more"].isBool() ? root["more"].asBool() : false;
+    out.m_currev = jsonToInt64(root["currev"]);
+
+    out.m_items.clear();
+    const Json::Value& arr = root["items"];
+    if (arr.isArray())
+    {
+        for (Json::ArrayIndex i = 0; i < arr.size(); ++i)
+        {
+            const Json::Value& jm = arr[i];
+            if (!jm.isObject())
+                continue;
+            RewrittenMessageItem item;
+            //与 cmd_sync_messages 同口径解析；缺 msgid / from 的脏数据跳过，不影响其余条目
+            if (!fillMessageFromObject(jm, item.m_msg))
+                continue;
+            item.m_rev = jsonToInt64(jm["rev"]);
+            out.m_items.push_back(item);
+        }
+    }
     return true;
 }
 

@@ -5,9 +5,9 @@
  *  cmd_announcement_notify=2103）的客户端侧编解码，与服务端
  *  chatserversrc/AnnouncementProtocol.{h,cpp} 一一对应。
  *
- *  平台公告由企业管理控制台(flamingoAdmin)发布，投递到 PC 主面板的「消息盒子」。
+ *  平台公告由企业管理控制台(flamingoAdmin)发布，投递到 PC 主面板的「公告中心」。
  *  典型用法：登录后发 cmd_get_announcements 全量拉一遍落本地库，之后靠
- *  cmd_announcement_notify 推送增量；用户在消息盒子里点开某条时发
+ *  cmd_announcement_notify 推送增量；用户在公告中心里点开某条时发
  *  cmd_mark_announcement_read 上报已读，管理控制台的「已读进度」统计的就是它。
  *
  *  注意与<u>群公告</u>（cmd_get_group_announcements=1323 等，见 GroupProtocolClient）
@@ -29,7 +29,7 @@
 namespace net {
 
 /**
- *  一条平台公告，即「消息盒子」列表里的一项。
+ *  一条平台公告，即「公告中心」列表里的一项。
  *
  *  字段与服务端 AnnouncementPushItem 一一对应。文本字段一律是 <u>UTF-8</u>，
  *  交给界面前须转成 UTF-16。
@@ -41,7 +41,7 @@ struct AnnouncementItem
     std::string m_body;            //正文（UTF-8）
     int         m_severity;        //级别，取值见 Protocol.h 的 announcement_severity（0 普通 1 提醒 2 警告）
     std::string m_senderName;      //发布者名称（UTF-8），如「平台运营」
-    int         m_pinned;          //是否置顶：0 否 1 是；置顶的在消息盒子列表里排最前
+    int         m_pinned;          //是否置顶：0 否 1 是；置顶的在公告中心列表里排最前
     int64_t     m_sentTimeMs;      //发布时间，Unix 毫秒
     int         m_read;            //本人是否已读：0 未读 1 已读
 

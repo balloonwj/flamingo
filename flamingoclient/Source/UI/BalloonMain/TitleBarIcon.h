@@ -38,4 +38,54 @@ namespace balloonmain {
  */
 HBITMAP CreateProgramIconBitmap(int size, COLORREF bg);
 
+// 标题栏程序图标的常用边长（像素）：标题栏最终按 16x16 绘制
+const int kProgramTitleIconSize = 16;
+
+// 不透明标题栏的底色：SetTitleBarTransparent(false)（默认）时 balloonui 画的就是这个颜色
+const COLORREF kOpaqueTitleBarColor = RGB(245, 246, 250);
+
+/**
+ *  ProgramWindowIcons —— 一个窗口的程序图标：标题栏左侧的位图，以及任务栏 / Alt-Tab 用的大、小两枚图标。
+ *
+ *  三者都由本对象持有、析构时释放：DuiFrameWindow::SetIcon 只借用位图不释放，WM_SETICON 交给系统的图标系统也不释放。
+ *  第一次用到时才加载，窗口关闭再打开（同一个 C++ 对象重新建窗）时复用，不重复加载。图标资源一律从 exe 模块
+ *  （GetModuleHandle(NULL)）加载，所以编进 FlamingoMedia.dll、FlamingoFileShare.dll 的窗口同样取得到。
+ *  2026-10-03 起文件共享的各窗口使用；此前各窗口把这段代码各写了一份（如远程桌面对话框）。
+ *
+ *  典型用法（DuiFrameWindow 子类建窗之后，m_programIcons 是成员）：
+ *      SetIcon(m_programIcons.TitleBitmap(kProgramTitleIconSize, kOpaqueTitleBarColor));
+ *      m_programIcons.ApplyTaskIcons(m_hWnd);
+ */
+class ProgramWindowIcons
+{
+public:
+    ProgramWindowIcons();
+
+    // 释放持有的位图与图标。用它们的窗口此时应已销毁（窗口是同一个对象的成员时，由所属对象先关闭窗口）。
+    ~ProgramWindowIcons();
+
+    /**
+     *  标题栏位图：第一次调用时按 size / bg 生成（见 CreateProgramIconBitmap），之后返回同一块，参数不再起作用。
+     *  @param size 边长（像素），一般传 kProgramTitleIconSize
+     *  @param bg   合成底色，须与标题栏实际显示的颜色一致，不透明标题栏传 kOpaqueTitleBarColor
+     *  @return 位图句柄，所有权归本对象；图标资源加载失败时返回 NULL（标题栏不显示图标）
+     */
+    HBITMAP TitleBitmap(int size, COLORREF bg);
+
+    /**
+     *  给窗口设置任务栏 / Alt-Tab 图标（WM_SETICON 的 ICON_BIG 与 ICON_SMALL）。图标第一次调用时按系统的大、小图标尺寸加载。
+     *  @param hwnd 目标窗口；不是有效窗口时不做任何事。图标加载失败的那一枚不设置
+     */
+    void ApplyTaskIcons(HWND hwnd);
+
+private:
+    // 持有 GDI 句柄，不可复制
+    ProgramWindowIcons(const ProgramWindowIcons&);
+    ProgramWindowIcons& operator=(const ProgramWindowIcons&);
+
+    HBITMAP m_titleBitmap;  // 标题栏位图，第一次 TitleBitmap 时生成；本对象拥有，析构时 DeleteObject
+    HICON   m_bigIcon;      // 任务栏 / Alt-Tab 的大图标，第一次 ApplyTaskIcons 时加载；本对象拥有，析构时 DestroyIcon
+    HICON   m_smallIcon;    // 任务栏 / Alt-Tab 的小图标（按小尺寸显示时使用），同上
+};
+
 } // namespace balloonmain

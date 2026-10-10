@@ -14,6 +14,7 @@
 #include "MainPanelStatusMenu.h"
 #include "PresenceBadge.h"          // GetPresenceBadgeIconKind（状态 → 徽标字形）
 #include "../../net/Protocol.h"        // presence_type（在线状态取值的单一事实来源）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -116,14 +117,14 @@ const wchar_t* GetPresenceMenuLabel(int presence, bool isCurrent)
     switch (NormalizePresenceForMenu(presence))
     {
     case presence_online:
-        return L"在线（当前）";
+        return TR(L"在线（当前）");
     case presence_away:
-        return L"离开（当前）";
+        return TR(L"离开（当前）");
     case presence_busy:
-        return L"忙碌（当前）";
+        return TR(L"忙碌（当前）");
     default:
         // 归一后只剩"离线"这一种可能。
-        return L"离线（当前）";
+        return TR(L"离线（当前）");
     }
 }
 
@@ -133,25 +134,25 @@ PresenceVisual GetPresenceVisual(int presence)
     switch (presence)
     {
     case presence_online:
-        v.text     = L"在线";
+        v.text     = TR(L"在线");
         v.dotColor = kDotOnline;
         break;
     case presence_away:
-        v.text     = L"离开";
+        v.text     = TR(L"离开");
         v.dotColor = kDotAway;
         break;
     case presence_busy:
-        v.text     = L"忙碌";
+        v.text     = TR(L"忙碌");
         v.dotColor = kDotBusy;
         break;
     case presence_offline:
-        v.text     = L"离线";
+        v.text     = TR(L"离线");
         v.dotColor = kDotOffline;
         break;
     default:
         // 本菜单不可选中的取值（含已作废的旧状态 4）统一退化为"离线"灰点。
         // 正常流程不会走到这里（菜单只产出上面 4 种），仅作兜底防御。
-        v.text     = L"离线";
+        v.text     = TR(L"离线");
         v.dotColor = kDotOffline;
         break;
     }

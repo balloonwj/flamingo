@@ -707,6 +707,20 @@ FolderScanOptions::FolderScanOptions()
 {
 }
 
+//1601-01-01 到 1970-01-01 之间的 100 纳秒数，以及 1 毫秒等于多少个 100 纳秒（FILETIME 换算 Unix 毫秒用）
+static const int64_t kFileTimeUnixEpochDiff = 116444736000000000LL;
+static const int64_t kFileTimeTicksPerMs = 10000;
+
+//把 FILETIME 换算成 Unix 毫秒；早于 1970 年的时间按 0（未知）处理
+static int64_t FileTimeToUnixMs(const FILETIME& ft)
+{
+    const int64_t ticks = static_cast<int64_t>((static_cast<uint64_t>(ft.dwHighDateTime) << kFileSizeHighShiftBits)
+                                               | ft.dwLowDateTime);
+    if (ticks <= kFileTimeUnixEpochDiff)
+        return 0;
+    return (ticks - kFileTimeUnixEpochDiff) / kFileTimeTicksPerMs;
+}
+
 bool ScanFolderTree(const std::wstring& rootPath, const FolderScanOptions& options, FolderScanResult& out)
 {
     out = FolderScanResult();
@@ -846,6 +860,7 @@ bool ScanFolderTree(const std::wstring& rootPath, const FolderScanOptions& optio
                     file.m_relativePath = childPath;
                     file.m_sizeBytes = (static_cast<int64_t>(findData.nFileSizeHigh) << kFileSizeHighShiftBits)
                                        | static_cast<int64_t>(findData.nFileSizeLow);
+                    file.m_mtimeMs = FileTimeToUnixMs(findData.ftLastWriteTime);
                     out.m_manifest.m_files.push_back(file);
                 }
             }

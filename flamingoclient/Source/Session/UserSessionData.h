@@ -1,8 +1,10 @@
 ﻿#pragma once
 
 #include "../third-party/jsoncpp-1.9.0/json.h"
+#include "../net/ProfileProtocolClient.h"   // net::ProfileEditableValues / ProfileUpdateFields（CBuddyInfo 的资料读写）
 #include <string>
 #include <vector>
+#include "../App/BrandText.h"   // g_strAppTitle / g_strAppSlogan（产品名称与标语）
 
 #if defined(UNICODE) || defined(_UNICODE)
 typedef std::wstring tstring;
@@ -28,7 +30,7 @@ extern char g_szHomePathAscii[MAX_PATH];
 extern TCHAR g_szDataRoot[MAX_PATH];
 extern const UINT USER_THUMB_COUNT;
 
-extern std::wstring g_strAppTitle;
+// 产品名称 g_strAppTitle 与标语 g_strAppSlogan 声明在 App/BrandText.h（本文件开头已包含）。
 
 #define     FMG_MSG_NET_ERROR               WM_USER + 50            // 网络错误
 
@@ -131,20 +133,21 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_LOGOUT                  WM_USER + 521			//托盘菜单 / 主面板系统菜单发出的"登出"请求，wParam=0，lParam=0；由会话控制器二次确认后断开连接、重置主面板并回登录界面。必须 PostMessage 而非 SendMessage：登出要销毁主面板、并进入登录窗的模态循环，不能在菜单分发的调用栈上做
 #define     FMG_MSG_V2_RECALL_RESULT        WM_USER + 522			//v2 撤回消息应答(cmd_recall_message 1508)，lParam=net::RecallMessageResponse*（处理后 delete）；code 非 0 时据 error_code 提示失败原因
 #define     FMG_MSG_V2_MESSAGE_RECALLED     WM_USER + 523			//v2 推送：某条消息被撤回(cmd_message_recalled_notify 1509)，lParam=net::MessageRecalledNotify*（处理后 delete）；撤回者本人也会收到，据 operator 区分提示文案
-#define     FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT WM_USER + 525		//v2 切换通话媒体类型应答(cmd_call_switch_media 1708)，lParam=net::CallSwitchMediaResponse*（处理后 delete）；code 非 0 时据 error_code 提示失败原因
-#define     FMG_MSG_V2_CALL_MEDIA_CHANGED   WM_USER + 526		//v2 推送：通话媒体类型已变更(cmd_call_media_changed_notify 1709)，lParam=net::CallMediaChangedNotify*（处理后 delete）；双方含发起者均收到，据 operator 决定本端是否自动开摄像头
-#define     FMG_MSG_CALL_STOP_MEDIA         WM_USER + 528		//通话窗发给主面板：请求停掉音视频媒体会话，wParam=0，lParam=0。用户点通话窗标题栏关闭按钮时发出——通话窗不持有 CallMediaSession（持有者是通话协调器），若只销毁窗口不停会话，采集线程会继续跑、摄像头灯一直亮着。本消息为窗口间投递，不经 ProxyWndProc
+//WM_USER + 525 原 FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT（v2 切换通话媒体类型应答）、526 原 FMG_MSG_V2_CALL_MEDIA_CHANGED
+//（v2 通话媒体类型已变更推送）、528 原 FMG_MSG_CALL_STOP_MEDIA（通话窗关窗请主面板停媒体会话）：2026-10-02 一对一通话
+//迁入 FlamingoMedia.dll，前两条改由 FMG_MSG_MEDIA_SIGNAL 原样转交 DLL，第三条改为 DLL 内部的窗口私有消息。三个号已废弃，禁止复用。
 #define     FMG_MSG_V2_CONVERSATION_CHANGED WM_USER + 524			//v2 推送：会话属性多端同步(cmd_conversation_changed_notify 1514)，lParam=net::ConversationChangedNotify*（处理后 delete）；带的是改完之后的完整状态(置顶/免打扰/删除)，发起改动的那一端自己也会收到
 
-// ---- 群管理（cmd 1305~1322）----
+// ---- 群管理（cmd 1305~1320）----
 // 说明：这一组里的写操作（邀请/移出/设管理员/禁言/全员禁言/改群资料/转让/解散/
-// 审批/敏感词增删）应答体都是通用 { code, msg }，共用同一条消息号
+// 审批）应答体都是通用 { code, msg }，共用同一条消息号
 // FMG_MSG_V2_GROUP_OP_RESULT 回投，由 wParam 带上是哪条协议的应答，界面据它决定
 // 失败时的提示文案。之所以不给每个操作各开一个消息号：它们的处理逻辑完全一致
 // （成功什么都不做、等推送刷新；失败弹提示），十来个号只会把 ProxyWndProc 撑肿。
 #define     FMG_MSG_V2_GROUP_OP_RESULT      WM_USER + 530			//v2 群管理写操作应答（通用 code/msg），wParam=对应的 cmd 协议号，lParam=net::GroupOpResult*（处理后 delete）
 #define     FMG_MSG_V2_GROUP_JOIN_REQUESTS  WM_USER + 531			//v2 待审批加群申请列表应答(cmd_get_group_join_requests 1319)，lParam=net::GroupJoinRequestsResult*（处理后 delete）
-#define     FMG_MSG_V2_SENSITIVE_WORDS      WM_USER + 532			//v2 群敏感词库应答(cmd_get_sensitive_words 1321)，lParam=net::SensitiveWordsResult*（处理后 delete）
+//WM_USER + 532 原 FMG_MSG_V2_SENSITIVE_WORDS（v2 群敏感词库应答，cmd_get_sensitive_words 1321）已废弃，禁止复用。
+//群级敏感词于 2026-10-02 删除，敏感词改为企业级词库、由管理端维护（docs/敏感词方案.md）。
 #define     FMG_MSG_V2_GROUP_MEMBER_CHANGED WM_USER + 533			//v2 推送：群成员变动(cmd_group_member_changed_notify 1317)，lParam=net::GroupMemberChangedNotify*（处理后 delete）；加入/退出/被踢/角色变更/禁言变更/群名片变更，操作者本人也会收到
 #define     FMG_MSG_V2_GROUP_INFO_CHANGED   WM_USER + 534			//v2 推送：群资料变更(cmd_group_info_changed_notify 1318)，lParam=net::GroupInfoChangedNotify*（处理后 delete）；changetype=2 表示群已解散，须关掉相关窗口
 #define     FMG_MSG_V2_JOIN_GROUP_REQUEST   WM_USER + 535			//v2 推送：有人申请加群(cmd_join_group_request_notify 1307)，lParam=net::GroupJoinRequestItem*（处理后 delete）；仅群主与管理员会收到
@@ -181,11 +184,12 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_EXIT_FOR_UPDATE         WM_USER + 499
 #define     FMG_MSG_UPDATE_PROGRESS         WM_USER + 556			//升级包下载进度，lParam=堆 update::UpdateProgressInfo*（UI 处理后 delete）；wParam=0
 #define     FMG_MSG_UPDATE_RESULT           WM_USER + 557			//一次检查更新 / 下载的最终结果，lParam=堆 update::UpdateTaskResult*（UI 处理后 delete）；wParam=0
-#define     FMG_MSG_V2_SET_STARRED_RESULT   WM_USER + 558			//v2 特别关注设置应答(cmd_set_starred 1216，标记/取消特别关注)，lParam=堆 net::SetStarredResult*（UI 处理后 delete）；失败时主面板据其中回带的 target/starred 回滚乐观更新（口径同 542 的收藏应答）
+//WM_USER + 558 原为 FMG_MSG_V2_SET_STARRED_RESULT（v2 特别关注设置应答，cmd_set_starred 1216）。2026-10-03
+//特别关注并入会话的消息提醒模式，1216 撤销，改走 cmd_set_conversation 的应答；此号作废、不得复用。
 //本条是<u>同步查询</u>，只能用 SendMessage、不能 PostMessage —— 调用方要的是返回值，
 //且 lParam 指向调用栈上的变量，异步投递时那块内存早没了。
-#define     FMG_MSG_QUERY_STARRED           WM_USER + 559			//群聊窗→主面板：查某联系人是否被特别关注（弹右键菜单前取文案用），lParam=const int64_t* userid（借用，指向调用栈），返回 1 已关注 / 0 未关注。关注名单只有主面板那一份，群聊窗与气泡都不认识它，故代问
-#define     FMG_MSG_TOGGLE_STARRED          WM_USER + 560			//群聊窗→主面板：请求切换某联系人的特别关注状态（群成员列表 / 气泡的 @片段与发送者头像三处右键菜单点了那一项），wParam=userid，lParam=0，无堆负载。目标状态由主面板按名单现状取反并发 cmd_set_starred，故无需传
+#define     FMG_MSG_QUERY_STARRED           WM_USER + 559			//群聊窗→主面板：查某联系人是否被特别关注（弹右键菜单前取文案用），lParam=const int64_t* userid（借用，指向调用栈），返回 1 已关注 / 0 未关注。提醒模式表只有主面板那一份，群聊窗与气泡都不认识它，故代问
+#define     FMG_MSG_TOGGLE_STARRED          WM_USER + 560			//群聊窗→主面板：请求切换某联系人的特别关注状态（群成员列表 / 气泡的 @片段与发送者头像三处右键菜单点了那一项），wParam=userid，lParam=0，无堆负载。目标状态由主面板按模式表现状取反（特别关注 ↔ 允许消息提醒）并发 cmd_set_conversation，故无需传
 #define     FMG_MSG_V2_TYPING_NOTIFY        WM_USER + 554		//v2 推送：对端正在 / 停止输入(cmd_typing_notify 1510)，lParam=堆 net::TypingNotify*（UI 处理后 delete）；m_cid 是"正在输入的那个人"的 userid，主面板据它找单聊窗刷新头部提示。这条提示不可靠（服务端不落库不重发），对端掉线时 state=0 收不到，故聊天窗侧另有过期兜底
 #define     FMG_MSG_V2_SET_TAGS_RESULT      WM_USER + 561			//v2 设置联系人标签应答(cmd_set_contact_tags 1217)，lParam=堆 net::SetContactTagsResult*（UI 处理后 delete）；成功时用应答回带的<u>归一后</u>列表把本地缓存对齐到服务端真值（服务端会去首尾空白、丢空串、忽略大小写去重，本地乐观更新算出来的那份未必与它逐字相同），失败时用回带的<u>当前</u>列表回滚。标签改完不走推送，读回靠下次通讯录应答里的 contacts[].tags
 #define     FMG_MSG_SET_CONTACT_TAGS        WM_USER + 562			//联系人资料窗→主面板：标签整份提交，wParam=对端 userid，lParam=堆 std::vector<std::string>*（该联系人在本人视角下的完整标签列表，UTF-8，未归一；主面板处理后 delete）。空列表表示清空。增、改、删三种操作都走这一条——协议本身就是整份覆盖语义。该不该发、发不出去怎么办、失败怎么退回来全由主面板判定，口径与备注名(553)一致
@@ -261,13 +265,11 @@ enum PresenceChangeSource
 #define     FMG_MSG_V2_SET_CONVERSATION_RESULT WM_USER + 485		//v2 会话设置应答(cmd_set_conversation 1513，置顶/免打扰)，wParam=code，lParam=std::string* msg
 #define     FMG_MSG_V2_SET_MEMBER_CARD_RESULT  WM_USER + 486		//v2 改本人群名片应答(cmd_set_member_card 1315)，wParam=code，lParam=std::string* msg
 #define     FMG_MSG_V2_LEAVE_GROUP_RESULT      WM_USER + 487		//v2 退出群聊应答(cmd_leave_group 1309)，wParam=code，lParam=std::string* msg
-//——v2 远程桌面信令(cmd_rd_* 1710-1716)，lParam 携带堆上 net:: 结构体指针，由 UI 线程处理后 delete——
-#define     FMG_MSG_V2_RD_INVITE_ACK        WM_USER + 488		//v2 远程桌面邀请应答(cmd_rd_invite 1710)，lParam=net::RDInviteResponse*（成功带 sessionid，失败提示；处理后 delete）
-#define     FMG_MSG_V2_RD_INVITE_NOTIFY     WM_USER + 489		//v2 远程桌面邀请推送(cmd_rd_invite_notify 1711)，lParam=net::RDInviteNotify*（被控端弹授权窗；处理后 delete）
-#define     FMG_MSG_V2_RD_RELAY_INFO        WM_USER + 490		//v2 远程桌面中转参数下发(cmd_rd_relay_info 1716)，lParam=net::RDRelayInfo*（双方据此连 imgserver 中转通道；处理后 delete）
-#define     FMG_MSG_V2_RD_STATE_NOTIFY      WM_USER + 491		//v2 远程桌面状态推送(cmd_rd_state_notify 1715)，lParam=net::RDStateNotify*（拒绝/取消/对方离线/超时/断开 提示并收尾；处理后 delete）
-#define     FMG_MSG_RD_START_INVITE         WM_USER + 492		//聊天窗显示器按钮→主面板远程桌面协调器:发起邀请,wParam=对端userid,lParam=堆 std::wstring* peerName(UI 线程处理后 delete)
-#define     FMG_MSG_RD_CONTROLLED_END_BY_USER WM_USER + 495	//被控端受控提示条"结束控制"按钮→主面板远程桌面协调器:主动结束受控会话(发 cmd_rd_close+停推流+关受控条;无参)
+//——远程桌面——
+//WM_USER + 488 ~ 491 原 FMG_MSG_V2_RD_INVITE_ACK / INVITE_NOTIFY / RELAY_INFO / STATE_NOTIFY（v2 远程桌面信令解析后投给主面板），
+//495 原 FMG_MSG_RD_CONTROLLED_END_BY_USER（受控提示条「结束控制」投给主面板）：2026-10-02 远程桌面迁入 FlamingoMedia.dll，
+//信令改由 FMG_MSG_MEDIA_SIGNAL 原样转交 DLL，「结束控制」改为 DLL 内部的窗口私有消息。这五个号已废弃，禁止复用。
+#define     FMG_MSG_RD_START_INVITE         WM_USER + 492		//聊天窗显示器按钮→主面板:交给 FlamingoMedia.dll 发起远程桌面邀请,wParam=对端userid,lParam=堆 std::wstring* peerName(UI 线程处理后 delete)
 //——子窗口 → 主面板 的路由消息（wParam=userid）——
 #define     FMG_MSG_OPEN_CONTACT_PROFILE    WM_USER + 453			//请求主面板打开某联系人资料窗，wParam=userid
 #define     FMG_MSG_OPEN_CHAT               WM_USER + 454			//请求主面板打开与某 userid 的单聊，wParam=userid
@@ -280,18 +282,60 @@ enum PresenceChangeSource
 //2026-08-16 号段整改划出的新段，段内按功能每档 100：4000 账号 / 4100 资料 / 4200 联系人 /
 //4300 群 / 4400 消息，档位顺序与 v2 协议 cmd 分组一致。本段的消息都由 IUSocket 投给代理窗，
 //必须在 FlamingoClient.cpp 的 ProxyWndProc 里加转发 case，否则会被静默丢弃、堆负载泄漏。
+#define     FMG_MSG_V2_FEATURES_NOTIFY      WM_USER + 4000			//v2 推送：本人所属企业的功能开关有变化(cmd_features_notify 1013)，lParam=net::FeaturesNotify*（主面板交给文件共享宿主按新开关激活或收起模块，并刷新已打开聊天窗的「文件共享」按钮，处理后 delete）
+#define     FMG_MSG_V2_AUTO_REPLY           WM_USER + 4100			//v2 应答：拉取本人的「离开 / 忙碌自动回复」设置(cmd_get_auto_reply 2810)，lParam=net::AutoReplyResult*（主面板据此覆盖本地设置，或把本机旧设置上传一次；处理后 delete。docs/机器人方案.md §11 Q2）
+#define     FMG_MSG_V2_SET_AUTO_REPLY_RESULT WM_USER + 4101		//v2 应答：保存自动回复设置(cmd_set_auto_reply 2811)，wParam=结果码，lParam=0（失败时主面板提示原因）；无堆负载，无需 delete
+#define     FMG_MSG_V2_SEARCH_GROUP_FILES   WM_USER + 4300			//v2 应答：按文件名搜索本人所在全部群的群文件(cmd_search_group_files 1807)，lParam=net::SearchGroupFilesResult*（主面板转给搜索下拉，下拉按回显的关键字丢弃过期应答；处理后 delete）
+#define     FMG_MSG_V2_ACCEPT_GROUP_INVITE  WM_USER + 4301			//v2 应答：点入群邀请卡片的「加入群聊」(cmd_accept_group_invite 1327)，lParam=net::AcceptGroupInviteResult*（成功时主面板按 joined 打开群聊窗或提示等待审批，失败时提示原因并恢复卡片按钮，处理后 delete）
+#define     FMG_MSG_V2_JOIN_REQUEST_HANDLED WM_USER + 4303			//v2 推送：一条加群申请已被处理(cmd_join_request_handled_notify 1329)，lParam=net::JoinRequestHandledNotify*（推给该群全体群主与管理员；主面板转给开着的群管理窗重拉待审批列表，处理后 delete）
+#define     FMG_MSG_V2_GROUP_FOLLOW_CHANGED WM_USER + 4304			//v2 推送：本人在某个群里关注的成员变了(cmd_group_follow_changed_notify 1331)，lParam=net::GroupFollowEntry*（整份名单，发起设置的这一端也会收到；主面板据此覆盖群关注缓存，处理后 delete。docs/消息提醒模式与消息盒子方案.md §12）
+#define     FMG_MSG_V2_SET_GROUP_FOLLOW_RESULT WM_USER + 4305		//v2 应答：设置群关注名单失败(cmd_set_group_follow 1330)，wParam=结果码，lParam=0（成功的应答不投；主面板提示失败原因）；无堆负载，无需 delete
+#define     FMG_MSG_V2_MUST_READ            WM_USER + 4306			//v2 应答：查询入群必读与本人是否待确认(cmd_get_must_read 1335)，lParam=net::MustReadResult*（主面板按 groupid 转给打开着的群聊窗，处理后 delete）
+#define     FMG_MSG_V2_GROUP_QA             WM_USER + 4307			//v2 应答：拉取群问答(cmd_get_group_qa 1336)，lParam=net::GroupQaResult*（主面板按 groupid 转给群聊窗的「问答」页签，处理后 delete）
+#define     FMG_MSG_V2_GROUP_QA_CHANGED     WM_USER + 4308			//v2 推送：本群问答变了(cmd_group_qa_changed_notify 1339)，lParam=堆上 int64_t* 群ID（打开着的群聊窗重拉，处理后 delete）
+#define     FMG_MSG_V2_GROUP_LINK_CREATED   WM_USER + 4309			//v2 应答：生成加群链接(cmd_create_group_link 1340)，lParam=net::CreateGroupLinkResult*（转给「加群链接」窗口，处理后 delete）
+#define     FMG_MSG_V2_GROUP_LINKS          WM_USER + 4310			//v2 应答：本群的加群链接列表(cmd_get_group_links 1341)，lParam=net::GroupLinksResult*（转给群管理窗的「加群链接」页，处理后 delete）
+#define     FMG_MSG_V2_GROUP_BOTS           WM_USER + 4313			//v2 应答：拉取本群可用的机器人(cmd_get_group_bots 2801)，lParam=net::GroupBotsResult*（主面板按 groupid 转给打开着的群聊窗，处理后 delete。docs/机器人方案.md）
+#define     FMG_MSG_V2_GROUP_BOTS_CHANGED   WM_USER + 4314			//v2 推送：本群可用的机器人有变化(cmd_group_bots_changed_notify 2820)，lParam=堆上 int64_t* 群ID，0 表示本企业全部群（打开着的群聊窗重拉，处理后 delete）
+#define     FMG_MSG_V2_GROUP_LINK_INFO      WM_USER + 4311			//v2 应答：按随机码查群(cmd_get_group_link_info 1343)，lParam=net::GroupLinkInfoResult*（主面板弹出加群确认框，处理后 delete）
+#define     FMG_MSG_V2_JOIN_GROUP_BY_LINK   WM_USER + 4312			//v2 应答：凭加群链接入群(cmd_join_group_by_link 1344)，lParam=net::JoinGroupByLinkResult*（主面板打开群聊窗或提示已提交申请，处理后 delete）
+#define     FMG_MSG_V2_GROUP_INVITE_CHANGED WM_USER + 4302			//v2 推送：入群邀请卡片的状态变化(cmd_group_invite_changed_notify 1328)，lParam=net::GroupInviteChangedNotify*（推给邀请人与被邀请人；主面板据此改本地库里的卡片状态、刷新已打开的单聊窗与消息记录窗，处理后 delete）
 #define     FMG_MSG_V2_MESSAGE_READ_NOTIFY  WM_USER + 4400			//v2 推送：对方已读你的消息(cmd_message_read_notify 1507)，lParam=net::MessageReadNotify*（单聊：cid=读消息的那个人的 userid，readmsgid=对方已读位点；主面板记下位点并转给已打开的单聊窗，处理后 delete）
 #define     FMG_MSG_V2_DELETE_MESSAGE_RESULT WM_USER + 4401			//v2 应答：删除单条消息(cmd_delete_message 1512)，lParam=net::DeleteMessageResponse*（成功时界面不做任何事，本地删行与移除气泡等 FMG_MSG_V2_MESSAGES_DELETED；失败时主面板提示原因，处理后 delete）
 #define     FMG_MSG_V2_DELETE_BY_TIME_RESULT WM_USER + 4402			//v2 应答：按时间范围清理聊天记录(cmd_delete_messages_by_time 1521)，lParam=net::DeleteMessagesByTimeResponse*（主面板转交系统设置 → 清理聊天记录对话框提示结果，处理后 delete）
-#define     FMG_MSG_V2_MESSAGES_DELETED     WM_USER + 4403			//v2 推送：本人删除了消息(cmd_messages_deleted_notify 1522)，lParam=net::MessagesDeletedNotify*（单条形式或区间形式；主面板据此删本地库、更新已打开的聊天窗与消息记录窗、重拉会话列表，处理后 delete）
+#define     FMG_MSG_V2_MESSAGES_DELETED     WM_USER + 4403			//v2 推送：本人删除了消息(cmd_messages_deleted_notify 1522)，lParam=net::MessagesDeletedNotify*（单条形式、区间形式或清空形式；主面板据此删本地库、更新已打开的聊天窗与消息记录窗、重拉会话列表或移除会话，处理后 delete）
+#define     FMG_MSG_V2_CLEAR_CONVERSATION_RESULT WM_USER + 4405	//v2 应答：按会话清空本人的聊天记录(cmd_clear_conversation 1523)，wParam=请求帧 seq（CIUSocket::ClearConversation 的返回值；失败应答不带会话，只能按它对回请求），lParam=net::ClearConversationResponse*（成功时界面不做任何事，本地删除与界面刷新等 FMG_MSG_V2_MESSAGES_DELETED 的清空形式；失败时主面板提示原因，处理后 delete）
 #define     FMG_MSG_V2_FORWARD_RESULT       WM_USER + 4404			//v2 应答：转发消息(cmd_forward_message 1511)，wParam=请求帧 seq（CIUSocket::ForwardMessage 的返回值；失败应答不带 clientmsgid，只能按它对回请求），lParam=net::ForwardMessageResponse*（主面板交给转发调度器处理，处理后 delete）
+#define     FMG_MSG_V2_RELAY_CHANGED        WM_USER + 4406			//v2 推送：接龙名单或状态变化(cmd_relay_changed_notify 1604)，lParam=net::RelayChangedNotify*（参与、修改、撤回本人那条、提前结束之后推给卡片所在会话全体，操作者本人也会收到；主面板据此合并进本地库的卡片内容并刷新消息记录窗，处理后 delete）
+#define     FMG_MSG_V2_RELAY_OP_RESULT      WM_USER + 4407			//v2 应答：接龙操作(cmd_join_relay 1603 / cmd_withdraw_relay 1607 / cmd_close_relay 1608)，wParam=命令号（区分是哪种操作），lParam=net::RelayOpResponse*（成功时界面不做任何事，名单变化等 FMG_MSG_V2_RELAY_CHANGED；失败时主面板按错误码提示原因，处理后 delete）
+#define     FMG_MSG_V2_SET_NOTIFY_MODES_RESULT WM_USER + 4408		//v2 应答：批量设置消息提醒模式(cmd_set_notify_modes 1524)，lParam=net::SetNotifyModesResult*（逐条结果码；主面板对失败的条目提示原因并重拉会话列表纠正本地模式表，处理后 delete）
+#define     FMG_MSG_V2_NOTIFY_MODES_CHANGED WM_USER + 4409			//v2 推送：本人一批会话的消息提醒模式变了(cmd_notify_modes_changed_notify 1525)，lParam=net::NotifyModesChangedNotify*（只含改成功的条目，发起批量设置的这一端也会收到；主面板据此覆盖模式表并刷新列表，处理后 delete）
+//备忘与提醒（cmd 2401~2404，docs/备忘与提醒方案.md）。主面板收到后交给 balloonmemo::CMemoCenter，由它更新备忘簿、
+//重新安排提醒并刷新备忘窗口与群聊窗的「备忘」页签
+#define     FMG_MSG_V2_MEMO_LIST            WM_USER + 4410			//v2 应答：拉取本人可见的全部备忘(cmd_memo_list 2401)，lParam=net::MemoListResult*（备忘中枢整体替换备忘簿、补出错过的提醒，处理后 delete）
+#define     FMG_MSG_V2_MEMO_SAVE_RESULT     WM_USER + 4411			//v2 应答：新建或修改备忘(cmd_memo_save 2402)，lParam=net::MemoSaveResult*（成功时备忘中枢写入备忘簿并关闭编辑对话框，失败时在对话框里写出原因，处理后 delete）
+#define     FMG_MSG_V2_MEMO_DELETE_RESULT   WM_USER + 4412			//v2 应答：删除备忘(cmd_memo_delete 2403)，lParam=net::MemoDeleteResult*（成功时从备忘簿删除，失败时提示原因，处理后 delete）
+#define     FMG_MSG_V2_MEMO_NOTIFY          WM_USER + 4413			//v2 推送：备忘新增、修改或删除(cmd_memo_notify 2404)，lParam=net::MemoNotify*（备忘中枢据此更新备忘簿与提醒，处理后 delete）
+//主面板搜索下拉「搜索服务器上的聊天记录」（cmd_global_search 1904，docs/全局搜索增强方案.md 第 3c 步）
+#define     FMG_MSG_V2_GLOBAL_SEARCH        WM_USER + 4414			//v2 应答：全局搜索服务器上的聊天记录与群公告(cmd_global_search 1904)，lParam=net::GlobalSearchResult*（主面板转给搜索下拉，下拉按回显的关键字丢弃过期应答；处理后 delete）
+//语音消息的下载（docs/语音消息方案.md 第 3d-3 步）：文件传输线程下载完一段语音后投给代理窗，代理窗转给主面板
+#define     FMG_MSG_V2_VOICE_DOWNLOAD_RESULT WM_USER + 4415		//v2 语音文件下载结果（cmd_request_download 1802 + fileserver 1852），lParam=net::VoiceDownloadResult*（按 md5 广播给已打开的单聊窗与群聊窗，同一段语音的气泡都改为就绪或下载失败；处理后 delete）
+#define     FMG_MSG_V2_VOICE_SEND_RESULT    WM_USER + 4416			//v2 发语音的上传结果（cmd_request_upload 1801 + fileserver 1851 + cmd_send_message 1503），lParam=net::VoiceSendResult*（主面板按 ctype/cid 路由到聊天窗；成功时等发送回执，失败时语音气泡标红色感叹号；处理后 delete）
+//一对一通话卡片（docs/音视频通话优化方案.md 第 6 项）：通话结束时服务端改写单聊里的卡片并推 1717，主面板据此改本地库与单聊窗
+#define     FMG_MSG_V2_CALL_CARD_CHANGED    WM_USER + 4417			//v2 推送：一对一通话卡片已改写成结束状态(cmd_call_card_notify 1717)，lParam=net::CallCardNotify*（主面板改本地库里的卡片、刷新已打开的单聊窗与消息记录窗，处理后 delete）
+//消息改写离线同步（docs/消息改写离线同步方案.md）：登录后按改写序号补上离线期间被改写过或被撤回的消息
+#define     FMG_MSG_V2_SYNC_REWRITTEN       WM_USER + 4418			//v2 应答：按改写序号同步离线期间被改写过或被撤回的消息(cmd_sync_rewritten_messages 1526)，lParam=net::SyncRewrittenResult*（主面板只覆盖本地库已有的行、推进水位、刷新受影响的已打开窗口，more 时续拉下一页；处理后 delete）
+//FlamingoMedia.dll 的信令转交：主连接收到白名单内（net::IsMediaSignalCmd）的音视频类推送 / 应答后不在 exe 里解析，
+//原样投给主面板，主面板交给 IMediaModule::OnSignal。v2 协议的音视频段（17xx）在 A 段没有对应档位，
+//2026-10-02 与用户确认放在 A 段末尾的 4490。
+#define     FMG_MSG_MEDIA_SIGNAL            WM_USER + 4490			//v2 音视频类信令转交 FlamingoMedia.dll，lParam=net::MediaSignalPacket*（主面板交给媒体模块处理，处理后 delete；主面板未就绪时代理窗就地 delete）
 
 //——B 段（WM_USER + 4500 ~ 4799）：窗口 → 主面板 CBalloonMainPanel——
 //
 //这一段是 2026-08-16 号段整改新划出来的，段内按<u>发起窗口</u>分档：
 //  4500 起  聊天窗 / 群聊窗（CBalloonChatWindow、CBalloonGroupChatWindow）
 //  4520 起  个人资料、系统设置一类的对话框
-//  4540 起  公告提示窗、消息盒子一类的浮窗
+//  4540 起  公告提示窗、公告中心一类的浮窗
 //下面四条原先分别取 472 / 474 / 477 / 552，逐个与 A 段的网络应答 / 推送消息撞号
 //（FMG_MSG_V2_USERINFO_CHANGED、FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT、
 // FMG_MSG_V2_FILE_SEND_PROGRESS、FMG_MSG_V2_SET_REMARK_RESULT）。当时没出问题，
@@ -304,23 +348,47 @@ enum PresenceChangeSource
 #define     FMG_MSG_OPEN_GROUP_MANAGE       WM_USER + 4501			//群聊窗→主面板：打开某群的群管理对话框，lParam=堆上 int64_t* groupId（处理后 delete）
 #define     FMG_MSG_OPEN_FORWARD_PICKER     WM_USER + 4502			//聊天窗 / 群聊窗→主面板：转发多选中的消息，打开目标选择窗，lParam=堆上 balloonmain::ForwardRequest*（UI/BalloonMain/ForwardRequest.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
 #define     FMG_MSG_QUERY_CONTACT_BRIEF     WM_USER + 4505			//群聊窗→主面板（同步 SendMessage）：按 userid 查通讯录缓存里的昵称与头像，供已退群成员的历史消息显示发送人，lParam=调用方栈上的 balloonchatwnd::ContactBriefQuery*（UI/BalloonChatWnd/GroupSenderRefresh.h，主面板就地填写、不 delete），返回 1 查到 / 0 查不到。窗口间直投、不经 ProxyWndProc
+//WM_USER + 4506 原 FMG_MSG_CLEAR_CONVERSATION（聊天窗 / 群聊窗头部「清空聊天记录」按钮→主面板）已废弃，禁止复用。
+//2026-10-03 起这个按钮移到消息记录窗，由消息记录窗直接调用 CBalloonMainPanel::RequestClearConversation。
 #define     FMG_MSG_TRANSFER_GROUP_OWNER    WM_USER + 4504			//群聊窗成员右键「转让群主」/ 选人对话框「转让群主并退出」→主面板：转让群主（确认框已由发起窗口弹过），lParam=堆上 balloonmain::TransferOwnerRequest*（UI/BalloonMain/GroupExitFlow.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
 #define     FMG_MSG_OPEN_MERGED_VIEWER      WM_USER + 4503			//聊天窗 / 群聊窗 / 聊天记录查看窗→主面板：打开一份合并转发的聊天记录，lParam=堆上 std::string*（合并消息的 content 原文，UTF-8，处理后 delete）。窗口间直投、不经 ProxyWndProc
-#define     FMG_MSG_REFRESH_SELF_HEADER     WM_USER + 4520			//个人信息对话框→主面板：乐观保存后请它按 m_UserInfo 立即刷新本人 Header（昵称/签名/头像）（无参）
-//下面四条是联系人资料对话框的动作出口。该窗口既没有 socket 也没有通讯录 / 收藏 /
-//特别关注三份缓存，判定与执行一律交给主面板，做法与备注名(553)、标签(562)一致。
-//三条状态类消息传的是<u>目标状态</u>而不是"取反"：开关拨出来的本来就是明确的开或关，
+#define     FMG_MSG_OPEN_RELAY_DETAIL       WM_USER + 4507			//群聊窗→主面板：打开一张接龙卡片的详情窗（点了卡片、卡片底部按钮或接龙系统提示行），lParam=堆上 ballooncard::RelayDetailRequest*（UI/BalloonCard/RelayDetailModel.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_QUERY_VOICE_PLAYED      WM_USER + 4508			//聊天窗 / 群聊窗→主面板（同步 SendMessage）：按一批 msgid 查本地库里哪些语音已听，供收到或翻到语音消息时决定画不画红点，lParam=调用方栈上的 balloonchatwnd::VoicePlayedQuery*（UI/BalloonChatWnd/ChatReceivedVoice.h，主面板就地填写、不 delete），返回 1 本地库可用 / 0 不可用。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_VOICE_PLAYED            WM_USER + 4509			//聊天窗 / 群聊窗 / 消息记录窗→主面板：一条语音播放过了，请它在本地库里标为已听并让其它已打开窗口去掉同一条的红点，lParam=堆上 balloonchatwnd::VoicePlayedMark*（UI/BalloonChatWnd/ChatReceivedVoice.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_QUERY_RECALL_DRAFTS     WM_USER + 4511			//聊天窗 / 群聊窗→主面板（同步 SendMessage）：拉历史时按一批本人撤回的 msgid 查本机库里的撤回快照，供撤回提示行在 5 分钟内显示「编辑」（docs/撤回后重新编辑方案.md），lParam=调用方栈上的 balloonchatwnd::RecallDraftQuery*（UI/BalloonChatWnd/RecallEdit.h，主面板就地填写、不 delete），返回 1 本地库可用 / 0 不可用。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_OPEN_SETTINGS_PAGE      WM_USER + 4512			//聊天窗 / 群聊窗→主面板：打开系统设置并切到指定页（发送按钮 ▾ 菜单的「设置快捷回复…」，docs/快捷回复方案.md），wParam=页号（balloonsettings::SettingsPage），lParam=0；无堆负载，无需 delete。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_QUERY_GROUP_FOLLOW      WM_USER + 4513			//群聊窗→主面板（同步 SendMessage）：查本人是否在某个群里关注了某位成员（弹成员右键菜单前取文案用，docs/消息提醒模式与消息盒子方案.md §12），lParam=调用方栈上的 balloonchatwnd::GroupFollowTarget*（UI/BalloonChatWnd/GroupFollowTarget.h，借用、不 delete），返回 1 已关注 / 0 未关注。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_TOGGLE_GROUP_FOLLOW     WM_USER + 4514			//群聊窗→主面板：成员右键「关注 TA 在本群的发言 / 取消关注」，lParam=堆上 balloonchatwnd::GroupFollowTarget*（目标群与成员，处理后 delete）；目标状态由主面板按缓存取反后发 cmd_set_group_follow。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_OPEN_JOIN_GROUP_LINK    WM_USER + 4515			//聊天窗 / 群聊窗→主面板：点了消息里的加群链接 flamingo://joingroup?code=…，lParam=堆上 std::string* 随机码（主面板查群并弹确认框，处理后 delete）
+#define     FMG_MSG_TOGGLE_SUBTITLE         WM_USER + 4510			//聊天窗 / 群聊窗→主面板（同步 SendMessage）：头部「字幕模式」按钮被点，请主面板切换本会话的桌面字幕（字幕由主面板持有、不随聊天窗关闭，docs/聊天字幕模式方案.md），wParam=ctype（1 单聊 2 群聊），lParam=调用方栈上的 int64_t* cid（不 delete），返回 1 切换后开着 / 0 关着。窗口间直投、不经 ProxyWndProc
+//WM_USER + 4520 原为 FMG_MSG_REFRESH_SELF_HEADER（个人信息对话框→主面板：乐观保存后请它按 m_UserInfo 立即刷新本人
+//Header）。2026-10-07 个人信息对话框 CBalloonProfileDlg 删除、本人资料改由联系人资料窗承担，这个号作废、不得复用。
+//下面几条是联系人资料对话框的动作出口。该窗口既没有 socket 也没有通讯录 / 收藏 /
+//提醒模式这几份缓存，判定与执行一律交给主面板，做法与备注名(553)、标签(562)一致。
+//状态类消息传的是<u>目标状态</u>而不是"取反"：开关拨出来的本来就是明确的开或关，
 //传取反的话，用户连点两下、而第一条应答还在路上时，主面板会按同一个旧状态取反两次。
-#define     FMG_MSG_SET_CONTACT_MUTE        WM_USER + 4521			//联系人资料窗→主面板：设置与该联系人会话的消息免打扰状态，wParam=对端 userid，lParam=目标状态(1 开 / 0 关)；无堆负载，无需 delete
+//WM_USER + 4521 原为 FMG_MSG_SET_CONTACT_MUTE（设置免打扰），WM_USER + 4523 原为
+//FMG_MSG_SET_CONTACT_STARRED（设置特别关注）。2026-10-03 两个开关合并成「消息提醒」下拉框，
+//改由 FMG_MSG_SET_CONTACT_NOTIFY_MODE(4527) 传目标模式，这两个号作废、不得复用。
 #define     FMG_MSG_SET_CONTACT_FAVORITE    WM_USER + 4522			//联系人资料窗→主面板：设置该联系人的收藏状态，wParam=对端 userid，lParam=目标状态(1 收藏 / 0 取消)；无堆负载，无需 delete
-#define     FMG_MSG_SET_CONTACT_STARRED     WM_USER + 4523			//联系人资料窗→主面板：设置该联系人的特别关注状态，wParam=对端 userid，lParam=目标状态(1 关注 / 0 取消)；无堆负载，无需 delete
 #define     FMG_MSG_LOCATE_CONTACT          WM_USER + 4524			//联系人资料窗→主面板：在通讯录树里定位该联系人（切到通讯录页、展开各级部门、滚动到该行并选中），wParam=对端 userid，lParam=0；无堆负载，无需 delete
 //本机历史账号列表由主面板上的会话控制器持有（内存一份、整份写回文件），系统设置窗若自行
 //读写 LoginAccountList.dat，写入的内容会被会话控制器下次落盘时整份覆盖，故只能转交它处理。
 //同样传目标状态而不是"取反"，理由同上。见 docs/自动登录方案.md §4。
 #define     FMG_MSG_SET_AUTO_LOGIN          WM_USER + 4525			//系统设置窗→主面板（由会话控制器处理）：设置当前账号的「自动登录」，wParam=目标状态(1 开 / 0 关)，lParam=0；无堆负载，无需 delete
+#define     FMG_MSG_SET_CONTACT_NOTIFY_MODE WM_USER + 4527			//联系人资料窗→主面板：设置与该联系人单聊会话的消息提醒模式，wParam=对端 userid，lParam=目标模式（Protocol.h 的 enum conversation_notify_mode）；无堆负载，无需 delete
+#define     FMG_MSG_RESTART_APP             WM_USER + 4528			//系统设置窗→主面板（由会话控制器处理）：界面语言已改、用户选了「立即重启」，请它先启动新进程（App/AppRestart.h）再走正常的退出流程，wParam=0，lParam=0；无堆负载，无需 delete
+#define     FMG_MSG_CONTACT_PROFILE_EDIT    WM_USER + 4529			//联系人资料窗→主面板：本人在资料窗里就地改了一项个人资料，wParam=0，lParam=堆 net::ProfileUpdateFields*（只标记了改动的那一项，已通过本地校验；主面板乐观更新本人资料、发 cmd_update_profile，处理后 delete）
+#define     FMG_MSG_SEND_MODE_CHANGED       WM_USER + 4530			//系统设置窗→主面板：「发送消息快捷键」改了（已写进账号配置，BUG-119），请它刷新已打开的单聊 / 群聊窗左下角提示与输入框占位文字，wParam=0，lParam=0；无堆负载，无需 delete
+#define     FMG_MSG_OPEN_MODIFY_AVATAR      WM_USER + 4531			//联系人资料窗（看本人）→主面板：点了头部头像，请它打开修改头像对话框（离线拦截照旧由主面板再判一次，2026-10-07），wParam=0，lParam=0；无堆负载，无需 delete
 #define     FMG_MSG_DEFAULT_CHAT_FONT_CHANGED WM_USER + 4526		//系统设置窗→主面板：全局默认聊天字体改了（或恢复默认），请它让已打开、且没有单独设过字体的单聊 / 群聊窗改用新的默认字体（字体本身已写进账号配置，主面板从那里读），wParam=0，lParam=0；无堆负载，无需 delete
-#define     FMG_MSG_OPEN_ANNOUNCE_BOX       WM_USER + 4540			//新公告提示窗→主面板：点「查看全部」，请它打开「消息盒子」窗口，wParam=0，lParam=0；无堆负载，无需 delete
+#define     FMG_MSG_OPEN_ANNOUNCE_BOX       WM_USER + 4540			//新公告提示窗→主面板：点「查看全部」，请它打开「公告中心」窗口，wParam=0，lParam=0；无堆负载，无需 delete
+
+//——C 段（WM_USER + 4800 ~ 4999）：主面板一侧 → 各具体子窗口——
+//
+//号段规约见开发约定文档「UI 约定」第 6 条，段内按目标窗口分档：
+//  4800 起  备忘与提醒（备忘中枢 balloonmemo::CMemoCenter → 备忘窗口、群聊窗）
+#define     FMG_MSG_MEMO_CHANGED            WM_USER + 4800			//备忘中枢→已登记的备忘窗口与群聊窗：备忘簿有变化，wParam=受影响的群 id（个人备忘、全量替换时为 0，收件方一律重读），lParam=0；无堆负载，无需 delete。中枢直接 PostMessage 给登记的窗口、不经代理窗
 //这条原先取的是 WM_USER + 497，与上面的 FMG_MSG_CONV_MARK_READ 撞了号，而两者<u>由同一个
 //窗口 CBalloonMainPanel 处理</u>。ATL 消息映射先匹配先赢，靠后的这条处理器永远不会执行：
 //系统设置里改「自动识别链接」开关时，消息落进了 OnConvMarkReadMsg，那个函数把 lParam 当
@@ -341,14 +409,12 @@ enum PresenceChangeSource
 // 投递的消息，本就不该由代理窗收；下界抬到 50 之后，万一有谁误把它们投给代理窗，
 // 会在门口被挡掉而不是被 switch 里号段相同的某条 case 当成别的消息处理。
 #define		FMG_MSG_FIRST					WM_USER + 50
-//——v2 音视频通话信令(cmd_call_* 1701-1707)，lParam 携带堆上 net:: 结构体指针，由 UI 线程处理后 delete——
-#define     FMG_MSG_V2_CALL_INVITE_ACK      WM_USER + 501		//v2 通话邀请应答(cmd_call_invite 1701)，lParam=net::CallInviteResponse*（成功带 sessionid，失败如对方离线/忙提示；处理后 delete）
-#define     FMG_MSG_V2_CALL_INVITE_NOTIFY   WM_USER + 502		//v2 通话邀请推送(cmd_call_invite_notify 1702)，lParam=net::CallInviteNotify*（被叫弹来电窗；处理后 delete）
-#define     FMG_MSG_V2_CALL_SIGNALING       WM_USER + 503		//v2 通话中转参数下发(cmd_call_signaling 1707)，lParam=net::CallSignalingInfo*（双方据此连 imgserver 中转通道；处理后 delete）
-#define     FMG_MSG_V2_CALL_STATE_NOTIFY    WM_USER + 504		//v2 通话状态推送(cmd_call_state_notify 1706)，lParam=net::CallStateNotify*（响铃/拒绝/取消/对方离线/超时/接通/结束/忙 提示并收尾；处理后 delete）
-#define     FMG_MSG_CALL_START_INVITE       WM_USER + 505		//单聊窗"语音通话"按钮→主面板通话协调器:发起呼叫,wParam=对端userid,lParam=堆 std::wstring* peerName(UI 线程处理后 delete)
-#define     FMG_MSG_CALL_RELAY_EVENT        WM_USER + 506		//通话中转会话事件(call::CallMediaSession→主面板):wParam=事件码 call::CallRelayEvent(connected/test_ok/failed/closed),lParam=序号(test_ok 时);无堆指针,无需 delete
-#define     FMG_MSG_CALL_START_VIDEO_INVITE WM_USER + 507		//单聊窗"视频通话"按钮→主面板通话协调器:发起视频呼叫,wParam=对端userid,lParam=堆 std::wstring* peerName(UI 线程处理后 delete)
+//——一对一通话——
+//WM_USER + 501 ~ 504 原 FMG_MSG_V2_CALL_INVITE_ACK / INVITE_NOTIFY / SIGNALING / STATE_NOTIFY（v2 通话信令解析后投给主面板），
+//506 原 FMG_MSG_CALL_RELAY_EVENT（通话中转会话事件投给主面板）：2026-10-02 一对一通话迁入 FlamingoMedia.dll，信令改由
+//FMG_MSG_MEDIA_SIGNAL 原样转交 DLL，中转事件改为 DLL 内部的窗口私有消息。这五个号已废弃，禁止复用。
+#define     FMG_MSG_CALL_START_INVITE       WM_USER + 505		//单聊窗 / 联系人窗"语音通话"→主面板:交给 FlamingoMedia.dll 发起呼叫,wParam=对端userid,lParam=堆 std::wstring* peerName(UI 线程处理后 delete)
+#define     FMG_MSG_CALL_START_VIDEO_INVITE WM_USER + 507		//单聊窗 / 联系人窗"视频通话"→主面板:交给 FlamingoMedia.dll 发起视频呼叫,wParam=对端userid,lParam=堆 std::wstring* peerName(UI 线程处理后 delete)
 // FMG_MSG_FIRST / FMG_MSG_LAST 是 CFlamingoClient::ProxyWndProc 的收件范围闸门
 //（见 FlamingoClient.cpp 开头的 message < FMG_MSG_FIRST || message > FMG_MSG_LAST
 // 判断）：socket 线程投给代理窗口的消息，号段落在范围外会被直接丢弃，连 switch 都进
@@ -459,6 +525,26 @@ public:
     void FillFakeData();	//TODO: 填充虚假数据，仅为了测试，实际的数据应该等服务器端完善以后从服务器获取
     void SetBuddyInfo(CBuddyInfo* lpBuddyInfo);
 
+    /**
+     *  取出本人可以修改的八项资料（昵称、签名、性别、生日、所在地、邮箱、座机、岗位）与手机号、座机的
+     *  两个公开范围，文字转成 UTF-8，供比较编辑前后的值、组装改资料请求、保存快照。
+     *  @return 各项的当前值
+     */
+    net::ProfileEditableValues GetEditableProfile() const;
+
+    /**
+     *  把八项资料与两个公开范围整体写回（UTF-8 转成宽字符）。改资料失败、按快照恢复时用。
+     *  @param values 各项的值
+     */
+    void SetEditableProfile(const net::ProfileEditableValues& values);
+
+    /**
+     *  只把 fields 里标记提交的项写进资料（乐观更新）；没标记的项保持不变。失败回滚时把 fields.m_values
+     *  换成提交前的快照再调一次，即可只恢复这一次提交过的项。
+     *  @param fields 一次改资料请求要提交的字段
+     */
+    void ApplyProfileUpdate(const net::ProfileUpdateFields& fields);
+
 public:
     UINT		m_uUserID;			//用户ID，唯一标识该用户
     tstring		m_strAccount;		//用户账户名
@@ -475,6 +561,10 @@ public:
     tstring		m_strMobile;		// 手机
     tstring		m_strAddress;		// 用户地址信息
     tstring		m_strEmail;
+    tstring		m_strLandline;		// 座机；未填为空串（2026-10-04 起随登录应答下发）
+    tstring		m_strPost;			// 岗位：本人填写的自由文本，与部门职位无关；未填为空串
+    int         m_nPhoneVisible;    // 手机号对同事的公开范围，取值见 net/Protocol.h 的 enum profile_visibility（2026-10-06 起随登录应答下发）
+    int         m_nLandlineVisible; // 座机对同事的公开范围，取值同上
     BOOL		m_bUseCustomFace;		//是否使用自定义头像
     BOOL		m_bCustomFaceAvailable;	//自定义头像是否可用
     tstring		m_strCustomFace;	    // 自定有头像名（文件名不是路径，本地不存在需要从服务器下载）
@@ -608,7 +698,7 @@ public:
 class CFontInfo				// 字体信息
 {
 public:
-    CFontInfo(void) : m_nSize(9), m_clrText(RGB(0, 0, 0)), m_strName(_T("微软雅黑")),
+    CFontInfo(void) : m_nSize(9), m_clrText(RGB(0, 0, 0)), m_strName(_T("微软雅黑")),    //i18n-ignore: 聊天内容字体的默认值，属于用户设置，不随界面语言变化
         m_bBold(FALSE), m_bItalic(FALSE), m_bUnderLine(FALSE){}
     ~CFontInfo(void){}
 

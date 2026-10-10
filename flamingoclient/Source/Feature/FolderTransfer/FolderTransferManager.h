@@ -69,6 +69,14 @@
 //现在的理由是不把整个协议头传染给本头文件的使用方。
 #include "../../net/FolderProtocolClient.h"
 
+//单聊单文件直传的两个扩展点（2026-10-04 起）：纯逻辑头文件，不引 winsock2.h
+#include "DirectFileTransfer.h"
+
+//P2P 通道工厂的具体类型（取链路路径用）：定义在 FolderP2PTransport.h，它带进 <winsock2.h>，此处只作前置声明
+namespace balloonp2p {
+class FolderP2PTransportFactory;
+}
+
 namespace foldertransfer {
 
 //两个传输状态机与接收进度对象都定义在引入了 <winsock2.h> 的头文件里，那种头文件不能被
@@ -84,6 +92,9 @@ class FolderReceiveState;
 //同样是为了不把 <winsock2.h> 传染给本头文件的使用方。定义在 FolderTransferManager.cpp。
 class FolderSendCallback;
 class FolderRecvCallback;
+
+//通道工厂（P2P 方案第 5 期）：定义在 FolderLaneTransport.h，它经 FolderRelayClient.h 带进 <winsock2.h>，同理只作前置声明
+class IFolderLaneTransportFactory;
 
 //交给扫描线程的一份入参（根目录、本地占位 id、对端 userid）。多笔传输可能同时在扫描，
 //故入参随线程走、不再放在管理器的成员里。定义在 FolderTransferManager.cpp。
@@ -193,6 +204,8 @@ struct FolderBindNotice
 struct FolderProgressNotice
 {
     std::string m_sessionId;    //本次传输的会话 id，界面据它定位气泡
+    int         m_kind;         //传输种类，取值见 net::folder_transfer_kind（2026-10-04 起；单文件直传时界面更新文件气泡）
+    int         m_linkPath;     //数据此刻走的 P2P 链路路径（1 局域网直连、2 打洞直连、3 中转）；0=没有走 P2P，供「P2P」徽章
     int64_t     m_doneBytes;    //已完成字节数（续传时含上次已落盘的部分），单位：字节
     int64_t     m_totalBytes;   //本次应传的总字节数，单位：字节
     int64_t     m_doneFiles;    //已完成的文件数，单位：个
@@ -200,7 +213,9 @@ struct FolderProgressNotice
     std::string m_currentFile;  //当前正在传的那个文件的相对路径（UTF-8）；可为空
 
     FolderProgressNotice()
-        : m_doneBytes(0)
+        : m_kind(net::folder_kind_folder)
+        , m_linkPath(net::kFolderLinkPathNone)
+        , m_doneBytes(0)
         , m_totalBytes(0)
         , m_doneFiles(0)
         , m_totalFiles(0)
@@ -219,12 +234,18 @@ struct FolderResultNotice
     std::wstring m_localRoot;    //本地根目录完整路径（发送端为源目录、接收端为落地目录），供「打开文件夹」
     int64_t      m_totalFiles;   //本次涉及的文件总数，单位：个
     int64_t      m_totalBytes;   //本次涉及的字节数合计，单位：字节
+    int          m_kind;         //传输种类，取值见 net::folder_transfer_kind（2026-10-04 起）
+    int          m_linkPath;     //数据实际走的 P2P 链路路径；0=没有走 P2P。写进 1814，供「P2P」徽章
+    std::string  m_md5;          //单文件直传时这个文件的 MD5（小写十六进制）；其余为空
+    std::wstring m_localFile;    //单文件直传时本地文件的完整路径（发送端为源文件、接收端为落地文件）；其余为空
 
     FolderResultNotice()
         : m_success(false)
         , m_errCode(0)
         , m_totalFiles(0)
         , m_totalBytes(0)
+        , m_kind(net::folder_kind_folder)
+        , m_linkPath(net::kFolderLinkPathNone)
     {
     }
 };
@@ -248,6 +269,7 @@ struct FolderPendingInvite
     //"这条邀请已经挂了多久" —— 服务端的邀请超时是 folderinvitetimeout（默认 30 分钟），
     //而本端不自行判超时（以服务端推来的 1815 状态 6 为准），故本字段只作展示与排查用。
     int64_t     m_receivedAtMs;
+    int         m_kind;             //传输种类，取值见 net::folder_transfer_kind（2026-10-04 起）：单文件直传时聊天窗补画文件气泡
 
     FolderPendingInvite()
         : m_fromUserId(0)
@@ -255,6 +277,7 @@ struct FolderPendingInvite
         , m_fileCount(0)
         , m_totalBytes(0)
         , m_receivedAtMs(0)
+        , m_kind(net::folder_kind_folder)
     {
     }
 };
@@ -284,6 +307,8 @@ enum FolderLocalRole
 struct FolderSessionRecord
 {
     int          m_role;          //本端角色，取值见 FolderLocalRole
+    int          m_kind;          //传输种类，取值见 net::folder_transfer_kind（2026-10-04 起）。单文件直传不占文件夹传输的
+                                  //并发名额（服务端另行限额），数据只走 P2P 链路
     int64_t      m_peerUserId;    //对端 userid
     std::string  m_localId;       //发送端的本地占位会话 id（服务端会话 id 到达前用它定位气泡）；接收端为空
     std::string  m_sessionId;     //服务端分配的会话 id；空=发送端尚未收到 1810 的应答
@@ -316,9 +341,21 @@ struct FolderSessionRecord
     std::shared_ptr<FolderRecvSession>  m_recvSession;    //接收端状态机；空=当前没有在收
     std::shared_ptr<FolderSendCallback> m_sendCallback;   //发送端回调适配器，生命周期须长于状态机
     std::shared_ptr<FolderRecvCallback> m_recvCallback;   //接收端回调适配器，同上
+    //本轮的通道工厂（P2P 方案第 5 期）：1816 带 p2psessionid 且 P2P 可用时才有，生命周期须长于状态机；空=各条通道走中转
+    std::shared_ptr<IFolderLaneTransportFactory> m_transportFactory;
+    //同一个工厂的具体类型（2026-10-04 起）：取链路实际路径（「P2P」徽章、1814 的 linkpath）与是否走上过 P2P 用；
+    //与 m_transportFactory 同时设置、同时清空
+    std::shared_ptr<balloonp2p::FolderP2PTransportFactory> m_p2pFactory;
+
+    //—— 单文件直传字段（2026-10-04 起，m_kind 为 net::folder_kind_file 时才有）——
+    //发送端扩展点：记下发送会话算出的 MD5，传完随 1814 报给服务端。整笔传输（含重试）共用一个，随记录销毁
+    std::shared_ptr<DirectFileSendHooks> m_directSendHooks;
+    //接收端扩展点：文件直接落在 direct-<会话号> 目录下，记下落地路径与校验通过的 MD5。整笔传输共用一个，随记录销毁
+    std::shared_ptr<DirectFileRecvHooks> m_directRecvHooks;
 
     FolderSessionRecord()
         : m_role(kFolderRoleNone)
+        , m_kind(net::folder_kind_folder)
         , m_peerUserId(0)
         , m_active(false)
         , m_failedAtMs(0)
@@ -367,13 +404,25 @@ public:
         return m_maxConcurrent;
     }
 
-    //当前占着名额的传输笔数（失败待重试的不计入）。
+    //当前占着名额的文件夹传输笔数（失败待重试的不计入）。单文件直传不占这个名额（服务端也是分开限额的），不计入
     int ActiveCount() const
     {
         int count = 0;
         for (RecordList::const_iterator it = m_records.begin(); it != m_records.end(); ++it)
         {
-            if (it->m_active)
+            if (it->m_active && it->m_kind != net::folder_kind_file)
+                ++count;
+        }
+        return count;
+    }
+
+    //当前在跑的单文件直传笔数（2026-10-04 起；失败待重试的不计入）。直传不占上面的文件夹名额，单独计数供日志
+    int DirectActiveCount() const
+    {
+        int count = 0;
+        for (RecordList::const_iterator it = m_records.begin(); it != m_records.end(); ++it)
+        {
+            if (it->m_active && it->m_kind == net::folder_kind_file)
                 ++count;
         }
         return count;
@@ -707,6 +756,17 @@ public:
     int StartSend(int64_t peerUserId, const std::wstring& rootPath, std::string& outLocalId);
 
     /**
+     *  发起一次单聊单文件 P2P 直传（2026-10-04 起）：立即构造只有这一个文件的清单（不扫描、不算 MD5），发
+     *  cmd_folder_invite(1810，kind=1)。应答、状态与进度都走文件夹传输的那组窗口消息，界面按 localId / 会话 id
+     *  对回文件气泡。不占文件夹传输的并发名额。
+     *  @param peerUserId 接收方 userid，须为正
+     *  @param filePath   要发送的本地文件完整路径，须存在且不是目录
+     *  @param localId    界面给这一笔取的本地 id（聊天窗用文件气泡的 clientMsgId），须非空且未被占用
+     *  @return kFolderStartOk 已发出邀请；kFolderStartBadArgument 参数非法、文件不存在或邀请构造不出来
+     */
+    int StartSendFile(int64_t peerUserId, const std::wstring& filePath, const std::string& localId);
+
+    /**
      *  接收方同意接收（气泡上点了「接收」并选好了保存位置）。发
      *  cmd_folder_response(1812, accept=1)，随后等服务端下发 cmd_folder_relay_info(1816)。
      *  @param sessionId     邀请推送里带来的会话 id，须对应一条仍在待应答的邀请
@@ -730,6 +790,20 @@ public:
      *  @param sessionId 本次传输的会话 id 或本地占位 id；查不到对应记录时只记日志
      */
     void CancelTransfer(const std::string& sessionId);
+
+    /**
+     *  同上，并可声明改为上传服务器发离线文件（2026-10-04 起，单文件直传的发送方在对方接收之前点「发送离线文件」）。
+     *  @param sessionId 会话 id 或本地 id
+     *  @param toOffline true 时撤回邀请带 tooffline=1：服务端向接收方推「已改为离线发送」、不留文件消息；false 同上一个重载
+     */
+    void CancelTransfer(const std::string& sessionId, bool toOffline);
+
+    /**
+     *  某一笔是不是单聊单文件直传（2026-10-04 起）。可在任意线程调用。
+     *  @param sessionId 会话 id 或本地 id
+     *  @return 表里有这一笔且是单文件直传返回 true
+     */
+    bool IsDirectFile(const std::string& sessionId) const;
 
     /**
      *  重试续传（发送端在失败气泡上点了「重试」）。发 cmd_folder_retry(1817)；服务端
@@ -867,11 +941,12 @@ private:
         std::shared_ptr<FolderRecvSession>  m_recvSession;
         std::shared_ptr<FolderSendCallback> m_sendCallback;
         std::shared_ptr<FolderRecvCallback> m_recvCallback;
+        std::shared_ptr<IFolderLaneTransportFactory> m_transportFactory;   //通道工厂，最后销毁
 
-        //四个指针是否都为空（这一笔当前没有在跑的状态机）。
+        //各指针是否都为空（这一笔当前没有在跑的状态机）。
         bool Empty() const
         {
-            return !m_sendSession && !m_recvSession && !m_sendCallback && !m_recvCallback;
+            return !m_sendSession && !m_recvSession && !m_sendCallback && !m_recvCallback && !m_transportFactory;
         }
     };
 
@@ -918,8 +993,12 @@ private:
     //停掉表里全部记录的状态机（同上）。
     void StopAllSessions();
 
-    //向服务端发 cmd_folder_close(1814)。成功与失败共用，失败时带错误码。
-    void SendClose(const std::string& sessionId, bool success, int errCode, const std::string& errMsg);
+    //向服务端发 cmd_folder_close(1814)。成功与失败共用，失败时带错误码；linkPath / md5 见 CIUSocket 的同名重载
+    void SendClose(const std::string& sessionId, bool success, int errCode, const std::string& errMsg,
+                   int linkPath, const std::string& md5);
+
+    //一笔的链路实际路径与是否走上过 P2P（锁内取出工厂、锁外查询：查询会进链路槽的锁）。查不到这一笔时都为假 / 0
+    void QueryLinkState(const std::string& sessionId, int& outKind, int& outLinkPath, bool& outDecidedP2P);
 
 private:
     //供两个回调适配器把结果转投给本单例，故声明为友元。它们只调下面几个私有方法。

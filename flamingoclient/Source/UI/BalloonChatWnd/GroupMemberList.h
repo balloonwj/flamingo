@@ -13,6 +13,12 @@
  *  连续排列；一个都没命中时在列表区域画一行「没有找到匹配的成员」。成员列表重建后宿主调
  *  ReapplyFilter 按原关键词重新过滤。
  *
+ *  部门树视图（2026-10-06 起，docs/群成员部门树方案.md）：宿主按 BuildGroupMemberDeptTree 的结果逐行
+ *  AddRow，部门标题行（GroupDeptHeaderItem）与成员行（GroupMemberItem）混排，每行记下父部门行的下标。
+ *  点部门标题行折叠 / 展开它的下级行，折叠状态按部门 id 记在本控件里（列表重建后照样保留，窗口关闭即丢）。
+ *  树视图下搜索时，命中成员所在的部门及上级照常显示并自动展开，没有命中成员的部门隐藏；清空关键字后
+ *  恢复原来的折叠状态。同一个人在多个部门下各有一行，在线状态等按 userid 的更新覆盖他的每一行。
+ *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
  *  balloonwj@qq.com   2026-05-22
@@ -20,7 +26,12 @@
 
 #pragma once
 
+#include <memory>
+#include <set>
+#include <vector>
+
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
+#include "ChatScrollFade.h"   // 滑块的淡入淡出（成员需完整类型）
 
 namespace balloonchatwnd {
 
@@ -64,8 +75,11 @@ public:
     // DuiControl 覆写：在滚动条命中带里按下开始拖动（点在轨道空白处时滑块中心先跳到点击处）。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
 
-    // DuiControl 覆写：拖动中按指针位置滚动。
+    // DuiControl 覆写：拖动中按指针位置滚动；没在拖动时报告鼠标是否在滚动条命中带上（悬停时滑块淡入并保持可见）。
     bool OnMouseMove(POINT pt, UINT mkFlags) override;
+
+    // DuiControl 覆写（2026-10-04 起）：鼠标离开本控件时滑块开始淡出。返回值同基类。
+    bool OnMouseLeave() override;
 
     // DuiControl 覆写：结束拖动。
     bool OnLButtonUp(POINT pt, UINT mkFlags) override;
@@ -101,9 +115,63 @@ public:
     // 当前可见（未被过滤隐藏）的成员行数。
     int VisibleRowCount() const;
 
-    // 有过滤关键词、且一行都没命中时返回 true；界面据此画「没有找到匹配的成员」。
+    // 有过滤关键词、且一个成员都没命中时返回 true；界面据此画「没有找到匹配的成员」。
     // 没有关键词时恒为 false（成员尚未到齐、侧栏为空时不显示这行提示）。
     bool HasNoMatches() const;
+
+    /**
+     *  摘掉全部行（成员行与部门标题行），同时清掉各行的父行记录。宿主重建成员列表前调用。
+     *  折叠状态按部门 id 保留，不随之清除。不重新排版，由宿主挂完新行后统一处理。
+     */
+    void ClearRows();
+
+    /**
+     *  在末尾挂一行。平铺视图挂成员行、parentRow 传 -1；部门树视图按 BuildGroupMemberDeptTree 的顺序挂，
+     *  parentRow 为父部门标题行的下标（父行必须先挂）。挂的是部门标题行时按记住的折叠状态设好箭头。
+     *  不重新排版，由宿主挂完后调 ReapplyFilter。
+     *    row：      要挂的行，所有权转给本控件。
+     *    parentRow：父部门标题行的下标（即它是第几个被挂上的行，从 0 起）；-1 表示没有父行。
+     */
+    void AddRow(std::unique_ptr<balloonwjui::DuiControl> row, int parentRow);
+
+    /**
+     *  切换为部门树视图或平铺视图。只记标志，行由宿主按新视图重建；切换后滚动位置回到顶部。
+     *    on：true 部门树视图，false 平铺视图。
+     */
+    void SetTreeMode(bool on);
+
+    // 当前是否为部门树视图
+    bool IsTreeMode() const { return m_treeMode; }
+
+    /**
+     *  挂完一批行之后调用（FillGroupMemberList 在 AddRow 之后、ReapplyFilter 之前调用）：选中的人不在新名单里
+     *  （离开了群）时取消选中，再按当前视图刷新各成员行的选中显示。
+     */
+    void CommitRows();
+
+    /**
+     *  选中一位成员（成员行被左键或右键按下时由行调用，2026-10-08 用户确认的方案）。只有平铺视图生效：
+     *  部门树视图保持原样，调用被忽略，平铺视图里记着的人也不变。按 userid 记住，列表重建后照样保留；
+     *  搜索过滤只隐藏、不取消，点列表空白处也不取消。
+     *    userid：成员 userid；不大于 0 时忽略。
+     */
+    void SelectMember(int64_t userid);
+
+    // 平铺视图里选中的成员 userid；0 表示没有选中
+    int64_t SelectedUserId() const { return m_selectedUserId; }
+
+    /**
+     *  折叠或展开一个部门（部门标题行被点击时调用；搜索中不调用）。折叠状态按部门 id 记住，
+     *  更新该部门标题行的箭头，再按新的状态重新决定各行显隐并重新排版。
+     *    deptId：部门 id；「未分配部门」为 kDeptTreeUnassignedId。
+     */
+    void ToggleDeptCollapsed(int64_t deptId);
+
+    // 某个部门当前是否折叠
+    bool IsDeptCollapsed(int64_t deptId) const { return m_collapsedDepts.count(deptId) != 0; }
+
+    // 当前挂着的成员行（GroupMemberItem）个数，不论是否可见；部门树视图下同一个人的多行分别计数
+    int MemberRowCount() const;
 
     /**
      *  设置右侧让位宽度：成员行与滚动条滑块都收在本控件矩形右缘往里这么多的范围内。
@@ -125,12 +193,21 @@ public:
     void SetMyNetRoleForAll(int netRole);
 
     /**
-     *  更新某个成员行的在线状态（GroupMemberItem::SetPresence），头像角上的徽标随之重画。
+     *  更新某个成员的在线状态（GroupMemberItem::SetPresence），头像角上的徽标随之重画。部门树视图下
+     *  同一个人在多个部门下各有一行，每一行都更新。
      *    userid：  成员 userid。
      *    presence：在线状态，取值见 GroupMemberItem::SetPresence。
      *  @return 找到该成员的行返回 true；侧栏里没有这个成员时什么都不做，返回 false。
      */
     bool SetMemberPresence(int64_t userid, int presence);
+
+    /**
+     *  把本端的界面连接态同步给每一个成员行（GroupMemberItem::SetSelfConnectionState）。只有本人
+     *  那一行的头像会因此变灰或恢复彩色（离线用户头像置灰，2026-10-03）。宿主群聊窗在连接态变化时调用。
+     *    connUiState：取值见 balloonmain::ConnectionUiState。
+     *  不是 GroupMemberItem 的子控件跳过；需要重绘的行由各行自己请求重绘。
+     */
+    void SetSelfConnectionStateForAll(int connUiState);
 
 private:
     // 当前滚动条滑块的矩形（宿主客户区坐标）；内容没有超出时为空矩形。
@@ -144,6 +221,14 @@ private:
     int  m_thumbDragOffsetY;   // 拖动时按下点相对滑块上沿的偏移（像素），拖动中保持不变，滑块不跳
     int  m_rightInset;         // 右侧让位宽度（物理像素），给窗口缩放边框让出位置，见 SetRightInset
     CString m_filterKeyword;   // 过滤关键词（已去掉首尾空白），空串表示不过滤；见 SetFilterKeyword
+    CChatScrollFade m_scrollFade;   // 滑块的淡入淡出（2026-10-04 起，与 balloonui 滚动条同一时序），随本控件销毁
+    bool m_treeMode;                // 是否为部门树视图；见 SetTreeMode
+    std::vector<int> m_rowParent;   // 与子控件一一对应：父部门标题行的下标，-1 表示没有；AddRow 记入，ClearRows 清空
+    std::set<int64_t> m_collapsedDepts;   // 折叠着的部门 id；本控件存活期间（窗口开着时）一直保留
+    int64_t m_selectedUserId;       // 平铺视图里选中的成员 userid，0 表示没有；本控件存活期间（窗口开着时）保留，见 SelectMember
+
+    // 按 m_selectedUserId 与当前视图刷新每个成员行的选中显示（部门树视图一律不显示）
+    void ApplySelectionToRows();
 };
 
 } // namespace balloonchatwnd

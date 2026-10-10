@@ -9,6 +9,7 @@
 #include "Theme/AdminTheme.h"
 #include "Widgets/Widgets.h"
 #include "Util/AppConfig.h"
+#include "Util/LoginText.h"
 
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Input/DuiEdit.h"
@@ -99,7 +100,7 @@ std::unique_ptr<DuiControl> BuildBrandPanel()
                                _T("为不同企业建立独立的组织与权限边界")),
                    Hint().Fixed(38));
     hero->AddChild(MakeFeature(_T("可视化组织树"),
-                               _T("部门与员工任意层级挂载、重排")),
+                               _T("部门任意层级嵌套，员工可调整所属部门")),
                    Hint().Fixed(38));
     hero->AddChild(MakeFeature(_T("全量审计日志"),
                                _T("所有管理动作留痕，可导出、可追溯")),
@@ -108,8 +109,8 @@ std::unique_ptr<DuiControl> BuildBrandPanel()
     hero->AddChild(std::make_unique<DuiControl>(), Hint().Weight(1));   // 下弹性空白
     panel->AddChild(std::move(hero), Hint().Weight(1));
 
-    // 底部版本信息。
-    panel->AddChild(ui::MakeLabel(_T("v2.0.0 · 内部构建 2026.05.18"),
+    // 底部版本信息：版本号常量加本次构建的日期（见 Util/LoginText.h）。
+    panel->AddChild(ui::MakeLabel(logintext::VersionLine(),
                                   theme::kFontSizeSmall, false, kBrandTextFaint),
                     Hint().Fixed(18));
 

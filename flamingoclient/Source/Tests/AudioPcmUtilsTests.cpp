@@ -10,7 +10,7 @@
  *  balloonwj@qq.com   2026-06-12
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/Call/AudioPcmUtils.h"
+#include "../../FlamingoMedia/Call/AudioPcmUtils.h"
 
 #include <vector>
 #include <stdint.h>

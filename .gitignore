@@ -29,7 +29,6 @@ iKutil.log
 *.o
 *.log
 LoginAccountList.data
-flamingoclient/Bin/Users/
 *.ilk
 *.suo
 FlamingoUpdater.exe
@@ -42,10 +41,7 @@ FlamingoUpdater.exe
 *.dylib
 flamingoclient/Source/Debug/
 flamingoclient/FlamingoUpdater/debug/
-flamingoclient/Bin/Flamingo.exe
-flamingoclient/Bin/CatchScreen.exe
 
-flamingoclient/Bin/Logs/
 
 # Compiled Static libraries
 *.lai
@@ -57,7 +53,6 @@ flamingoclient/Bin/Logs/
 # 它一并吞掉，故在此显式放行 —— 此前 libsodium 的 Linux 静态库就是因为这条规则
 # 一直没能进版本库，Linux 上克隆完仍得自己编一遍。
 !flamingoserver/deps/libsodium/lib/linux/*.a
-!flamingoserver/deps/mariadb-connector/lib/linux/*.a
 *.sbr
 *.idb
 *.obj
@@ -85,7 +80,6 @@ flamingoAndroid/app/src/main/java/org/hootina/platform/.DS_Store
 flamingoAndroid/app/src/main/java/org/hootina/platform/model/.DS_Store
 flamingoAndroid/app/src/main/res/.DS_Store
 flamingoclient/.DS_Store
-flamingoclient/Bin/.DS_Store
 flamingoclient/Source/.DS_Store
 flamingoclient/Source/net/.DS_Store
 flamingoserver/.DS_Store
@@ -101,7 +95,6 @@ flamingoserver/.vs/
 
 # 调试期间 dump 出来的位图：摄像头自测抓的第一帧、DXGI 抓屏改造时的画面比对图
 /cameratest_first.bmp
-flamingoclient/Bin/dxgi*.bmp
 
 # 服务端在 Windows 下就地运行时，手工把标准输出/标准错误重定向出来的文件
 # （日志文件本身已被上面的 *.log 规则覆盖）
@@ -118,11 +111,6 @@ flamingoclient/Source/Release_x64/
 
 # PC 客户端单元测试工程的中间文件与测试可执行文件
 flamingoclient/Source/Tests/Unit_Debug_Win32/
-flamingoclient/Bin/Tests/
-
-# 第三方音频库的中间文件目录。生成的静态库放在各自的 Bin 子目录里，不受影响。
-third-party/opus-1.5.2/obj/
-third-party/speexdsp-1.2.1/obj/
 
 # 服务端测试程序跑 SQLite 集成用例时生成的临时库文件（含 WAL 模式的两个附属文件）。
 # 每个用例开头都会重建它们，属于纯粹的测试中间产物。
@@ -163,16 +151,43 @@ flamingoserver/build-linux/
 flamingoclient/Source/Tests/Unit_Debug_x64/
 flamingoclient/Source/Tests/Unit_Release_x64/
 
-# PC 客户端 Win32 两个配置的输出目录（里面只有 exe 与 pdb，没有资源）
-flamingoclient/Bin/Win32/
+# PC 客户端的四个输出目录（2026-10-09 起取代原来的 Bin/）：
+#   Debug/、Release/ 分别是 x64 Debug、Release 版的运行目录，其中的资源与配置（config、Face、Image、Sound）入库，
+#   编译产物与运行期数据（各账号的本地数据 Users、日志、下载的升级包、图片缓存、调试时 dump 的位图）不入库；
+#   Debug_Win32/、Release_Win32/ 只有 32 位版本的编译产物，整个不入库。单元测试程序输出到各配置目录下的 Tests/
+#   （常用的 Debug|Win32 在 Debug_Win32/Tests/），同样不入库。
+flamingoclient/Debug/*.exe
+flamingoclient/Debug/*.dll
+flamingoclient/Debug/*.pdb
+flamingoclient/Debug/*.lib
+flamingoclient/Debug/*.exp
+flamingoclient/Debug/*.iobj
+flamingoclient/Debug/*.ipdb
+flamingoclient/Debug/*.bmp
+flamingoclient/Debug/Users/
+flamingoclient/Debug/Logs/
+flamingoclient/Debug/log/
+flamingoclient/Debug/update/
+flamingoclient/Debug/cache/
+flamingoclient/Debug/Tests/
+flamingoclient/Release/*.exe
+flamingoclient/Release/*.dll
+flamingoclient/Release/*.pdb
+flamingoclient/Release/*.lib
+flamingoclient/Release/*.exp
+flamingoclient/Release/*.iobj
+flamingoclient/Release/*.ipdb
+flamingoclient/Release/*.bmp
+flamingoclient/Release/Users/
+flamingoclient/Release/Logs/
+flamingoclient/Release/log/
+flamingoclient/Release/update/
+flamingoclient/Release/cache/
+flamingoclient/Release/Tests/
+flamingoclient/Debug_Win32/
+flamingoclient/Release_Win32/
 
-# PC 客户端 x64 Release 的发布包与打好的压缩包。不是「重新编译即可恢复」的东西
-# （exe 之外还手工装配了全套资源与 update 目录），所以 clean.ps1 不删它，
-# 但它是构建产物，不入库。
-flamingoclient/Bin/x64/
 
-# PC 客户端运行期落盘的图片缓存
-flamingoclient/Bin/cache/
 
 # 跑 SQLite 集成用例时落在各处的临时库文件。测试程序的工作目录不固定，
 # 仓库根、客户端目录、服务端 tools 目录下都可能留下一份。
@@ -180,7 +195,7 @@ flamingoclient/Bin/cache/
 flamingoclient/flamingo_sqlite_*.db*
 flamingoserver/tools/flamingo_sqlite_*.db*
 
-# Python 字节码缓存。tools/ 与 migrations/ 下的脚本跑过就会生成，属于纯派生物。
+# Python 字节码缓存。tools/ 下的脚本跑过就会生成，属于纯派生物。
 __pycache__/
 *.pyc
 
@@ -193,12 +208,34 @@ flamingoAdmin/Tests/Debug/
 flamingoAdmin/Tests/Release/
 flamingoAdmin/Tests/Debug_x64/
 flamingoAdmin/Tests/Release_x64/
-# flamingoAdmin 自带的第三方依赖副本，与仓库根的 third-party 同理，不入库
-flamingoAdmin/third-party/
 
-# 第三方依赖的源码副本（opus / speexdsp / libvpx / sqlite 等）。体积以 GB 计，
-# 是编译客户端要用到的真实构建依赖，留在磁盘上但不入库。
-/third-party/
+# 第三方依赖（2026-10-10 起随仓库提交）：third-party/ 与 flamingoAdmin/third-party/ 只收源码和编译必需的
+# 预编译库，下面列出的是其中不入库的部分。third-party/balloonui 是独立的 git 仓库，另行忽略，见下文。
+# libvpx：没有任何工程引用，不入库。
+/third-party/libvpx-1.16.0/
+# opus / speexdsp：由客户端解决方案里的 opus_static、speexdsp_static 工程从源码编译，
+# 中间目录 obj/ 与输出目录 Bin/ 不入库。
+/third-party/opus-1.5.2/obj/
+/third-party/opus-1.5.2/Bin/
+/third-party/speexdsp-1.2.1/obj/
+/third-party/speexdsp-1.2.1/Bin/
+# libsodium：客户端各工程直接链接 bin/<平台>/<配置>/v143/static 下的预编译静态库，只收这几个
+# libsodium.lib 与配套的 libsodium.pdb（后者须写成例外，否则被上文的 *.pdb 忽略）；中间目录 obj/
+# 与 bin/ 下的其余输出不入库。
+/third-party/libsodium-1.0.22-RELEASE/obj/
+/third-party/libsodium-1.0.22-RELEASE/bin/**
+!/third-party/libsodium-1.0.22-RELEASE/bin/**/
+!/third-party/libsodium-1.0.22-RELEASE/bin/*/*/v143/static/libsodium.lib
+!/third-party/libsodium-1.0.22-RELEASE/bin/*/*/v143/static/libsodium.pdb
+# sqlite：客户端只编译合并版 sqlite3.c，只收合并版源码、两个头文件与说明文件；
+# 完整源码树与编译生成工具产生的文件不入库。
+/third-party/sqlite-src-3530100/*
+!/third-party/sqlite-src-3530100/sqlite3.c
+!/third-party/sqlite-src-3530100/sqlite3.h
+!/third-party/sqlite-src-3530100/sqlite3ext.h
+!/third-party/sqlite-src-3530100/LICENSE.md
+!/third-party/sqlite-src-3530100/README.md
+!/third-party/sqlite-src-3530100/VERSION
 
 # 参考资料：其它开源项目的源码副本（rustdesk / soui 等），只用来对照实现，不入库。
 /references/
@@ -206,6 +243,9 @@ flamingoAdmin/third-party/
 # 设计稿与设计稿抓取的中间产物
 /design/
 /.design-fetch/
+
+# 宣传海报网页（build.py 生成的 index.html 与所用截图），只在本地使用，不入库
+/poster/
 
 # 从 Sysinternals 下载的现成调试工具，可随时重新下载
 /DebugView/
@@ -233,8 +273,6 @@ flamingoclient/FlamingoUpdater/Release_x64/
 flamingoclient/FlamingoUpdater/Debug_Win32/
 flamingoclient/FlamingoUpdater/Release_Win32/
 
-# 客户端下载的升级包与更新器日志。运行期产物，几十 MB，且每次升级都会变。
-flamingoclient/Bin/update/
 
 # WSL / Linux 侧 CMake 构建目录。里面是编出来的可执行文件与 CMake 中间产物，
 # 单个近 20 MB，且重新 cmake+make 即可恢复。
@@ -243,10 +281,31 @@ flamingoserver/build-mysql/
 # 升级包投放目录。运维手工把 zip 放进去，服务端按 MD5 反查，属于部署数据不是源码。
 flamingoserver/windowsproj/updatecache/
 
-# MariaDB 客户端 SDK：下载解压得来的第三方依赖，与 third-party/ 同理不入库。
-flamingoserver/mariadb-connector-c-3.4.9/
+# MariaDB Connector/C：2026-10-09 起改为随仓库提交裁剪后的源码（flamingoserver/mariadb-connector-c-3.4.9/，
+# 编进 chatserver，见 docs/服务端依赖库源码编译方案.md），那个目录不再忽略。下载来的官方发布包与早年
+# 解压出的 SDK 目录仍是可再生的下载物，不入库。
 flamingoserver/mariadb-connector-c-3.4.9.zip
 flamingoserver/mariadb-connector-x64/
+
+# 服务端运行期落盘的数据（2026-10-09 清理 flamingoserver 时补齐）。服务端配置里的相对目录有两种
+# 解析方式：dbpath / logfiledir / cloudrecorddir / updatecachedir 按可执行文件所在目录，
+# filecachedir / imgcachedir 按进程工作目录（fileserversrc/main.cpp、imgserversrc/main.cpp），
+# 因此这类目录会出现在源码根、windowsproj/ 以及各构建目录下。
+flamingoserver/filecache/
+flamingoserver/imgcache/
+flamingoserver/logs/
+flamingoserver/windowsproj/imgcache/
+flamingoserver/windowsproj/logs/
+
+# 服务端 MariaDB 连接器静态库工程 windowsproj/mariadbclient.vcxproj 的中间文件目录
+# （产物 mariadbclient.lib 输出到 windowsproj/x64/<配置>/，已被上面的 x64/ 规则覆盖）
+flamingoserver/windowsproj/mariadbclient/
+
+# 服务端测试用例在当次工作目录下建的临时库与临时目录（test_fileshare_schema.cpp、
+# test_updatepackageindex.cpp、test_updatepackagescanner.cpp）。其中 flamingo_fileshare_schema_test.db
+# 不以 flamingo_sqlite_ 开头，上面的 flamingo_sqlite_*.db* 规则匹配不到；与那条规则一样刻意不锚定目录。
+flamingo_*_test.db*
+flamingo_update*_test/
 
 # 跑单测时在源码目录里落下的临时 SQLite 库。
 flamingoclient/Source/flamingo_sqlite_*_test.db
@@ -262,3 +321,102 @@ flamingoserver/etc/server_key.pub
 # 这些图是排查问题、核对界面时随手截的，数量多、体积大、时效性强，
 # 对克隆仓库的人没有价值；需要长期保留的图请另行归档并在文档中说明出处。
 snapshots/
+
+# PC 客户端 FlamingoMedia DLL 工程（屏幕共享 / 录制 / 音视频）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoMedia/Debug/
+flamingoclient/FlamingoMedia/Release/
+flamingoclient/FlamingoMedia/Debug_x64/
+flamingoclient/FlamingoMedia/Release_x64/
+
+# PC 客户端 FlamingoFileShare DLL 工程（文件共享）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoFileShare/Debug/
+flamingoclient/FlamingoFileShare/Release/
+flamingoclient/FlamingoFileShare/Debug_x64/
+flamingoclient/FlamingoFileShare/Release_x64/
+
+# PC 客户端 FlamingoP2P DLL 工程（P2P 通信）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoP2P/Debug/
+flamingoclient/FlamingoP2P/Release/
+flamingoclient/FlamingoP2P/Debug_x64/
+flamingoclient/FlamingoP2P/Release_x64/
+
+# PC 客户端 FlamingoOcr DLL 工程（图片文字识别）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoOcr/Debug/
+flamingoclient/FlamingoOcr/Release/
+flamingoclient/FlamingoOcr/Debug_x64/
+flamingoclient/FlamingoOcr/Release_x64/
+
+# PC 客户端 FlamingoMarkdown DLL 工程（Markdown 消息、编辑器与导出）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoMarkdown/Debug/
+flamingoclient/FlamingoMarkdown/Release/
+flamingoclient/FlamingoMarkdown/Debug_x64/
+flamingoclient/FlamingoMarkdown/Release_x64/
+
+# PC 客户端 FlamingoSecretChat DLL 工程（单聊密聊）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoSecretChat/Debug/
+flamingoclient/FlamingoSecretChat/Release/
+flamingoclient/FlamingoSecretChat/Debug_x64/
+flamingoclient/FlamingoSecretChat/Release_x64/
+
+# 语音字幕：sherpa-onnx 的源码、构建目录与静态库（由 flamingoclient/deps/sherpa-onnx/build_sherpa_onnx.ps1 生成，x64 的
+# onnxruntime.lib 922 MB，不能入库）；识别模型的下载与转换结果（由 flamingoclient/deps/caption-model/prepare_model.py 生成）
+flamingoclient/deps/sherpa-onnx/src/
+flamingoclient/deps/sherpa-onnx/build-*/
+flamingoclient/deps/sherpa-onnx/lib/
+flamingoclient/deps/caption-model/download/
+flamingoclient/deps/caption-model/out/
+
+# PC 客户端 FlamingoBot DLL 工程（机器人管理界面，docs/机器人方案.md 8.2）的中间文件目录，
+# 编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略（2026-10-09 起不再输出到 Bin/）
+flamingoclient/FlamingoBot/Debug/
+flamingoclient/FlamingoBot/Release/
+flamingoclient/FlamingoBot/Debug_x64/
+flamingoclient/FlamingoBot/Release_x64/
+
+# PC 客户端其余 DLL 工程（语音字幕 FlamingoCaption、识别模型 FlamingoCaptionModel、语言包 FlamingoLang、锁屏 FlamingoLock、
+# 截图 FlamingoScreenshot、帖子群 FlamingoThreadGroup）的中间文件目录，编译输出的 DLL 由「PC 客户端的四个输出目录」一节统一忽略。
+# 其中 FlamingoCaptionModel 的每个中间目录里都有一个约 160 MB 的 .res（识别模型打包成的资源），绝不能入库（2026-10-10 补齐）
+flamingoclient/FlamingoCaption/Debug/
+flamingoclient/FlamingoCaption/Release/
+flamingoclient/FlamingoCaption/Debug_x64/
+flamingoclient/FlamingoCaption/Release_x64/
+flamingoclient/FlamingoCaptionModel/Debug/
+flamingoclient/FlamingoCaptionModel/Release/
+flamingoclient/FlamingoCaptionModel/Debug_x64/
+flamingoclient/FlamingoCaptionModel/Release_x64/
+flamingoclient/FlamingoLang/Debug/
+flamingoclient/FlamingoLang/Release/
+flamingoclient/FlamingoLang/Debug_x64/
+flamingoclient/FlamingoLang/Release_x64/
+flamingoclient/FlamingoLock/Debug/
+flamingoclient/FlamingoLock/Release/
+flamingoclient/FlamingoLock/Debug_x64/
+flamingoclient/FlamingoLock/Release_x64/
+flamingoclient/FlamingoScreenshot/Debug/
+flamingoclient/FlamingoScreenshot/Release/
+flamingoclient/FlamingoScreenshot/Debug_x64/
+flamingoclient/FlamingoScreenshot/Release_x64/
+flamingoclient/FlamingoThreadGroup/Debug/
+flamingoclient/FlamingoThreadGroup/Release/
+flamingoclient/FlamingoThreadGroup/Debug_x64/
+flamingoclient/FlamingoThreadGroup/Release_x64/
+
+# 管理端 FlamingoLink DLL 工程（长连接与「在线用户」页）的中间文件目录；DLL 输出到 flamingoAdmin/Bin/，已被上文忽略
+flamingoAdmin/FlamingoLink/Debug/
+flamingoAdmin/FlamingoLink/Release/
+flamingoAdmin/FlamingoLink/Debug_x64/
+flamingoAdmin/FlamingoLink/Release_x64/
+
+# PC 客户端单元测试工程 Release|Win32 配置的中间文件（另外三个配置已在上文列出）
+flamingoclient/Source/Tests/Unit_Release_Win32/
+
+# 单元测试工程编译 XmlDocument.h 里的 #import 时在 Tests/ 下生成的类型库头文件，每次编译都会重新生成。
+# 注意 flamingoclient/Source/ 下同名的那两份是早年就入库的，不在此列
+flamingoclient/Source/Tests/msxml3.tlh
+flamingoclient/Source/Tests/msxml3.tli

@@ -67,14 +67,19 @@ static std::string buildPinnedWhere(int ctype, int64_t cid, int64_t selfUserId)
     //已撤回的不返回。撤回时会顺手删掉它的Pin行，这里是双保险、防住历史脏数据。
     os << " AND m.f_recalled = 0";
 
-    //排除该用户本端已删除的消息。口径与 MessageManager 的 notDeletedClause 一致，
-    //区别只是这里必须写成 m.f_msgid —— 联表之后裸 f_msgid 有歧义。
+    //排除该用户本端已删除的消息。口径与 MessageManager 的 visibleToUserClause 里删除过滤的部分一致，
+    //区别只是这里必须写成 m.f_msgid —— 联表之后裸 f_msgid 有歧义。visibleToUserClause 里另有一段
+    //可见范围过滤（f_audience），这里不需要：只给部分人看的消息目前只有文件共享卡片，而共享卡片
+    //不允许置顶（ChatSession::onPinMessage 拒绝），Pin 表里不会出现这类消息。
     os << " AND m.f_msgid NOT IN (SELECT f_msgid FROM t_message_deleted WHERE f_userid = "
        << selfUserId << ")";
 
     //再排除该用户按时间范围清理掉的消息（cmd_delete_messages_by_time）。时间列同样要带
     //别名 m，理由同上
     os << msgdelete::BuildNotInDeletedRangeClause(selfUserId, "m.f_create_time");
+
+    //再排除该用户按会话清空掉的消息（cmd_clear_conversation），列名前缀同样是别名 m
+    os << msgdelete::BuildNotClearedClause(selfUserId, "m.");
     return os.str();
 }
 
@@ -179,7 +184,8 @@ bool MessagePinManager::getPinRecord(int64_t msgid, PinRecord& out)
 
 bool MessagePinManager::getPinnedMessages(int ctype, int64_t cid, int64_t selfUserId,
                                           int limit, std::vector<MessageRecord>& out,
-                                          std::vector<PinRecord>& outPins, int64_t& outTotal)
+                                          std::vector<PinRecord>& outPins, int64_t& outTotal,
+                                          int64_t minCreateTime, int64_t minMsgId)
 {
     out.clear();
     outPins.clear();
@@ -201,7 +207,14 @@ bool MessagePinManager::getPinnedMessages(int ctype, int64_t cid, int64_t selfUs
         return false;
     }
 
-    const std::string where = buildPinnedWhere(ctype, cid, selfUserId);
+    //本人能看到的历史范围：总数与分页查询都套用，total 只计看得到的
+    std::ostringstream osWhere;
+    osWhere << buildPinnedWhere(ctype, cid, selfUserId);
+    if (minCreateTime > 0)
+        osWhere << " AND m.f_create_time >= " << minCreateTime;
+    if (minMsgId > 0)
+        osWhere << " AND m.f_msgid >= " << minMsgId;
+    const std::string where = osWhere.str();
 
     //先取不受 limit 约束的真实总数。客户端拿它与返回条数比较判断是否发生截断，
     //进而决定本地对账的时间下界——少了这一步，超过 limit 的老 Pin 会被误清。

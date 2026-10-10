@@ -8,6 +8,7 @@
 #include "../../App/CustomMsgDef.h"   // WM_CHAT_FOCUS_AREA / WM_CHAT_COPY_SELECTION
 #include "../../Common/Log/IULog.h"   // LOG_INFO
 #include "ChatClipboardIo.h"          // 读剪贴板里的 Flamingo 聊天内容
+#include "ChatPasteImage.h"           // 剪贴板里只有图片时存成 PNG 再插入（BUG-106）
 #include "ChatFaceTag.h"              // FaceTagFromId / kFaceDisplayPx（插入表情）
 #include "ChatInlineText.h"           // FaceImagePathFromId（表情编号 → 图片文件）
 #include "ChatScrollThumb.h"          // 与消息区同一种细滚动条：几何计算与滑块绘制
@@ -70,6 +71,7 @@ ChatInputRichEdit::ChatInputRichEdit()
     , m_nMentionChangedMsg(0)
     , m_nMentionNavMsg(0)
     , m_nMentionWheelMsg(0)
+    , m_nPasteTextMsg(0)
     , m_bImeComposing(false)
     , m_pfnSendQuery(NULL)
     , m_pSendQueryCtx(NULL)
@@ -84,6 +86,7 @@ ChatInputRichEdit::ChatInputRichEdit()
 {
     ::SetRectEmpty(&m_thumbCacheRect);
     ::SetRectEmpty(&m_thumbCacheItem);
+    m_scrollFade.SetOwner(this);
 
     // 关掉基类自带的拖放，且<u>必须在构造时就关</u>。
     //
@@ -190,7 +193,7 @@ void ChatInputRichEdit::OnPaint(HDC hdc, const RECT& rcDirty)
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        PaintChatScrollThumb(g, m_thumbCacheRect);
+        PaintChatScrollThumb(g, m_thumbCacheRect, m_scrollFade.Alpha());
     }
 }
 
@@ -225,6 +228,34 @@ void ChatInputRichEdit::SetSendOnEnterQuery(SendOnEnterQueryFn fn, void* pCtx)
 void ChatInputRichEdit::SetTypingChangedMsg(UINT nMsg)
 {
     m_nTypingChangedMsg = nMsg;
+}
+
+void ChatInputRichEdit::SetPasteTextMsg(UINT nMsg)
+{
+    m_nPasteTextMsg = nMsg;
+}
+
+bool ChatInputRichEdit::IsInputBlank() const
+{
+    const CString text = GetText();
+    for (int i = 0; i < text.GetLength(); ++i)
+    {
+        const TCHAR ch = text[i];
+        if (ch != _T(' ') && ch != _T('\t') && ch != _T('\r') && ch != _T('\n'))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ChatInputRichEdit::NotifyPastedIntoBlank()
+{
+    if (m_nPasteTextMsg == 0 || !HasTarget())
+    {
+        return;
+    }
+    ::PostMessage(m_hNotifyTarget, m_nPasteTextMsg, 1, 0);
 }
 
 void ChatInputRichEdit::SetMentionMsgs(UINT nChangedMsg, UINT nNavMsg, UINT nWheelMsg)
@@ -282,9 +313,27 @@ bool ChatInputRichEdit::OnKeyDown(UINT vk, UINT flags)
     //
     // 从聊天记录复制的内容带着 Flamingo 自己的格式，按片段插入才能把表情、图片还原出来。
     // 只接管这一种；剪贴板里没有这种格式时不拦，仍由基类按原来的方式粘贴。
-    if (IsPasteShortcut(vk) && TryPasteChatContent())
+    if (IsPasteShortcut(vk))
     {
-        return true;
+        if (TryPasteChatContent())
+        {
+            return true;
+        }
+        // 剪贴板里只有图片：按截图「发送到对话框」的路径插入，不交给 RichEdit 原生粘贴（BUG-106）
+        if (TryPasteClipboardImage())
+        {
+            return true;
+        }
+        // 普通粘贴：粘贴之前输入框是空的，就在粘贴完成后告诉宿主（粘贴识别，docs/代码片段方案.md 第 3.1 节）。
+        // 先交给基类完成粘贴再投递，宿主收到通知时输入框里已经是粘贴后的内容。粘贴键不会是下面几段
+        // 处理的格式快捷键、@ 导航键或回车，直接交给基类不影响它们。
+        const bool wasBlank = (m_nPasteTextMsg != 0) && IsInputBlank();
+        const bool handled = DuiRichEdit::OnKeyDown(vk, flags);
+        if (wasBlank)
+        {
+            NotifyPastedIntoBlank();
+        }
+        return handled;
     }
 
     // ---- @提醒浮层的导航键 ----
@@ -402,6 +451,7 @@ bool ChatInputRichEdit::OnLButtonDown(POINT pt, UINT mkFlags)
                 ScrollToThumbTop(pt.y - m_thumbDragOffsetY);
             }
             m_thumbDragging = true;
+            m_scrollFade.SetDragging(true);
             Capture();
             return true;
         }
@@ -413,6 +463,8 @@ bool ChatInputRichEdit::OnMouseMove(POINT pt, UINT mkFlags)
 {
     if (!m_thumbDragging)
     {
+        //用绘制时缓存的滑块矩形判断是否在命中带上：鼠标移动很频繁，不为此再向排版引擎查询滚动状态
+        m_scrollFade.SetHover(HitChatScrollBand(pt, m_thumbCacheRect, m_rcItem));
         return DuiRichEdit::OnMouseMove(pt, mkFlags);
     }
     ScrollToThumbTop(pt.y - m_thumbDragOffsetY);
@@ -426,8 +478,15 @@ bool ChatInputRichEdit::OnLButtonUp(POINT pt, UINT mkFlags)
         return DuiRichEdit::OnLButtonUp(pt, mkFlags);
     }
     m_thumbDragging = false;
+    m_scrollFade.SetDragging(false);
     ReleaseCapture();
     return true;
+}
+
+bool ChatInputRichEdit::OnMouseLeave()
+{
+    m_scrollFade.OnOwnerMouseLeave();
+    return DuiRichEdit::OnMouseLeave();
 }
 
 bool ChatInputRichEdit::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
@@ -442,7 +501,13 @@ bool ChatInputRichEdit::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
             return true;   // 浮层消费掉了这次滚轮，输入框自身不滚
         }
     }
-    return DuiRichEdit::OnMouseWheel(pt, zDelta, mkFlags);
+    const bool handled = DuiRichEdit::OnMouseWheel(pt, zDelta, mkFlags);
+    //内容超出、有滑块时，滚动让滑块淡入，停手 kIdleHideMs 后淡出
+    if (m_thumbCacheRect.bottom > m_thumbCacheRect.top)
+    {
+        m_scrollFade.OnScrolled();
+    }
+    return handled;
 }
 
 bool ChatInputRichEdit::OnRawMessage(UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -473,6 +538,11 @@ HRESULT ChatInputRichEdit::TxSiteNotify(DWORD iNotify, void* pv)
         if (m_nMentionChangedMsg != 0 && HasTarget())
         {
             ::PostMessage(m_hNotifyTarget, m_nMentionChangedMsg, 0, 0);
+        }
+        // 粘贴识别：内容变了（宿主据此在提示条显示之后、用户继续输入时收起提示条）
+        if (m_nPasteTextMsg != 0 && HasTarget())
+        {
+            ::PostMessage(m_hNotifyTarget, m_nPasteTextMsg, 0, 0);
         }
     }
     return DuiRichEdit::TxSiteNotify(iNotify, pv);
@@ -553,12 +623,54 @@ bool ChatInputRichEdit::TryPasteChatContent()
     return true;
 }
 
+bool ChatInputRichEdit::TryPasteClipboardImage()
+{
+    if (IsReadOnly() || m_pfnStageImage == NULL)
+    {
+        return false;
+    }
+    if (DecideChatPaste(IsChatContentOnClipboard(), ClipboardHasText(), ClipboardHasImage()) != kChatPasteImage)
+    {
+        return false;
+    }
+    //剪贴板归属窗口：宿主窗口有效就用它，否则按"不指定归属"打开（与 TryPasteChatContent 相同）
+    HWND owner = NULL;
+    if (GetHost() != NULL && ::IsWindow(GetHost()->m_hWnd))
+    {
+        owner = GetHost()->m_hWnd;
+    }
+    std::wstring path;
+    if (!ReadClipboardImageToPng(owner, path))
+    {
+        //只有图片却存不下来：也不交给 RichEdit，原生粘贴进来的位图发不出去（原因已由 ReadClipboardImageToPng 记日志）
+        LOG_WARNING("chat input: clipboard image could not be pasted.");
+        return true;
+    }
+    const bool staged = m_pfnStageImage(m_pStageImageCtx, path);
+    LOG_INFO("chat input: pasted a clipboard image, staged=%d.", staged ? 1 : 0);
+    return true;
+}
+
 bool ChatInputRichEdit::OnContextMenuCommand(UINT nId)
 {
-    //右键「粘贴」：与 Ctrl+V 同口径。只接管带 Flamingo 格式的内容，其余交给基类。
-    if (nId == balloonwjui::kRichEditCmdPaste && TryPasteChatContent())
+    //右键「粘贴」：与 Ctrl+V 同口径。只接管带 Flamingo 格式的内容，其余交给基类；往空输入框里粘贴时同样通知宿主
+    if (nId == balloonwjui::kRichEditCmdPaste)
     {
-        return true;
+        if (TryPasteChatContent())
+        {
+            return true;
+        }
+        if (TryPasteClipboardImage())
+        {
+            return true;
+        }
+        const bool wasBlank = (m_nPasteTextMsg != 0) && IsInputBlank();
+        const bool handled = DuiRichEdit::OnContextMenuCommand(nId);
+        if (wasBlank)
+        {
+            NotifyPastedIntoBlank();
+        }
+        return handled;
     }
     return DuiRichEdit::OnContextMenuCommand(nId);
 }

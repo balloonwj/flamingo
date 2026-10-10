@@ -9,8 +9,6 @@
 --------
 
     include\sodium.h、include\sodium\*.h    公共头文件（取自 Linux 安装结果，含生成的 version.h）
-    lib\Win32\Debug\libsodium.lib           静态库，/MTd
-    lib\Win32\Release\libsodium.lib         静态库，/MT
     lib\x64\Debug\libsodium.lib             静态库，/MTd
     lib\x64\Release\libsodium.lib           静态库，/MT
     lib\linux\libsodium.a                   静态库，-fPIC

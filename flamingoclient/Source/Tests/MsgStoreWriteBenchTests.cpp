@@ -89,6 +89,9 @@ std::wstring MakeUniqueTempDbPath(int seq)
     ::swprintf_s(name, L"%sflamingo_msgbench_%lu_%d.db", dir,
                  (unsigned long)::GetCurrentProcessId(), seq);
     ::DeleteFileW(name);
+    //本地库是 WAL 模式：上次异常退出残留的日志文件会被套用到同名新库上，一并删掉
+    ::DeleteFileW((std::wstring(name) + L"-wal").c_str());
+    ::DeleteFileW((std::wstring(name) + L"-shm").c_str());
     return name;
 }
 

@@ -1,6 +1,6 @@
 /**
  *  托盘控制器：系统托盘那只图标的全部行为集中在一个类里 —— 图标本身、悬停提示文字、
- *  新消息时的头像闪烁、自动登录时的转圈动画、左键单击、右键菜单，以及鼠标停留时弹出的
+ *  新消息时的头像闪烁、正在连接时的亮灰交替、左键单击、右键菜单，以及鼠标停留时弹出的
  *  未读消息浮窗。
  *
  *  本类不是窗口，它借用宿主窗口的句柄来挂托盘图标、起定时器、以及作为右键菜单的属主。
@@ -10,7 +10,7 @@
  *  典型用法：
  *
  *      m_trayController.Attach(m_hWnd, &m_BalloonMainPanel, &m_FMGClient, this);
- *      m_trayController.AddIcon(_T("Flamingo未登录"));
+ *      m_trayController.AddIcon((g_strAppTitle + L"未登录").c_str());
  *      ...
  *      // 宿主的 OnTimer 开头
  *      if (m_trayController.PumpTimer(nIDEvent))
@@ -23,6 +23,7 @@
 
 #include "../../App/TrayIcon.h"          // CTrayIcon（Shell_NotifyIcon 的薄封装）
 #include "TrayFlashController.h"         // balloonmain::CTrayFlashController（未读会话集合与闪烁状态）
+#include "TrayConnectingBlink.h"         // balloonmain::CTrayConnectingBlink（正在连接时亮灰交替的状态机）
 #include "TrayMsgTipPopup.h"             // CTrayMsgTipPopup（鼠标停留在托盘图标上时的未读消息浮窗）
 #include "MainPanelSessionHost.h"        // balloonmain::ISessionStateHost（向宿主打听在线状态 / 请求切换状态）
 #include "../../App/CustomMsgDef.h"      // WM_TRAYICON_NOTIFY（托盘图标的回调消息号）
@@ -76,13 +77,8 @@ public:
     // 避免中间态在托盘上闪一下。
     void ReloadAppIcon();
 
-    // 掉线重连时弹一次「正在帮您重连」的托盘气泡，同时把图标换成当前（灰色）那只。
+    // 掉线重连时弹一次「正在帮您重连」的托盘气泡，同时把图标换成当前那只（正在连接时为交替中的那一帧）。
     void ShowReconnectingBalloon();
-
-    // 起 / 停自动登录期间的托盘图标转圈动画。手动登录不用它 —— 登录窗自己会显示
-    // 「登录中」，托盘无须重复提示。
-    void StartLoginAnimation();
-    void StopLoginAnimation();
 
     /**
      *  取托盘图标在屏幕上的矩形，供别处把提示框对准图标弹出（如被踢下线的提示）。
@@ -99,7 +95,7 @@ public:
      */
     bool PumpTimer(UINT_PTR nIDEvent);
 
-    // 退出程序时的收尾：停两个定时器、摘图标、销毁浮窗与全部图标资源。
+    // 退出程序时的收尾：停两个定时器（未读闪烁、正在连接交替）、摘图标、销毁浮窗与全部图标资源。
     void Shutdown();
 
     // 供宿主诊断日志使用：悬停未读提示浮窗当前是否还持有窗口。
@@ -136,18 +132,44 @@ private:
     // 悬停提示文字：第一行昵称、第二行账号、第三行在线状态与连接态。
     CString BuildTrayTipText();
 
+    // 此刻应推给系统的悬停提示：有未读会话时为空串（悬停交给未读消息浮窗，见 ShouldShowTraySystemTip），
+    // 否则为 BuildTrayTipText 的三行。凡是刷新悬停提示的地方都经它取，不直接调 BuildTrayTipText。
+    CString TrayTipForCurrentState();
+
     // 只把悬停提示文字推给系统（图标沿用当前那只）。
     void UpdateTrayIconTip();
 
-    // 按连接态取图标文件、叠加在线状态角标，结果存进 m_hAppIcon。
+    // 按连接态取图标文件、叠加在线状态角标，结果存进 m_hAppIcon。先据连接态开始或停止
+    // 正在连接的亮灰交替；交替中 m_hAppIcon 取当前那一帧，不叠角标。
     //   nConnUiState  连接态（balloonmain::kConnUi*）。
     // 返回 TRUE 表示取到了图标。
     BOOL LoadAppIcon(int nConnUiState);
     void DestroyAppIcon();
 
-    // 自动登录动画的六帧图标。
-    BOOL LoadLoginIcon();
-    void DestroyLoginIcon();
+    // 据连接态开始或停止正在连接的亮灰交替（起停定时器、加载或释放两帧图标）。
+    //   nConnUiState  连接态（balloonmain::kConnUi*）。
+    void SyncConnectingBlink(int nConnUiState);
+
+    // 加载 / 释放亮灰交替用的两帧图标（m_hBlinkIcon）。
+    void LoadBlinkIcons();
+    void DestroyBlinkIcons();
+
+    // 停掉亮灰交替的定时器并释放两帧图标；没在交替时调用也安全。不改状态机，供
+    // SyncConnectingBlink 与 Shutdown 共用。
+    void StopConnectingBlinkTimer();
+
+    // 亮灰交替定时器的一次触发：切到另一帧并推给系统，不改悬停提示。
+    void OnConnectingBlinkTick();
+
+    // 据连接态暂停或准备恢复未读提醒（起停恢复定时器；刚暂停时收起已弹出的未读浮窗）。
+    //   nConnUiState  连接态（balloonmain::kConnUi*）。
+    void SyncUnreadHold(int nConnUiState);
+
+    // 停掉未读提醒的恢复定时器；没在计时时调用也安全。
+    void StopUnreadResumeTimer();
+
+    // 恢复定时器到点：解除暂停，并按新状态刷新悬停提示（有未读时清空，交给未读浮窗）。
+    void OnUnreadResumeTick();
 
     // 按未读集合里最近那条消息的发送方，生成闪烁用的头像图标存进 m_hMsgIcon。
     void UpdateTrayFlashIcon();
@@ -155,7 +177,7 @@ private:
     // 停止闪烁：停定时器、释放头像图标、把图标与提示恢复成常态。
     void StopTrayFlash();
 
-    // 闪烁定时器的一次触发：在应用图标与发送方头像之间切换一帧。
+    // 闪烁定时器的一次触发：在应用图标与发送方头像之间切换一帧。正在连接时暂停（只记一条日志）。
     void OnFlashTimerTick();
 
     // 提示音开关的读取与翻转（翻转后立即落盘）。
@@ -180,11 +202,14 @@ private:
 
     CTrayIcon m_TrayIcon;               // 托盘图标本身，对 Shell_NotifyIcon 的封装
     HICON m_hAppIcon;                   // 常态图标：按连接态取底图、叠在线状态角标；由 LoadAppIcon 生成、DestroyAppIcon 释放
-    HICON m_hLoginIcon[6];              // 自动登录动画的六帧图标；由 LoadLoginIcon 生成、DestroyLoginIcon 释放
-    int m_nCurLoginIcon;                // 登录动画当前播到第几帧，取值 0~5
+    HICON m_hBlinkIcon[kTrayBlinkFrameCount]; // 正在连接亮灰交替的两帧图标，下标为 TrayBlinkFrame（亮、灰）；
+                                        // 开始交替时由 LoadBlinkIcons 加载、停止时由 DestroyBlinkIcons 释放，不交替时为 NULL
     HICON m_hMsgIcon;                   // 新消息闪烁用的发送方头像图标；每轮闪烁开始时重建、停闪时释放
-    DWORD m_dwLoginTimerId;             // 登录动画定时器标识；0 表示动画没在跑
+    DWORD m_dwBlinkTimerId;             // 正在连接亮灰交替的定时器标识；0 表示没在交替
     DWORD m_dwMsgTimerId;               // 新消息闪烁定时器标识；0 表示没在闪
+    CTrayConnectingBlink m_connBlink;   // 正在连接亮灰交替的状态机：是否在交替、当前是哪一帧
+    CTrayUnreadHold m_unreadHold;       // 重连期间暂停未读提醒（头像闪烁、悬停的未读浮窗）的状态机，连上后等一会儿再恢复
+    DWORD m_dwUnreadResumeTimerId;      // 未读提醒恢复定时器标识；0 表示没在计时
     CTrayFlashController m_trayFlash;   // 未读会话集合与闪烁状态机：哪些会话未读、最近一条是哪个
     bool m_bTrayFlashTickLogged;        // 本轮闪烁是否已经打过「首次 tick」那条诊断日志；每轮开始时复位
     CTrayMsgTipPopup m_trayMsgTipPopup; // 鼠标停留在托盘图标上时弹出的未读消息浮窗

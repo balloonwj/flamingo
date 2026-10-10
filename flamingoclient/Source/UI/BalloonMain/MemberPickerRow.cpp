@@ -37,6 +37,9 @@ extern CAppModule _Module;
 
 #include "MemberPickerRow.h"
 #include "MemberPickerTreeModel.h"   // MemberPickerCheckState
+#include "MainPanelIcons.h"          // DrawLineIcon：行右端附注的小图标
+#include "AvatarGlyph.h"             // DrawCenteredGlyphGdi：头像字居中
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonmain {
 
@@ -71,6 +74,15 @@ const Gdiplus::Color kBoxMark(255, 255, 255, 255);
 // 姓名文字色，与主面板列表行同口径。
 const COLORREF kNameColor = RGB(0x3C, 0x3C, 0x3C);
 
+// 行右端附注：文字字号、小图标边长与描边（viewBox 24 基准，与会话行的徽章一致）、
+// 图标与文字的间距、附注与行右缘的间距、附注与姓名之间至少留的空隙
+const int kTrailPx = 12;
+const int kTrailIconSize = 12;
+const Gdiplus::REAL kTrailIconStroke = 2.0f;
+const int kTrailIconGap = 4;
+const int kTrailPadRight = 8;
+const int kTrailNameGap = 12;
+
 // 向 path 添加一个圆角矩形（四段 90° 圆弧 + 闭合）。半径会被 clamp 到不超过
 // 宽 / 高的一半。
 void AddRoundRect(Gdiplus::GraphicsPath& path,
@@ -103,7 +115,7 @@ HFONT CreateRowFont(int pixelHeight, bool bold)
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
 }
 
 // 用 GDI DrawText 画一段文字（经系统 ClearType 光栅化，比 GDI+ 清晰）。
@@ -144,7 +156,17 @@ MemberPickerRow::MemberPickerRow()
     : m_avatarColor(RGB(0xFF, 0x7A, 0x45))
     , m_checkState(kPickerUnchecked)
     , m_checkVisible(true)
+    , m_trailIcon(-1)
+    , m_trailColor(RGB(0x99, 0x99, 0x99))
 {
+}
+
+void MemberPickerRow::SetTrailing(LPCTSTR text, int iconKind, COLORREF color)
+{
+    m_trailText  = (text != NULL) ? text : _T("");
+    m_trailIcon  = iconKind;
+    m_trailColor = color;
+    Invalidate();
 }
 
 void MemberPickerRow::SetCheckVisible(bool visible)
@@ -265,7 +287,8 @@ void MemberPickerRow::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
             Gdiplus::SolidBrush ab(Gdiplus::Color(255,
                 GetRValue(m_avatarColor), GetGValue(m_avatarColor),
                 GetBValue(m_avatarColor)));
-            g.FillPath(&ab, &avatar);
+            // 按像素格对齐地填充，与头像字、照片头像对齐（见 AvatarGlyph.h）
+            FillAvatarBackground(g, ab, avatar);
         }
     }
 
@@ -276,19 +299,54 @@ void MemberPickerRow::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         const int avX = x + kCheckStripW + kAvatarGap;
         const int avY = y + (h - kAvatarSize) / 2;
         RECT avRc = { avX, avY, avX + kAvatarSize, avY + kAvatarSize };
-        DrawGdiText(hdc, (LPCWSTR)m_avatarText, avRc, kAvatarPx, true,
-                    AvatarTextColor(m_avatarColor),
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        // 按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低
+        DrawCenteredGlyphGdi(hdc, (LPCWSTR)m_avatarText, avRc, kAvatarPx, true, AvatarTextColor(m_avatarColor));
     }
 
-    // 姓名：头像右侧（无头像时紧跟复选框），一路用满到行右边缘，单行、
-    // 放不下打省略号。
+    // 行右端附注（批量管理消息提醒窗口的当前模式）：文字右对齐贴着右边距，图标在文字左边。
+    // 姓名的右边界让到附注左边。
+    int nameRight = x + w;
+    if (!m_trailText.IsEmpty())
+    {
+        int textW = 0;
+        HFONT hFont = CreateRowFont(kTrailPx, false);
+        if (hFont != NULL)
+        {
+            HFONT hOld = (HFONT)::SelectObject(hdc, hFont);
+            SIZE sz = { 0, 0 };
+            ::GetTextExtentPoint32W(hdc, (LPCWSTR)m_trailText, m_trailText.GetLength(), &sz);
+            textW = sz.cx;
+            ::SelectObject(hdc, hOld);
+            ::DeleteObject(hFont);
+        }
+        const int textRight = x + w - kTrailPadRight;
+        RECT trailRc = { textRight - textW, y, textRight, y + h };
+        DrawGdiText(hdc, (LPCWSTR)m_trailText, trailRc, kTrailPx, false, m_trailColor,
+                    DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        int trailLeft = trailRc.left;
+        if (m_trailIcon >= 0)
+        {
+            trailLeft -= kTrailIconGap + kTrailIconSize;
+            Gdiplus::Graphics g(hdc);
+            g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            DrawLineIcon(g, m_trailIcon,
+                         (Gdiplus::REAL)trailLeft, (Gdiplus::REAL)(y + (h - kTrailIconSize) / 2),
+                         (Gdiplus::REAL)kTrailIconSize,
+                         Gdiplus::Color(255, GetRValue(m_trailColor), GetGValue(m_trailColor),
+                                        GetBValue(m_trailColor)),
+                         kTrailIconStroke);
+        }
+        nameRight = trailLeft - kTrailNameGap;
+    }
+
+    // 姓名：头像右侧（无头像时紧跟复选框），一路用到行右边缘（有附注时到附注左边），
+    // 单行、放不下打省略号。
     int nameLeft = x + kCheckStripW + kAvatarGap;
     if (hasAvatar)
     {
         nameLeft += kAvatarSize + kAvatarGap;
     }
-    RECT nameRc = { nameLeft, y, x + w, y + h };
+    RECT nameRc = { nameLeft, y, nameRight, y + h };
     DrawGdiText(hdc, (LPCWSTR)m_name, nameRc, kNamePx, false, kNameColor,
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }

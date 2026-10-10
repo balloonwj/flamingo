@@ -10,6 +10,8 @@
  *  带出「对方已读到哪条」。
  *  CVU8（2026-10-02 补）：服务端生成的群系统消息（发布公告、入群欢迎语、退出群聊、转让群主，
  *  msgtype=17、发送者为 0）不计入未读 —— 它们是群里的变动通知，不是有人对你说话。
+ *  CVU9（2026-10-07 补，用户确认）：上一条的唯一例外 —— 「有人入群」提示对名单里的新成员本人计未读，
+ *  加群申请审批通过、被人拉进群时，新成员的会话行因此有红点；邀请人与其他老成员仍不计。
  *
  *  未读的口径（读 MessageManager.cpp 得出，两条路各一份）：
  *    · 群聊：f_ctype=2 且 f_to=群id 且 <u>f_from != 本人</u> 且 f_msgid > 已读位点，
@@ -31,7 +33,9 @@
 
 #include "doctest.h"
 #include "test_dbbackend.h"
+#include "../chatserversrc/GroupProtocol.h"     //CVU9：入群提示的 content
 #include "../chatserversrc/MessageManager.h"
+#include "../chatserversrc/MessageProtocol.h"   //CVU9：消息入库时的 content 包装
 #include "../chatserversrc/Protocol.h"
 #include "../dbapi/DbConfig.h"
 #include "../dbapi/IDatabase.h"
@@ -124,7 +128,7 @@ static void setReadPos(int ctype, int64_t cid, int64_t readmsgid)
     std::unique_ptr<IDatabase> pConn(openConn());
     std::ostringstream os;
     os << "REPLACE INTO t_conversation "
-          "(f_userid,f_ctype,f_cid,f_pinned,f_mute,f_readmsgid,f_deleted,"
+          "(f_userid,f_ctype,f_cid,f_pinned,f_notify_mode,f_readmsgid,f_deleted,"
           "f_deleted_msgid,f_update_time) "
           "VALUES (" << CVU_USER_ID << "," << ctype << "," << cid << ",0,0,"
        << readmsgid << ",0,0," << CVU_BASE_TIME << ")";
@@ -335,6 +339,109 @@ TEST_CASE("CVU8 群系统消息不计入未读，但仍是会话的最后一条�
     CHECK(brief.unread == 1);
     //系统消息照样更新会话的最后一条（会话列表的摘要与时间据此显示）
     CHECK(brief.lastmsgid == 3);
+
+    removeCvuDbFiles();
+}
+
+//CVU9 另外两位群成员：同批入群的另一位新成员、未入群的路人（userid 任取，与上面几个互不相同）
+static const int32_t CVU_NEWBIE2_ID = 100002;
+static const int64_t CVU_STRANGER_ID = 300001;
+
+//把某人对本群的已读位点写进 t_conversation（setReadPos 只写 CVU_USER_ID 的那一行）
+static void setGroupReadPosFor(int32_t userid, int64_t readmsgid)
+{
+    std::unique_ptr<IDatabase> pConn(openConn());
+    std::ostringstream os;
+    os << "REPLACE INTO t_conversation "
+          "(f_userid,f_ctype,f_cid,f_pinned,f_notify_mode,f_readmsgid,f_deleted,"
+          "f_deleted_msgid,f_update_time) "
+          "VALUES (" << userid << "," << conversation_group << "," << CVU_GROUP_ID << ",0,0,"
+       << readmsgid << ",0,0," << CVU_BASE_TIME << ")";
+    REQUIRE(pConn->execute(os.str().c_str()));
+}
+
+/**
+ *  插一条「有人入群」系统提示，content 与 ChatSession::completeGroupJoin 写入的完全相同
+ *  （GroupProtocol::buildMemberJoinTipContent 再经 MessageProtocol::buildStoredContent 包装）。
+ *    msgid：    消息 id。
+ *    inviterId：邀请人 userid；0 表示没有邀请人。
+ *    members：  新成员 userid。
+ */
+static void insertJoinTip(int64_t msgid, int64_t inviterId, const std::vector<int64_t>& members)
+{
+    std::vector<JoinTipMember> tipMembers;
+    for (size_t i = 0; i < members.size(); ++i)
+        tipMembers.push_back(JoinTipMember(members[i], "m" + std::to_string(members[i])));
+    const std::string content = GroupProtocol::buildMemberJoinTipContent(inviterId, "inviter", tipMembers);
+    const std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(content, noMentions, false, "");
+
+    const int64_t kSystemSender = 0;
+    std::unique_ptr<IDatabase> pConn(openConn());
+    std::ostringstream os;
+    os << "INSERT INTO t_chatmsg "
+          "(f_msgid,f_clientmsgid,f_ctype,f_from,f_to,f_msgtype,f_content,"
+          "f_recalled,f_create_time) VALUES ("
+       << msgid << ",'sys-join-" << msgid << "'," << conversation_group << "," << kSystemSender << ","
+       << CVU_GROUP_ID << "," << message_type_system << ",'" << stored << "',0," << (CVU_BASE_TIME + msgid) << ")";
+    REQUIRE(pConn->execute(os.str().c_str()));
+}
+
+//取某人的群会话摘要（只有一个群，直接返回那一条）
+static ConversationBrief groupBriefFor(int32_t userid)
+{
+    std::vector<int64_t> groupids;
+    groupids.push_back(CVU_GROUP_ID);
+    std::vector<ConversationBrief> out;
+    REQUIRE(Singleton<MessageManager>::Instance().getGroupConversationBriefs(userid, groupids, out));
+    REQUIRE(out.size() == 1);
+    return out[0];
+}
+
+TEST_CASE("CVU9 「有人入群」提示对名单里的新成员本人计未读，对邀请人与其他成员不计")
+{
+    resetCvuDb();
+
+    //群里原有一条别人发的消息（msgid 1）；随后 CVU_OTHER_ID 邀请两位新成员入群（msgid 2），
+    //接着是一条别的系统提示（msgid 3，例如有人退群）。三个人的已读位点都停在 1：
+    //新成员入群时服务端把位点初始化到入群前的最后一条（GJ9），老成员此前读到了 1
+    insertMsg(1, conversation_group, CVU_OTHER_ID, CVU_GROUP_ID);
+    std::vector<int64_t> newbies;
+    newbies.push_back(CVU_USER_ID);
+    newbies.push_back(CVU_NEWBIE2_ID);
+    insertJoinTip(2, CVU_OTHER_ID, newbies);
+    insertSystemMsg(3, CVU_GROUP_ID);
+    setGroupReadPosFor(CVU_USER_ID, 1);
+    setGroupReadPosFor(CVU_NEWBIE2_ID, 1);
+    setGroupReadPosFor(static_cast<int32_t>(CVU_OTHER_ID), 1);
+
+    //两位新成员各计 1（只算入群提示，别的系统提示仍不计）
+    CHECK(groupBriefFor(CVU_USER_ID).unread == 1);
+    CHECK(groupBriefFor(CVU_NEWBIE2_ID).unread == 1);
+    //邀请人不在新成员名单里，不计
+    CHECK(groupBriefFor(static_cast<int32_t>(CVU_OTHER_ID)).unread == 0);
+    //会话的最后一条仍按原口径取：msgid 3（另一条系统提示）
+    CHECK(groupBriefFor(CVU_USER_ID).lastmsgid == 3);
+
+    //别人入群的提示（名单里没有本人）不计
+    std::vector<int64_t> stranger(1, CVU_STRANGER_ID);
+    insertJoinTip(4, 0, stranger);
+    CHECK(groupBriefFor(CVU_USER_ID).unread == 1);
+
+    //读过入群提示之后不再计
+    setGroupReadPosFor(CVU_USER_ID, 2);
+    CHECK(groupBriefFor(CVU_USER_ID).unread == 0);
+
+    //判断函数本身：认 tipkind 与 members 里的 userid；邀请人、别的提示、坏数据都返回 false
+    std::vector<JoinTipMember> one(1, JoinTipMember(CVU_USER_ID, "a"));
+    const std::vector<int64_t> noMentions;
+    const std::string stored = MessageProtocol::buildStoredContent(
+        GroupProtocol::buildMemberJoinTipContent(CVU_OTHER_ID, "b", one), noMentions, false, "");
+    CHECK(GroupProtocol::isMemberJoinTipFor(stored, CVU_USER_ID));
+    CHECK_FALSE(GroupProtocol::isMemberJoinTipFor(stored, CVU_OTHER_ID));
+    CHECK_FALSE(GroupProtocol::isMemberJoinTipFor(CVU_CONTENT, CVU_USER_ID));
+    CHECK_FALSE(GroupProtocol::isMemberJoinTipFor("not json", CVU_USER_ID));
+    CHECK_FALSE(GroupProtocol::isMemberJoinTipFor(stored, 0));
 
     removeCvuDbFiles();
 }

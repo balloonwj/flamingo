@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 26 章：锁屏（设置临时密码、选择与预览锁屏画面、锁屏后的界面与解锁）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>锁屏 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c26">
+<article class="doc">
+  <h1>锁屏</h1>
+  <p class="lead">临时离开座位时，可以用客户端的锁屏功能锁住整台电脑：设一个只在本次有效的临时密码，屏幕上播放动画和时间，别人无法操作你的电脑，回来后输入密码即可解锁。</p>
+  <ul class="facts">
+    <li>适用：全体员工，登录前后都可以使用</li>
+    <li>入口：托盘菜单或主面板系统菜单里的「锁屏」</li>
+  </ul>
+
+  <h2 id="setup">设置临时密码并锁屏</h2>
+  <ol class="steps">
+    <li>右键任务栏右下角的 FlamingoIM 托盘图标选 <span class="ui">锁屏</span>，或在主面板系统菜单里选 <span class="ui">锁屏</span>，打开「锁屏」窗口。</li>
+    <li>在 <span class="ui">本次锁屏的临时密码</span> 里输入 4~32 个字母、数字或符号，在 <span class="ui">再输入一次</span> 里重复一遍。点输入框右侧的眼睛图标可以临时显示明文。</li>
+    <li>在 <span class="ui">锁屏画面</span> 里选择一种动画，可以先点 <span class="ui">预览</span> 看看效果。</li>
+    <li>点 <span class="ui">锁屏</span>，电脑立即锁定。</li>
+  </ol>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/z_lock_setup.png" width="400" alt="锁屏窗口"><figcaption>「锁屏」窗口</figcaption></figure>
+    <figure class="shot"><img src="../img/z_lock_setup_anim.png" width="400" alt="锁屏画面列表"><figcaption>可选的锁屏画面</figcaption></figure>
+  </div>
+  <div class="callout note"><b>密码只用一次</b>这个密码只在本次锁屏有效，解锁后即作废，下次锁屏要重新设置。它与你的登录密码、Windows 密码都没有关系。</div>
+
+  <h3>锁屏画面</h3>
+  <table>
+    <tr><th>选项</th><th>说明</th></tr>
+    <tr><td>八荣八耻、火烈鸟漫步、粒子时钟、弹跳标志与烟花、汉字数字雨</td><td>五种动画，选哪种就一直播放哪种</td></tr>
+    <tr><td>随机</td><td>每次锁屏时随机选一种</td></tr>
+    <tr><td>轮流播放（每分钟换一种）</td><td>五种动画依次轮换，每分钟换一种</td></tr>
+  </table>
+
+  <h3>预览</h3>
+  <p>点 <span class="ui">预览</span>，所选动画会在「锁屏」窗口所在的显示器上全屏播放，画面上方提示「按 Esc 或单击退出预览」。预览不需要密码，按任意键或单击即可退出，回到「锁屏」窗口。</p>
+  <figure class="shot">
+    <img src="../img/z_lock_preview.png" width="880" alt="锁屏画面预览">
+    <figcaption>「火烈鸟漫步」的预览，左下角显示当前时间和日期</figcaption>
+  </figure>
+
+  <h2 id="locked">锁屏之后</h2>
+  <p>锁定后，每块显示器都全屏显示所选动画，左下角显示时间和日期。锁屏期间：</p>
+  <ul>
+    <li>锁屏界面始终显示在最前面，并拦截 Windows 键等切换窗口用的按键，别人无法操作其他程序。</li>
+    <li>电脑不会自动休眠。</li>
+    <li>客户端自己的弹窗和提示音会推迟到解锁之后，或者不再出现。</li>
+    <li>如果你的电脑正在被同事<a href="17-remote-desktop.html">远程控制</a>，控制会立即结束。</li>
+  </ul>
+
+  <h2 id="unlock">解锁</h2>
+  <ol class="steps">
+    <li>在锁屏画面上单击，屏幕下方出现 <span class="ui">解锁</span>、<span class="ui">重启</span>、<span class="ui">关机</span> 三个按钮。</li>
+    <li>点 <span class="ui">解锁</span>，按钮上方出现密码框。</li>
+    <li>输入本次锁屏设置的临时密码，按 <kbd>Enter</kbd>。密码正确即解锁，回到锁屏前的桌面。</li>
+  </ol>
+  <ul>
+    <li>密码不正确时提示「密码不正确，请重试」。连续输错 5 次，要等待 30 秒才能再试，期间提示「输错次数过多，请 N 秒后再试」。</li>
+    <li>按 <kbd>Esc</kbd> 逐级退回：先收起密码框，再收起按钮，回到只有动画的画面。一段时间没有操作，按钮也会自动收起。</li>
+    <li>点 <span class="ui">重启</span> 或 <span class="ui">关机</span> 会先确认「确定要重启吗？」或「确定要关机吗？」，并提醒其他程序里未保存的内容可能会丢失。</li>
+  </ul>
+  <div class="callout note"><b>关于截图</b>本章只有设置窗口和预览的截图，锁定后的界面按上文描述为准。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

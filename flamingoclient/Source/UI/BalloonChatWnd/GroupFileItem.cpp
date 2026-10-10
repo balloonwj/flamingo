@@ -41,6 +41,7 @@ extern CAppModule _Module;
 #include "../../App/CustomMsgDef.h"                          // WM_GROUP_FILE_DOWNLOAD / WM_GROUP_FILE_UPLOAD_CANCEL
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"        // GetHost()->m_hWnd（向宿主投递下载 / 取消上传消息）
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"  // 文件名/说明放不下时挂 tooltip
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -63,6 +64,9 @@ const Gdiplus::REAL kBadgeRadius = 4.0f;   // 角标圆角
 const Gdiplus::REAL kHoverRadius = 6.0f;   // 行悬停底圆角
 
 const Gdiplus::Color kHoverFill   (255, 0xF2, 0xF1, 0xEE);   // 行悬停底
+// 定位高亮底（淡黄）：从主面板全局搜索点群文件结果打开群聊窗后，标出被定位的那一行。
+// 与搜索命中的黄色同一色系、更浅一档，铺满整行也不刺眼。
+const Gdiplus::Color kLocateFill  (255, 0xFF, 0xF4, 0xC2);
 const Gdiplus::Color kDlHoverFill (255, 0xFF, 0xF0, 0xE9);   // 下载箭头悬停底（淡橙）
 const COLORREF       kNameColor   = RGB(0x40, 0x40, 0x40);   // 文件名（干净的中性深色，不washed也不纯黑）
 const COLORREF       kMetaColor   = RGB(0x9A, 0x9A, 0x9A);   // 说明行
@@ -100,7 +104,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -167,6 +171,7 @@ GroupFileItem::GroupFileItem()
     , m_uploadPercent(0)
     , m_canDelete(false)
     , m_deleteHover(false)
+    , m_highlighted(false)
 {
 }
 
@@ -176,6 +181,15 @@ GroupFileItem::~GroupFileItem()
     // 行被销毁（换页 / 推送重渲染都会销毁旧行）时反注册，杜绝 tooltip 管理器悬空指针。
     balloonwjui::DuiToolTipMgr::Inst().Unregister(this);
 #endif
+}
+
+void GroupFileItem::SetHighlighted(bool on)
+{
+    if (m_highlighted != on)
+    {
+        m_highlighted = on;
+        Invalidate();
+    }
 }
 
 void GroupFileItem::SetDeletable(bool canDelete)
@@ -302,13 +316,14 @@ void GroupFileItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     Gdiplus::Graphics g(hdc);
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
-    // 整行悬停：浅灰圆角底（行内缩边留呼吸位）。
-    if (IsHover())
+    // 整行底色：被定位的行画淡黄底（优先于悬停，鼠标移过时仍能看出是哪一行），否则悬停时
+    // 画浅灰圆角底（行内缩边留呼吸位）。
+    if (m_highlighted || IsHover())
     {
         Gdiplus::GraphicsPath hp;
         AddRoundRect(hp, (Gdiplus::REAL)(x + 3), (Gdiplus::REAL)(y + 2),
                      (Gdiplus::REAL)(w - 6), (Gdiplus::REAL)(h - 4), kHoverRadius);
-        Gdiplus::SolidBrush hb(kHoverFill);
+        Gdiplus::SolidBrush hb(m_highlighted ? kLocateFill : kHoverFill);
         g.FillPath(&hb, &hp);
     }
 
@@ -445,11 +460,11 @@ void GroupFileItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         CString metaText = m_metaLine;
         if (m_uploading)
         {
-            metaText.Format(_T("上传中 %d%%"), m_uploadPercent);
+            metaText.Format(TR(L"上传中 %d%%"), m_uploadPercent);
         }
         else if (m_downloading)
         {
-            metaText.Format(_T("下载中 %d%%"), m_downloadPercent);
+            metaText.Format(TR(L"下载中 %d%%"), m_downloadPercent);
         }
         const COLORREF metaClr = (m_uploading || m_downloading) ? kDlHoverColor : kMetaColor;
         RECT metaRc = { textLeft, blockTop + nameH + kTextLineGap,

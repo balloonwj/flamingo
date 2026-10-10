@@ -24,6 +24,15 @@ constexpr int GROUP_FILE_PAGE_MAX = 50;
 //cmd_get_group_files 单页条数缺省值：请求未给 count 或 count<=0 时取用
 constexpr int GROUP_FILE_PAGE_DEFAULT = 20;
 
+//cmd_search_group_files 返回条数上限：请求 limit 超过此值会被钳到此值。搜索结果显示在主面板
+//搜索下拉里，条数再多用户也看不过来，应当换个更具体的关键字
+constexpr int GROUP_FILE_SEARCH_LIMIT_MAX = 50;
+//cmd_search_group_files 返回条数缺省值：请求未给 limit 或 limit<=0 时取用
+constexpr int GROUP_FILE_SEARCH_LIMIT_DEFAULT = 30;
+//cmd_search_group_files 关键字长度上限（UTF-8 字节数）。t_file.f_name 最长 256 个字符，按每个
+//汉字 3 字节算约 768 字节；关键字比它还长就不可能命中任何文件名，直接按非法请求拒绝
+constexpr int GROUP_FILE_SEARCH_KEYWORD_MAX_BYTES = 768;
+
 //一条群文件条目；cmd_add_group_file 应答、cmd_get_group_files 列表项、
 //cmd_group_files_changed_notify 推送三处共用。文件名/扩展名/大小/MD5
 //源自 t_file，登记关系字段源自 t_group_file。
@@ -86,6 +95,31 @@ struct DeleteGroupFileRequest
     }
 };
 
+//cmd_search_group_files 请求
+struct SearchGroupFilesRequest
+{
+    std::string keyword;   //文件名关键字（UTF-8），已去掉首尾空白，非空且不超过 GROUP_FILE_SEARCH_KEYWORD_MAX_BYTES 字节
+    int         limit;     //最多返回几条，已由解析阶段钳到 [1, GROUP_FILE_SEARCH_LIMIT_MAX]
+
+    SearchGroupFilesRequest()
+        : limit(GROUP_FILE_SEARCH_LIMIT_DEFAULT)
+    {
+    }
+};
+
+//cmd_search_group_files 的一条结果：群文件条目加上它所在的群。列表接口 cmd_get_group_files 只查
+//一个群，条目本身不带群ID；搜索跨全部群，客户端要靠 groupid 显示群名、点击后打开对应群聊窗
+struct SearchedGroupFile
+{
+    int64_t        groupid;   //条目所在的群ID
+    GroupFileEntry entry;     //群文件条目（uploadername 由会话层补全）
+
+    SearchedGroupFile()
+        : groupid(0)
+    {
+    }
+};
+
 //群文件报文编解码工具类；全部为静态方法，不可实例化
 class GroupFileProtocol
 {
@@ -118,6 +152,17 @@ public:
     static bool parseDeleteGroupFileRequest(const std::string& json, DeleteGroupFileRequest& req);
 
     /**
+     *  解析 cmd_search_group_files 请求。
+     *  keyword 去掉首尾空格与制表符后为空、缺失、不是字符串、或超过 GROUP_FILE_SEARCH_KEYWORD_MAX_BYTES
+     *  字节时返回 false；limit 缺省或非正取 GROUP_FILE_SEARCH_LIMIT_DEFAULT，超过上限钳到
+     *  GROUP_FILE_SEARCH_LIMIT_MAX（纠正而不拒绝）。
+     *  @param json 请求 JSON 文本
+     *  @param req  [出参] 解析并纠正后的结果
+     *  @return 关键字合法返回 true
+     */
+    static bool parseSearchGroupFilesRequest(const std::string& json, SearchGroupFilesRequest& req);
+
+    /**
      *  构造 cmd_add_group_file 成功应答（code 恒为 0）；错误应答用 buildSimpleResponse。
      *  @param entry 已登记的群文件条目
      *  @return 应答 JSON 文本
@@ -144,6 +189,16 @@ public:
      *  @return 应答 JSON 文本
      */
     static std::string buildDeleteGroupFileResponse(int64_t groupid, int64_t entryid);
+
+    /**
+     *  构造 cmd_search_group_files 成功应答（code 恒为 0）。
+     *  @param keyword 本次搜索的关键字（回显，客户端据此丢弃已经过期的应答）
+     *  @param hasMore 命中条数是否超过了本次的 limit（超过时 files 只含最近的 limit 条）
+     *  @param files   命中的群文件，按登记时间倒序；每项是一条群文件条目外加 groupid
+     *  @return 应答 JSON 文本
+     */
+    static std::string buildSearchGroupFilesResponse(const std::string& keyword, bool hasMore,
+                                                     const std::vector<SearchedGroupFile>& files);
 
     /**
      *  构造 cmd_group_files_changed_notify 推送（新增）：changetype=1，携 file 详情。

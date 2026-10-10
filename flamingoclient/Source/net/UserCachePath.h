@@ -13,7 +13,7 @@
  *
  *  典型用法：
  *      std::wstring dir = net::UserCacheDir(g_szHomePath, account, L"ChatFile");
- *      // dir == L"...\\Bin\\Users\\MY0309\\ChatFile\\"
+ *      // dir == L"...\\程序目录\\Users\\MY0309\\ChatFile\\"
  *
  *  balloonwj@qq.com   2026-08-11
  */

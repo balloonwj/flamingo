@@ -67,6 +67,9 @@ struct GetGroupFilesResult
     int         m_total;     //该群该筛选条件下的文件总数
     bool        m_hasmore;   //是否还有后续页：(offset + 本页条数) < total
     std::vector<GroupFileEntry> m_files;  //本页文件条目（按登记时间倒序）
+    //这一页应答对应的请求序号（帧头里服务端原样带回的 seq），由 CIUSocket 收到应答时填写，不来自 JSON 包体；
+    //解析函数不改它。主面板据此分辨应答是谁请求的（聊天记录管理器的群文件缓存同步或群聊窗）
+    uint32_t    m_seq;
 
     GetGroupFilesResult()
         : m_code(-1)         //-1：尚未解析出有效结果码，避免被误判为成功
@@ -74,6 +77,7 @@ struct GetGroupFilesResult
         , m_offset(0)
         , m_total(0)
         , m_hasmore(false)
+        , m_seq(0)
     {
     }
 };
@@ -120,6 +124,31 @@ struct GroupFilesChangedNotify
 
     GroupFilesChangedNotify()
         : m_changetype(0)
+    {
+    }
+};
+
+//cmd_search_group_files(1807) 应答里的一条结果：群文件条目加上它所在的群。搜索跨本人所在的全部群，
+//主面板搜索下拉靠 m_groupid 显示群名、点击后打开对应的群聊窗。
+struct SearchedGroupFileItem
+{
+    std::string    m_groupid;  //条目所在的群ID（字符串编码int64）
+    GroupFileEntry m_entry;    //群文件条目，字段含义同 cmd_get_group_files 的列表项
+};
+
+//cmd_search_group_files(1807) 应答的解析结果。
+//成功（m_code==0）时各字段有效；失败时只有 m_code / m_msg 有意义。
+struct SearchGroupFilesResult
+{
+    int         m_code;      //结果码，0成功，非0见 enum error_code
+    std::string m_msg;       //结果描述（成功为"ok"，失败为诊断信息）
+    std::string m_keyword;   //服务端回显的关键字（已去掉首尾空白）；搜索下拉据此丢弃过期的应答
+    bool        m_hasmore;   //命中条数是否超过了请求的 limit（超过时 m_files 只含最近的 limit 条）
+    std::vector<SearchedGroupFileItem> m_files;  //命中的群文件，按登记时间倒序
+
+    SearchGroupFilesResult()
+        : m_code(-1)         //-1：尚未解析出有效结果码，避免被误判为成功
+        , m_hasmore(false)
     {
     }
 };
@@ -192,6 +221,24 @@ public:
      *  @return JSON 合法、含字符串 groupid 与整型 changetype 返回 true，否则 false
      */
     static bool parseGroupFilesChangedNotify(const std::string& jsonbody, GroupFilesChangedNotify& out);
+
+    /**
+     *  构造 cmd_search_group_files(1807) 请求 JSON 包体（紧凑 UTF-8）：按文件名在本人所在的
+     *  全部群里搜群文件。
+     *  @param keywordUtf8 文件名关键字（UTF-8），原样写入；服务端会去掉首尾空白，为空或超过 768 字节回 bad request
+     *  @param limit       最多返回几条；服务端对 <=0 取缺省 30、>50 钳到 50
+     *  @return 紧凑格式的请求 JSON 文本
+     */
+    static std::string buildSearchGroupFilesRequest(const std::string& keywordUtf8, int limit);
+
+    /**
+     *  解析 cmd_search_group_files(1807) 应答 JSON 包体。
+     *  只要 JSON 合法且含整型 code 即返回 true，调用方据 out.m_code 判定结果；files 里不是对象的项跳过。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 解析结果
+     *  @return JSON 合法且含 code 返回 true，否则 false
+     */
+    static bool parseSearchGroupFilesResponse(const std::string& jsonbody, SearchGroupFilesResult& out);
 
 private:
     GroupFileProtocolClient() = delete;

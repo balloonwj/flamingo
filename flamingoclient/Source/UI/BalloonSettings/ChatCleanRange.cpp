@@ -12,6 +12,7 @@
 
 #include <stdio.h>   // swprintf_s（时间格式化）
 #include <time.h>    // _mktime64 / _localtime64_s（本机时区换算）
+#include "../../Common/I18n/I18n.h"   // TR / TRF / TR_NOOP：界面文字的多语言查找
 
 namespace balloonsettings {
 
@@ -55,30 +56,29 @@ const int kDays30 = 30;
 //格式化 "yyyy-MM-dd HH:mm" 用的缓冲区长度（16 个字符加结尾，留足余量）
 const int kFormatBufLen = 32;
 
-//各档位的显示文字，下标即 ChatCleanPreset 的取值
+//各档位的显示文字，下标即 ChatCleanPreset 的取值；只做标记（TR_NOOP），ChatCleanPresetLabel 返回译文
 const wchar_t* const kPresetLabels[kCleanPresetCount] =
 {
-    L"全部",
-    L"最近 1 天",
-    L"最近 7 天",
-    L"最近 30 天",
-    L"7 天以前",
-    L"30 天以前",
-    L"3 个月以前",
-    L"半年以前",
-    L"1 年以前",
-    L"自定义",
+    TR_NOOP(L"全部"),
+    TR_NOOP(L"最近 1 天"),
+    TR_NOOP(L"最近 7 天"),
+    TR_NOOP(L"最近 30 天"),
+    TR_NOOP(L"7 天以前"),
+    TR_NOOP(L"30 天以前"),
+    TR_NOOP(L"3 个月以前"),
+    TR_NOOP(L"半年以前"),
+    TR_NOOP(L"1 年以前"),
+    TR_NOOP(L"自定义"),
 };
 
-//说明文字与成功提示里共用的片段
-const wchar_t* const kSummaryHead = L"将删除 ";
-const wchar_t* const kSummaryBetween = L" 之间的全部单聊和群聊记录，";
-const wchar_t* const kSummaryBefore = L" 以前的全部单聊和群聊记录，";
-const wchar_t* const kSummaryTail = L"本机与服务器同时删除，对方不受影响，删除后无法恢复。";
-const wchar_t* const kDoneHead = L"已清理 ";
-const wchar_t* const kDoneBetween = L" 的聊天记录";
-const wchar_t* const kDoneBefore = L" 以前的聊天记录";
-const wchar_t* const kRangeTo = L" 至 ";
+//说明文字与成功提示的整句模板，只做标记（TR_NOOP），生成时再取译文。
+//「以前」一类的 {0} 为截止时间；「之间」一类的 {0}、{1} 为起止时间，均为 yyyy-MM-dd HH:mm
+const wchar_t* const kSummaryBefore =
+    TR_NOOP(L"将删除 {0} 以前的全部单聊和群聊记录，本机与服务器同时删除，对方不受影响，删除后无法恢复。");
+const wchar_t* const kSummaryBetween =
+    TR_NOOP(L"将删除 {0} 至 {1} 之间的全部单聊和群聊记录，本机与服务器同时删除，对方不受影响，删除后无法恢复。");
+const wchar_t* const kDoneBefore = TR_NOOP(L"已清理 {0} 以前的聊天记录");
+const wchar_t* const kDoneBetween = TR_NOOP(L"已清理 {0} 至 {1} 的聊天记录");
 
 bool IsLeapYear(int year)
 {
@@ -120,7 +120,7 @@ const wchar_t* ChatCleanPresetLabel(int preset)
 {
     if (preset < 0 || preset >= kCleanPresetCount)
         return L"";
-    return kPresetLabels[preset];
+    return TR(kPresetLabels[preset]);
 }
 
 int DaysInMonth(int year, int month)
@@ -322,15 +322,15 @@ const wchar_t* ChatCleanRangeErrorText(int err)
     {
     //开始晚于结束
     case kCleanRangeStartAfterEnd:
-        return L"开始时间不能晚于结束时间";
+        return TR(L"开始时间不能晚于结束时间");
 
     //结束选到了将来
     case kCleanRangeEndInFuture:
-        return L"结束时间不能晚于当前时间";
+        return TR(L"结束时间不能晚于当前时间");
 
     //字段越界或早于可选的最早年份：正常操作下拉框不会出现，出现即说明界面填值有误
     case kCleanRangeBadTime:
-        return L"时间无效，请重新选择";
+        return TR(L"时间无效，请重新选择");
 
     //合法，或未知取值
     default:
@@ -352,39 +352,20 @@ std::wstring FormatCleanMinute(int64_t ms)
 
 std::wstring BuildCleanSummaryText(int64_t beginMs, int64_t endMs)
 {
-    std::wstring text = kSummaryHead;
     if (beginMs <= 0)
     {
-        text += FormatCleanMinute(endMs);
-        text += kSummaryBefore;
+        return TRF(kSummaryBefore, FormatCleanMinute(endMs));
     }
-    else
-    {
-        text += FormatCleanMinute(beginMs);
-        text += kRangeTo;
-        text += FormatCleanMinute(endMs);
-        text += kSummaryBetween;
-    }
-    text += kSummaryTail;
-    return text;
+    return TRF(kSummaryBetween, FormatCleanMinute(beginMs), FormatCleanMinute(endMs));
 }
 
 std::wstring BuildCleanDoneText(int64_t beginMs, int64_t endMs)
 {
-    std::wstring text = kDoneHead;
     if (beginMs <= 0)
     {
-        text += FormatCleanMinute(endMs);
-        text += kDoneBefore;
+        return TRF(kDoneBefore, FormatCleanMinute(endMs));
     }
-    else
-    {
-        text += FormatCleanMinute(beginMs);
-        text += kRangeTo;
-        text += FormatCleanMinute(endMs);
-        text += kDoneBetween;
-    }
-    return text;
+    return TRF(kDoneBetween, FormatCleanMinute(beginMs), FormatCleanMinute(endMs));
 }
 
 std::vector<int> CleanYearOptions(int currentYear)

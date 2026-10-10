@@ -4,6 +4,8 @@
  *  覆盖 19 条用例（见 docs/UI设计计划.md 与计划确认记录），分 6 组：
  *  种子完整性、DataStore 构造、FindEnterprise、CreateEnterprise、
  *  OrgTree / Services、SendAnnouncement / PushAudit。
+ *  2026-10-04 起数据层默认为空（产品代码不再装种子），新增 DST1、DST2：构造后为空、
+ *  LoadSeedData 装入种子、Clear 清空；其余用例都在 LoadSeedData 之后运行。
  *
  *  DataStore 是单例：变更类用例采用「变更前后计数差值」断言，不依赖执行
  *  顺序；种子构建函数 BuildSeed* 是纯函数、天然隔离。RunAllDataStoreTests
@@ -336,9 +338,55 @@ void Test_PushAudit()
 
 } // anonymous namespace
 
+// DST1：刚构造的数据层是空的（产品代码不装种子），LoadSeedData 之后才有种子数据。
+// 本函数必须是整个测试进程里第一个用到 DataStore 的地方（TestMain 把数据层用例排在最前）。
+void Test_StartsEmptyThenSeed()
+{
+    BeginCase("DST1 数据层构造后为空，LoadSeedData 之后装入种子");
+
+    DataStore& ds = DataStore::Instance();
+    FA_EXPECT_EQ(ds.Enterprises().size(), 0);
+    FA_EXPECT_EQ(ds.Announcements().size(), 0);
+    FA_EXPECT_EQ(ds.AuditLogs().size(), 0);
+    FA_EXPECT_EQ(ds.MessageTrend().size(), 0);
+
+    ds.LoadSeedData();
+    FA_EXPECT_EQ(ds.Enterprises().size(), BuildSeedEnterprises().size());
+    FA_EXPECT_EQ(ds.Announcements().size(), BuildSeedAnnouncements().size());
+    FA_EXPECT_EQ(ds.AuditLogs().size(), BuildSeedAuditLogs().size());
+}
+
+// DST2：Clear 清空全部缓存；之后重新装入种子，供排在后面的用例使用。
+void Test_ClearEmptiesEverything()
+{
+    BeginCase("DST2 Clear 清空企业、组织树、服务号、公告、审计与消息趋势");
+
+    DataStore& ds = DataStore::Instance();
+    const CString firstEnt = ds.Enterprises().empty() ? CString() : ds.Enterprises().front().m_id;
+    std::vector<MessageTrendPoint> trend(1);
+    trend[0].m_date  = _T("10-04");
+    trend[0].m_count = 3;
+    ds.SetMessageTrend(trend);
+
+    ds.Clear();
+    FA_EXPECT_EQ(ds.Enterprises().size(), 0);
+    FA_EXPECT_EQ(ds.Announcements().size(), 0);
+    FA_EXPECT_EQ(ds.AuditLogs().size(), 0);
+    FA_EXPECT_EQ(ds.MessageTrend().size(), 0);
+    FA_EXPECT_NULL(ds.FindEnterprise(firstEnt));
+    FA_EXPECT_NULL(ds.OrgTree(firstEnt));
+    FA_EXPECT_EQ(ds.Services(firstEnt).size(), 0);
+
+    ds.LoadSeedData();
+    FA_EXPECT_EQ(ds.Enterprises().size(), BuildSeedEnterprises().size());
+}
+
 void RunAllDataStoreTests()
 {
     PrintLine(_T("======== flamingoAdmin Mock 数据层单元测试 ========\n"));
+
+    // 数据层默认为空：先核对这一点，再装入种子供下面的用例使用。
+    Test_StartsEmptyThenSeed();
 
     // 只读用例（不改变单例状态）。Test_DataStoreConstruction 断言纯种子计数，
     // 必须排在下方变更类用例之前。
@@ -357,6 +405,9 @@ void RunAllDataStoreTests()
     Test_CreateEnterprise();
     Test_SendAnnouncement();
     Test_PushAudit();
+
+    // Clear：放在最后，测完重新装入种子。
+    Test_ClearEmptiesEverything();
 }
 
 }} // namespace flamingoadmin::test

@@ -1,0 +1,194 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="plugins">
+      <UniqueIdentifier>{88efe0af-da34-4721-838a-5c695a1be196}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins\auth">
+      <UniqueIdentifier>{c67a908a-7e57-4ed2-93ba-dd9f4d7a5330}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libmariadb">
+      <UniqueIdentifier>{8a4decec-bd6e-459b-923a-a8deb08357ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libmariadb\secure">
+      <UniqueIdentifier>{ec965793-2b7b-4c18-8ae3-8cef614e2145}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins\compress">
+      <UniqueIdentifier>{f089512e-1c2b-48d0-aad9-ee4dfbd0218a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins\pvio">
+      <UniqueIdentifier>{1d8f8a06-10bf-4dd7-b6ff-0da8622ef7f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="config">
+      <UniqueIdentifier>{2fa67570-0c1e-4073-bd5a-871d0f95053c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="win-iconv">
+      <UniqueIdentifier>{b1a3ace2-b571-4571-90b3-321da1be7b4c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\my_auth.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\dialog.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\get_password.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\caching_sha2_pw.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\win_crypt.c">
+      <Filter>libmariadb\secure</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\sha256_pw.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\auth_gssapi_client.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\sspi_client.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\sspi_errmsg.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\old_password.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\auth\mariadb_cleartext.c">
+      <Filter>plugins\auth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\compress\c_zlib.c">
+      <Filter>plugins\compress</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\pvio\pvio_socket.c">
+      <Filter>plugins\pvio</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\plugins\pvio\pvio_npipe.c">
+      <Filter>plugins\pvio</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_array.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_charset.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_decimal.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_hashtbl.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_net.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_charset.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_time.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_default.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_errmsg.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_lib.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_list.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_pvio.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_tls.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_alloc.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_compress.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_init.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_password.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_ll2str.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_stmt.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_loaddata.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_stmt_codec.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_string.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_dtoa.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_rpl.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadbclient\config\x64\ma_client_plugin.c">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_io.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\schannel.c">
+      <Filter>libmariadb\secure</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\ma_schannel.c">
+      <Filter>libmariadb\secure</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\secure\schannel_certs.c">
+      <Filter>libmariadb\secure</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\win-iconv\win_iconv.c">
+      <Filter>win-iconv</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\win32_errmsg.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_dyncol.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\mariadb_async.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mariadb-connector-c-3.4.9\libmariadb\ma_context.c">
+      <Filter>libmariadb</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\mariadbclient\config\x64\ma_config.h">
+      <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mariadbclient\config\x64\mariadb_version.h">
+      <Filter>config</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\mariadbclient\config\x64\mariadbclient_manifest.txt">
+      <Filter>config</Filter>
+    </Text>
+    <None Include="..\mariadbclient\gen_config.ps1">
+      <Filter>config</Filter>
+    </None>
+    <Text Include="..\mariadbclient\README.txt">
+      <Filter>config</Filter>
+    </Text>
+  </ItemGroup>
+</Project>

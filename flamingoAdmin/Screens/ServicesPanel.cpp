@@ -5,6 +5,7 @@
  */
 #include "stdafx.h"
 #include "Screens/ServicesPanel.h"
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/UiHelpers.h"
@@ -60,17 +61,32 @@ int MeasureW(LPCTSTR text, HFONT font)
     return sz.cx;
 }
 
-// 画一个 pill 形开关（展示用）。
-void DrawToggle(HDC hdc, const RECT& rc, bool on)
+// 画一个置灰的 pill 形开关：服务号的推送设置尚未接入服务端，开关只表示「有这项设置」，
+// 一律画成关闭、不可点击的样子，不显示任何开启状态。
+void DrawDisabledToggle(HDC hdc, const RECT& rc)
 {
     const int h = rc.bottom - rc.top;
-    ui::FillRoundRect(hdc, rc, on ? theme::kFlamingo500 : theme::kInk200, h / 2);
+    ui::FillRoundRect(hdc, rc, theme::kInk100, h / 2);
     const int knob = h - 4;
-    RECT k = { on ? (rc.right - 2 - knob) : (rc.left + 2), rc.top + 2,
-               0, rc.top + 2 + knob };
-    k.right = k.left + knob;
-    ui::FillRoundRect(hdc, k, theme::kInk0, knob / 2);
+    RECT k = { rc.left + 2, rc.top + 2, rc.left + 2 + knob, rc.top + 2 + knob };
+    ui::FillRoundRect(hdc, k, theme::kInk25, knob / 2);
 }
+
+// 画一个带细边框的空白提示框，文字居中（「暂无数据」「尚未绑定任何对象」等）。
+//   rc：提示框矩形；text：提示文字。
+void DrawEmptyBox(HDC hdc, const RECT& rc, LPCTSTR text)
+{
+    ui::FillRoundRect(hdc, rc, theme::kInk0, theme::kRadiusLg);
+    ui::StrokeRoundRect(hdc, rc, theme::kInk150, theme::kRadiusLg, 1.0f);
+    ui::DrawTextLine(hdc, text, rc, theme::kInk400, ui::UiFont(theme::kFontSizeNormal, false),
+                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+}
+
+// 服务号的统计与推送记录尚无服务端接口时显示的占位文字。
+const TCHAR kNoValue[] = _T("—");
+const TCHAR kNoData[]  = _T("暂无数据");
+// 空白提示框的高度（像素）。
+const int kEmptyBoxH = 48;
 
 // 服务号状态文案 / 颜色。
 LPCTSTR ServiceStatusLabel(ServiceStatus s)
@@ -129,31 +145,6 @@ COLORREF BindKindColor(BindingKind k)
 }
 
 // 取某类型服务号的一条 mock 推送文案（按 index 循环取）。
-CString MockPush(ServiceKind kind, int index)
-{
-    static const TCHAR* const kNotif[] =
-    {
-        _T("5 月薪资单已生成，请在客户端查看"), _T("考勤异常通知：5/19 缺卡"),
-        _T("社保公积金缴纳完成"), _T("报销单 RE-2025-0832 已审批通过"),
-        _T("本周财务月报已发布"), _T("高管简报 #18 已发送"),
-    };
-    static const TCHAR* const kAsst[] =
-    {
-        _T("收到打卡请求，已记录"), _T("工单 IT-0421 已分配给 梁川"),
-        _T("已查询到您的休假余额：3.5 天"), _T("VPN 客户端新版本已发布"),
-    };
-    static const TCHAR* const kIntg[] =
-    {
-        _T("[P1] api-gateway 5xx 错误率突增"), _T("[P2] redis-cache 内存使用 87%"),
-        _T("[INFO] 部署成功 backend@v4.2.108"), _T("[P0] cdn-edge-jp 不可达"),
-    };
-    const TCHAR* const* pool = kNotif;
-    int n = sizeof(kNotif) / sizeof(kNotif[0]);
-    if (kind == ServiceKind::Assistant)   { pool = kAsst; n = sizeof(kAsst) / sizeof(kAsst[0]); }
-    if (kind == ServiceKind::Integration) { pool = kIntg; n = sizeof(kIntg) / sizeof(kIntg[0]); }
-    return CString(pool[index % n]);
-}
-
 } // anonymous namespace
 
 ServicesPanel::ServicesPanel()
@@ -302,27 +293,28 @@ void ServicesPanel::OnPaint(HDC hdc, const RECT& rcDirty)
     int top = m_rcItem.top + 14;
 
     // ---- 统计卡 ----
-    int total = 0, active = 0, reach = 0, msg = 0;
+    // 列表接口不返回绑定与消息量：累计触达只能按已读过绑定的服务号累加，且同一员工会被
+    // 多个服务号重复计入；本月消息没有数据来源。两项都显示「—」，不再显示不可信的数字。
+    int total = 0, active = 0;
     const std::vector<Service>& svcs = DataStore::Instance().Services(m_entId);
     total = static_cast<int>(svcs.size());
     for (const Service& s : svcs)
     {
-        if (s.m_status == ServiceStatus::Active) { ++active; }
-        reach += s.m_subs;
-        msg   += s.m_msgCount;
+        if (s.m_status == ServiceStatus::Active)
+        {
+            ++active;
+        }
     }
     struct Stat { LPCTSTR label; CString value; COLORREF clr; };
-    CString vT, vA, vR, vM;
+    CString vT, vA;
     vT.Format(_T("%d"), total);
     vA.Format(_T("%d"), active);
-    vR.Format(_T("%d"), reach);
-    vM.Format(_T("%d"), msg);
     Stat stats[] =
     {
         { _T("服务号总数"), vT, theme::kInk700 },
         { _T("活跃"),       vA, theme::kColorOk },
-        { _T("累计触达"),   vR, theme::kColorInfo },
-        { _T("本月消息"),   vM, theme::kInk700 },
+        { _T("累计触达"),   CString(kNoValue), theme::kInk400 },
+        { _T("本月消息"),   CString(kNoValue), theme::kInk400 },
     };
     const int statGap = 10;
     const int statW = (w - statGap * 3) / 4;
@@ -449,8 +441,12 @@ void ServicesPanel::PaintList(HDC hdc, const RECT& rc)
         ui::DrawTextLine(hdc, s.m_desc, ds, theme::kInk400,
                          ui::UiFont(theme::kFontSizeSmall, false),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
-        CString metric;
-        metric.Format(_T("订阅 %d · 消息 %d"), s.m_subs, s.m_msgCount);
+        // 覆盖人数按绑定范围在本地算出，绑定读到之前显示「—」；消息量没有数据来源，不再显示。
+        CString metric(_T("覆盖 —"));
+        if (s.m_bindingsLoaded)
+        {
+            metric.Format(_T("覆盖 %d 人"), s.m_subs);
+        }
         RECT mt = { av.right + 12, ly + 47, rc.right - 14, ly + 63 };
         ui::DrawTextLine(hdc, metric, mt, theme::kInk400,
                          ui::UiFont(theme::kFontSizeSmall, false),
@@ -551,7 +547,8 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
     meta.Format(_T("%s    负责人：%s    创建于 %s"),
                 static_cast<LPCTSTR>(svc->m_id),
                 static_cast<LPCTSTR>(svc->m_owner),
-                static_cast<LPCTSTR>(svc->m_createdAt));
+                static_cast<LPCTSTR>(timetext::FormatTimeText(
+                    svc->m_createdAt, timetext::TimeStyle::Date)));
     RECT mr = { tx, y + 70, right - 18, y + 90 };
     ui::DrawTextLine(hdc, meta, mr, theme::kInk400,
                      ui::UiFont(theme::kFontSizeSmall, false),
@@ -588,13 +585,17 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
         // 3 个小统计。
         const int g = 10;
         const int cw = (w - g * 2) / 3;
-        CString v0, v1;
-        v0.Format(_T("%d"), svc->m_subs);
-        v1.Format(_T("%d"), svc->m_msgCount);
+        // 覆盖用户按绑定范围与组织树在本地算出（与「绑定范围」页签的触达人数相同），
+        // 绑定读到之前显示「—」；累计消息与阅读率服务端尚未提供，一律显示「—」。
+        CString v0(kNoValue);
+        if (svc->m_bindingsLoaded)
+        {
+            v0.Format(_T("%d"), svc->m_subs);
+        }
         struct M { LPCTSTR l; CString v; COLORREF c; };
         M ms[] = { { _T("覆盖用户"), v0, theme::kColorInfo },
-                   { _T("累计消息"), v1, theme::kInk700 },
-                   { _T("本周阅读率"), CString(_T("82.4%")), theme::kColorOk } };
+                   { _T("累计消息"), CString(kNoValue), theme::kInk400 },
+                   { _T("本周阅读率"), CString(kNoValue), theme::kInk400 } };
         for (int i = 0; i < 3; ++i)
         {
             RECT c = { left + i * (cw + g), y, left + i * (cw + g) + cw, y + 62 };
@@ -619,13 +620,12 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
         const int bn = static_cast<int>(svc->m_bindings.size());
         if (bn == 0)
         {
-            RECT box = { left, y, right, y + 48 };
-            ui::FillRoundRect(hdc, box, theme::kInk0, theme::kRadiusLg);
-            ui::StrokeRoundRect(hdc, box, theme::kInk150, theme::kRadiusLg, 1.0f);
-            ui::DrawTextLine(hdc, _T("尚未绑定任何对象，员工不会看到此服务号"),
-                             box, theme::kInk400, ui::UiFont(theme::kFontSizeNormal, false),
-                             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            y += 48;
+            RECT box = { left, y, right, y + kEmptyBoxH };
+            // 绑定还没从服务端读到时不能说「尚未绑定」：列表接口不带绑定，空只代表没读。
+            DrawEmptyBox(hdc, box, svc->m_bindingsLoaded
+                                       ? _T("尚未绑定任何对象，员工不会看到此服务号")
+                                       : _T("正在读取绑定…"));
+            y += kEmptyBoxH;
         }
         else
         {
@@ -656,34 +656,9 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
                          ui::UiFont(theme::kFontSizeSmall, true),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         y += 24;
-        const int pn = 5;
-        RECT pcard = { left, y, right, y + pn * 34 };
-        ui::DrawCard(hdc, pcard);
-        for (int i = 0; i < pn; ++i)
-        {
-            const int py = y + i * 34;
-            if (i > 0)
-            {
-                ui::FillLine(hdc, left + 14, py, w - 28, 1, theme::kInk100);
-            }
-            CString ts;
-            ts.Format(_T("05-21 %02d:%02d"), 18 - i, (i * 13) % 60);
-            RECT tr = { left + 14, py, left + 90, py + 34 };
-            ui::DrawTextLine(hdc, ts, tr, theme::kInk400,
-                             ui::UiFont(theme::kFontSizeSmall, false),
-                             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            RECT msr = { left + 98, py, right - 110, py + 34 };
-            ui::DrawTextLine(hdc, MockPush(svc->m_kind, i), msr, theme::kInk700,
-                             ui::UiFont(theme::kFontSizeNormal, false),
-                             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
-            CString rd;
-            rd.Format(_T("%d/%d 已读"), svc->m_subs * 6 / 10, svc->m_subs);
-            RECT rr = { right - 104, py, right - 14, py + 34 };
-            ui::DrawTextLine(hdc, rd, rr, theme::kInk400,
-                             ui::UiFont(theme::kFontSizeSmall, false),
-                             DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        }
-        y += pn * 34;
+        // 服务号的推送记录尚无服务端接口，不再显示编造的示例。
+        DrawEmptyBox(hdc, RECT{ left, y, right, y + kEmptyBoxH }, kNoData);
+        y += kEmptyBoxH;
     }
     else if (m_detailTab == 1)       // 绑定范围
     {
@@ -701,7 +676,14 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
                          ui::UiFont(theme::kFontSizeSmall, false),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         CString rv;
-        rv.Format(_T("%d 名员工"), reach);
+        if (svc->m_bindingsLoaded)
+        {
+            rv.Format(_T("%d 名员工"), reach);
+        }
+        else
+        {
+            rv = _T("—");   // 绑定还没读到，触达人数无从计算
+        }
         RECT rr = { ib.right + 14, y + 36, right - 130, y + 64 };
         ui::DrawTextLine(hdc, rv, rr, theme::kInk700,
                          ui::UiFont(theme::kFontSizeHeading, true),
@@ -731,7 +713,9 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
             RECT box = { left, y, right, y + 48 };
             ui::FillRoundRect(hdc, box, theme::kInk0, theme::kRadiusLg);
             ui::StrokeRoundRect(hdc, box, theme::kInk150, theme::kRadiusLg, 1.0f);
-            ui::DrawTextLine(hdc, _T("尚未绑定任何对象"), box, theme::kInk400,
+            ui::DrawTextLine(hdc, svc->m_bindingsLoaded ? _T("尚未绑定任何对象")
+                                                        : _T("正在读取绑定…"),
+                             box, theme::kInk400,
                              ui::UiFont(theme::kFontSizeNormal, false),
                              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             y += 48;
@@ -768,52 +752,26 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
                          ui::UiFont(theme::kFontSizeSmall, true),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         y += 24;
-        const int hn = 12;
-        RECT hcard = { left, y, right, y + hn * 34 };
-        ui::DrawCard(hdc, hcard);
-        for (int i = 0; i < hn; ++i)
-        {
-            const int py = y + i * 34;
-            if (i > 0)
-            {
-                ui::FillLine(hdc, left + 14, py, w - 28, 1, theme::kInk100);
-            }
-            CString ts;
-            ts.Format(_T("05-%02d %02d:%02d"), 21 - i / 3,
-                      18 - (i % 9), (i * 17) % 60);
-            RECT tr = { left + 14, py, left + 96, py + 34 };
-            ui::DrawTextLine(hdc, ts, tr, theme::kInk400,
-                             ui::UiFont(theme::kFontSizeSmall, false),
-                             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            RECT msr = { left + 104, py, right - 110, py + 34 };
-            ui::DrawTextLine(hdc, MockPush(svc->m_kind, i), msr, theme::kInk700,
-                             ui::UiFont(theme::kFontSizeNormal, false),
-                             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
-            CString rd;
-            rd.Format(_T("%d/%d 已读"), svc->m_subs * (5 + i % 5) / 10, svc->m_subs);
-            RECT rr = { right - 104, py, right - 14, py + 34 };
-            ui::DrawTextLine(hdc, rd, rr, theme::kInk400,
-                             ui::UiFont(theme::kFontSizeSmall, false),
-                             DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        }
-        y += hn * 34;
+        // 同「近期推送」：尚无服务端接口，显示「暂无数据」。
+        DrawEmptyBox(hdc, RECT{ left, y, right, y + kEmptyBoxH }, kNoData);
+        y += kEmptyBoxH;
     }
     else                             // 设置
     {
         // 推送设置。
         RECT st = { left, y, right, y + 18 };
-        ui::DrawTextLine(hdc, _T("推送设置"), st, theme::kInk400,
+        ui::DrawTextLine(hdc, _T("推送设置（暂未开放）"), st, theme::kInk400,
                          ui::UiFont(theme::kFontSizeSmall, true),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         y += 24;
-        struct Opt { LPCTSTR label; LPCTSTR hint; bool on; };
+        // 这四项设置尚未接入服务端：开关画成置灰的关闭状态、不响应点击，标题旁注明「暂未开放」。
+        struct Opt { LPCTSTR label; LPCTSTR hint; };
         const Opt opts[] =
         {
-            { _T("允许员工取消订阅"), _T("关闭后员工无法在客户端隐藏本服务号"), false },
-            { _T("消息支持回复"),     _T("允许员工对服务号消息直接回复"),
-              svc->m_kind == ServiceKind::Assistant },
-            { _T("推送通知（系统横幅）"), _T("关闭后消息仅在应用内出现"), true },
-            { _T("工作时间外静音"),   _T("21:00 – 08:00 不发送横幅"), true },
+            { _T("允许员工取消订阅"), _T("关闭后员工无法在客户端隐藏本服务号") },
+            { _T("消息支持回复"),     _T("允许员工对服务号消息直接回复") },
+            { _T("推送通知（系统横幅）"), _T("关闭后消息仅在应用内出现") },
+            { _T("工作时间外静音"),   _T("21:00 – 08:00 不发送横幅") },
         };
         RECT setCard = { left, y, right, y + 4 * 56 };
         ui::DrawCard(hdc, setCard);
@@ -834,7 +792,7 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             RECT tog = { right - 16 - 36, oy + (56 - 20) / 2,
                          right - 16,      oy + (56 + 20) / 2 };
-            DrawToggle(hdc, tog, opts[i].on);
+            DrawDisabledToggle(hdc, tog);
         }
         y += 4 * 56 + kSecGap;
 
@@ -846,24 +804,22 @@ void ServicesPanel::PaintDetail(HDC hdc, const RECT& rc)
         y += 24;
         RECT dcard = { left, y, right, y + 72 };
         ui::DrawCard(hdc, dcard);
-        CString webhook;
-        webhook.Format(_T("https://im.flamingo.cn/svc/%s/inbound"),
-                       static_cast<LPCTSTR>(svc->m_id));
+        // Webhook 与 Token 尚无服务端接口，不再拼出示例地址与示例密钥。
         ui::DrawTextLine(hdc, _T("Webhook 接收地址"),
                          RECT{ left + 16, y + 12, left + 180, y + 32 },
                          theme::kInk400, ui::UiFont(theme::kFontSizeSmall, false),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        ui::DrawTextLine(hdc, webhook,
+        ui::DrawTextLine(hdc, kNoValue,
                          RECT{ left + 180, y + 12, right - 16, y + 32 },
-                         theme::kInk700, ui::UiFont(theme::kFontSizeSmall, false),
+                         theme::kInk400, ui::UiFont(theme::kFontSizeSmall, false),
                          DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
         ui::DrawTextLine(hdc, _T("API Token"),
                          RECT{ left + 16, y + 40, left + 180, y + 60 },
                          theme::kInk400, ui::UiFont(theme::kFontSizeSmall, false),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        ui::DrawTextLine(hdc, _T("sk_live_••••••••••mA9q"),
+        ui::DrawTextLine(hdc, kNoValue,
                          RECT{ left + 180, y + 40, right - 16, y + 60 },
-                         theme::kInk700, ui::UiFont(theme::kFontSizeSmall, false),
+                         theme::kInk400, ui::UiFont(theme::kFontSizeSmall, false),
                          DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         y += 72 + kSecGap;
 
@@ -941,6 +897,8 @@ bool ServicesPanel::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
                 m_detailTab  = 0;
                 m_scrollY    = 0;
                 Invalidate();
+                // 列表接口不带绑定：通知 AdminFrame 为新选中的服务号读取绑定。
+                RaisePending(Pending::Selected);
             }
         }
         else if (h.m_kind == 1)       // 切筛选

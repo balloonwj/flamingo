@@ -12,6 +12,8 @@
  *    · 乱序 / 重复分片的判定（FRS13~FRS18）—— 正好接续、整片重复、部分重叠、留下空洞、
  *      越过文件末尾、描述符为负数各锁一条。
  *    · 接收状态对象（FRS19~FRS22）—— 按清单初始化与核对、进度与完成计数、续传位点表。
+ *    · 数据通道断开的判定（FRS23）—— 全部文件都已校验通过后数据通道断开不算失败（文件共享
+ *      第 18 步验收 SAC3 发现：发送端发完 ft_complete 即关闭全部通道，接收端曾因此误判 616）。
  *
  *  真正碰 socket 与磁盘的部分（建通道、建目录、写盘、改名）不在本文件覆盖范围，靠后续
  *  两账号真机联调验证。本文件不起任何连接，也不在磁盘上留下任何文件。
@@ -453,4 +455,19 @@ TEST_CASE("FRS22 接收状态：ResetFile 把一个文件退回从零，Reset �
     REQUIRE_FALSE(state.HasRootPath());
     REQUIRE(state.GetFileCount() == 0);
     REQUIRE(state.GetReceivedBytes() == 0);
+}
+
+TEST_CASE("FRS23 数据通道断开：全部文件都已校验通过时不算失败，其余情况一律判失败")
+{
+    const int64_t kTotal = 3;
+    //清单未收齐：文件总数未知，断开判失败
+    CHECK(folderrecv::IsDataLaneCloseFatal(false, 0, 0));
+    CHECK(folderrecv::IsDataLaneCloseFatal(false, kTotal, kTotal));
+    //还有文件没完成：判失败
+    CHECK(folderrecv::IsDataLaneCloseFatal(true, 0, kTotal));
+    CHECK(folderrecv::IsDataLaneCloseFatal(true, kTotal - 1, kTotal));
+    //全部完成：不算失败，交给控制通道判定
+    CHECK_FALSE(folderrecv::IsDataLaneCloseFatal(true, kTotal, kTotal));
+    //清单里没有文件（纯目录结构）：没有数据要收，同样不算失败
+    CHECK_FALSE(folderrecv::IsDataLaneCloseFatal(true, 0, 0));
 }

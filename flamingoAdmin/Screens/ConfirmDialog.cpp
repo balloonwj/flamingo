@@ -300,6 +300,27 @@ LRESULT ConfirmDialog::OnDuiNotify(UINT, WPARAM, LPARAM lParam,
     }
 }
 
+LRESULT ConfirmDialog::OnKeyDownMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
+{
+    if (wParam == VK_ESCAPE)
+    {
+        RequestClose();
+        bHandled = TRUE;
+        return 0;
+    }
+    if (wParam == VK_RETURN && m_spec.m_infoMode)
+    {
+        if (m_frame != nullptr)
+        {
+            m_frame->OnConfirmDialogConfirmed(this);
+        }
+        bHandled = TRUE;
+        return 0;
+    }
+    bHandled = FALSE;
+    return 0;
+}
+
 LRESULT ConfirmDialog::OnCloseMsg(UINT, WPARAM, LPARAM, BOOL& bHandled)
 {
     DestroyWindow();

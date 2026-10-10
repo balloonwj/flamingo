@@ -16,7 +16,7 @@ balloonwj@qq.com   2026-08-03
          DEFAULT，脚本会把清单打出来备查。
   2. **整表替换。** 每张待迁移的表先 DELETE 再灌入，避免与库里原有数据混在一起
      产生主键冲突或半新半旧的状态。只在 MySQL 侧存在的表才会被清空，SQLite 独有
-     的表（如 t_group_sensitive_word）原样保留、不动。
+     的表（MySQL 侧结构较旧、尚未建出的表）原样保留、不动。
   3. **全程一个事务。** 任何一步失败整体回滚，库不会停在搬了一半的状态。开工前
      还会把库文件复制一份 .bak。
   4. **搬完逐表核对行数**，两边对不上就报错。
@@ -168,7 +168,7 @@ def preflight(my_schema, lite_schema):
     if only_mysql_tables:
         raise MigrateError(
             u"下列表只在 MySQL 侧存在，目标库没有，搬过去会丢整张表：%s\n"
-            u"           说明目标库表结构偏旧。请先用最新的 table.sql 重跑 "
+            u"           说明目标库表结构偏旧。请先用最新的 table_mysql.sql 重跑 "
             u"tools/gen_table_sqlite.py，再以 dbtype=sqlite 启动一次 chatserver 建表。"
             % ", ".join(only_mysql_tables))
 

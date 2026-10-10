@@ -36,13 +36,19 @@ extern CAppModule _Module;
 #include "../../net/MessageProtocolClient.h"   // net::MergedRecord / parseMergedContent
 #include "../../net/Protocol.h"                // ::message_type_*
 #include "../BalloonChatWnd/ChatFileStateModel.h"   // 文件态取值
+#include "../BalloonChatWnd/ChatReceivedVoice.h"    // BuildStoredVoiceMessage：语音行的本机文件状态
+#include "../BalloonChatWnd/ChatVoiceBubble.h"      // ApplyVoiceMessage：语音子消息做成语音条
+#include "../BalloonChatWnd/ChatMergedCard.h"       // MergedDirectFilePlaceholder：在线直传文件子消息的说明文字
+#include "../../Common/Code/CodeLexer.h"             // CodeLanguageFromId：代码片段子消息的语言
+#include "../BalloonChatWnd/ChatCodeMessage.h"       // CodeNotesFromData / CodeLineCount：代码片段子消息的批注
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
 namespace {
 
 //嵌套记录行的文字前缀，与会话列表摘要、聊天窗卡片的类型文字一致
-const wchar_t* const kNestedRowPrefix = L"[聊天记录]";
+const wchar_t* const kNestedRowPrefix = TR_NOOP(L"[聊天记录]");
 
 //UTF-8 转 CString（UTF-16）。空串安全
 CString Utf8ToCStr(const std::string& utf8)
@@ -83,6 +89,15 @@ void FillRowContent(const net::MessageNotify& sub, HistoryRowView& row)
         return;
     }
 
+    //在线直传的文件（2026-10-05 起）：服务器上没有副本，合并转发时文件本身没有随记录发出。只写一行说明文字，
+    //不画可下载的文件卡片（下载必然失败）
+    if (sub.m_msgtype == ::message_type_file && sub.m_fileDirect)
+    {
+        row.m_previewText = balloonchatwnd::MergedDirectFilePlaceholder(sub.m_fileName);
+        row.m_fullText    = row.m_previewText;
+        return;
+    }
+
     //其余类型先转成与本地库相同的归一化 content，再走消息记录窗那套取文字的函数，
     //两个窗口对同一种消息的显示因此一致
     const std::string content = BuildContentJson(sub);
@@ -117,6 +132,19 @@ void FillRowContent(const net::MessageNotify& sub, HistoryRowView& row)
         row.m_previewText = text;
         row.m_fullText    = text;
     }
+    else if (sub.m_msgtype == ::message_type_voice)
+    {
+        //语音：画成与聊天窗同款的语音条；合并记录里没有已听状态，一律按已听、不画红点。本机文件状态由查看窗按
+        //缓存目录补（ResolveVoiceRowLocalState），这里先按就绪构造。正文写「[语音] 1′05″」，复制与搜索按它取文字
+        row.m_isVoice = true;
+        row.m_voiceShowDot = false;
+        row.m_voice = balloonchatwnd::ChatMessage();
+        row.m_voice.fromMe = false;
+        row.m_voice.msgid = (long long)sub.m_msgid;
+        balloonchatwnd::ApplyVoiceMessage(row.m_voice, sub.m_voiceFileId, sub.m_voiceMd5, sub.m_voiceDuration,
+                                          (long long)sub.m_voiceSize, sub.m_voiceWave, true);
+        row.m_fullText = row.m_previewText;
+    }
     else if (sub.m_msgtype == ::message_type_folder)
     {
         //文件夹传输记录：一行文字写明名字、规模与结局，与消息记录窗一致
@@ -127,6 +155,23 @@ void FillRowContent(const net::MessageNotify& sub, HistoryRowView& row)
     {
         //文本保留 /f["<id>"] 内联表情标记，交给行内容块画成表情；其余类型与预览相同
         row.m_fullText = Utf8ToCStr(FullTextFromContent(sub.m_msgtype, content));
+        //代码片段：画成与聊天窗相同的代码卡片（docs/代码片段方案.md 第 3.4 节），代码取上面的正文
+        if (sub.m_msgtype == ::message_type_text && sub.m_textFormat == net::text_format_code)
+        {
+            row.m_isCode = true;
+            row.m_codeLang = codesnippet::CodeLanguageFromId(sub.m_codeLang);
+            //批注按代码行数整理（docs/代码片段方案.md 第 10.5 节）
+            row.m_codeNotes = balloonchatwnd::CodeNotesFromData(
+                sub.m_codeNotes, balloonchatwnd::CodeLineCount(std::wstring((LPCWSTR)row.m_fullText)), sub.m_from);
+        }
+        //Markdown 消息：FlamingoMarkdown.dll 可用时画成与聊天窗相同的 Markdown 卡片（docs/Markdown消息方案.md 第 12 节），
+        //点卡片打开预览窗口；DLL 不可用时仍按普通文字显示源文本。合并记录里不区分本人，预览窗口显示原发送者的名字
+        else if (sub.m_msgtype == ::message_type_text && sub.m_textFormat == net::text_format_markdown)
+        {
+            row.m_isMarkdown = balloonchatwnd::MakeMarkdownCardInfo(row.m_fullText,
+                                                                    std::wstring((LPCWSTR)row.m_senderName), false,
+                                                                    sub.m_timestamp, sub.m_msgid, row.m_markdownCard);
+        }
     }
 }
 
@@ -145,13 +190,13 @@ CString ResolveMergedSenderName(const std::string& fromNameUtf8, int64_t fromid,
         return it->second;
     }
     CString name;
-    name.Format(_T("用户%lld"), (long long)fromid);
+    name.Format(TR(L"用户%lld"), (long long)fromid);
     return name;
 }
 
 CString MergedNestedRowText(const std::string& mergedContentUtf8)
 {
-    CString text(kNestedRowPrefix);
+    CString text(TR(kNestedRowPrefix));
     net::MergedRecord nested;
     if (net::MessageProtocolClient::parseMergedContent(mergedContentUtf8, nested)
         && !nested.m_title.empty())
@@ -298,6 +343,21 @@ void BuildMergedRecordRows(const net::MergedRecord& record,
 
         out.push_back(row);
     }
+}
+
+void ResolveVoiceRowLocalState(HistoryRowView& row, const std::wstring& voiceDir)
+{
+    if (!row.m_isVoice)
+    {
+        return;
+    }
+    const balloonchatwnd::ChatMessage& v = row.m_voice;
+    const balloonchatwnd::ChatMessage resolved = balloonchatwnd::BuildStoredVoiceMessage(
+        v.msgid, v.fromMe, v.voiceFileId, v.voiceMd5, v.voiceDuration, v.voiceSize, std::string(), v.voicePlayed,
+        voiceDir);
+    //只取本机文件的结论，波形、播放状态等保留原值
+    row.m_voice.voiceState = resolved.voiceState;
+    row.m_voice.voiceLocalPath = resolved.voiceLocalPath;
 }
 
 } // namespace balloonhistory

@@ -67,6 +67,14 @@ const int kRegPhoneLen = 11;
 // 与其发上去等一个"公司不存在"，不如在本地就拦住并给出准确提示。
 const int kRegCompanyMaxLen = 128;
 
+// 取默认公司的全称。注册窗「公司名称」组合框的下拉里只有这一项，打开注册窗时默认选中它，
+// 用户不改就注册进这家公司。取值来自 flamingo.ini 的 [ui] defaultcompany（启动时读入
+// g_strDefaultCompany，见 App/BrandText.h），须与服务端 chatserver.conf 的 defaultenterprise
+// 配成同一个值：chatserver 启动时保证库里有那家企业。
+// 返回：g_strDefaultCompany；尚未读取配置（为空串，如单元测试里）时返回内置的
+// brandtext::kDefaultCompany，即 FlamingoIM.org。
+CString RegDefaultCompany();
+
 /**
  *  RegisterModel —— 注册流程的数据模型。
  *
@@ -77,7 +85,7 @@ const int kRegCompanyMaxLen = 128;
 class RegisterModel
 {
 public:
-    // 构造：当前步置于步骤 1，全部字段为空。
+    // 构造：当前步置于步骤 1，公司名为默认公司 RegDefaultCompany()，其余字段为空。
     RegisterModel();
 
     // ---- 步骤 ----
@@ -128,6 +136,12 @@ public:
     //   result：取值见 RegisterValidateResult。
     //   返回：常量字符串指针（静态存储，调用方不得释放）。
     static LPCTSTR ValidateMessage(int result);
+
+    // 把注册应答的服务端错误码翻译成给用户看的提示文字（经 TR 换成当前界面语言）。服务端应答里的
+    // msg 是英文诊断串，只进日志，不给用户看。
+    //   code：服务端结果码，取值见 net/Protocol.h 的 enum error_code；不认识的码给出通用的「注册失败」提示。
+    //   返回：常量字符串指针（静态存储，调用方不得释放）。
+    static LPCTSTR ServerErrorMessage(int code);
 
 private:
     // 判断 step 是否是合法步骤号（1..kRegStepCount）。

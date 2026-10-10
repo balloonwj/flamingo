@@ -24,21 +24,50 @@ std::string ProfileProtocolClient::buildUpdateSignatureRequest(const std::string
     return writeCompact(root);
 }
 
-std::string ProfileProtocolClient::buildUpdateProfileRequest(const std::string& nicknameUtf8,
-                                                             const std::string& signatureUtf8,
-                                                             int gender, long birthday,
-                                                             const std::string& addressUtf8,
-                                                             const std::string& mailUtf8)
+ProfileUpdateFields ProfileProtocolClient::diffProfileValues(const ProfileEditableValues& before,
+                                                             const ProfileEditableValues& after)
 {
-    Json::Value root;
-    //6 字段全放；key 严格对齐服务端 parseUpdateProfileRequest（邮箱键名是 "mail"）。
-    //birthday 范围 YYYYMMDD（≤ 99991231）落在 32 位 int 内，强转 int 即可。
-    root["nickname"]  = nicknameUtf8;
-    root["signature"] = signatureUtf8;
-    root["gender"]    = gender;
-    root["birthday"]  = (int)birthday;
-    root["address"]   = addressUtf8;
-    root["mail"]      = mailUtf8;
+    ProfileUpdateFields fields;
+    fields.m_values       = after;
+    fields.m_hasNickname  = (before.m_nickname != after.m_nickname);
+    fields.m_hasSignature = (before.m_signature != after.m_signature);
+    fields.m_hasGender    = (before.m_gender != after.m_gender);
+    fields.m_hasBirthday  = (before.m_birthday != after.m_birthday);
+    fields.m_hasAddress   = (before.m_address != after.m_address);
+    fields.m_hasMail      = (before.m_mail != after.m_mail);
+    fields.m_hasLandline  = (before.m_landline != after.m_landline);
+    fields.m_hasPost      = (before.m_post != after.m_post);
+    fields.m_hasPhoneVisible    = (before.m_phoneVisible != after.m_phoneVisible);
+    fields.m_hasLandlineVisible = (before.m_landlineVisible != after.m_landlineVisible);
+    return fields;
+}
+
+std::string ProfileProtocolClient::buildUpdateProfileRequest(const ProfileUpdateFields& fields)
+{
+    //空对象而不是 null：一项都不提交时仍是合法的 {}
+    Json::Value root(Json::objectValue);
+    //key 严格对齐服务端 parseUpdateProfileRequest（邮箱键名是 "mail"）；手机号不允许本人修改，从不放进请求
+    const ProfileEditableValues& v = fields.m_values;
+    if (fields.m_hasNickname)
+        root["nickname"] = v.m_nickname;
+    if (fields.m_hasSignature)
+        root["signature"] = v.m_signature;
+    if (fields.m_hasGender)
+        root["gender"] = v.m_gender;
+    if (fields.m_hasBirthday)
+        root["birthday"] = v.m_birthday;
+    if (fields.m_hasAddress)
+        root["address"] = v.m_address;
+    if (fields.m_hasMail)
+        root["mail"] = v.m_mail;
+    if (fields.m_hasLandline)
+        root["landline"] = v.m_landline;
+    if (fields.m_hasPost)
+        root["post"] = v.m_post;
+    if (fields.m_hasPhoneVisible)
+        root["phonevisible"] = v.m_phoneVisible;
+    if (fields.m_hasLandlineVisible)
+        root["landlinevisible"] = v.m_landlineVisible;
     return writeCompact(root);
 }
 

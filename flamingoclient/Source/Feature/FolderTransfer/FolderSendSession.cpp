@@ -21,6 +21,7 @@
 #include "FolderSendSession.h"
 
 #include "FolderRelayClient.h"      // FolderRelayClient / kFolderRelayMaxAppFrameBytes / kFolderMaxDataLanes
+#include "FolderLaneTransport.h"    // IFolderLaneTransport / FolderRelayLaneTransport
 #include "../../net/Protocol.h"        // enum error_code
 #include "../../Common/Util/MD5Core.h"             // MD5Init / MD5Update / MD5Final（与上传路径复用同一份实现）
 #include "../../Common/Log/IULog.h"               // LOG_INFO / LOG_WARNING / LOG_ERROR
@@ -92,7 +93,7 @@ static bool readFileChunkAt(std::ifstream& in, int64_t offset, char* buf, size_t
 /**
  *  一条中转通道的上下文：连接本身、回调适配，以及该通道的传输状态。
  *
- *  控制通道（下标 0）只用到 m_client 与帧回调；数据通道（下标 1..N）另外用 m_window
+ *  控制通道（下标 0）只用到 m_client（通道传输：中转连接或 P2P 链路上的可靠通道）与帧回调；数据通道（下标 1..N）另外用 m_window
  *  做流控、用 m_resultXxx 承接对端的文件校验结果。两种通道共用一个类是因为差异只在
  *  "哪些成员会被用到"，另拆一个类反而要在收帧路径上多一层分支。
  *
@@ -125,7 +126,7 @@ public:
 
     FolderSendSession*      m_owner;        // 所属会话（不拥有；生命周期必然长于本对象）
     size_t                  m_slot;         // 本通道在 m_lanes 里的下标，同时就是 lane 序号
-    FolderRelayClient       m_client;       // 本通道的中转连接
+    std::unique_ptr<IFolderLaneTransport> m_client;   // 本通道的传输（中转连接或 P2P 可靠通道），Start 时建好
 
     std::mutex              m_mtx;          // 保护以下四个成员（工作线程与接收线程共同访问）
     std::condition_variable m_cv;           // 工作线程等分片回执 / 等文件校验结果的唤醒点
@@ -203,17 +204,7 @@ bool FolderSendSession::Start(const FolderSendSessionParams& params, IFolderSend
         m_dataLaneCount = kFolderMaxDataLanes;
     }
 
-    //清单的文件列表转成协议结构，下标即文件序号，此后发帧与队列都用这一份
-    m_files.clear();
-    m_files.reserve(m_params.m_manifest.m_files.size());
-    for (size_t i = 0; i < m_params.m_manifest.m_files.size(); ++i)
-    {
-        FolderRelayFileEntry entry;
-        entry.m_relpath = m_params.m_manifest.m_files[i].m_relativePath;
-        entry.m_size = m_params.m_manifest.m_files[i].m_sizeBytes;
-        m_files.push_back(entry);
-    }
-    m_queue.Reset(m_files);
+    BuildFileQueue();
 
     //<u>通道对象在这里一次性建齐</u>，而不是等驱动线程去建：Cancel / Stop 与各通道的接收
     //线程都会遍历 m_lanes，容器在传输过程中再被写入就是数据竞争。此处仍在调用方线程上、
@@ -221,7 +212,15 @@ bool FolderSendSession::Start(const FolderSendSessionParams& params, IFolderSend
     const int laneTotal = m_dataLaneCount + 1;
     m_lanes.reserve(static_cast<size_t>(laneTotal));
     for (int i = 0; i < laneTotal; ++i)
+    {
         m_lanes.push_back(std::unique_ptr<LaneContext>(new LaneContext(this, static_cast<size_t>(i))));
+        //有通道工厂（P2P）时用它建，否则按中转参数建到 fileserver 的中转连接
+        if (params.m_transportFactory != NULL)
+            m_lanes.back()->m_client.reset(params.m_transportFactory->CreateLane(i));
+        else
+            m_lanes.back()->m_client.reset(new FolderRelayLaneTransport(params.m_relayIp, params.m_relayPort,
+                                                                        params.m_relayToken, params.m_serverPubKey));
+    }
 
     m_running.store(true);
     m_driver.reset(new std::thread(&FolderSendSession::RunProc, this));
@@ -233,6 +232,9 @@ void FolderSendSession::Cancel()
 {
     LOG_INFO("FolderSendSession: cancel requested by local user.");
     Fail(error_code_folder_canceled, "canceled by local user");
+    //唤醒可能阻塞在前置交换里的扩展点
+    if (m_params.m_hooks != NULL)
+        m_params.m_hooks->OnStopping();
 }
 
 void FolderSendSession::Stop()
@@ -244,6 +246,9 @@ void FolderSendSession::Stop()
 
     m_stop.store(true);
     WakeAllLanes();
+    //阻塞在前置交换里的扩展点也要叫醒
+    if (m_params.m_hooks != NULL)
+        m_params.m_hooks->OnStopping();
     {
         //目录就绪回执的等待点也要叫醒，否则驱动线程会一直等到超时才发现该收工了
         std::lock_guard<std::mutex> guard(m_manifestMtx);
@@ -279,7 +284,7 @@ void FolderSendSession::RunProc()
              static_cast<long long>(m_queue.TotalBytes()));
 
     //建通道 → 发清单 → 等目录就绪 → 并行传文件，前一步成功才做下一步
-    if (OpenLanes() && SendManifest() && WaitManifestAck())
+    if (OpenLanes() && RunPreamble() && SendManifest() && WaitManifestAck())
     {
         for (int i = 1; i <= m_dataLaneCount; ++i)
         {
@@ -316,7 +321,7 @@ void FolderSendSession::RunProc()
         {
             Fail(error_code_bad_request, "build ft_complete failed");
         }
-        else if (!m_lanes[kControlLaneSlot]->m_client.SendAppFrame(
+        else if (!m_lanes[kControlLaneSlot]->m_client->SendAppFrame(
                      reinterpret_cast<const unsigned char*>(frame.data()), frame.size()))
         {
             Fail(error_code_folder_relay_broken, "send ft_complete failed");
@@ -372,10 +377,7 @@ bool FolderSendSession::OpenLanes()
             LOG_WARNING("FolderSendSession: stop requested while opening lanes, lane=%d.", i);
             return false;
         }
-        if (!m_lanes[static_cast<size_t>(i)]->m_client.Connect(m_params.m_relayIp, m_params.m_relayPort,
-                                                              m_params.m_relayToken, i,
-                                                              m_lanes[static_cast<size_t>(i)].get(),
-                                                              timeoutSec))
+        if (!m_lanes[static_cast<size_t>(i)]->m_client->Connect(i, m_lanes[static_cast<size_t>(i)].get(), timeoutSec))
         {
             LOG_ERROR("FolderSendSession: open relay lane failed, lane=%d, relay=%s:%d.",
                       i, m_params.m_relayIp.c_str(), m_params.m_relayPort);
@@ -388,6 +390,53 @@ bool FolderSendSession::OpenLanes()
     LOG_INFO("FolderSendSession: all relay lanes ready, total=%d (1 control + %d data).",
              total, m_dataLaneCount);
     return true;
+}
+
+bool FolderSendSession::RunPreamble()
+{
+    if (m_params.m_hooks == NULL)
+        return true;
+    if (ShouldStop())
+        return false;
+
+    const int code = m_params.m_hooks->RunPreamble(*this, m_params.m_manifest, m_params.m_rootPath);
+    if (code != 0)
+    {
+        LOG_ERROR("FolderSendSession: preamble by hooks failed, code=%d.", code);
+        Fail(code, "preamble failed");
+        return false;
+    }
+    if (ShouldStop())
+        return false;
+
+    //扩展点可能换了清单：发送队列按新清单重建。此刻工作线程尚未启动、清单尚未发出，没有别的线程读这两项
+    BuildFileQueue();
+    LOG_INFO("FolderSendSession: preamble done, files=%u, root=%s.",
+             static_cast<unsigned int>(m_files.size()), m_params.m_manifest.m_folderName.c_str());
+    return true;
+}
+
+void FolderSendSession::BuildFileQueue()
+{
+    //清单的文件列表转成协议结构，下标即文件序号，此后发帧与队列都用这一份
+    m_files.clear();
+    m_files.reserve(m_params.m_manifest.m_files.size());
+    for (size_t i = 0; i < m_params.m_manifest.m_files.size(); ++i)
+    {
+        FolderRelayFileEntry entry;
+        entry.m_relpath = m_params.m_manifest.m_files[i].m_relativePath;
+        entry.m_size = m_params.m_manifest.m_files[i].m_sizeBytes;
+        entry.m_mtime = m_params.m_manifest.m_files[i].m_mtimeMs;
+        m_files.push_back(entry);
+    }
+    m_queue.Reset(m_files);
+}
+
+bool FolderSendSession::SendControl(const std::string& frame)
+{
+    if (m_lanes.empty())
+        return false;
+    return m_lanes[0]->m_client->SendAppFrame(reinterpret_cast<const unsigned char*>(frame.data()), frame.size());
 }
 
 bool FolderSendSession::SendManifest()
@@ -423,7 +472,7 @@ bool FolderSendSession::SendManifest()
     {
         if (ShouldStop())
             return false;
-        if (!m_lanes[kControlLaneSlot]->m_client.SendAppFrame(
+        if (!m_lanes[kControlLaneSlot]->m_client->SendAppFrame(
                 reinterpret_cast<const unsigned char*>(frames[i].data()), frames[i].size()))
         {
             LOG_ERROR("FolderSendSession: send manifest segment %u/%u failed.",
@@ -443,24 +492,42 @@ bool FolderSendSession::SendManifest()
 
 bool FolderSendSession::WaitManifestAck()
 {
-    LOG_INFO("FolderSendSession: waiting receiver to create directories, timeout=%d sec.",
-             kFolderSendManifestAckTimeoutSec);
+    LOG_INFO("FolderSendSession: waiting receiver to create directories, timeout=%d sec, first resend after %d ms.",
+             kFolderSendManifestAckTimeoutSec, FolderManifestResendDelayMs(0));
 
+    //回执到达之前按递增的间隔重发整份清单：fileserver 在接收端同序号通道报到之前收到的帧直接丢弃，
+    //接收端晚一步报到时第一份清单就丢了。接收端的重组器只认收齐的第一份，多出来的整份丢弃。总时限不变
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(kFolderSendManifestAckTimeoutSec);
+    int resendCount = 0;
     FolderRelayManifestAck ack;
     bool got = false;
+    for (;;)
     {
-        std::unique_lock<std::mutex> lock(m_manifestMtx);
-        while (!m_manifestAckReady && !m_stop.load())
         {
-            const std::cv_status st = m_manifestCv.wait_for(
-                lock, std::chrono::seconds(kFolderSendManifestAckTimeoutSec));
-            //超时且回执仍未到：不再等下去，按失败收场
-            if (st == std::cv_status::timeout && !m_manifestAckReady)
-                break;
+            std::unique_lock<std::mutex> lock(m_manifestMtx);
+            std::chrono::steady_clock::time_point wakeAt =
+                std::chrono::steady_clock::now() + std::chrono::milliseconds(FolderManifestResendDelayMs(resendCount));
+            if (wakeAt > deadline)
+                wakeAt = deadline;
+            while (!m_manifestAckReady && !m_stop.load())
+            {
+                if (m_manifestCv.wait_until(lock, wakeAt) == std::cv_status::timeout)
+                    break;
+            }
+            got = m_manifestAckReady;
+            if (got)
+                ack = m_manifestAck;
         }
-        got = m_manifestAckReady;
-        if (got)
-            ack = m_manifestAck;
+        //回执到了、本端在停、或总时限已到：不再重发
+        if (got || m_stop.load() || std::chrono::steady_clock::now() >= deadline)
+            break;
+
+        ++resendCount;
+        LOG_WARNING("FolderSendSession: manifest ack not received yet, resending manifest, attempt %d.", resendCount);
+        //重发失败（通道已断、或本端在停）时 SendManifest 已记下原因
+        if (!SendManifest())
+            return false;
     }
 
     if (!got)
@@ -576,6 +643,10 @@ bool FolderSendSession::SendOneFile(size_t laneSlot, const FolderSendFileTask& t
         ctx.m_resultMsg.clear();
     }
 
+    //扩展点要这个 MD5（单文件直传把它报给服务端写进文件消息）；只在这里交出，不另算一遍
+    if (m_params.m_hooks != NULL)
+        m_params.m_hooks->OnFileMd5Computed(task.m_index, md5);
+
     FolderRelayFileBegin begin;
     begin.m_index = task.m_index;
     begin.m_size = task.m_size;
@@ -588,7 +659,7 @@ bool FolderSendSession::SendOneFile(size_t laneSlot, const FolderSendFileTask& t
         Fail(error_code_bad_request, "build ft_file_begin failed");
         return false;
     }
-    if (!ctx.m_client.SendAppFrame(reinterpret_cast<const unsigned char*>(frame.data()), frame.size()))
+    if (!ctx.m_client->SendAppFrame(reinterpret_cast<const unsigned char*>(frame.data()), frame.size()))
     {
         Fail(error_code_folder_relay_broken, "send ft_file_begin failed");
         return false;
@@ -684,7 +755,7 @@ bool FolderSendSession::SendOneFile(size_t laneSlot, const FolderSendFileTask& t
         if (stale)
             continue;
 
-        if (!ctx.m_client.SendAppFrame(reinterpret_cast<const unsigned char*>(chunkFrame.data()),
+        if (!ctx.m_client->SendAppFrame(reinterpret_cast<const unsigned char*>(chunkFrame.data()),
                                        chunkFrame.size()))
         {
             LOG_ERROR("FolderSendSession: send ft_file_chunk failed, lane=%u, index=%lld, offset=%lld.",
@@ -702,7 +773,7 @@ bool FolderSendSession::SendOneFile(size_t laneSlot, const FolderSendFileTask& t
         Fail(error_code_bad_request, "build ft_file_end failed");
         return false;
     }
-    if (!ctx.m_client.SendAppFrame(reinterpret_cast<const unsigned char*>(endFrame.data()),
+    if (!ctx.m_client->SendAppFrame(reinterpret_cast<const unsigned char*>(endFrame.data()),
                                    endFrame.size()))
     {
         Fail(error_code_folder_relay_broken, "send ft_file_end failed");
@@ -793,6 +864,13 @@ bool FolderSendSession::ComputeFileMd5(const std::wstring& path, std::string& md
 
 void FolderSendSession::OnLaneFrame(size_t laneSlot, const unsigned char* data, size_t len)
 {
+    //控制通道上首字节不属于 ft_* 的帧是扩展点的自定义帧（文件共享的 st_job / st_job_ack），交给扩展点
+    if (m_params.m_hooks != NULL && laneSlot == 0 && data != NULL && len > 0 && !IsFolderFrameTypeByte(data[0]))
+    {
+        m_params.m_hooks->OnControlFrame(data, len);
+        return;
+    }
+
     FolderRelayInboundFrame frame;
     if (!relayframing::DecodeFrame(data, len, frame))
     {
@@ -1005,7 +1083,7 @@ void FolderSendSession::SendAbort()
 {
     if (m_lanes.empty())
         return;
-    if (!m_lanes[kControlLaneSlot]->m_client.IsConnected())
+    if (!m_lanes[kControlLaneSlot]->m_client->IsConnected())
     {
         LOG_WARNING("FolderSendSession: control lane is down, ft_abort not sent (signaling path will cover it).");
         return;
@@ -1024,7 +1102,7 @@ void FolderSendSession::SendAbort()
         LOG_ERROR("FolderSendSession: build ft_abort failed, errcode=%d.", abort.m_errcode);
         return;
     }
-    if (!m_lanes[kControlLaneSlot]->m_client.SendAppFrame(
+    if (!m_lanes[kControlLaneSlot]->m_client->SendAppFrame(
             reinterpret_cast<const unsigned char*>(frame.data()), frame.size()))
     {
         LOG_ERROR("FolderSendSession: send ft_abort failed, errcode=%d.", abort.m_errcode);
@@ -1037,7 +1115,7 @@ void FolderSendSession::SendAbort()
 void FolderSendSession::CloseAllLanes()
 {
     for (size_t i = 0; i < m_lanes.size(); ++i)
-        m_lanes[i]->m_client.Close();
+        m_lanes[i]->m_client->Close();
     LOG_INFO("FolderSendSession: all relay lanes closed, total=%u.",
              static_cast<unsigned int>(m_lanes.size()));
 }

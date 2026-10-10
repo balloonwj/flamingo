@@ -1,0 +1,179 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Net">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ui">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000006}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared\flamingoAdmin">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000007}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared\flamingoclient">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000008}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared\jsoncpp">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-000000000009}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared\zlib">
+      <UniqueIdentifier>{6F1D3A52-8C47-4E2B-9B1E-00000000000A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FlamingoLinkApi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LinkLog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LinkModule.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LinkProtocol.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\OnlineTable.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LinkText.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\LinkConnection.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\LinkClient.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Ui\OnlinePage.h">
+      <Filter>Ui</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LinkLog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LinkModule.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LinkProtocol.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\OnlineTable.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LinkText.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\LinkConnection.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\LinkClient.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Ui\OnlinePage.cpp">
+      <Filter>Ui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\ActionTable.cpp">
+      <Filter>Shared\flamingoAdmin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\ColumnHeader.cpp">
+      <Filter>Shared\flamingoAdmin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\UiHelpers.cpp">
+      <Filter>Shared\flamingoAdmin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\net\FrameCodec.cpp">
+      <Filter>Shared\flamingoclient</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\net\FrameCrypto.cpp">
+      <Filter>Shared\flamingoclient</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\net\FramePayload.cpp">
+      <Filter>Shared\flamingoclient</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\net\HandshakeRunner.cpp">
+      <Filter>Shared\flamingoclient</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\Common\Util\ZlibUtil.cpp">
+      <Filter>Shared\flamingoclient</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Shared\jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Shared\jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Shared\jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\adler32.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\compress.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\crc32.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\deflate.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzclose.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzlib.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzread.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\gzwrite.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\infback.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\inffast.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\inflate.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\inftrees.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\trees.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\uncompr.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\third-party\zlib1.2.11\zutil.c">
+      <Filter>Shared\zlib</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoLink.def">
+      <Filter>Source Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

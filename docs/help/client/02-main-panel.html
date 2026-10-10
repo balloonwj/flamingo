@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 2 章：认识主面板（头部、搜索、三个页签、底部按钮、系统菜单、关闭方式与托盘图标）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>认识主面板 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c02">
+<article class="doc">
+  <h1>认识主面板</h1>
+  <p class="lead">登录成功后出现的竖长窗口就是主面板，几乎所有功能都从这里开始。本章逐一介绍主面板的各个区域、系统菜单里的入口，以及关闭主面板和使用托盘图标的方法。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：已登录</li>
+  </ul>
+
+  <h2 id="overview">主面板一览</h2>
+  <p>主面板自上而下分为头部、搜索框、页签、列表区和底部栏五个部分：</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/b_main.png" width="338" alt="主面板">
+      <span class="pin" style="left:2.4%;top:6.8%">1</span>
+      <span class="pin" style="left:50%;top:6.2%">2</span>
+      <span class="pin" style="left:48.5%;top:10.3%">3</span>
+      <span class="pin" style="left:81.5%;top:13.3%">4</span>
+      <span class="pin" style="left:2.4%;top:16.4%">5</span>
+      <span class="pin" style="left:26.5%;top:16.4%">6</span>
+      <span class="pin" style="left:94%;top:21.7%">7</span>
+      <span class="pin" style="left:27%;top:27.5%">8</span>
+      <span class="pin" style="left:57%;top:27.5%">9</span>
+      <span class="pin" style="left:90%;top:27.5%">10</span>
+      <span class="pin" style="left:14.5%;top:97%">11</span>
+      <span class="pin" style="left:70.5%;top:97%">12</span>
+    </div>
+    <figcaption>主面板（当前位于「联系人」页签）</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>头像</b>：点击修改头像</li>
+    <li><b>昵称</b>：点击打开本人资料</li>
+    <li><b>状态胶囊</b>：切换在线状态</li>
+    <li><b>个性签名</b>：点击就地修改</li>
+    <li><b>公告中心</b>：查看平台和企业发布的公告</li>
+    <li><b>消息盒子</b>：查看收进消息盒子的会话</li>
+    <li><b>搜索框</b>：搜索联系人、群、消息和文件</li>
+    <li><b>消息页签</b>：最近会话，角标是未读消息总数</li>
+    <li><b>联系人页签</b>：收藏与组织架构</li>
+    <li><b>群组页签</b>：你加入的群</li>
+    <li><b>系统菜单</b>：更多功能与设置的入口</li>
+    <li><b>底部按钮</b>：随页签变化，如「文件共享」「建群」</li>
+  </ol>
+  <div class="callout tip"><b>主面板贴边自动隐藏</b>把主面板拖到屏幕上、左、右边缘时，它会自动收起，鼠标移过去再展开。不需要这个效果时，可以在<a href="28-settings.html#general">「系统设置 → 通用」</a>里关闭「主面板贴边自动隐藏」。</div>
+
+  <h2 id="header">头部：头像、状态与签名</h2>
+
+  <h3>修改头像与查看资料</h3>
+  <p>点头部左侧的头像会打开 <span class="ui">修改头像</span> 对话框；点头像右侧的昵称会打开本人资料窗口，在那里可以修改昵称、性别、生日等资料。这两项的具体操作见<a href="03-profile.html">「个人资料与账号」</a>。</p>
+
+  <h3>切换在线状态</h3>
+  <p>昵称下方的胶囊显示你当前的状态。点它会弹出状态菜单，当前所处的状态后面带有「（当前）」：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_presence.png" width="338" alt="在线状态菜单"><figcaption>状态菜单</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <table>
+        <tr><th>状态</th><th>说明</th></tr>
+        <tr><td>在线</td><td>正常工作状态</td></tr>
+        <tr><td>离开</td><td>暂时不在电脑前；可以设置「离开时自动回复」</td></tr>
+        <tr><td>忙碌</td><td>正在忙，请同事稍后再联系；可以设置「忙碌时自动回复」</td></tr>
+        <tr><td>离线</td><td>断开与服务器的连接，同事看到你是离线状态；之后选在线、离开或忙碌会重新连接</td></tr>
+      </table>
+      <p>自动回复在<a href="28-settings.html#chat">「系统设置 → 聊天」</a>里设置。</p>
+    </div>
+  </div>
+  <div class="callout note"><b>没有连上服务器时不能切换状态</b>客户端与服务器的连接还没有建立（例如刚掉线、正在重连）时，菜单里显示「正在连接（当前）」，四个状态都是灰色、不能点。连接恢复后再切换即可。</div>
+
+  <h3>修改个性签名</h3>
+  <p>昵称下方第二行是个性签名。点签名文字，它会就地变成输入框：</p>
+  <ol class="steps">
+    <li>点签名文字。还没有设置签名时，这里显示「点击添加个性签名」。</li>
+    <li>输入新的签名，最多 127 个字符。</li>
+    <li>按 <kbd>Enter</kbd> 或在别处点一下保存；按 <kbd>Esc</kbd> 放弃修改。</li>
+  </ol>
+  <p>离线状态下不能修改签名，保存时会提示「您当前处于离线状态，无法修改个性签名，请上线后重试。」</p>
+
+  <h3>公告中心与消息盒子</h3>
+  <p>头像下方有两个小按钮：</p>
+  <ul>
+    <li><b>铃铛按钮</b>打开 <span class="ui">公告中心</span>。有未读公告时按钮上显示条数，鼠标停在上面会提示「你有 N 条新公告」。详见<a href="27-announcements.html">「公告与通知」</a>。</li>
+    <li><b>右边的按钮</b>打开 <span class="ui">消息盒子</span>，里面是你设为「收进消息盒子且不提醒」的会话。有未读消息时按钮上同样显示条数。详见<a href="05-conversations.html#msgbox">「会话列表与消息提醒」</a>。</li>
+  </ul>
+
+  <h2 id="search">搜索</h2>
+  <p>头部下方的搜索框提示「搜索联系人、群、消息、文件…」。输入关键字后，下方立即弹出结果，关键字以黄色底色标出：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_search.png" width="342" alt="搜索聊天记录"><figcaption>搜索「测试环境」：命中一个会话里的聊天记录</figcaption></figure>
+    <figure class="shot"><img src="../img/b_search2.png" width="342" alt="搜索联系人"><figcaption>搜索「周」：同时命中联系人和聊天记录</figcaption></figure>
+  </div>
+  <ul>
+    <li><b>能搜什么</b>：联系人（按姓名、账号，也可以输入拼音首字母或全拼，如输入 <code>zsy</code> 或 <code>zhousiyuan</code> 找周思源）、群、部门、聊天记录、文件，以及备忘。</li>
+    <li><b>按类别筛选</b>：结果上方有 <span class="ui">全部</span>、<span class="ui">联系人</span>、<span class="ui">群组</span>、<span class="ui">消息</span>、<span class="ui">文件</span> 几个标签，后面的数字是各类的命中数。「全部」里聊天记录和文件各最多列 3 条，更多的点段末的 <span class="ui">查看更多聊天记录</span> 或 <span class="ui">查看更多文件</span>。</li>
+    <li><b>聊天记录只查本机</b>：分组标题「聊天记录（仅搜索本机已保存的记录）」说明这里只查本机保存的记录。需要查更早的消息时，在 <span class="ui">消息</span> 标签里点 <span class="ui">搜索服务器上的聊天记录</span>（需要联网），或点 <span class="ui">在聊天记录管理器中查看全部</span> 到<a href="24-history.html">聊天记录管理器</a>里查看每一条命中。</li>
+    <li><b>群文件需要联网</b>：「文件」标签里的群文件是向服务器查询的，离线时搜不到。</li>
+    <li><b>用键盘操作</b>：主面板在前台时按 <kbd>Ctrl</kbd>+<kbd>K</kbd> 把光标移到搜索框；<kbd>↑</kbd> <kbd>↓</kbd> 在结果之间移动，<kbd>Enter</kbd> 打开选中的一条，<kbd>Ctrl</kbd>+<kbd>Tab</kbd> 切换筛选标签；按 <kbd>Esc</kbd> 先收起结果下拉（关键字保留），再按一次清空搜索框。</li>
+    <li><b>最近搜索</b>：搜索框为空时，下拉里显示「最近搜索」的关键字，点一个可以再次搜索，点右侧的 <span class="ui">清空</span> 删除这些记录。</li>
+  </ul>
+
+  <h2 id="tabs">三个页签</h2>
+  <p>搜索框下方有三个图标页签，从左到右依次是 <b>消息</b>（时钟图标）、<b>联系人</b>（人像图标）和 <b>群组</b>（双人图标）。当前页签的图标显示为橙色。</p>
+
+  <h3>消息</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_msgs.png" width="338" alt="消息页签"><figcaption>「消息」页签：最近会话</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>「消息」页签列出最近的单聊和群聊会话，最近有消息的排在上面。每一行显示对方的头像、名字、最后一条消息的摘要和时间，有未读消息时右下角显示红色数字。页签图标上的角标是所有会话的未读总数。</p>
+      <ul>
+        <li><b>单击</b>一行即打开对应的聊天窗口，并清除该会话的未读数。</li>
+        <li><b>置顶</b>的会话固定排在最上面，整行底色略深、左侧有一道橙色竖条。</li>
+        <li>设为「收进消息盒子且不提醒」的会话不单独出现，而是汇总成一行 <span class="ui">消息盒子</span>。</li>
+        <li><b>右键</b>一行可以标为未读、置顶、设置消息提醒等。</li>
+      </ul>
+      <p>这些操作详见<a href="05-conversations.html">「会话列表与消息提醒」</a>。</p>
+    </div>
+  </div>
+
+  <h3>联系人</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_contacts.png" width="338" alt="联系人页签"><figcaption>「联系人」页签：组织架构树</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>「联系人」页签就是企业通讯录，自上而下可能有这几组（某一组没有内容时不显示）：</p>
+      <ul>
+        <li><b>我的收藏</b>：你收藏的同事和群。</li>
+        <li><b>组织架构</b>：标题形如「明远科技有限公司 · 167 人」，下面按部门逐级展开，点部门名展开或收起。</li>
+        <li><b>其他联系人</b>：还没有分配到任何部门的同事。</li>
+        <li><b>服务号</b>：企业开通的服务号。</li>
+      </ul>
+      <p>单击一个人只是选中，<b>双击</b>才打开与他的聊天窗口；双击自己会打开本人资料。右键一个人可以发起通话、查看资料、修改备注等，详见<a href="04-contacts.html">「通讯录与联系人」</a>。</p>
+    </div>
+  </div>
+
+  <h3>群组</h3>
+  <p>「群组」页签列出你加入的所有群，标题「我的群聊 · N」中的 N 是群的个数。每个群显示群名、群号和人数。与联系人一样，单击只是选中，<b>双击</b>打开群聊窗口，右键弹出群的菜单。</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_groups.png" width="338" alt="群组页签"><figcaption>「群组」页签</figcaption></figure>
+    <figure class="shot"><img src="../img/b_main_groups2.png" width="338" alt="群组页签中的帖子群"><figcaption>加入帖子群「技术分享」后，它的群号前标有「帖子群」</figcaption></figure>
+  </div>
+  <p>帖子群没有聊天消息，只有帖子和评论，双击它打开的是帖子群窗口，详见<a href="15-thread-group.html">「帖子群」</a>。普通群的用法见<a href="13-group-chat.html">「群聊」</a>。右图中「羽毛球俱乐部」右下角的小图标表示它被设为「收进消息盒子且不提醒」。</p>
+
+  <h2 id="bottom">底部栏</h2>
+  <p>主面板最下方一栏有两个按钮：</p>
+  <table>
+    <tr><th>位置</th><th>按钮</th><th>作用</th></tr>
+    <tr><td>左侧</td><td>≡</td><td>打开系统菜单，见下一节</td></tr>
+    <tr><td rowspan="3">右侧</td><td><span class="ui">建群</span></td><td>位于「群组」页签时显示，打开新建群聊对话框（见<a href="13-group-chat.html#create">「群聊」</a>）</td></tr>
+    <tr><td><span class="ui">文件共享</span></td><td>位于「消息」或「联系人」页签时显示，打开「文件共享」窗口（见<a href="21-file-share.html">「文件共享」</a>）</td></tr>
+    <tr><td><span class="ui">查找</span></td><td>程序没有文件共享模块时代替「文件共享」显示，点它把光标移到搜索框</td></tr>
+  </table>
+
+  <h2 id="sysmenu">系统菜单</h2>
+  <p>点底部栏左侧的 ≡ 按钮弹出系统菜单。菜单按用途分为五组，每组开头有一行灰色的组名：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_main_sysmenu.png" width="338" alt="系统菜单"><figcaption>系统菜单</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <table>
+        <tr><th>菜单项</th><th>作用</th></tr>
+        <tr><th colspan="2">账号</th></tr>
+        <tr><td>个人信息</td><td>打开本人资料窗口（<a href="03-profile.html#open">详见</a>）</td></tr>
+        <tr><td>修改密码</td><td>修改登录密码（<a href="03-profile.html#password">详见</a>）</td></tr>
+        <tr><td>锁屏</td><td>设置临时密码后锁住屏幕（<a href="26-lock.html">详见</a>）</td></tr>
+        <tr><th colspan="2">发起</th></tr>
+        <tr><td>发起语音通话</td><td>选一个联系人或群发起语音通话（<a href="16-calls.html">详见</a>）</td></tr>
+        <tr><td>发起视频通话</td><td>选一个联系人或群发起视频通话（<a href="16-calls.html">详见</a>）</td></tr>
+        <tr><td>发起屏幕共享</td><td>选一个联系人或群，打开聊天窗口并选择要共享的内容（<a href="18-screen-share.html">详见</a>）</td></tr>
+        <tr><td>发起录制</td><td>开始录制屏幕；录制过程中这一项变为「停止录制」（<a href="19-recording.html">详见</a>）</td></tr>
+        <tr><th colspan="2">消息与工具</th></tr>
+        <tr><td>聊天记录管理</td><td>打开聊天记录管理器（<a href="24-history.html">详见</a>）</td></tr>
+        <tr><td>公告与通知</td><td>打开公告中心，与头部的铃铛按钮相同（<a href="27-announcements.html">详见</a>）</td></tr>
+        <tr><td>消息盒子</td><td>打开消息盒子窗口（<a href="05-conversations.html#msgbox">详见</a>）</td></tr>
+        <tr><td>备忘与提醒</td><td>打开你自己的备忘窗口（<a href="23-memo.html">详见</a>）</td></tr>
+        <tr><td>我的机器人</td><td>管理替你自动回复的个人机器人（<a href="25-bots.html">详见</a>）</td></tr>
+        <tr><td>图片文字识别</td><td>打开识别窗口，选一张图片识别其中的文字（<a href="09-screenshot.html">详见</a>）</td></tr>
+        <tr><td>Markdown 编辑器</td><td>打开一个空白的 Markdown 编辑器（<a href="12-markdown.html">详见</a>）</td></tr>
+        <tr><td>文件共享</td><td>打开「文件共享」窗口（<a href="21-file-share.html">详见</a>）</td></tr>
+        <tr><td>录制管理</td><td>查看和管理你录过的录像（<a href="19-recording.html">详见</a>）</td></tr>
+        <tr><th colspan="2">设置</th></tr>
+        <tr><td>系统设置</td><td>客户端的各项设置（<a href="28-settings.html">详见</a>）</td></tr>
+        <tr><td>网络设置</td><td>修改服务器地址和端口（<a href="01-quick-start.html#net">详见</a>）</td></tr>
+        <tr><th colspan="2">登出与关于</th></tr>
+        <tr><td>登出</td><td>退出当前账号，回到登录窗口（<a href="03-profile.html#logout">详见</a>）</td></tr>
+        <tr><td>关于 FlamingoIM</td><td>查看版本信息与检查更新（<a href="29-about-update.html">详见</a>）</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="callout note"><b>菜单里少了几项？</b>锁屏、通话、屏幕共享、录制、图片文字识别、Markdown 编辑器、文件共享等功能各由一个独立模块提供，模块不可用时（例如程序目录里缺少对应的文件）对应的菜单项不会出现。「我的机器人」只在机器人模块可用、并且企业允许使用个人机器人时出现。</div>
+
+  <h2 id="close">关闭主面板</h2>
+  <p>点主面板右上角的 × 时，会弹出「关闭 FlamingoIM」对话框，请你选择关闭方式：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/b_close_prompt.png" width="380" alt="关闭 FlamingoIM 对话框"><figcaption>选择关闭方式</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ul>
+        <li><b>最小化到托盘</b>：程序继续在后台运行，照常接收消息，单击托盘图标可以重新打开主面板。</li>
+        <li><b>退出 FlamingoIM</b>：关闭程序，下次需要重新登录。</li>
+      </ul>
+      <p>选好后点 <span class="ui">确认</span>。勾选 <span class="ui">记住我的选择</span> 后，以后点 × 不再询问，直接按记住的方式处理。</p>
+    </div>
+  </div>
+  <p>记住的方式可以随时在<a href="28-settings.html#general">「系统设置 → 通用 → 关闭主面板时」</a>修改；没有勾选「记住我的选择」时，对话框打开时默认选中的也是这里设置的方式。</p>
+
+  <h2 id="tray">托盘图标</h2>
+  <p>FlamingoIM 运行时，任务栏右下角的通知区域里有一个托盘图标。右键单击它弹出托盘菜单：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/zz_tray_menu.png" width="198" alt="托盘菜单"><figcaption>登录后的托盘菜单</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <table>
+        <tr><th>菜单项</th><th>作用</th></tr>
+        <tr><td>在线 / 离开 / 忙碌 / 离线</td><td>切换在线状态，与主面板的状态胶囊相同</td></tr>
+        <tr><td>关闭所有声音</td><td>关闭提示音；关闭后这一项变为「开启所有声音」</td></tr>
+        <tr><td>打开主面板</td><td>显示主面板</td></tr>
+        <tr><td>截图（Alt+Z）</td><td>开始截图，括号里是当前的截图快捷键（<a href="09-screenshot.html">详见</a>）</td></tr>
+        <tr><td>锁屏</td><td>锁住屏幕（<a href="26-lock.html">详见</a>）</td></tr>
+        <tr><td>Markdown 编辑器</td><td>打开 Markdown 编辑器（<a href="12-markdown.html">详见</a>）</td></tr>
+        <tr><td>发起屏幕共享</td><td>选择会话后开始屏幕共享（<a href="18-screen-share.html">详见</a>）</td></tr>
+        <tr><td>发起录制</td><td>开始录制屏幕，录制中变为「停止录制」（<a href="19-recording.html">详见</a>）</td></tr>
+        <tr><td>登出</td><td>退出当前账号，回到登录窗口</td></tr>
+        <tr><td>退出</td><td>关闭程序</td></tr>
+      </table>
+    </div>
+  </div>
+  <p>登录之前，托盘菜单里只有 <span class="ui">打开主面板</span>、<span class="ui">截图</span>、<span class="ui">锁屏</span>、<span class="ui">Markdown 编辑器</span> 和 <span class="ui">退出</span>，因此不登录也可以截图、锁屏和编辑 Markdown 文档。</p>
+  <ul>
+    <li><b>快速显示或隐藏主面板</b>：登录后在任何程序里按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd>，主面板可见时把它隐藏，不可见时把它调到前台。</li>
+    <li><b>新消息提醒</b>：收到新消息而聊天窗口没有打开时，托盘图标会闪烁。单击闪烁的托盘图标会打开有未读消息的会话；鼠标停在托盘图标上，会弹出未读消息的浮窗。</li>
+    <li><b>掉线提示</b>：与服务器的连接断开时，托盘会弹出气泡「您已经掉线，正在帮您重连......」，客户端会自动重连，重连期间托盘图标在亮、灰之间交替。</li>
+  </ul>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

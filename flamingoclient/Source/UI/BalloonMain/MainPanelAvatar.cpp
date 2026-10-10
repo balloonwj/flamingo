@@ -29,6 +29,7 @@
 #include "MainPanelIcons.h"        // DrawLineIcon（徽标字形的唯一一份画法）
 #include "PresenceBadge.h"         // GetPresenceBadgeIconKind（状态 → 字形）
 #include "MainPanelStatusMenu.h"   // GetPresenceVisual（状态 → 徽标配色）
+#include "AvatarGlyph.h"           // FillCenteredGlyph：头像字按笔画外框居中
 
 #pragma comment(lib, "gdiplus.lib")
 
@@ -137,26 +138,16 @@ HBITMAP MakeMonogramAvatar(LPCTSTR text, COLORREF bgColor, int sizePx)
                                : Gdiplus::Color(255, 255, 255, 255);
     Gdiplus::SolidBrush textBrush(textColor);
 
-    // 字号约为 sizePx 的 9/16,与旧版保持一致的视觉比例。GDI+ FontFamily
-    // 接 UTF-16 字符串,_T 在 _UNICODE 下就是 wchar_t,直接传即可。
+    // 字号约为 sizePx 的 9/16,与旧版保持一致的视觉比例。字按笔画外框居中(见 AvatarGlyph.h):
+    // 原先用居中格式的 DrawString,居中的是排版框而不是字,字普遍偏左 1~1.5 像素、偏上 0.5~2 像素
+    // (2026-10-03 实测)。在 _UNICODE 工程下 LPCTSTR 即 wchar_t*。
     Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
     Gdiplus::REAL fontSize = static_cast<Gdiplus::REAL>(sizePx * 9 / 16);
-    Gdiplus::Font font(&fontFamily, fontSize,
-                       Gdiplus::FontStyleRegular,
-                       Gdiplus::UnitPixel);
-
-    Gdiplus::StringFormat fmt;
-    fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
-    fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-    fmt.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
-
-    Gdiplus::RectF layoutRect(0.0f, 0.0f,
-                              static_cast<Gdiplus::REAL>(sizePx),
-                              static_cast<Gdiplus::REAL>(sizePx));
-
-    // DrawString 接的也是 wchar_t*;在 _UNICODE 工程下 LPCTSTR 即 wchar_t*。
-    g.DrawString(reinterpret_cast<const WCHAR*>(text), len,
-                 &font, layoutRect, &fmt, &textBrush);
+    Gdiplus::RectF box(0.0f, 0.0f,
+                       static_cast<Gdiplus::REAL>(sizePx),
+                       static_cast<Gdiplus::REAL>(sizePx));
+    FillCenteredGlyph(g, reinterpret_cast<const WCHAR*>(text), len, fontFamily,
+                      Gdiplus::FontStyleRegular, fontSize, box, textBrush);
 
     // Graphics / Bitmap 析构会自动 flush,bits 已被写满,返回 HBITMAP 即可。
     return hBmp;
@@ -269,23 +260,14 @@ HBITMAP MakeMonogramSquareAvatar(LPCTSTR text, COLORREF bgColor, int sizePx, int
                                : Gdiplus::Color(255, 255, 255, 255);
     Gdiplus::SolidBrush textBrush(textColor);
 
+    // 字号与按笔画外框居中的做法同 MakeMonogramAvatar。
     Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
     Gdiplus::REAL fontSize = static_cast<Gdiplus::REAL>(sizePx * 9 / 16);
-    Gdiplus::Font font(&fontFamily, fontSize,
-                       Gdiplus::FontStyleRegular,
-                       Gdiplus::UnitPixel);
-
-    Gdiplus::StringFormat fmt;
-    fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
-    fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-    fmt.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
-
-    Gdiplus::RectF layoutRect(0.0f, 0.0f,
-                              static_cast<Gdiplus::REAL>(sizePx),
-                              static_cast<Gdiplus::REAL>(sizePx));
-
-    g.DrawString(reinterpret_cast<const WCHAR*>(text), len,
-                 &font, layoutRect, &fmt, &textBrush);
+    Gdiplus::RectF box(0.0f, 0.0f,
+                       static_cast<Gdiplus::REAL>(sizePx),
+                       static_cast<Gdiplus::REAL>(sizePx));
+    FillCenteredGlyph(g, reinterpret_cast<const WCHAR*>(text), len, fontFamily,
+                      Gdiplus::FontStyleRegular, fontSize, box, textBrush);
 
     return hBmp;
 }

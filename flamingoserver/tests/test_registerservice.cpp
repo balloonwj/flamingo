@@ -1,6 +1,8 @@
 ﻿/**
  *  注册业务流程单元测试，test_registerservice.cpp
  *  Suite RS：RegisterService::doRegister 的全部判定分支。
+ *  RSW2、RSW3：企业关闭了「允许用户自助注册」（register.enabled）时拒绝注册、不建号，且只影响这一家企业。
+ *  LGA10（2026-10-06，docs/登录账号与手机号登录方案.md）：手机号格式不对时拒绝注册、不建号。
  *
  *  这里用一个内存假数据源顶替 UserManager / EnterpriseManager / DepartmentManager，
  *  因此整个用例集不连库、不依赖任何单例，可以在 Tests.exe 里独立跑。
@@ -35,6 +37,9 @@ public:
         , m_attachedUserId(0)
         , m_createUserCalled(false)
         , m_addToDeptCalled(false)
+        , m_checkNicknameCalled(false)
+        , m_checkedEnterpriseId(0)
+        , m_checkRegisterAllowedCalled(false)
         , m_nextUserId(FAKE_FIRST_USER_ID)
     {
     }
@@ -42,6 +47,9 @@ public:
     //---- 预置数据 ----
     std::map<std::string, RegisterEnterprise> m_enterprises;  //企业全称 -> 企业信息
     std::set<std::string>                     m_takenPhones;     //已被占用的手机号
+    std::string                               m_sensitiveWord;   //假词库里唯一的敏感词；为空表示词库为空。
+                                                                 //昵称里含有它即视为命中
+    std::set<int64_t>                         m_registerClosed;  //关闭了「允许用户自助注册」的企业ID；默认为空，即都允许
 
     //---- 故障注入开关 ----
     bool m_createUserShouldFail;   //置 true 时 createUser 一律失败，用于覆盖建号失败分支
@@ -54,6 +62,9 @@ public:
     int64_t m_attachedUserId;      //入部门时传入的用户ID；未入部门时为 0
     bool    m_createUserCalled;    //createUser 是否被调用过
     bool    m_addToDeptCalled;     //addUserToDepartment 是否被调用过
+    bool    m_checkNicknameCalled; //hitSensitiveNickname 是否被调用过
+    int64_t m_checkedEnterpriseId; //检查昵称时传入的企业ID；未检查时为 0
+    bool    m_checkRegisterAllowedCalled; //isRegisterAllowed 是否被调用过
 
     virtual bool findEnterpriseByName(const std::string& name, RegisterEnterprise& out)
     {
@@ -63,6 +74,12 @@ public:
 
         out = it->second;
         return true;
+    }
+
+    virtual bool isRegisterAllowed(int64_t enterpriseId)
+    {
+        m_checkRegisterAllowedCalled = true;
+        return m_registerClosed.find(enterpriseId) == m_registerClosed.end();
     }
 
     virtual bool isPhoneTaken(const std::string& phone)
@@ -84,6 +101,13 @@ public:
         m_createdEnterpriseId = enterpriseId;
         m_takenPhones.insert(req.phone);
         return true;
+    }
+
+    virtual bool hitSensitiveNickname(int64_t enterpriseId, const RegisterRequest& req)
+    {
+        m_checkNicknameCalled = true;
+        m_checkedEnterpriseId = enterpriseId;
+        return !m_sensitiveWord.empty() && req.nickname.find(m_sensitiveWord) != std::string::npos;
     }
 
     virtual bool addUserToDepartment(int64_t deptId, int64_t userId)
@@ -439,4 +463,168 @@ TEST_CASE("RS14 入部门失败：根部门ID照常带出，但 departmentAttach
 
     CHECK(out.rootDeptId == ent.rootDeptId);
     CHECK_FALSE(out.departmentAttached);
+}
+
+TEST_CASE("RS15 昵称命中所加入企业的敏感词库：返回资料含敏感词，且不建号")
+{
+    FakeRegisterDataSource ds;
+    RegisterEnterprise ent = MakeActiveEnterprise();
+    ds.m_enterprises[ent.name] = ent;
+    ds.m_sensitiveWord = "敏感";
+
+    RegisterRequest req = MakeValidRequest();
+    req.nickname = "含敏感词的昵称";
+    RegisterOutcome out;
+    CHECK(RegisterService::doRegister(ds, req, out) == error_code_profile_sensitive_word);
+    //按新账号将要加入的企业检查
+    CHECK(ds.m_checkNicknameCalled);
+    CHECK(ds.m_checkedEnterpriseId == ent.enterpriseId);
+    CHECK_FALSE(ds.m_createUserCalled);
+    CHECK_FALSE(ds.m_addToDeptCalled);
+    CHECK(out.userid == 0);
+
+    //昵称干净时照常注册，且同样检查过一次
+    FakeRegisterDataSource clean;
+    clean.m_enterprises[ent.name] = ent;
+    clean.m_sensitiveWord = "敏感";
+    RegisterOutcome okOut;
+    CHECK(RegisterService::doRegister(clean, MakeValidRequest(), okOut) == error_code_ok);
+    CHECK(clean.m_checkNicknameCalled);
+    CHECK(clean.m_createUserCalled);
+}
+
+TEST_CASE("RS16 判定顺序：手机号已占用、企业不存在、停用或没有根部门时，不检查昵称")
+{
+    RegisterRequest req = MakeValidRequest();
+    req.nickname = "含敏感词的昵称";
+
+    //手机号已被占用
+    {
+        FakeRegisterDataSource ds;
+        ds.m_enterprises[MakeActiveEnterprise().name] = MakeActiveEnterprise();
+        ds.m_sensitiveWord = "敏感";
+        ds.m_takenPhones.insert(req.phone);
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_already_registered);
+        CHECK_FALSE(ds.m_checkNicknameCalled);
+    }
+    //企业不存在：还不知道该按哪个企业的词库检查
+    {
+        FakeRegisterDataSource ds;
+        ds.m_sensitiveWord = "敏感";
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_not_exist);
+        CHECK_FALSE(ds.m_checkNicknameCalled);
+    }
+    //企业已停用
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ent.status = ENTERPRISE_STATUS_ACTIVE + 1;
+        ds.m_enterprises[ent.name] = ent;
+        ds.m_sensitiveWord = "敏感";
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_disabled);
+        CHECK_FALSE(ds.m_checkNicknameCalled);
+    }
+    //企业没有公司根部门
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ent.rootDeptId = 0;
+        ds.m_enterprises[ent.name] = ent;
+        ds.m_sensitiveWord = "敏感";
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_no_root_dept);
+        CHECK_FALSE(ds.m_checkNicknameCalled);
+    }
+}
+
+TEST_CASE("RSW2 企业关闭了允许用户自助注册：拒绝注册且不建号；企业不存在或不可用时仍按原错误码返回")
+{
+    RegisterRequest req = MakeValidRequest();
+
+    //开关关闭：返回 410，不建号、不检查昵称、不入部门，根部门ID保持 0
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ds.m_enterprises[ent.name] = ent;
+        ds.m_registerClosed.insert(ent.enterpriseId);
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_register_closed);
+        CHECK(ds.m_checkRegisterAllowedCalled);
+        CHECK_FALSE(ds.m_createUserCalled);
+        CHECK_FALSE(ds.m_checkNicknameCalled);
+        CHECK_FALSE(ds.m_addToDeptCalled);
+        CHECK(out.rootDeptId == 0);
+    }
+    //企业不存在：仍返回 407，不去查开关
+    {
+        FakeRegisterDataSource ds;
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_not_exist);
+        CHECK_FALSE(ds.m_checkRegisterAllowedCalled);
+    }
+    //企业已停用且开关也关了：仍返回 408（企业状态先判），不去查开关
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ent.status = ENTERPRISE_STATUS_ACTIVE + 1;
+        ds.m_enterprises[ent.name] = ent;
+        ds.m_registerClosed.insert(ent.enterpriseId);
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_disabled);
+        CHECK_FALSE(ds.m_checkRegisterAllowedCalled);
+        CHECK_FALSE(ds.m_createUserCalled);
+    }
+}
+
+TEST_CASE("RSW3 一家企业关闭了允许用户自助注册，不影响向另一家企业注册")
+{
+    FakeRegisterDataSource ds;
+    RegisterEnterprise closed = MakeActiveEnterprise();
+    RegisterEnterprise open = MakeActiveEnterprise();
+    open.enterpriseId = closed.enterpriseId + 1;
+    open.name = "清和科技有限公司";
+    ds.m_enterprises[closed.name] = closed;
+    ds.m_enterprises[open.name] = open;
+    ds.m_registerClosed.insert(closed.enterpriseId);
+
+    RegisterRequest toClosed = MakeValidRequest();
+    RegisterOutcome out;
+    CHECK(RegisterService::doRegister(ds, toClosed, out) == error_code_register_closed);
+    CHECK_FALSE(ds.m_createUserCalled);
+
+    RegisterRequest toOpen = MakeValidRequest();
+    toOpen.company = open.name;
+    RegisterOutcome outOpen;
+    CHECK(RegisterService::doRegister(ds, toOpen, outOpen) == error_code_ok);
+    CHECK(ds.m_createdEnterpriseId == open.enterpriseId);
+    CHECK(outOpen.enterpriseName == open.name);
+}
+
+TEST_CASE("LGA10 手机号格式不对时注册被拒、不建号；号码已被占用照旧返回已注册")
+{
+    FakeRegisterDataSource ds;
+    RegisterEnterprise ent = MakeActiveEnterprise();
+    ds.m_enterprises[ent.name] = ent;
+
+    //格式不对：服务端补上与客户端同一条规则（11 位以 1 开头的数字）
+    const char* const kBadPhones[] = { "", "1391704332", "23917043329", "139-1704-332" };
+    for (size_t i = 0; i < sizeof(kBadPhones) / sizeof(kBadPhones[0]); ++i)
+    {
+        CAPTURE(kBadPhones[i]);
+        RegisterRequest req = MakeValidRequest();
+        req.phone = kBadPhones[i];
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_bad_request);
+        CHECK_FALSE(ds.m_createUserCalled);
+    }
+
+    //号码已被占用：仍按原来的「已注册」返回
+    RegisterRequest taken = MakeValidRequest();
+    ds.m_takenPhones.insert(taken.phone);
+    RegisterOutcome out;
+    CHECK(RegisterService::doRegister(ds, taken, out) == error_code_already_registered);
+    CHECK_FALSE(ds.m_createUserCalled);
 }

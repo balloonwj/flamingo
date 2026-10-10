@@ -79,9 +79,35 @@ public:
     //设置关键字（UTF-8，空串=不过滤）；重置到第1页。
     void SetKeyword(const std::string& keyword);
 
+    //设置关键字是否按通配符解释（搜索框旁「通配符」复选框，docs/聊天记录管理器方案.md §11.4）；
+    //与当前取值不同且关键字非空时重置到第1页（关键字为空时结果不变，停在原来那一页）。
+    //ResetSearchFilters 不改动它：复选框的状态在窗口打开期间一直保持，由窗口在新打开时自己恢复为不勾。
+    //@param wildcard  true 时 '*'、'?' 是通配符；false 时按普通字符
+    void SetWildcard(bool wildcard);
+
     //设置发送人筛选：只看这个 userid 发的消息；重置到第1页。
     //@param fromid  发送人 userid；0 或负数表示不限
     void SetSenderFilter(int64_t fromid);
+
+    //设置关键字里 from:名字 解析出的 userid（docs/聊天记录管理器方案.md §12.3，含义见
+    //HistoryFilter::m_syntaxFromIds）。窗口在关键字变化后按本会话的发言人名单解析好再传进来；
+    //与当前取值相同时不做任何事，不同时重置到第1页。
+    //@param ids  匹配上的 userid；关键字里没有 from: 时传空表
+    void SetSyntaxFromIds(const std::vector<int64_t>& ids);
+
+    //设置关键字是否只用来高亮、不筛选（时间轴模式，docs/聊天记录管理器方案.md §11.7）：为 true 时统计、
+    //分页、页号换算（PageOfPosition、JumpToDate）与导出都按去掉关键字的条件进行，列表保留上下文；
+    //关键字仍留在 Filter() 里，窗口据它高亮命中处、找命中位置。
+    //取值改变且关键字筛选生效时重置到第1页（列表换了一批消息）；关键字为空时结果不变，停在原来那一页。
+    //@param highlightOnly  true 只高亮；false 按关键字筛选（列表模式，默认）
+    void SetKeywordHighlightOnly(bool highlightOnly);
+
+    //关键字当前是否只用来高亮（见 SetKeywordHighlightOnly）。
+    bool KeywordHighlightOnly() const;
+
+    //实际交给本地库查询的条件：关键字只高亮时是 Filter() 去掉关键字后的样子，否则与 Filter() 相同。
+    //「查看上下文」是否出现、空状态文字等「列表里实际筛了什么」的判断应按它来做。
+    HistoryFilter QueryFilter() const;
 
     //按当前筛选条件，算出时间与 msgid 为给定值的那条消息落在第几页（排序同 QueryPage）。
     //@param nowMs      当前时间（Unix毫秒），供"近N天"换算
@@ -220,10 +246,13 @@ private:
     static bool SameCountFilter(const HistoryFilter& a, const HistoryFilter& b);
 
     CV2MsgStore*               m_store;    //本地库（注入，不持有）；NULL=未注入
-    HistoryFilter              m_filter;   //当前过滤与分页状态
+    HistoryFilter              m_filter;   //当前过滤与分页状态（含关键字，即便关键字只用来高亮）
+    //关键字是否只用来高亮、不参与查询（时间轴模式）；默认 false。窗口切换「列表 | 时间轴」时设置
+    bool                       m_keywordHighlightOnly;
     int64_t                    m_total;    //上次 Refresh 的匹配总数
     std::vector<HistoryRecord> m_records;  //当前页记录（最新在前）
-    //上次统计总数时的筛选条件；RefreshPage 据它判断筛选条件是否变过（只比较影响总数的字段）
+    //上次统计总数时实际查询用的条件（QueryFilter() 的值）；RefreshPage 据它判断筛选条件是否变过
+    //（只比较影响总数的字段）
     HistoryFilter              m_countedFilter;
     //m_total 是否来自一次成功的统计。刚创建、换了库时为 false，RefreshPage 此时必须重新统计
     bool                       m_countValid;
@@ -244,7 +273,8 @@ bool ShouldResetHistorySearch(bool windowOpen, bool sameConversation);
 //消息记录窗换完列表后，要不要把列表滚回顶部（DuiScrollView 换内容时保留原滚动位置）。
 //@param shown  上一次显示列表时的筛选条件（含页号）
 //@param now    这一次的筛选条件
-//@return 页号、每页条数，或会话、类型、时间范围（含自定义起止）、关键字、发送人任一项变了时返回
+//@return 页号、每页条数，或会话、类型、时间范围（含自定义起止）、关键字、发送人任一项变了，
+//        或关键字非空时通配符开关变了，返回
 //        true —— 新列表是另一批消息，应从头看起。完全相同（同一页因图片下载完成等原因重画），
 //        或只有显示下界（覆盖区间，往前拉取到更早消息时由程序改动）变了时返回 false，保持用户
 //        当前的滚动位置

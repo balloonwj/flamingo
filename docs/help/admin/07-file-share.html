@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 7 章：查看员工发起的文件共享与成员权限、强制取消共享、查询共享审计。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件共享管理 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a07">
+<article class="doc">
+  <h1>文件共享管理</h1>
+  <p class="lead">员工可以在聊天里把本机的磁盘、文件夹或文件共享给同事（见客户端<a href="../client/21-file-share.html">「文件共享」</a>）。管理员在这里查看本企业有哪些共享、谁能访问，必要时在后台强制取消，并按人、按动作查询共享的操作记录。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：左侧导航「文件共享」</li>
+    <li>相关开关：<a href="05-feature-switches.html#transfer">功能开关 → 文件共享</a></li>
+  </ul>
+
+  <h2 id="shares">查看文件共享</h2>
+  <p>点左侧导航的 <span class="ui">文件共享</span>。页面右上角有 <span class="ui">文件共享</span> 和 <span class="ui">共享审计</span> 两个页签，以及 <span class="ui">刷新</span> 按钮；默认打开「文件共享」页签：</p>
+  <figure class="shot">
+    <img src="../img/ad_fileshare.png" width="880" alt="文件共享页签">
+    <figcaption>罗俊辉在与赵卓轩的单聊里共享了一个文件夹，下方显示这个共享的详情与成员权限</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>按需在 <span class="ui">搜索分享者的昵称或账号</span> 框中输入分享者。</li>
+    <li>在右侧的状态下拉框中选择 <span class="ui">全部状态</span>、<span class="ui">有效</span> 或 <span class="ui">已取消</span>。</li>
+    <li>在列表中点选一行，下方显示这个共享的详情与成员权限。</li>
+  </ol>
+  <p>列表各列依次是 <span class="ui">分享者</span>（姓名与账号）、<span class="ui">显示路径</span>（共享内容在分享者电脑上的路径）、<span class="ui">所在会话</span>（如「单聊：赵卓轩」或群名）、<span class="ui">成员数</span>、<span class="ui">状态</span>、<span class="ui">发起时间</span> 和 <span class="ui">操作</span>。</p>
+  <p>下方左侧的详情包括分享者、所在会话、共享类型（整个磁盘、文件夹或单个文件）、状态、发起时间、取消时间、取消原因（例如分享者取消、群主或群管理员取消、管理员在后台强制取消）、所属企业和显示路径；右侧的 <span class="ui">成员与权限</span> 列出能访问这个共享的成员以及各自的权限（如「上传」）。</p>
+
+  <h2 id="cancel">强制取消共享</h2>
+  <p>发现不应共享的内容时（例如误把整个磁盘共享到了大群里），管理员可以在后台直接取消：</p>
+  <ol class="steps">
+    <li>在列表中找到这个共享，点该行的 <span class="ui">强制取消</span>。只有状态为「有效」的共享才有这个按钮。</li>
+    <li>在「强制取消共享」确认框中核对分享者和共享名称，点 <span class="ui">强制取消</span>。</li>
+  </ol>
+  <p>取消后，这个共享的全部成员都不能再访问，正在进行的访问与传输会立即结束，分享者的客户端也会删除这条共享。列表中该行的状态变为「已取消」，取消原因记为「管理员在后台强制取消」。</p>
+  <div class="callout warn"><b>强制取消不能撤销</b>强制取消针对的是整个共享，不能只取消其中某一位成员。取消后如果还需要共享，只能由分享者在客户端重新发起。</div>
+
+  <h2 id="audit">共享审计</h2>
+  <p>切到 <span class="ui">共享审计</span> 页签，可以按人、按动作、按时间查询文件共享的操作记录，例如谁打开了某个共享、下载了哪些文件：</p>
+  <figure class="shot">
+    <img src="../img/ad_fileshare_audit.png" width="880" alt="共享审计页签">
+    <figcaption>共享审计：罗俊辉发起共享，赵卓轩随后打开了它</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在第一个下拉框中选择时间范围，默认是近 7 天。</li>
+    <li>按需在 <span class="ui">搜索操作人</span> 框中输入操作人的名字。</li>
+    <li>按需在 <span class="ui">全部动作</span> 中选择一种动作，或在 <span class="ui">共享 ID</span> 框中输入某个共享的 ID，只看这个共享的记录。</li>
+    <li>点选一条记录，下方显示它的详情。</li>
+  </ol>
+  <p>列表各列依次是 <span class="ui">时间</span>、<span class="ui">操作人</span>、<span class="ui">分享者</span>、<span class="ui">共享名</span>、<span class="ui">动作</span>、<span class="ui">路径</span>、<span class="ui">大小</span>、<span class="ui">结果</span> 和 <span class="ui">来源</span>。可以筛选的动作有：</p>
+  <table>
+    <tr><th>类别</th><th>动作</th></tr>
+    <tr><td>共享本身</td><td>发起共享、取消共享、调整成员</td></tr>
+    <tr><td>访问</td><td>打开、申请下载、申请上传、下载文件、上传文件</td></tr>
+    <tr><td>修改内容</td><td>新建文件夹、重命名、删除、移动</td></tr>
+  </table>
+  <p><span class="ui">来源</span> 列表示这条记录由谁记下：「服务端」是服务器记录的，「分享者」是分享者的客户端上报的。详情区还会显示共享 ID、访问会话，以及重命名、移动时的目标路径。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

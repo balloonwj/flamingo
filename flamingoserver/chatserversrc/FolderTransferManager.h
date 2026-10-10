@@ -53,9 +53,11 @@ struct FolderTransferScale
     int64_t     totalDirs;    //目录数，单位：个；含空目录，不含根目录本身
     int64_t     totalFiles;   //文件数，单位：个
     int64_t     totalSize;    //全部文件的字节数之和，单位：字节
+    int         kind;         //传输种类，取值见 FolderTransferProtocol.h 的 enum folder_transfer_kind（2026-10-04 起）；
+                              //单文件直传时 folderName 是文件名
 
     FolderTransferScale()
-        : totalDirs(0), totalFiles(0), totalSize(0)
+        : totalDirs(0), totalFiles(0), totalSize(0), kind(0)
     {
     }
 };
@@ -78,10 +80,13 @@ struct FolderTransferSessionInfo
                              //聊天记录里的传输记录条以「会话 id + 本序号」为幂等键，故它
                              //决定了"每次尝试各留一条记录"：先失败后重试成功的一笔传输，
                              //会留下 result=7 与 result=8 两条记录。生命周期与会话相同
+    int         kind;        //传输种类，取值见 FolderTransferProtocol.h 的 enum folder_transfer_kind（2026-10-04 起）。
+                             //单文件直传会话不占文件夹传输的每用户与整台服务器名额（它不用 fileserver 中转），
+                             //另按 directfilemaxperuser 限额；邀请超时取 directfileinvitetimeout
 
     FolderTransferSessionInfo()
         : senderId(0), receiverId(0), totalDirs(0), totalFiles(0), totalSize(0)
-        , state(0), createTime(0), stateTime(0), attemptSeq(0)
+        , state(0), createTime(0), stateTime(0), attemptSeq(0), kind(0)
     {
     }
 };
@@ -135,6 +140,13 @@ public:
     //期内发送端可点「重试」断点续传，期满会话销毁、只能重新发起
     static const int64_t kDefaultRetryWindowMs = 10 * 60 * 1000;
 
+    //单文件直传邀请无应答的超时默认值（毫秒）= 5 分钟，对应配置项 directfileinvitetimeout。超时后发送端改为
+    //上传服务器的离线文件（用户 2026-10-04 定，docs/单聊文件P2P直传与P2P徽章方案.md 决定 2）
+    static const int64_t kDefaultDirectFileInviteTimeoutMs = 5 * 60 * 1000;
+    //单个用户同时可参与的单文件直传会话数上限默认值（笔），对应配置项 directfilemaxperuser。直传只走 P2P 链路、
+    //不占 fileserver 连接，比文件夹传输的 5 笔放宽；超出时发送端同样改为上传服务器
+    static const int kDefaultDirectFileMaxPerUser = 10;
+
     //新建会话时的尝试序号（次）。从 1 而不是 0 起算，是为了让聊天记录里的传输记录条
     //在人读日志与包体时能直接对应"第几次尝试"，不必在心里加一
     static const int kFirstAttemptSeq = 1;
@@ -175,6 +187,29 @@ public:
                    int maxSessions, int maxSessionsPerUser,
                    int64_t inviteTimeoutMs, int64_t retryWindowMs);
 
+    /**
+     *  设置单文件直传的两项参数（2026-10-04 起，在 configure 之后由 main.cpp 调用）。
+     *  @param inviteTimeoutMs 邀请无应答的超时（directfileinvitetimeout），单位：毫秒；小于 1 时取 kDefaultDirectFileInviteTimeoutMs
+     *  @param maxPerUser      单个用户同时可参与的直传会话数上限（directfilemaxperuser），单位：笔；小于 1 时取
+     *                         kDefaultDirectFileMaxPerUser
+     */
+    void configureDirectFile(int64_t inviteTimeoutMs, int maxPerUser);
+
+    //取单文件直传邀请无应答的超时（毫秒）
+    int64_t getDirectFileInviteTimeoutMs() const;
+    //取单个用户同时可参与的单文件直传会话数上限（笔）
+    int getDirectFileMaxPerUser() const;
+
+    /**
+     *  单文件直传邀请的准入校验：发送方或接收方参与的直传会话数已达 directfilemaxperuser 时拒绝（先判发送方）。
+     *  只数单文件直传会话，文件夹传输会话不计入；也不受整台服务器文件夹会话总数的限制（直传不用 fileserver 中转）。
+     *  P2P 能否建立由会话层另查（P2PSignalService::checkForFeature），不在本方法里。
+     *  @param senderId   发起邀请的用户 userid
+     *  @param receiverId 被邀请的用户 userid
+     *  @return 0 表示允许；error_code_folder_busy(620) 表示某一方的直传名额已满
+     */
+    int checkDirectFileInvite(int64_t senderId, int64_t receiverId);
+
     //取 fileserver 中转对外主机地址，供构造 cmd_folder_relay_info
     const std::string& getRelayHost() const;
     //取 fileserver 中转对外端口，供构造 cmd_folder_relay_info
@@ -210,6 +245,7 @@ public:
      *  统计某用户当前参与着几笔活跃的文件夹传输（作发送端或接收端都各算一笔）。
      *  并发限制据此判定：达到 foldermaxperuser 即拒绝其新的邀请 / 应答。
      *  失败待重试的会话在保留期内仍占着名额（重试要接着往同一个目录续传），故计入。
+     *  只数文件夹传输会话，单文件直传会话不计入（2026-10-04 起，直传另按 checkDirectFileInvite 限额）。
      *  @param userId 待查询用户 userid
      *  @return 该用户参与的活跃会话数，单位：笔；一笔也没有时返回 0
      */
@@ -239,12 +275,13 @@ public:
     int findSessionsByUser(int64_t userId, std::vector<FolderTransferSessionInfo>& out);
 
     /**
-     *  查询整台服务器的活跃会话数是否已达 foldermaxsessions 上限。
+     *  查询整台服务器的活跃会话数是否已达 foldermaxsessions 上限。只数文件夹传输会话：这道闸门防的是 fileserver
+     *  中转连接被占满，单文件直传不用中转，不计入（2026-10-04 起）。
      *  @return 已达上限返回 true（此时新邀请应回 error_code_folder_server_busy），否则 false
      */
     bool isServerBusy();
 
-    //取当前活跃会话数（个），供监控命令与单元测试观察会话表规模
+    //取当前活跃会话数（个，文件夹传输与单文件直传都算），供监控命令与单元测试观察会话表规模
     size_t getActiveSessionCount();
 
     /**
@@ -254,6 +291,7 @@ public:
      *    2. 发送方或接收方的名额已满         -> error_code_folder_busy(620)
      *       （该用户参与的会话数已达 foldermaxperuser，先判发送方再判接收方）
      *    3. 服务器活跃会话总数已达上限       -> error_code_folder_server_busy(619)
+     *  第 2、3 两步只数文件夹传输会话，单文件直传会话不计入（2026-10-04 起）。
      *  先报"某一方名额已满"再报"服务器繁忙"：两道闸门同时到顶时报前者，因为它对用户
      *  更有指导性（等自己那几笔里有一笔传完即可），后者只能干等。
      *
@@ -274,7 +312,7 @@ public:
      *  调用方须先用 checkInvite 判定通过。
      *  @param senderId   发送端 userid（发起方）
      *  @param receiverId 接收端 userid（被邀请方）
-     *  @param scale      目录名与规模统计，原样记进会话供后续推送使用
+     *  @param scale      目录名与规模统计，原样记进会话供后续推送使用；其中的 kind 决定会话种类
      *  @param now        当前时间，Unix 毫秒（同时作 createTime 与 stateTime）
      *  @return 新会话的 sessionid（只含数字与连字符，不含 '.' / '|'，可直接放进 relay 令牌）
      */
@@ -348,7 +386,7 @@ public:
      *  @param attemptSeq    本次尝试的序号（次），调用方从会话快照的
      *                       FolderTransferSessionInfo::attemptSeq 取；它与传输记录条的
      *                       幂等键用的是同一个值，去重粒度因而与记录粒度严格对齐
-     *  @param terminalState 终态取值，见 Protocol.h 的 enum folder_transfer_state 的 3~8；
+     *  @param terminalState 终态取值，见 Protocol.h 的 enum folder_transfer_state 的 3~9；
      *                       传入过程态（响铃中 / 传输中）视为调用方参数写错，本方法记一条
      *                       告警日志并返回 false，既不登记也不改状态
      *  @param now           当前时间，Unix 毫秒
@@ -440,13 +478,20 @@ private:
      *
      *  调用者须已持有 m_mutex（该锁不可重入）。
      *
-     *  @param userId 待查询用户 userid
-     *  @param out    [出参] 非空时把命中的会话逐条追加进去（容器由调用方持有，本方法
-     *                只写不保存指针）；只需要笔数时传 NULL，此时不构造任何拷贝
+     *  @param userId     待查询用户 userid
+     *  @param kindFilter 只数这一种会话，取值见 enum folder_transfer_kind；kAnyKind 表示两种都数（2026-10-04 起）
+     *  @param out        [出参] 非空时把命中的会话逐条追加进去（容器由调用方持有，本方法
+     *                    只写不保存指针）；只需要笔数时传 NULL，此时不构造任何拷贝
      *  @return 命中的会话数，单位：笔
      */
-    int collectUserSessionsLocked(int64_t userId,
+    int collectUserSessionsLocked(int64_t userId, int kindFilter,
                                   std::vector<FolderTransferSessionInfo>* out) const;
+
+    //collectUserSessionsLocked 的 kindFilter 取这个值时文件夹传输与单文件直传都数（按用户反查收尾时用）
+    static const int kAnyKind = -1;
+
+    //整台服务器的文件夹传输会话数（单文件直传不计入），调用者须已持有 m_mutex
+    int countFolderSessionsLocked() const;
 
     /**
      *  一条"已终结尝试"的登记项，记的是某个会话最近一次被终结的是第几次尝试、终结于何时。
@@ -479,4 +524,6 @@ private:
     int                                                 m_maxSessionsPerUser;//单个用户同时可参与的会话数上限，单位：笔
     int64_t                                             m_inviteTimeoutMs;//邀请无应答的超时，单位：毫秒
     int64_t                                             m_retryWindowMs;  //失败会话的保留期，单位：毫秒
+    int64_t                                             m_directFileInviteTimeoutMs; //单文件直传邀请无应答的超时，单位：毫秒
+    int                                                 m_directFileMaxPerUser;      //单个用户同时可参与的单文件直传会话数上限，单位：笔
 };

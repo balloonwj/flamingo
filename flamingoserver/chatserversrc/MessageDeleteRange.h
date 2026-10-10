@@ -89,4 +89,19 @@ std::vector<DeleteRange> MergeDeleteRanges(const std::vector<DeleteRange>& exist
  */
 std::string BuildNotInDeletedRangeClause(int64_t userid, const char* timeColumn);
 
+/**
+ *  生成"排除本人清空过的会话里、清空锚点之前的消息"的 SQL 片段（cmd_clear_conversation 用）。
+ *
+ *  清空锚点记在本人这一行 t_conversation.f_cleared_msgid：该会话里 msgid 不大于锚点的消息对本人
+ *  隐藏。片段对外层的每一条消息算出它在本人视角下属于哪个会话 —— 群消息为 (2, f_to)；单聊为
+ *  (1, 对端)，对端在本人是发送方时取 f_to，否则取 f_from —— 再按主键查出锚点比较 msgid；查不到行
+ *  （没有清空过）按 0 处理。所以既能用于只查一个会话的语句，也能用于跨会话的语句（搜索、会话列表、
+ *  按 ID 取消息）。
+ *
+ *  @param userid      本人 userid
+ *  @param tablePrefix 外层查询里消息表各列的前缀，含末尾的点，如 "t_chatmsg." 或 "m."（不可为 NULL）
+ *  @return 以 " AND " 开头的 SQL 片段，可直接拼在 WHERE 条件之后
+ */
+std::string BuildNotClearedClause(int64_t userid, const char* tablePrefix);
+
 } // namespace msgdelete

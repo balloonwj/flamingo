@@ -8,6 +8,7 @@
 
 #include "ImagePlaceholder.h"
 #include "ChatMessageMenu.h"   // kChatImageState*：聊天气泡图片状态的取值
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -316,7 +317,7 @@ SIZE MeasureImagePlaceholderCaption(HDC hdc, LPCWSTR text, int pixelHeight)
     HFONT font = ::CreateFontW(-pixelHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                               L"Microsoft YaHei");
+                               i18n::UiFontName());
     if (font == NULL)
     {
         return size;
@@ -357,11 +358,11 @@ LPCWSTR ChatImageFailureCaption(ChatImageFailure failure)
     {
     //本端发出的图片没有上传成功
     case kChatImageSendFailed:
-        return L"图片发送失败";
+        return TR(L"图片发送失败");
 
     //收到的图片没下载下来，或本地文件丢失、损坏
     case kChatImageLoadFailed:
-        return L"图片加载失败";
+        return TR(L"图片加载失败");
 
     //不失败：不画说明文字
     default:
@@ -407,14 +408,14 @@ HistoryThumbDecision ResolveHistoryThumb(bool downloadable, bool fileExists, boo
     {
         d.m_state     = kHistoryThumbBroken;
         d.m_clickable = downloadable;
-        d.m_tooltip   = downloadable ? L"下载失败，单击重试" : L"";
+        d.m_tooltip   = downloadable ? TR(L"下载失败，单击重试") : L"";
         return d;
     }
     if (downloadable)
     {
         d.m_state     = kHistoryThumbNeedDownload;
         d.m_clickable = true;
-        d.m_tooltip   = L"单击下载图片";
+        d.m_tooltip   = TR(L"单击下载图片");
         return d;
     }
     d.m_state = kHistoryThumbBroken;   //缺少下载信息（老消息缺字段等），无从下载

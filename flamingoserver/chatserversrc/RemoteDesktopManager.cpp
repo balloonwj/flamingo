@@ -11,7 +11,69 @@
 RemoteDesktopManager::RemoteDesktopManager()
     : m_seqCounter(0)
     , m_relayPort(0)
+    , m_offlineGraceMs(kDefaultOfflineGraceMs)
 {
+}
+
+void RemoteDesktopManager::setOfflineGraceMs(int64_t graceMs)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    m_offlineGraceMs = (graceMs > 0) ? graceMs : kDefaultOfflineGraceMs;
+}
+
+int64_t RemoteDesktopManager::offlineGraceMs() const
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    return m_offlineGraceMs;
+}
+
+void RemoteDesktopManager::markUserOffline(int64_t userId, int64_t now)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (std::map<std::string, RemoteDesktopSessionInfo>::iterator it = m_sessions.begin(); it != m_sessions.end();
+         ++it)
+    {
+        //已记过的不改：宽限期从第一次掉线算起
+        if (it->second.controllerId == userId && it->second.controllerOfflineAt == 0)
+            it->second.controllerOfflineAt = now;
+        if (it->second.controlledId == userId && it->second.controlledOfflineAt == 0)
+            it->second.controlledOfflineAt = now;
+    }
+}
+
+void RemoteDesktopManager::markUserOnline(int64_t userId)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (std::map<std::string, RemoteDesktopSessionInfo>::iterator it = m_sessions.begin(); it != m_sessions.end();
+         ++it)
+    {
+        if (it->second.controllerId == userId)
+            it->second.controllerOfflineAt = 0;
+        if (it->second.controlledId == userId)
+            it->second.controlledOfflineAt = 0;
+    }
+}
+
+void RemoteDesktopManager::reapOfflineSessions(int64_t now, std::vector<RemoteDesktopSessionInfo>& out)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    std::map<std::string, RemoteDesktopSessionInfo>::iterator it = m_sessions.begin();
+    while (it != m_sessions.end())
+    {
+        const RemoteDesktopSessionInfo& s = it->second;
+        const bool controllerGone = s.controllerOfflineAt != 0 && now - s.controllerOfflineAt >= m_offlineGraceMs;
+        const bool controlledGone = s.controlledOfflineAt != 0 && now - s.controlledOfflineAt >= m_offlineGraceMs;
+        if (controllerGone || controlledGone)
+        {
+            out.push_back(s);
+            //erase 返回下一个迭代器，避免失效
+            it = m_sessions.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 RemoteDesktopManager::~RemoteDesktopManager()

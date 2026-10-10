@@ -190,6 +190,14 @@ TEST_CASE("V2L5 各段动态 id 互不重叠且容量够用")
     CHECK(kIdHistoryRowCapacity >= 100);
     CHECK(kIdHistoryExpandCapacity >= 100);
     CHECK(kIdHistoryThumbCapacity >= 100);
+
+    //Markdown 卡片段（docs/Markdown消息方案.md 第 12 节）排在已有各个行级段之后，与它们都不相交，容量够用
+    const UINT markdownBase = (UINT)kIdHistoryMarkdownCardBase;
+    CHECK(markdownBase >= (UINT)kIdHistoryCodeCardBase + kIdHistoryCodeCardCapacity);
+    CHECK(markdownBase >= (UINT)kIdHistoryVoiceBase + kIdHistoryVoiceCapacity);
+    CHECK(markdownBase >= (UINT)kIdHistoryNavMonthBase + kIdHistoryNavMonthCapacity);
+    CHECK(markdownBase >= (UINT)kIdHistoryNavYearBase);
+    CHECK(kIdHistoryMarkdownCardCapacity >= 100);
 }
 
 TEST_CASE("V2L6 列表为空时产出空状态，且一行都不建")
@@ -1264,9 +1272,15 @@ TEST_CASE("V2L20 底部一行各控件互不重叠：页码格最多时，默认
 
 namespace {
 
-// 能装下全部内容、但装不下左侧信息文字的中间宽度（像素）：去掉左侧信息之后分页栏照样放得下
-// 首页 / 末页，用来核对"先隐藏左侧信息，仍放不下才隐藏首页 / 末页"的先后顺序
-const int kTestMediumBodyWidth = 760;
+// 三级隐藏的分界（页码格最多、共 25 页时实测，2026-10-03 底部加入「清空聊天记录」之后）：宽度低于 970
+// 隐藏左侧信息，低于 840 再隐藏首页 / 末页，低于 736 再隐藏「跳至 _ 页」。下面三个宽度各落在一段里，
+// 用来核对隐藏的先后顺序
+// 只装不下左侧信息的宽度：首页 / 末页与跳页框都在
+const int kTestMediumBodyWidth = 900;
+// 还装不下首页 / 末页、但装得下跳页框的宽度
+const int kTestTightBodyWidth = 760;
+// 什么都不用隐藏的宽度（高于 970）
+const int kTestWideBodyWidth = 1000;
 
 // 页数少的情形：3 页，页码格全部平铺
 const int kTestFewPages = 3;
@@ -1310,40 +1324,71 @@ void CheckPageCellsShown(const DuiControl* root, int pageCount, int currentPage)
 
 } // anonymous namespace
 
-TEST_CASE("V2L21 默认宽度下页码格最多时也不隐藏任何控件")
+TEST_CASE("V2L21 默认宽度下页码格最多时只隐藏左侧信息，首页末页、跳页框与两个按钮都在")
 {
+    //2026-10-03 底部加入「清空聊天记录」后与用户确认：默认宽度、页数多时左侧信息让出位置
     std::unique_ptr<DuiControl> root = BuildFooterAt(kTestBodyWidth, kTestManyPages, kTestMiddlePage);
-    CHECK(IsShown(root.get(), kIdHistoryFooterInfo));
+    CHECK_FALSE(IsShown(root.get(), kIdHistoryFooterInfo));
     CHECK(IsShown(root.get(), kIdHistoryPageFirst));
     CHECK(IsShown(root.get(), kIdHistoryPageLast));
+    CHECK(IsShown(root.get(), kIdHistoryPageJump));
+    CHECK(IsShown(root.get(), kIdHistoryClearConversation));
+    CHECK(IsShown(root.get(), kIdHistoryExport));
     CheckPageCellsShown(root.get(), kTestManyPages, kTestMiddlePage);
+
+    //页数少时默认宽度下什么都不隐藏
+    std::unique_ptr<DuiControl> few = BuildFooterAt(kTestBodyWidth, kTestFewPages, 1);
+    CHECK(IsShown(few.get(), kIdHistoryFooterInfo));
+    CHECK(IsShown(few.get(), kIdHistoryPageFirst));
+    CHECK(IsShown(few.get(), kIdHistoryPageJump));
 }
 
-TEST_CASE("V2L22 窗口变窄时先隐藏左侧信息，仍放不下才隐藏首页与末页，页码格始终都在")
+TEST_CASE("V2L22 窗口变窄时依次隐藏左侧信息、首页与末页、跳页框，页码格与两个按钮始终都在")
 {
-    // 中间宽度：只隐藏左侧信息
+    // 只隐藏左侧信息
     {
         std::unique_ptr<DuiControl> root = BuildFooterAt(kTestMediumBodyWidth, kTestManyPages, kTestMiddlePage);
         CHECK_FALSE(IsShown(root.get(), kIdHistoryFooterInfo));
         CHECK(IsShown(root.get(), kIdHistoryPageFirst));
         CHECK(IsShown(root.get(), kIdHistoryPageLast));
+        CHECK(IsShown(root.get(), kIdHistoryPageJump));
         CheckPageCellsShown(root.get(), kTestManyPages, kTestMiddlePage);
     }
-    // 最小宽度：再隐藏首页与末页
+    // 再隐藏首页与末页，跳页框还在
+    {
+        std::unique_ptr<DuiControl> root = BuildFooterAt(kTestTightBodyWidth, kTestManyPages, kTestMiddlePage);
+        CHECK_FALSE(IsShown(root.get(), kIdHistoryFooterInfo));
+        CHECK_FALSE(IsShown(root.get(), kIdHistoryPageFirst));
+        CHECK_FALSE(IsShown(root.get(), kIdHistoryPageLast));
+        CHECK(IsShown(root.get(), kIdHistoryPageJump));
+        CHECK(IsShown(root.get(), kIdHistoryPageJumpLabel));
+        CHECK(IsShown(root.get(), kIdHistoryPageJumpUnit));
+        CheckPageCellsShown(root.get(), kTestManyPages, kTestMiddlePage);
+    }
+    // 最小宽度：「跳至 _ 页」整组也隐藏
     {
         std::unique_ptr<DuiControl> root = BuildFooterAt(kTestNarrowBodyWidth, kTestManyPages, kTestMiddlePage);
         CHECK_FALSE(IsShown(root.get(), kIdHistoryFooterInfo));
         CHECK_FALSE(IsShown(root.get(), kIdHistoryPageFirst));
         CHECK_FALSE(IsShown(root.get(), kIdHistoryPageLast));
+        CHECK_FALSE(IsShown(root.get(), kIdHistoryPageJump));
+        CHECK_FALSE(IsShown(root.get(), kIdHistoryPageJumpLabel));
+        CHECK_FALSE(IsShown(root.get(), kIdHistoryPageJumpUnit));
+        CHECK(IsShown(root.get(), kIdHistoryClearConversation));
+        CHECK(IsShown(root.get(), kIdHistoryExport));
         CheckPageCellsShown(root.get(), kTestManyPages, kTestMiddlePage);
     }
 }
 
-TEST_CASE("V2L23 页数少时最小宽度下也放得下，首页与末页照常显示")
+TEST_CASE("V2L23 页数少时最小宽度下也放得下：页码格、跳页框与两个按钮都在")
 {
+    //页数少时首页 / 末页与页码格重复（第 1 页与最后一页本来就显示着），最小宽度下让出位置
     std::unique_ptr<DuiControl> root = BuildFooterAt(kTestNarrowBodyWidth, kTestFewPages, 1);
-    CHECK(IsShown(root.get(), kIdHistoryPageFirst));
-    CHECK(IsShown(root.get(), kIdHistoryPageLast));
+    CHECK_FALSE(IsShown(root.get(), kIdHistoryPageFirst));
+    CHECK_FALSE(IsShown(root.get(), kIdHistoryPageLast));
+    CHECK(IsShown(root.get(), kIdHistoryPageJump));
+    CHECK(IsShown(root.get(), kIdHistoryClearConversation));
+    CHECK(IsShown(root.get(), kIdHistoryExport));
     CheckPageCellsShown(root.get(), kTestFewPages, 1);
     CheckFooterNoOverlap(kTestNarrowBodyWidth, kTestFewPages, 1);
 }
@@ -1353,16 +1398,17 @@ TEST_CASE("V2L24 窄宽度下隐藏过的控件，在宽度恢复后重新排版
     std::unique_ptr<DuiControl> root = BuildFooterAt(kTestNarrowBodyWidth, kTestManyPages, kTestMiddlePage);
     REQUIRE_FALSE(IsShown(root.get(), kIdHistoryPageFirst));
 
-    // 同一棵控件树按默认宽度重新排版
-    root->ForceLayout(RECT{ 0, 0, kTestBodyWidth, kTestBodyHeight });
+    // 同一棵控件树按足够宽的宽度重新排版（默认宽度下页数多时左侧信息本来就隐藏）
+    root->ForceLayout(RECT{ 0, 0, kTestWideBodyWidth, kTestBodyHeight });
     CHECK(IsShown(root.get(), kIdHistoryFooterInfo));
     CHECK(IsShown(root.get(), kIdHistoryPageFirst));
     CHECK(IsShown(root.get(), kIdHistoryPageLast));
 
-    // 与直接按默认宽度构建的结果逐个比对位置
-    std::unique_ptr<DuiControl> direct = BuildFooterAt(kTestBodyWidth, kTestManyPages, kTestMiddlePage);
+    // 与直接按同一宽度构建的结果逐个比对位置
+    std::unique_ptr<DuiControl> direct = BuildFooterAt(kTestWideBodyWidth, kTestManyPages, kTestMiddlePage);
     const UINT ids[] = { kIdHistoryFooterInfo, kIdHistoryPageFirst, kIdHistoryPagePrev,
-                         kIdHistoryPageNext, kIdHistoryPageLast, kIdHistoryPageJump, kIdHistoryExport };
+                         kIdHistoryPageNext, kIdHistoryPageLast, kIdHistoryPageJump,
+                         kIdHistoryClearConversation, kIdHistoryExport };
     for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
     {
         const DuiControl* a = FindById(root.get(), ids[i]);
@@ -1543,8 +1589,8 @@ TEST_CASE("V2L25 按窗口换页的流程重建分页栏并重排整行后，新
 // V2L26 / V2L27  列表滚动条与聊天窗同一风格：悬浮式、自动隐藏的灰色细条
 //
 // 列表原先用 DuiScrollView 自带的滚动条：宽 10 像素、带浅灰轨道与蓝灰方形滑块，且占用
-// 列表宽度。改用主面板与公告窗已在用的 MainPanelScrollView：自带滚动条宽度置 0、内容用满
-// 视口宽度，滑块是悬浮在内容上方的 5 像素灰色圆角细条，滚动时淡入、停下后淡出。
+// 列表宽度。改用主面板与公告窗已在用的 MainPanelScrollView：内容用满视口宽度，滑块是悬浮在
+// 内容上方的 5 像素灰色圆角细条，滚动时淡入、停下后淡出（2026-10-04 起即 balloonui 统一的滚动条）。
 // =====================================================================
 
 namespace {
@@ -1582,11 +1628,15 @@ TEST_CASE("V2L26 列表滚动视口是悬浮式自动隐藏的 MainPanelScrollVi
     balloonmain::MainPanelScrollView* overlay =
         dynamic_cast<balloonmain::MainPanelScrollView*>(root->FindCtrlById(kIdHistoryScroll));
     REQUIRE(overlay != nullptr);
-    CHECK(overlay->GetScrollBarWidth() == 0);
+    REQUIRE(overlay->GetScrollBar() != nullptr);
+    CHECK(overlay->GetScrollBar()->IsAutoHide());
+    // 命中带保持默认宽度：置 0 就完全没有滚动条（2026-10-04 界面核对时发现过这一遗漏）
+    CHECK(overlay->GetScrollBarWidth() == DuiScrollBar::kOverlayBandPx);
 
-    // 内容超出视口时，列表内容仍然用满视口宽度，不为滚动条让出一列
+    // 内容超出视口时，列表内容仍然用满视口宽度，不为滚动条让出一列；滚动条出现
     DuiScrollView* scroll = FillOverflowRows(root.get());
     REQUIRE(scroll->GetContent() != nullptr);
+    CHECK(scroll->GetScrollBar()->IsVisible());
     const RECT rcView = scroll->GetRect();
     const RECT rcContent = scroll->GetContent()->GetRect();
     INFO("viewport (" << rcView.left << ", " << rcView.right << "), content (" << rcContent.left
@@ -2022,3 +2072,171 @@ TEST_CASE("DR9 「选日期」弹层：两组年月日与两个按钮，点哪�
     CHECK(HistoryDatePopupActionFromNotify((UINT)DuiEdit::DUIN_EDIT_ENTER, kIdDatePopupJump) == kHistoryDatePopupNone);
 }
 
+// =====================================================================
+// HWL-C1~C2 —— 底部「清空聊天记录」按钮（2026-10-03 从聊天窗头部移到这里，放在「导出」左边）
+// =====================================================================
+
+TEST_CASE("HWL-C1 底部一行有「清空聊天记录」，紧挨在「导出」左边、与「导出」等高；关掉开关时没有", "[history][clearconv]")
+{
+    std::unique_ptr<DuiControl> root = BuildFooterAt(kTestBodyWidth, kTestFewPages, 1);
+    const DuiControl* clear = FindById(root.get(), kIdHistoryClearConversation);
+    const DuiControl* exportBtn = FindById(root.get(), kIdHistoryExport);
+    REQUIRE(dynamic_cast<const DuiButton*>(clear) != nullptr);
+    REQUIRE(exportBtn != nullptr);
+    CHECK(clear->IsVisible());
+
+    //同一行、子控件顺序里紧挨在「导出」前面
+    REQUIRE(clear->GetParent() == exportBtn->GetParent());
+    const std::vector<std::unique_ptr<DuiControl>>& kids = exportBtn->GetParent()->Children();
+    size_t clearAt = kids.size();
+    size_t exportAt = kids.size();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        if (kids[i].get() == clear)
+            clearAt = i;
+        if (kids[i].get() == exportBtn)
+            exportAt = i;
+    }
+    CHECK(clearAt + 1 == exportAt);
+
+    //排版后在「导出」左边、与它等高且上下对齐
+    const RECT rcClear = clear->GetRect();
+    const RECT rcExport = exportBtn->GetRect();
+    CHECK(rcClear.right > rcClear.left);
+    CHECK(rcClear.right <= rcExport.left);
+    CHECK(rcClear.top == rcExport.top);
+    CHECK(rcClear.bottom == rcExport.bottom);
+    const DuiButton* button = dynamic_cast<const DuiButton*>(clear);
+    CHECK(button->GetText() == CString(_T("清空聊天记录")));
+
+    //调试入口没有主面板，窗口把开关关掉：这一行里没有这个按钮
+    HistoryViewData data;
+    FillMockHistory(data);
+    data.m_showClearConversation = false;
+    std::unique_ptr<DuiControl> noClear = BuildHistoryWindowBody(data);
+    REQUIRE(noClear != nullptr);
+    CHECK(FindById(noClear.get(), kIdHistoryClearConversation) == nullptr);
+}
+
+TEST_CASE("HWL-C2 最小宽度且页码格最多时，「清空聊天记录」照常显示，与分页器等互不重叠", "[history][clearconv]")
+{
+    //底部一行逐个可见子控件检查不重叠、不越界（含新增的按钮）
+    CheckFooterNoOverlap(kTestNarrowBodyWidth, kTestManyPages, kTestMiddlePage);
+    std::unique_ptr<DuiControl> root = BuildFooterAt(kTestNarrowBodyWidth, kTestManyPages, kTestMiddlePage);
+    CHECK(IsShown(root.get(), kIdHistoryClearConversation));
+    CHECK(IsShown(root.get(), kIdHistoryExport));
+    //为它让出位置的是「跳至 _ 页」（第三级隐藏，2026-10-03 与用户确认）
+    CHECK_FALSE(IsShown(root.get(), kIdHistoryPageJump));
+    CheckPageCellsShown(root.get(), kTestManyPages, kTestMiddlePage);
+}
+
+// =====================================================================
+// TGE13b  帖子卡片与补充卡片下的缩略图（docs/帖子群方案.md 14.5，帖子群第 5g 步）
+//
+// 带图片的帖子卡片在正文下面排一行缩略图（最多 3 张，按原图宽高等比缩进 72 见方的方框），最后一张写「+N」；
+// 每张有自己的编号，单击看图、双击不转交给行（行的双击是「定位」）。
+// =====================================================================
+
+TEST_CASE("TGE13b 消息记录行里帖子卡片的缩略图：编号、「+N」、双击与排版", "[threadgroup]")
+{
+    const int kWideW = 800;     //横图原图宽
+    const int kWideH = 400;     //横图原图高
+    const int kExtra = 2;       //没显示出来的张数
+    std::vector<HistoryRowView> rows;
+    HistoryRowView card = MakeContentRow(_T("发帖：周报"), false, 9801);
+    for (size_t k = 0; k < kHistoryCardMaxThumbs; ++k)
+    {
+        HistoryCardThumbView view;
+        view.m_state = balloonchatwnd::kHistoryThumbNeedDownload;
+        view.m_width = kWideW;
+        view.m_height = kWideH;
+        card.m_cardThumbs.push_back(view);
+    }
+    card.m_cardThumbExtra = kExtra;
+    rows.push_back(card);
+    //第 1 行正文相同、没有图片
+    rows.push_back(MakeContentRow(_T("发帖：周报"), false, 9802));
+
+    std::unique_ptr<DuiControl> content = BuildListContent(rows, _T(""), _T(""), kTestListWidth);
+    REQUIRE(content != nullptr);
+    content->ForceLayout(RECT{ 0, 0, kTestListWidth, kTestLayoutHeight });
+
+    const DuiControl* row0 = FindById(content.get(), (UINT)(kIdHistoryRowBase + 0));
+    const DuiControl* row1 = FindById(content.get(), (UINT)(kIdHistoryRowBase + 1));
+    REQUIRE(row0 != nullptr);
+    REQUIRE(row1 != nullptr);
+    const RECT rcRow0 = row0->GetRect();
+
+    int expectW = 0;
+    int expectH = 0;
+    ComputeHistoryCardThumbSize(kWideW, kWideH, expectW, expectH);
+    for (size_t k = 0; k < kHistoryCardMaxThumbs; ++k)
+    {
+        const HistoryCardThumb* thumb = dynamic_cast<const HistoryCardThumb*>(
+            FindById(content.get(), (UINT)(kIdHistoryCardThumbBase + k)));
+        INFO("第 " << k << " 张");
+        REQUIRE(thumb != nullptr);
+        //一律可点：本机有图时看图，没有时先下载
+        CHECK(thumb->IsClickable());
+        CHECK(thumb->GetImageState() == balloonchatwnd::kHistoryThumbNeedDownload);
+        //只有最后一张写「+N」
+        CHECK(thumb->GetExtraCount() == ((k + 1 == kHistoryCardMaxThumbs) ? kExtra : 0));
+        //按原图宽高等比缩放，整张落在本行里
+        const RECT rc = thumb->GetRect();
+        CHECK(RectWidth(rc) == expectW);
+        CHECK(RectHeight(rc) == expectH);
+        CHECK(rc.top >= rcRow0.top);
+        CHECK(rc.bottom <= rcRow0.bottom);
+        //双击由缩略图拦下，不转交给行
+        CHECK(const_cast<HistoryCardThumb*>(thumb)->OnLButtonDblClk(POINT{ rc.left + 1, rc.top + 1 }, 0));
+    }
+    //没有图片的行不占这一段编号，行也比带缩略图的行矮
+    CHECK(FindById(content.get(), (UINT)(kIdHistoryCardThumbBase + kHistoryCardMaxThumbs)) == nullptr);
+    CHECK(RectHeight(row1->GetRect()) < RectHeight(rcRow0));
+    //缩略图那一行的高度取最高的一张（横图缩放后只有 36 像素高，不按 72 预留，下面不留空白；2026-10-08 实机发现）
+    CHECK(HistoryCardThumbStripHeight(rows[0]) == expectH);
+    CHECK(HistoryCardThumbStripHeight(rows[1]) == 0);
+}
+
+TEST_CASE("TGE13c 帖子卡片缩略图的尺寸与点击编号的换算", "[threadgroup]")
+{
+    SECTION("尺寸：按长边缩进 72 见方，小图不放大，宽高未知时为方框本身")
+    {
+        int w = 0;
+        int h = 0;
+        ComputeHistoryCardThumbSize(800, 400, w, h);
+        CHECK(w == kHistoryCardThumbPx);
+        CHECK(h == kHistoryCardThumbPx / 2);
+        ComputeHistoryCardThumbSize(300, 600, w, h);
+        CHECK(w == kHistoryCardThumbPx / 2);
+        CHECK(h == kHistoryCardThumbPx);
+        ComputeHistoryCardThumbSize(40, 30, w, h);
+        CHECK(w == 40);
+        CHECK(h == 30);
+        ComputeHistoryCardThumbSize(0, 30, w, h);
+        CHECK(w == kHistoryCardThumbPx);
+        CHECK(h == kHistoryCardThumbPx);
+        //极扁的图至少留 1 像素
+        ComputeHistoryCardThumbSize(10000, 1, w, h);
+        CHECK(w == kHistoryCardThumbPx);
+        CHECK(h == 1);
+    }
+
+    SECTION("编号：基址 + 行 × 每行张数 + 第几张；段外返回 false 且不改出参")
+    {
+        int row = -1;
+        int thumb = -1;
+        const int kRow = 5;
+        const int kThumb = 2;
+        REQUIRE(ResolveHistoryCardThumbClick((UINT)(kIdHistoryCardThumbBase + kRow * kHistoryCardMaxThumbs + kThumb),
+                                             row, thumb));
+        CHECK(row == kRow);
+        CHECK(thumb == kThumb);
+        row = -1;
+        thumb = -1;
+        CHECK_FALSE(ResolveHistoryCardThumbClick((UINT)(kIdHistoryCardThumbBase - 1), row, thumb));
+        CHECK_FALSE(ResolveHistoryCardThumbClick((UINT)(kIdHistoryCardThumbBase + kIdHistoryCardThumbCapacity), row, thumb));
+        CHECK(row == -1);
+        CHECK(thumb == -1);
+    }
+}

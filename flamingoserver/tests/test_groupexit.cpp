@@ -1,12 +1,13 @@
 ﻿/**
  *  退群、解散群、转让群主的存储层单元测试（Suite GX），test_groupexit.cpp
  *
- *  背景：解散群原先只删 t_group 与 t_group_member 两张表，群公告、加群申请、敏感词、群文件条目，
+ *  背景：解散群原先只删 t_group 与 t_group_member 两张表，群公告、加群申请、群文件条目，
  *  以及各成员对该群的收藏行、会话设置行都留在库里；退群 / 被移出时，当事人对该群的收藏行与会话
  *  设置行也不删；转让群主的三条更新语句不在一个事务里，后两条的失败还被直接忽略。本套用例覆盖
  *  修正后的行为：
  *
- *    GX1  解散：该群在八张表里的行全部删除，群消息保留，其它群与单聊的数据不受影响
+ *    GX1  解散：该群在七张表里的行全部删除，群消息保留，其它群与单聊的数据不受影响
+ *         （原为八张表，群敏感词表 t_group_sensitive_word 已于 2026-10-02 随群级敏感词删除）
  *    GX2  解散中途失败：整体回滚，群、成员与各附属行都保持原样
  *    GX3  退群 / 移出：删除当事人的成员行、对该群的收藏行与会话设置行，其余数据不动
  *    GX4  移出中途失败：整体回滚
@@ -14,7 +15,7 @@
  *    GX6  转让中途失败：整体回滚，三处都保持原样
  *    GX7  解散群号最大的群并重启服务后，新建的群不会复用这个群号。解散后群消息保留在 t_chatmsg
  *         里，若群号被新群复用，新群成员就能翻到旧群的聊天记录
- *    GX8  退群系统提示的正文：带昵称；昵称为空时用"有成员"兜底
+ *    GX8  （已删除）退群系统提示的正文——2026-10-04 起主动退群不再插提示，组装函数随之删除
  *    GX9  转让群主系统提示的正文：两端昵称齐全、缺一端、两端都缺
  *
  *  "中途失败"用 SQLite 触发器模拟：在事务里最后执行的那条语句所在的表上挂一个 RAISE(ABORT) 触发器，
@@ -27,7 +28,7 @@
  */
 #include "doctest.h"
 #include "../chatserversrc/GroupManager.h"
-#include "../chatserversrc/GroupProtocol.h"  //buildMemberLeaveTip / buildOwnerTransferTip
+#include "../chatserversrc/GroupProtocol.h"  //buildOwnerTransferTip
 #include "../chatserversrc/Protocol.h"       //group_role_xxx / conversation_group
 #include "../dbapi/DbConfig.h"
 #include "../dbapi/IDatabase.h"
@@ -132,8 +133,9 @@ std::string byGroupTarget(int64_t groupid)
 void addUser(int64_t userid, const std::string& nickname)
 {
     std::ostringstream os;
-    os << "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_register_time) VALUES("
-       << userid << ", 'u" << userid << "', '" << nickname << "', '2026-10-01 10:00:00')";
+    //f_password 非空（table_mysql.sql）；这里只是准备测试数据，不需要能登录，填空串
+    os << "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) VALUES("
+       << userid << ", 'u" << userid << "', '" << nickname << "', '', '2026-10-01 10:00:00')";
     execSql(os.str());
 }
 
@@ -180,7 +182,7 @@ void addFavoriteAndConversation(int64_t userid, int ctype, int64_t cid)
     execSql(conv.str());
 }
 
-// 给一个群写满各张附属表：一条公告、一条加群申请（丁提交）、一个敏感词、一个群文件条目、
+// 给一个群写满各张附属表：一条公告、一条加群申请（丁提交）、一个群文件条目、
 // 一条群消息，以及三名成员（甲、乙、丙）各自对该群的收藏行与会话设置行。
 void seedGroupRows(int64_t groupid)
 {
@@ -193,11 +195,6 @@ void seedGroupRows(int64_t groupid)
     req << "INSERT INTO t_group_join_request(f_groupid, f_userid, f_create_time) VALUES("
         << groupid << ", " << kUserDing << ", " << kGxTime << ")";
     execSql(req.str());
-
-    std::ostringstream word;
-    word << "INSERT INTO t_group_sensitive_word(f_groupid, f_word, f_create_time) VALUES("
-         << groupid << ", 'badword', " << kGxTime << ")";
-    execSql(word.str());
 
     std::ostringstream file;
     file << "INSERT INTO t_group_file(f_groupid, f_fileid, f_uploaderid, f_uploadtime) VALUES("
@@ -237,7 +234,7 @@ void buildTwoGroups(GroupManager& mgr, int64_t& gid, int64_t& other)
 }
 
 // 断言某个群在各张表里的行数：
-//   members：成员行数；satellite：公告、加群申请、敏感词、群文件每张表的行数；
+//   members：成员行数；satellite：公告、加群申请、群文件每张表的行数；
 //   personal：t_favorite 与 t_conversation 里指向该群的行数；messages：群消息行数。
 void checkGroupRows(int64_t groupid, int64_t groupRow, int64_t members, int64_t satellite,
                     int64_t personal, int64_t messages)
@@ -247,7 +244,6 @@ void checkGroupRows(int64_t groupid, int64_t groupRow, int64_t members, int64_t 
     CHECK(countRows("t_group_member", byGroup(groupid)) == members);
     CHECK(countRows("t_group_announcement", byGroup(groupid)) == satellite);
     CHECK(countRows("t_group_join_request", byGroup(groupid)) == satellite);
-    CHECK(countRows("t_group_sensitive_word", byGroup(groupid)) == satellite);
     CHECK(countRows("t_group_file", byGroup(groupid)) == satellite);
     CHECK(countRows("t_favorite", byGroupTarget(groupid)) == personal);
     CHECK(countRows("t_conversation", byGroupTarget(groupid)) == personal);
@@ -436,12 +432,6 @@ TEST_CASE("GX7 解散群号最大的群并重启后，新建的群不复用这�
     REQUIRE(fresh != 0);
     CHECK(fresh > other);
     testdb::cleanupDb(kGxSqliteFile);
-}
-
-TEST_CASE("GX8 退群系统提示：带昵称；昵称为空时不出现空的书名号")
-{
-    CHECK(GroupProtocol::buildMemberLeaveTip(u8"乙") == std::string(u8"「乙」退出了群聊"));
-    CHECK(GroupProtocol::buildMemberLeaveTip("") == std::string(u8"有成员退出了群聊"));
 }
 
 TEST_CASE("GX9 转让群主系统提示：两端昵称齐全、缺一端、两端都缺")

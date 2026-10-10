@@ -42,6 +42,7 @@ public:
         ToggleStatus,  // 停用 / 重新启用 当前服务号
         Delete,        // 删除当前服务号
         EditBindings,  // 修改当前服务号的绑定范围
+        Selected,      // 用户在左栏改选了服务号：AdminFrame 据此读取它的绑定（列表接口不带绑定）
     };
 
     ServicesPanel();

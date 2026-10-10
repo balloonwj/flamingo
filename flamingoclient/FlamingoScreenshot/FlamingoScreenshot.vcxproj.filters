@@ -1,0 +1,129 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Capture">
+      <UniqueIdentifier>{44a50f07-b4bd-c577-4090-1280f9eddaf5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\I18n">
+      <UniqueIdentifier>{d711daf4-ea18-2b93-2dff-ee7c91e38ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp">
+      <Filter>Source\Common\I18n</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\HostLogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\ScreenshotModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\ShotHostServices.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\ShotLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\AnnotationModel.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\CaptureCanvas.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\CaptureExclusion.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\ScreenCaptureOverlay.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\ScreenshotActions.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\ScreenshotGeometry.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\ScreenshotToolbar.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+    <ClCompile Include="Capture\ShotBgra.cpp">
+      <Filter>Capture</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="ScreenshotApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\I18n.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Common\I18n\BalloonUiText.h">
+      <Filter>Source\Common\I18n</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\ScreenshotModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\ShotHostServices.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\ShotLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\AnnotationModel.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\CaptureCanvas.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\CaptureExclusion.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\ScreenCaptureOverlay.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\ScreenshotActions.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\ScreenshotGeometry.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\ScreenshotToolbar.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+    <ClInclude Include="Capture\ShotBgra.h">
+      <Filter>Capture</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoScreenshotVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoScreenshot.def" />
+  </ItemGroup>
+</Project>

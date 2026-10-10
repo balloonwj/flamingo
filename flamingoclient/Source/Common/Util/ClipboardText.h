@@ -3,7 +3,7 @@
  *
  *  极小工具:把一段 Unicode 文本写入系统剪贴板(CF_UNICODETEXT)。仅一个 inline
  *  函数、纯 header,无需加进工程文件。供"点击账号复制到剪贴板"等场景共用
- *  (个人信息窗 CBalloonProfileDlg、联系人资料窗 CBalloonContactWindow)。
+ *  (联系人资料窗 CBalloonContactWindow、群资料对话框等;个人信息窗 CBalloonProfileDlg 2026-10-07 已删除)。
  *
  *  本工程为 _UNICODE,TCHAR == WCHAR == UTF-16,正好对应 CF_UNICODETEXT。
  *

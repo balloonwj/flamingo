@@ -47,7 +47,13 @@ enum LinkScheme
 {
     kLinkSchemeHttp  = 0,   // 正文里就写着 http://，原样打开
     kLinkSchemeHttps = 1,   // 正文里就写着 https://，原样打开
-    kLinkSchemeBare  = 2    // 正文里是 www. 开头没写协议，打开时补 https://
+    kLinkSchemeBare  = 2,   // 正文里是 www. 开头没写协议，打开时补 https://
+    // 屏幕共享的分享链接「flamingo://screenshare/<10 位链接码>」（docs/屏幕共享与录制方案.md 第 12.4.4 节）：
+    // 点击后在客户端里凭链接加入共享，不交给浏览器；链接码不合规的不识别
+    kLinkSchemeScreenShare = 3,
+    // 加群链接「flamingo://joingroup?code=<12 位随机码>」（docs/邀请入群方案.md §12）：点击后在客户端里查群并加入，
+    // 不交给浏览器；随机码不合规的不识别。与屏幕共享分享链接同属站内链接
+    kLinkSchemeJoinGroup = 4
 };
 
 /**
@@ -76,6 +82,33 @@ struct LinkSpan
  *  @return 链接区间表；没有链接时返回空表。
  */
 std::vector<LinkSpan> DetectLinks(const std::wstring& flatText);
+
+/**
+ *  从扁平文本里识别链接，分别控制网址与分享链接（屏幕共享第 25 期）。
+ *    flatText：消息正文的扁平文本。
+ *    webLinks：是否识别网址（http / https / www.）；用户关掉「识别链接」时传 false。
+ *    shareLinks：是否识别屏幕共享的分享链接（kLinkSchemeScreenShare）；它是站内功能，聊天气泡里不受「识别链接」开关影响，
+ *                消息记录窗里传 false（那里点了也无法加入）。
+ *  @return 链接区间表，按 m_off 升序、互不重叠。
+ */
+std::vector<LinkSpan> DetectLinks(const std::wstring& flatText, bool webLinks, bool shareLinks);
+
+/**
+ *  是不是屏幕共享的分享链接（第 25 期）：前缀 flamingo://screenshare/（大小写不敏感）之后正好是 10 位链接码，
+ *  链接码只用数字 2~9 与去掉 I O l o 的字母（与服务端、FlamingoMedia/Share/ShareLinkInvite 一致）。
+ *    url：链接文字。
+ *  @return 是合规的分享链接返回 true。
+ */
+bool IsScreenShareLinkUrl(const std::wstring& url);
+
+/**
+ *  是不是合规的加群链接（docs/邀请入群方案.md §12）：flamingo://joingroup?code= 之后是 12 位随机码
+ *  （判定与 net::GroupLinkProtocolClient::parseJoinUrl 相同）。
+ *    url：链接文字。
+ *    code：[出参，可为 NULL] 合规时填入小写的随机码。
+ *  @return 是合规的加群链接返回 true。
+ */
+bool IsJoinGroupLinkUrl(const std::wstring& url, std::string* code);
 
 /**
  *  一个 URL 是否允许直接打开。打开链接前<u>必须</u>过这一关 —— DetectLinks 的

@@ -20,6 +20,7 @@
                                    // IsActionAllowedInState（"当前项是哪一行、显示什么文字、
                                    // 四项能不能点"三个判定的唯一出处，本文件不另立口径）
 #include "../../net/Protocol.h"       // presence_type（取各状态的圆点色）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -100,7 +101,9 @@ void PushSeparator(std::vector<TrayMenuEntry>& items)
 } // anonymous namespace
 
 std::vector<TrayMenuEntry> BuildTrayMenuModel(TrayMenuKind kind, bool muted,
-                                              int currentPresence, int connUiState)
+                                              int currentPresence, int connUiState, int recordState,
+                                              bool withScreenShare, bool withLock, bool withMarkdown,
+                                              const wchar_t* screenshotLabel)
 {
     std::vector<TrayMenuEntry> items;
 
@@ -137,24 +140,48 @@ std::vector<TrayMenuEntry> BuildTrayMenuModel(TrayMenuKind kind, bool muted,
         // 文字与图标都随静音态切换：未静音显示"关闭所有声音"（喇叭图标，点一下转静音）；
         // 已静音显示"开启所有声音"（静音图标，点一下恢复声音）。
         PushIconItem(items, kTrayMenuMute,
-                     muted ? L"开启所有声音" : L"关闭所有声音",
+                     muted ? TR(L"开启所有声音") : TR(L"关闭所有声音"),
                      muted ? kIconMute : kIconSound);
         PushSeparator(items);
-        PushIconItem(items, kTrayMenuOpenPanel, L"打开主面板",  kIconPanel);
+        PushIconItem(items, kTrayMenuOpenPanel, TR(L"打开主面板"),  kIconPanel);
+        //截图：不依赖登录，紧跟「打开主面板」；截图功能不可用时不出现（docs/截图独立模块方案.md 3.6 节）
+        if (screenshotLabel != NULL)
+            PushIconItem(items, kTrayMenuScreenshot, screenshotLabel, kIconScreenshot);
+        //锁屏：锁屏模块不可用时不出现（docs/锁屏方案.md）
+        if (withLock)
+            PushIconItem(items, kTrayMenuLockScreen, TR(L"锁屏"), kIconLock);
+        //Markdown 编辑器：不依赖登录，排在锁屏之后；DLL 不可用时不出现（docs/Markdown消息方案.md 第 11.3 节）
+        if (withMarkdown)
+            PushIconItem(items, kTrayMenuMarkdownEditor, TR(L"Markdown 编辑器"), kIconMarkdown);
+        //发起屏幕共享：屏幕共享模块不可用时不出现；点了先选会话（屏幕共享第 17 期）
+        if (withScreenShare)
+            PushIconItem(items, kTrayMenuScreenShare, TR(L"发起屏幕共享"), kIconScreenShare);
+        //发起录制：录屏模块不可用时不出现；录制中文字为「停止录制」
+        if (recordState != kRecordMenuHidden)
+            PushIconItem(items, kTrayMenuRecord, RecordMenuLabel(recordState), kIconRecord);
         PushSeparator(items);
         // 登出排在退出上方、与之同组：两者都结束当前会话，区别在于登出之后程序继续
         // 运行并回到登录界面。图标必须区分（登出为人形加箭头、退出为门框加箭头），
         // 否则两行紧挨着无法辨认。
-        PushIconItem(items, kTrayMenuLogout,    L"登出",        kIconLogout);
-        PushIconItem(items, kTrayMenuExit,      L"退出",        kIconExit);
+        PushIconItem(items, kTrayMenuLogout,    TR(L"登出"),        kIconLogout);
+        PushIconItem(items, kTrayMenuExit,      TR(L"退出"),        kIconExit);
         return items;
     }
 
     // 未登录（kTrayBeforeLogin）与面板锁定（kTrayLocked）内容相同，对照
     // flamingo.rc "系统托盘菜单一" / "面板锁定状态"：打开主面板 ── 退出。
-    PushIconItem(items, kTrayMenuOpenPanel, L"打开主面板", kIconPanel);
+    PushIconItem(items, kTrayMenuOpenPanel, TR(L"打开主面板"), kIconPanel);
+    //截图同样不依赖登录：未登录时也能截图，结果放进剪贴板
+    if (screenshotLabel != NULL)
+        PushIconItem(items, kTrayMenuScreenshot, screenshotLabel, kIconScreenshot);
+    //锁屏不依赖登录，登录前的菜单里同样有（锁屏模块不可用时不出现）
+    if (withLock)
+        PushIconItem(items, kTrayMenuLockScreen, TR(L"锁屏"), kIconLock);
+    //Markdown 编辑器同样不依赖登录（DLL 不可用时不出现）
+    if (withMarkdown)
+        PushIconItem(items, kTrayMenuMarkdownEditor, TR(L"Markdown 编辑器"), kIconMarkdown);
     PushSeparator(items);
-    PushIconItem(items, kTrayMenuExit,      L"退出",       kIconExit);
+    PushIconItem(items, kTrayMenuExit,      TR(L"退出"),       kIconExit);
     return items;
 }
 

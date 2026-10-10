@@ -37,6 +37,7 @@
 
 #include "ChatInlineText.h"
 #include "ChatTextExtentCache.h"   // 逐词元测宽的结果缓存（排版的主要开销在逐字的 GDI 测量）
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonchatwnd {
 
@@ -111,15 +112,20 @@ Gdiplus::Bitmap* GetFaceGdiBitmapCached(int faceId)
 // 一个折行 token。除了用于测量 / 绘制的文本，还带上它在<u>源串</u>里占的区间 ——
 // 选中复制要把屏幕坐标映射回原文下标，而 token 文本与源串并非处处等长（\r\n 会被
 // 归一成一个 "\n"），只靠 token 文本长度累加会错位。
+//
+// 词元只记它在源串里的位置，不再各自复制出一份字符串（2026-10-04）：中文每个字单独成一个词元，
+// 一万字的消息原先要为切词元分配上万个小字符串。测量与绘制用的文字就是源串里的
+// [m_srcBegin, m_srcBegin + m_srcCount) 这一段；显式换行例外，由 m_newline 标出。
 struct WrapToken
 {
-    CString m_text;       // 测量 / 绘制用的文本
-    int     m_srcBegin;   // 在源串里的起始下标
-    int     m_srcCount;   // 在源串里占的字符数（\r\n 为 2，其余等于 m_text 长度）
+    int  m_srcBegin;   // 在源串里的起始下标
+    int  m_srcCount;   // 在源串里占的字符数（\r\n 为 2，其余就是测量 / 绘制用的文字长度）
+    bool m_newline;    // 是否显式换行（\r、\n 或 \r\n）；为 true 时不测量、不放置
 
     WrapToken()
         : m_srcBegin(0)
         , m_srcCount(0)
+        , m_newline(false)
     {
     }
 };
@@ -127,6 +133,8 @@ struct WrapToken
 void TokenizeForWrap(const CString& s, std::vector<WrapToken>& out)
 {
     const int n = s.GetLength();
+    // 词元数不会超过字符数，一次留足容量，免得逐个追加时反复扩容搬移
+    out.reserve(out.size() + (size_t)n);
     int i = 0;
     while (i < n)
     {
@@ -140,7 +148,6 @@ void TokenizeForWrap(const CString& s, std::vector<WrapToken>& out)
             {
                 ++j;
             }
-            tok.m_text = s.Mid(i, j - i);
             i = j;
         }
         else if (c == L'\r' || c == L'\n')
@@ -150,7 +157,7 @@ void TokenizeForWrap(const CString& s, std::vector<WrapToken>& out)
             {
                 ++j;   // \r\n 视作一个换行
             }
-            tok.m_text = CString(_T("\n"));
+            tok.m_newline = true;
             i = j;
         }
         else if (c < 0x80)
@@ -161,18 +168,148 @@ void TokenizeForWrap(const CString& s, std::vector<WrapToken>& out)
             {
                 ++j;
             }
-            tok.m_text = s.Mid(i, j - i);
             i = j;
         }
         else
         {
-            tok.m_text = s.Mid(i, 1);
             ++i;
         }
         tok.m_srcCount = i - tok.m_srcBegin;
         out.push_back(tok);
     }
 }
+
+// 一次排版内单字词元的测量结果与文字（2026-10-04）。中文每个字单独成一个词元，一条长消息里同一个
+// 字反复出现；进程级的测宽缓存每查一次都要构造键、加锁、查两层表，这里先在本次排版内记下每个字
+// 第一次查到的宽高，之后直接取。结果与每次都查缓存完全相同（缓存对同一个字总是返回同一个值）。
+// 同一个字的文字也只建一份 CString，各放置项按引用计数共用，不再各自分配。
+// 只在一次 LayoutInlineContent 调用内使用，不跨调用、不跨线程。
+
+// SingleCharMemo 记录表的初始容量（项），必须是 2 的幂；短消息用不满，长消息按需翻倍
+const size_t kCharMemoInitialCapacity = 64;
+// SingleCharMemo 记录表的容量上限（项），必须是 2 的幂；一条消息里不同的字超过它的一半后不再记录
+const size_t kCharMemoMaxCapacity = 8192;
+
+class SingleCharMemo
+{
+public:
+    SingleCharMemo()
+        : m_used(0)
+    {
+    }
+
+    // 取字符 ch 的宽高：本次排版内第一次遇到时查进程级缓存并记下，之后直接返回记下的值。
+    // 记录表满了（本次排版里不同的字超过上限）就直接查缓存，不再记录。
+    SIZE Extent(HDC hdc, const TextExtentFontKey& key, ChatTextExtentCache& cache, wchar_t ch)
+    {
+        Entry* e = Find(ch);
+        if (e != NULL)
+        {
+            return e->m_size;
+        }
+        const SIZE size = cache.TextExtent(hdc, key, &ch, 1);
+        Insert(ch, size);
+        return size;
+    }
+
+    // 字符 ch 的文字。记录过的字返回共用的那一份；没记录（表满）时新建一份
+    CString Text(wchar_t ch)
+    {
+        Entry* e = Find(ch);
+        if (e != NULL)
+        {
+            return e->m_text;
+        }
+        return CString(ch);
+    }
+
+private:
+    // 记录表的一项
+    struct Entry
+    {
+        wchar_t m_ch;     // 字符；m_used 为 false 时无意义
+        bool    m_used;   // 本项是否已经记录了一个字
+        SIZE    m_size;   // 该字的宽高（逻辑单位）
+        CString m_text;   // 该字的文字，各放置项共用
+
+        Entry()
+            : m_ch(0)
+            , m_used(false)
+        {
+            m_size.cx = 0;
+            m_size.cy = 0;
+        }
+    };
+
+    // 开放定址、线性探测：查找字符 ch 所在的项，没有记录时返回 NULL
+    Entry* Find(wchar_t ch)
+    {
+        if (m_table.empty())
+        {
+            return NULL;
+        }
+        const size_t mask = m_table.size() - 1;
+        for (size_t i = (size_t)ch & mask; ; i = (i + 1) & mask)
+        {
+            Entry& e = m_table[i];
+            if (!e.m_used)
+            {
+                return NULL;
+            }
+            if (e.m_ch == ch)
+            {
+                return &e;
+            }
+        }
+    }
+
+    // 记录一个新字。装填超过一半时容量翻倍并重新放置；已到上限则不记录
+    void Insert(wchar_t ch, const SIZE& size)
+    {
+        if (m_table.empty())
+        {
+            m_table.resize(kCharMemoInitialCapacity);
+        }
+        if ((m_used + 1) * 2 > m_table.size())
+        {
+            if (m_table.size() >= kCharMemoMaxCapacity)
+            {
+                return;
+            }
+            std::vector<Entry> old;
+            old.swap(m_table);
+            m_table.resize(old.size() * 2);
+            m_used = 0;
+            for (size_t k = 0; k < old.size(); ++k)
+            {
+                if (old[k].m_used)
+                {
+                    Place(old[k].m_ch, old[k].m_size, old[k].m_text);
+                }
+            }
+        }
+        Place(ch, size, CString(ch));
+    }
+
+    // 把一项放进当前的表（调用方已保证表里还有空位）
+    void Place(wchar_t ch, const SIZE& size, const CString& textOfCh)
+    {
+        const size_t mask = m_table.size() - 1;
+        size_t i = (size_t)ch & mask;
+        while (m_table[i].m_used)
+        {
+            i = (i + 1) & mask;
+        }
+        m_table[i].m_ch = ch;
+        m_table[i].m_used = true;
+        m_table[i].m_size = size;
+        m_table[i].m_text = textOfCh;
+        ++m_used;
+    }
+
+    std::vector<Entry> m_table;   // 记录表，容量为 0 或 2 的幂；第一次记录时才分配
+    size_t             m_used;    // 已记录的字数
+};
 
 // 把一个"本身就比整行可用宽度还宽"的文字词元按字符切开、逐行填进排版结果。
 //
@@ -319,6 +456,7 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
     //（50 条消息的首次测量里约占一半以上）。缓存键取自当前选入 hdc 的字体，每次排版取一次
     const TextExtentFontKey fontKey = TextExtentFontKey::FromDc(hdc);
     ChatTextExtentCache& extentCache = ChatTextExtentCache::Inst();
+    SingleCharMemo charMemo;   // 本次排版内单字词元的宽高与文字，见 SingleCharMemo
 
     int x = 0;
     int y = 0;
@@ -375,6 +513,12 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
         {
             std::vector<WrapToken> tokens;
             TokenizeForWrap(seg.m_strText, tokens);
+            const LPCWSTR segText = seg.m_strText;   // 词元文字就是这段源串里的一截
+            if (outPlaced != NULL)
+            {
+                // 放置项一般一个词元一项（超长词元被切开时才多出几项），按词元数留足容量
+                outPlaced->reserve(outPlaced->size() + tokens.size());
+            }
             for (size_t ti = 0; ti < tokens.size() && !truncated; ++ti)
             {
                 // 每个词元排之前都过一次上限：显式换行走的是 continue，
@@ -386,11 +530,10 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                 }
 
                 const WrapToken& wt = tokens[ti];
-                const CString&   tok = wt.m_text;
                 const int tokCharBegin = charPos;
                 charPos += wt.m_srcCount;   // 无论放不放置，游标都要推进
 
-                if (tok == _T("\n"))   // 显式换行
+                if (wt.m_newline)   // 显式换行
                 {
                     if (x > maxLineW)
                     {
@@ -400,8 +543,12 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                     y += lineH;
                     continue;
                 }
-                const SIZE ts = extentCache.TextExtent(hdc, fontKey, tok, tok.GetLength());
-                const bool isSpace = (tok[0] == L' ' || tok[0] == L'\t');
+                const LPCWSTR tokText = segText + wt.m_srcBegin;
+                const int     tokLen = wt.m_srcCount;
+                const SIZE ts = (tokLen == 1)
+                                ? charMemo.Extent(hdc, fontKey, extentCache, tokText[0])
+                                : extentCache.TextExtent(hdc, fontKey, tokText, tokLen);
+                const bool isSpace = (tokText[0] == L' ' || tokText[0] == L'\t');
                 if (x > 0 && x + ts.cx > maxW)
                 {
                     if (x > maxLineW)
@@ -425,7 +572,7 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                 // 否则会一路画出气泡边界之外。
                 if (ts.cx > maxW)
                 {
-                    PlaceOverlongToken(hdc, tok, tokCharBegin, maxW, lineH,
+                    PlaceOverlongToken(hdc, CString(tokText, tokLen), tokCharBegin, maxW, lineH,
                                        outPlaced, x, y, maxLineW, maxLines, truncated);
                     continue;
                 }
@@ -434,7 +581,7 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                     InlinePlaced p;
                     p.isFace = false;
                     p.faceId = -1;
-                    p.text = tok;
+                    p.text = (tokLen == 1) ? charMemo.Text(tokText[0]) : CString(tokText, tokLen);
                     p.rc.left = x;
                     p.rc.top = y;
                     p.rc.right = x + ts.cx;
@@ -514,6 +661,20 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
     const TextExtentFontKey fontKey = TextExtentFontKey::FromDc(hdc);
     ChatTextExtentCache& extentCache = ChatTextExtentCache::Inst();
 
+    // 先数出行数与每行的段数，一次留足容量（2026-10-04）。每一段都带一个逐字符右边界数组，数组随行内
+    // 段数增长而扩容时，已有的段要整体搬移一遍；调试版运行库下每个 std::vector 的构造与搬移都伴随堆分配，
+    // 一万字的消息有四千来段，这部分开销比测宽本身还大。分行的判定与下面建模时完全相同：top 变了就是换了一行。
+    std::vector<size_t> runsPerLine;
+    for (size_t i = 0; i < placed.size(); ++i)
+    {
+        if (i == 0 || placed[i].rc.top != placed[i - 1].rc.top)
+        {
+            runsPerLine.push_back(0);
+        }
+        ++runsPerLine.back();
+    }
+    out.m_lines.reserve(runsPerLine.size());
+
     for (size_t i = 0; i < placed.size(); ++i)
     {
         const InlinePlaced& p = placed[i];
@@ -521,10 +682,11 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
         // 放置项按文档顺序产出，top 变了就是换了一行。
         if (out.m_lines.empty() || out.m_lines.back().m_top != p.rc.top)
         {
-            SelLine line;
-            line.m_top    = p.rc.top;
-            line.m_bottom = p.rc.bottom;
-            out.m_lines.push_back(line);
+            out.m_lines.emplace_back();
+            SelLine& newLine = out.m_lines.back();
+            newLine.m_top    = p.rc.top;
+            newLine.m_bottom = p.rc.bottom;
+            newLine.m_runs.reserve(runsPerLine[out.m_lines.size() - 1]);
         }
         SelLine& line = out.m_lines.back();
         // 同一行里表情格比文字矮 / 高时，行高取最大，保证选区高亮盖住整行。
@@ -533,7 +695,9 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
             line.m_bottom = p.rc.bottom;
         }
 
-        SelRun run;
+        // 段直接在行内数组里原地构造（容量已经留足，不会搬移），不再先建一个临时对象再移进去
+        line.m_runs.emplace_back();
+        SelRun& run = line.m_runs.back();
         run.m_charBegin = p.charBegin;
         run.m_charCount = p.charCount;
         run.m_left      = p.rc.left;
@@ -543,6 +707,12 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
         {
             run.m_charRights.push_back(p.rc.right);
             run.m_charCount = 1;
+        }
+        else if (p.charCount == 1 && p.text.GetLength() == 1)
+        {
+            // 只有一个字符的文字段（中文每个字单独成段，长消息里这类段占大多数）：它的右边界就是
+            // 放置矩形的右边界 —— 排版时正是按这个字符的宽度算出来的，不必再查一次逐字符宽度
+            run.m_charRights.push_back(p.rc.right);
         }
         else
         {
@@ -561,9 +731,6 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
                     p.rc.left + (p.rc.right - p.rc.left) * k / run.m_charCount);
             }
         }
-
-        // run 此后不再使用，移入而不是复制（复制会把 m_charRights 再分配一遍）
-        line.m_runs.push_back(std::move(run));
     }
 }
 
@@ -651,7 +818,7 @@ HFONT CreateInlineFont(const InlineTextStyle& st)
         st.underline ? TRUE : FALSE,
         st.strike ? TRUE : FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
 }
 
 } // anonymous namespace

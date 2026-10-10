@@ -11,6 +11,7 @@
 #include "Widgets/IconRenderer.h"
 #include "Widgets/Widgets.h"
 #include "Widgets/CommonWidgets.h"
+#include "Widgets/OverlayScrollbar.h"   // 内容放不下时右缘的悬浮滚动条
 
 #include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
@@ -58,6 +59,10 @@ const int kC2ConfLbl = 202;  // 确认新密码标签
 const int kC2ConfEd  = 222;  // 确认新密码输入框
 const int kC2Btn     = 274;  // 「修改密码」按钮
 const int kCard2H    = kC2Btn + kBtnH + 20;   // 修改密码卡总高
+
+// 滚动（2026-10-05）
+const int kBottomPad = 24;   // 最下面一张卡之下留出的空白，滚到底时卡片不贴着界面底边
+const int kWheelStep = 48;   // 滚轮每格（WHEEL_DELTA）滚动的像素数
 
 // 构造一个统一风格的输入框。
 //   id：控件 ID；placeholder：占位文字；password：是否密码模式。
@@ -116,6 +121,12 @@ SettingsScreen::SettingsScreen()
     changeBtn->SetTextPointSize(theme::kFontSizeNormal);
     m_btnChangePw = changeBtn.get();
     AddChild(std::move(changeBtn));
+
+    // 悬浮滚动条：最后加入，命中测试时先于其它子控件
+    std::unique_ptr<OverlayScrollbar> sb(new OverlayScrollbar());
+    sb->SetOnScroll(&SettingsScreen::OnScrollbarScroll, this);
+    m_scrollbar = sb.get();
+    AddChild(std::move(sb));
 }
 
 void SettingsScreen::SetProfile(const CString& name, const CString& email,
@@ -179,7 +190,18 @@ void SettingsScreen::Layout(const RECT& rcAvail)
     {
         cardW = kCardW;
     }
-    const int card1Top = rcAvail.top + kHeaderH + kCardGap;
+
+    // 内容总高（与滚动无关）：页头 + 两张卡，最下面一张卡之下留 kBottomPad。据此算出最大滚动偏移并夹取当前偏移。
+    const int contentH = kHeaderH + kCardGap + kCard1H + kCardGap + kCard2H + kBottomPad;
+    const int viewH = rcAvail.bottom - rcAvail.top;
+    m_scrollMax = (contentH > viewH) ? (contentH - viewH) : 0;
+    if (m_scroll > m_scrollMax)
+        m_scroll = m_scrollMax;
+    if (m_scroll < 0)
+        m_scroll = 0;
+
+    // 内容顶边随滚动上移
+    const int card1Top = rcAvail.top - m_scroll + kHeaderH + kCardGap;
     m_card1Rc = RECT{ contentL, card1Top, contentL + cardW, card1Top + kCard1H };
     const int card2Top = m_card1Rc.bottom + kCardGap;
     m_card2Rc = RECT{ contentL, card2Top, contentL + cardW, card2Top + kCard2H };
@@ -202,6 +224,45 @@ void SettingsScreen::Layout(const RECT& rcAvail)
                                        fieldR, m_card2Rc.top + kC2ConfEd + kEditH });
     m_btnChangePw->ForceLayout(RECT{ fieldR - kBtnW, m_card2Rc.top + kC2Btn,
                                      fieldR, m_card2Rc.top + kC2Btn + kBtnH });
+
+    // 悬浮滚动条：贴本界面右缘、与本界面等高；内容放得下时它不显示也不命中
+    m_scrollbar->ForceLayout(RECT{ rcAvail.right - OverlayScrollbar::kSuggestedWidth, rcAvail.top,
+                                   rcAvail.right, rcAvail.bottom });
+    m_scrollbar->SetMetrics(contentH, m_scroll);
+}
+
+bool SettingsScreen::OnMouseWheel(POINT /*pt*/, short zDelta, UINT /*mkFlags*/)
+{
+    if (!m_bVisible || m_scrollMax <= 0)
+    {
+        return false;
+    }
+    ScrollTo(m_scroll - (static_cast<int>(zDelta) * kWheelStep) / WHEEL_DELTA);
+    m_scrollbar->Flash();
+    return true;
+}
+
+void SettingsScreen::ScrollTo(int scroll)
+{
+    if (scroll > m_scrollMax)
+        scroll = m_scrollMax;
+    if (scroll < 0)
+        scroll = 0;
+    if (scroll == m_scroll)
+        return;
+    m_scroll = scroll;
+    // 重新摆放子控件，并同步滚动条
+    ForceLayout(m_rcItem);
+    Invalidate();
+}
+
+void SettingsScreen::OnScrollbarScroll(void* ctx, int newScroll)
+{
+    SettingsScreen* self = static_cast<SettingsScreen*>(ctx);
+    if (self != nullptr)
+    {
+        self->ScrollTo(newScroll);
+    }
 }
 
 void SettingsScreen::OnPaint(HDC hdc, const RECT& rcDirty)
@@ -212,22 +273,26 @@ void SettingsScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     }
     ui::FillSolidRect(hdc, m_rcItem, theme::kInk25);
 
+    // 内容随滚动上移，裁剪到本界面矩形：滚出本界面的部分不画到顶栏等相邻区域上
+    const int savedDc = ::SaveDC(hdc);
+    ::IntersectClipRect(hdc, m_rcItem.left, m_rcItem.top, m_rcItem.right, m_rcItem.bottom);
     const int L = m_rcItem.left;
     const int R = m_rcItem.right;
+    const int top = m_rcItem.top - m_scroll;
 
     // ---- 页头 ----
-    ui::FillSolidRect(hdc, RECT{ L, m_rcItem.top, R, m_rcItem.top + kHeaderH },
+    ui::FillSolidRect(hdc, RECT{ L, top, R, top + kHeaderH },
                       theme::kInk0);
     ui::DrawTextLine(hdc, _T("账户"),
-                     RECT{ L + kSidePad, m_rcItem.top + 20, L + 300, m_rcItem.top + 36 },
+                     RECT{ L + kSidePad, top + 20, L + 300, top + 36 },
                      theme::kFlamingo600, ui::UiFont(kEyebrowPt, true),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     ui::DrawTextLine(hdc, _T("平台设置"),
-                     RECT{ L + kSidePad, m_rcItem.top + 36, L + 400, m_rcItem.top + 68 },
+                     RECT{ L + kSidePad, top + 36, L + 400, top + 68 },
                      theme::kInk700, ui::UiFont(kPageTitlePt, true),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     ui::DrawTextLine(hdc, _T("管理你的管理员资料与登录密码"),
-                     RECT{ L + kSidePad, m_rcItem.top + 68, L + 600, m_rcItem.top + 88 },
+                     RECT{ L + kSidePad, top + 68, L + 600, top + 88 },
                      theme::kInk400, ui::UiFont(theme::kFontSizeNormal, false),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
@@ -271,8 +336,9 @@ void SettingsScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     DrawFieldLabel(hdc, _T("新密码"),     c2L, c2R, m_card2Rc.top + kC2NewLbl);
     DrawFieldLabel(hdc, _T("确认新密码"), c2L, c2R, m_card2Rc.top + kC2ConfLbl);
 
-    // 子控件（输入框 + 按钮）。
+    // 子控件（输入框、按钮与滚动条），同样裁剪到本界面矩形。
     balloonwjui::DuiControl::OnPaint(hdc, rcDirty);
+    ::RestoreDC(hdc, savedDc);
 }
 
 } // namespace flamingoadmin

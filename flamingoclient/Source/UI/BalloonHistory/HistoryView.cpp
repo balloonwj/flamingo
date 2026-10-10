@@ -6,7 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../net/Protocol.h"   // message_type_*（全局命名空间）
+#include "../../net/MessageProtocolClient.h"   // threadCardDigest / parseThreadCardContent：帖子卡片的预览文字
 #include "../../third-party/jsoncpp-1.9.0/json.h"
+#include "../../Common/I18n/I18n.h"   // TR8 / TRF8：UTF-8 界面文字的多语言查找
+#include "../../net/SystemTipText.h"   // FormatSystemTipFromContent：系统提示按当前界面语言生成文字
+#include "../../net/VoiceContent.h"    // VoiceDurationText：语音时长的文字
+#include "../BalloonChatWnd/ChatMarkdownContent.h"   // DigestFromContent：Markdown 消息的判断与摘要（不依赖 ATL）
 
 namespace balloonhistory {
 
@@ -25,6 +30,14 @@ static bool ParseObject(const std::string& json, Json::Value& root)
     return ok && errs.empty() && root.isObject();
 }
 
+//把 content 列里的 threadcard 子对象写回紧凑 JSON 文本，交给 MessageProtocolClient::parseThreadCardContent
+static std::string ThreadCardJson(const Json::Value& card)
+{
+    Json::StreamWriterBuilder w;
+    w["indentation"] = "";
+    return Json::writeString(w, card);
+}
+
 std::string PreviewFromContent(int msgtype, const std::string& contentJson)
 {
     Json::Value root;
@@ -40,7 +53,7 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson)
         return std::string();
     case ::message_type_image:
     case ::message_type_screenshot:
-        return "[图片]";
+        return TR8("[图片]");
     case ::message_type_file:
         //文件：带上文件名便于一眼辨认。
         if (ok && root.isMember("file") && root["file"].isObject())
@@ -48,10 +61,10 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson)
             const Json::Value& file = root["file"];
             if (file.isMember("name") && file["name"].isString() && !file["name"].asString().empty())
             {
-                return std::string("[文件] ") + file["name"].asString();
+                return TR8("[文件]") + " " + file["name"].asString();
             }
         }
-        return "[文件]";
+        return TR8("[文件]");
     case ::message_type_folder:
         //文件夹传输记录：带上文件夹名，体例与文件那条一致（"[文件] 名字"）。
         //只写名字、不写规模统计与结局 —— 列表一行的横向空间有限，规模与结局由
@@ -62,19 +75,38 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson)
             if (folder.isMember("foldername") && folder["foldername"].isString()
                 && !folder["foldername"].asString().empty())
             {
-                return std::string("[文件夹] ") + folder["foldername"].asString();
+                return TR8("[文件夹]") + " " + folder["foldername"].asString();
             }
         }
-        return "[文件夹]";
+        return TR8("[文件夹]");
+    //语音：「[语音] 8″」，时长取自 voice 子对象（本地库的 BuildContentJson 写成整数，转发来的也可能是字符串）；
+    //取不到时只写「[语音]」
     case ::message_type_voice:
-        return "[语音]";
+        if (ok && root.isMember("voice") && root["voice"].isObject())
+        {
+            const Json::Value& voice = root["voice"];
+            int seconds = 0;
+            if (voice.isMember("duration") && voice["duration"].isInt())
+            {
+                seconds = voice["duration"].asInt();
+            }
+            else if (voice.isMember("duration") && voice["duration"].isString())
+            {
+                seconds = atoi(voice["duration"].asCString());
+            }
+            if (seconds > 0)
+            {
+                return TR8("[语音]") + " " + net::VoiceDurationText(seconds);
+            }
+        }
+        return TR8("[语音]");
     case ::message_type_emoji:
         //动画表情：与会话列表 digestForMsgType 口径对齐，显示“[表情]”。
-        return "[表情]";
+        return TR8("[表情]");
     case ::message_type_shake:
         //窗口抖动：与会话列表 digestForMsgType 口径对齐，显示“[抖一抖]”，
         //不再落到通用“[消息]”兜底（此前缺本分支导致抖动消息显示成“[消息]”）。
-        return "[抖一抖]";
+        return TR8("[抖一抖]");
     //合并转发的聊天记录：「[聊天记录] 标题」，标题取自 merged 子对象；取不到时只写
     //「[聊天记录]」，与会话列表摘要 digestForMsgType 的类型文字一致
     case ::message_type_merged:
@@ -84,14 +116,142 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson)
             if (merged.isMember("title") && merged["title"].isString()
                 && !merged["title"].asString().empty())
             {
-                return std::string("[聊天记录] ") + merged["title"].asString();
+                return TR8("[聊天记录]") + " " + merged["title"].asString();
             }
         }
-        return "[聊天记录]";
+        return TR8("[聊天记录]");
+    //系统提示（入群、退群、转让群主、接龙的参与 / 结束等）：取提示文字；2026-10-03 之前落库的旧行 content
+    //是空对象，取不到时写「[系统消息]」，不再落到通用的「[消息]」
+    case ::message_type_system:
+    {
+        //带结构化类型的提示（多语言第 5 期）按查看时的界面语言重新生成；认不出的类型与旧行取落库时的文字
+        std::string localized;
+        if (ok && net::FormatSystemTipFromContent(root, localized))
+        {
+            return localized;
+        }
+        if (ok && root.isMember("text") && root["text"].isString() && !root["text"].asString().empty())
+        {
+            return root["text"].asString();
+        }
+        return TR8("[系统消息]");
+    }
+    //群接龙卡片：「[接龙] 标题」，标题取自 relay 子对象（见 V2MsgQuery.cpp 的 BuildContentJson）；
+    //取不到时只写「[接龙]」，与会话列表摘要 digestForNotify 一致
+    case ::message_type_relay:
+        if (ok && root.isMember("relay") && root["relay"].isObject())
+        {
+            const Json::Value& relay = root["relay"];
+            if (relay.isMember("title") && relay["title"].isString()
+                && !relay["title"].asString().empty())
+            {
+                return TR8("[接龙]") + " " + relay["title"].asString();
+            }
+        }
+        return TR8("[接龙]");
+    //文件共享卡片：「[共享] 名称」，名称取自 share 子对象（见 V2MsgQuery.cpp 的 BuildContentJson）；
+    //取不到时只写「[共享]」，与会话列表摘要 digestForNotify 一致
+    case ::message_type_fileshare:
+        if (ok && root.isMember("share") && root["share"].isObject())
+        {
+            const Json::Value& share = root["share"];
+            if (share.isMember("name") && share["name"].isString() && !share["name"].asString().empty())
+            {
+                return TR8("[共享]") + " " + share["name"].asString();
+            }
+        }
+        return TR8("[共享]");
+    //屏幕共享卡片：只写类型，与会话列表摘要 digestForNotify 一致
+    case ::message_type_screenshare:
+        return TR8("[屏幕共享]");
+    //群通话卡片：按 groupcall 子对象的媒体类型写「[群语音通话]」「[群视频通话]」（见 V2MsgQuery.cpp 的 BuildContentJson），
+    //与会话列表摘要 digestForNotify 一致
+    case ::message_type_rtc:
+        if (ok && root.isMember("groupcall") && root["groupcall"].isObject())
+        {
+            const Json::Value& call = root["groupcall"];
+            //kind 为 groupcall 才是群通话卡片；media 为 2 是群视频（docs/协议设计-v2.md 21.5）
+            const int kGroupCallVideo = 2;
+            if (call["kind"].isString() && call["kind"].asString() == "groupcall")
+            {
+                return (call["media"].isInt() && call["media"].asInt() == kGroupCallVideo) ? TR8("[群视频通话]")
+                                                                                          : TR8("[群语音通话]");
+            }
+            //kind 为 call 是一对一通话卡片（7.8 节「一对一通话卡片」），视频同样为 2；与会话列表摘要一致
+            if (call["kind"].isString() && call["kind"].asString() == "call")
+            {
+                return (call["media"].isInt() && call["media"].asInt() == kGroupCallVideo) ? TR8("[视频通话]")
+                                                                                          : TR8("[语音通话]");
+            }
+        }
+        return TR8("[通话]");
+    //入群邀请卡片：「[入群邀请] 群名」，群名取自 groupinvite 子对象（见 V2MsgQuery.cpp 的 BuildContentJson）；
+    //取不到时只写「[入群邀请]」，与会话列表摘要 digestForNotify 一致
+    case ::message_type_group_invite:
+        if (ok && root.isMember("groupinvite") && root["groupinvite"].isObject())
+        {
+            const Json::Value& invite = root["groupinvite"];
+            if (invite.isMember("groupname") && invite["groupname"].isString()
+                && !invite["groupname"].asString().empty())
+            {
+                return TR8("[入群邀请]") + " " + invite["groupname"].asString();
+            }
+        }
+        return TR8("[入群邀请]");
+    //群公告卡片：「[群公告] 标题」，标题取自 announcement 子对象（见 V2MsgQuery.cpp 的 BuildContentJson）；
+    //已删除的卡片同样只写标题；取不到时只写「[群公告]」，与会话列表摘要 digestForNotify 一致
+    case ::message_type_announcement:
+        if (ok && root["announcement"].isObject() && root["announcement"]["title"].isString()
+            && !root["announcement"]["title"].asString().empty())
+        {
+            return TR8("[群公告]") + " " + root["announcement"]["title"].asString();
+        }
+        return TR8("[群公告]");
+    //群备忘卡片：「[群备忘] 标题」，标题取自 memocard 子对象；取不到时只写「[群备忘]」
+    case ::message_type_memo:
+        if (ok && root["memocard"].isObject() && root["memocard"]["title"].isString()
+            && !root["memocard"]["title"].asString().empty())
+        {
+            return TR8("[群备忘]") + " " + root["memocard"]["title"].asString();
+        }
+        return TR8("[群备忘]");
+    //帖子卡片、帖子动态卡片：「发帖：标题」「回复：内容」等，与会话列表摘要同一写法（threadCardDigest），
+    //字段取自 threadcard 子对象（见 V2MsgQuery.cpp 的 BuildContentJson）；取不到时只写类型
+    case ::message_type_thread_post:
+    case ::message_type_thread_reply:
+    {
+        std::string arg;
+        int kind = 0;
+        int64_t postId = 0;
+        bool deleted = false;
+        if (ok && root["threadcard"].isObject()
+            && net::MessageProtocolClient::parseThreadCardContent(msgtype, ThreadCardJson(root["threadcard"]), arg, kind,
+                                                                  postId, deleted))
+        {
+            return net::MessageProtocolClient::threadCardDigest(msgtype, kind, arg, deleted);
+        }
+        return net::MessageProtocolClient::digestForMsgType(msgtype, std::string());
+    }
+    //云端录像卡片：「[云端录像] 标题」，标题取自 cloudrecord 子对象；取不到时只写「[云端录像]」
+    case ::message_type_cloudrecord:
+        if (ok && root["cloudrecord"].isObject() && root["cloudrecord"]["title"].isString()
+            && !root["cloudrecord"]["title"].asString().empty())
+        {
+            return TR8("[云端录像]") + " " + root["cloudrecord"]["title"].asString();
+        }
+        return TR8("[云端录像]");
+    //位置、名片、投票、待办：只写类型，与会话列表摘要 digestForMsgType 一致（多语言第 5 期补齐）
+    case ::message_type_location:
+        return TR8("[位置]");
+    case ::message_type_card:
+        return TR8("[名片]");
+    case ::message_type_poll:
+        return TR8("[投票]");
+    case ::message_type_todo:
+        return TR8("[待办]");
     default:
-        //其余尚未在历史窗单独渲染的类型（位置 / 名片 / 投票 / 接龙 / 待办 /
-        //通话记录 / 系统等）暂用通用占位，与会话列表兜底口径一致。
-        return "[消息]";
+        //其余尚未在历史窗单独渲染的类型（短视频 / 通话记录等）暂用通用占位，与会话列表兜底口径一致。
+        return TR8("[消息]");
     }
 }
 
@@ -117,6 +277,17 @@ std::string FullTextFromContent(int msgtype, const std::string& contentJson)
         return root["text"].asString();
     }
     return std::string();
+}
+
+std::string DigestFromContent(int msgtype, const std::string& contentJson)
+{
+    //Markdown 消息：与主面板会话列表相同的「[Markdown] 标题」（docs/Markdown消息方案.md 第 12 节）；
+    //FlamingoMarkdown.dll 不可用时 MarkdownDigestFromUtf8Body 退回去掉表情标记的正文
+    if (balloonchatwnd::IsMarkdownContentJson(msgtype, contentJson))
+    {
+        return balloonchatwnd::MarkdownDigestFromUtf8Body(FullTextFromContent(msgtype, contentJson));
+    }
+    return PreviewFromContent(msgtype, contentJson);
 }
 
 HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJson)
@@ -170,6 +341,48 @@ HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJso
         return brief;
     }
 
+    //语音：voice 子对象（本地库的 BuildContentJson 写成整数与字符串，转发来的也可能是字符串或数字，两种都认）
+    if (msgtype == ::message_type_voice)
+    {
+        if (root.isMember("voice") && root["voice"].isObject())
+        {
+            const Json::Value& voice = root["voice"];
+            if (voice.isMember("fileid") && voice["fileid"].isString())
+            {
+                brief.m_voiceFileId = voice["fileid"].asString();
+            }
+            else if (voice.isMember("fileid") && voice["fileid"].isIntegral())
+            {
+                brief.m_voiceFileId = std::to_string((long long)voice["fileid"].asInt64());
+            }
+            if (voice.isMember("md5") && voice["md5"].isString())
+            {
+                brief.m_voiceMd5 = voice["md5"].asString();
+            }
+            if (voice.isMember("duration") && voice["duration"].isIntegral())
+            {
+                brief.m_voiceDuration = voice["duration"].asInt();
+            }
+            else if (voice.isMember("duration") && voice["duration"].isString())
+            {
+                brief.m_voiceDuration = atoi(voice["duration"].asCString());
+            }
+            if (voice.isMember("size") && voice["size"].isIntegral())
+            {
+                brief.m_voiceSize = (int64_t)voice["size"].asInt64();
+            }
+            else if (voice.isMember("size") && voice["size"].isString())
+            {
+                brief.m_voiceSize = ::_strtoi64(voice["size"].asString().c_str(), NULL, 10);
+            }
+            if (voice.isMember("wave") && voice["wave"].isString())
+            {
+                brief.m_voiceWave = voice["wave"].asString();
+            }
+        }
+        return brief;
+    }
+
     if (msgtype == ::message_type_file)
     {
         if (root.isMember("file") && root["file"].isObject())
@@ -202,6 +415,8 @@ HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJso
             {
                 brief.m_fileMd5 = file["md5"].asString();
             }
+            //direct：在线直传留下的文件，服务器上没有副本。写入方 BuildContentJson 只在是直传时写 1
+            brief.m_fileDirect = file.isMember("direct") && file["direct"].isIntegral() && file["direct"].asInt() == 1;
         }
         return brief;
     }
@@ -275,7 +490,48 @@ HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJso
             brief.m_mergedContent = Json::writeString(w, merged);
         }
     }
+    else if (msgtype == ::message_type_thread_post || msgtype == ::message_type_thread_reply)
+    {
+        //帖子卡片与补充卡片：图片在 threadcard.images[]（docs/帖子群方案.md 14.5）。已删除形态的卡片不显示图片
+        //（服务端改写时已去掉 images，这里再按 deleted 判断一次，兼容改写前落库、之后只改了 deleted 的记录）
+        if (root.isMember("threadcard") && root["threadcard"].isObject())
+        {
+            const Json::Value& card = root["threadcard"];
+            const bool deleted = card.isMember("deleted") && card["deleted"].isIntegral() && card["deleted"].asInt() != 0;
+            if (!deleted && card.isMember("images") && card["images"].isArray())
+            {
+                const Json::Value& images = card["images"];
+                for (Json::ArrayIndex i = 0; i < images.size(); ++i)
+                {
+                    const Json::Value& item = images[i];
+                    if (!item.isObject() || !item["fileid"].isString() || item["fileid"].asString().empty())
+                        continue;
+                    HistoryCardImage image;
+                    image.m_fileId = item["fileid"].asString();
+                    if (item["md5"].isString())
+                        image.m_md5 = item["md5"].asString();
+                    if (item["thumbfileid"].isString())
+                        image.m_thumbFileId = item["thumbfileid"].asString();
+                    if (item["width"].isIntegral() && item["width"].asInt() > 0)
+                        image.m_width = item["width"].asInt();
+                    if (item["height"].isIntegral() && item["height"].asInt() > 0)
+                        image.m_height = item["height"].asInt();
+                    if (item["size"].isIntegral() && item["size"].asInt64() > 0)
+                        image.m_size = item["size"].asInt64();
+                    brief.m_threadImages.push_back(image);
+                }
+            }
+        }
+    }
     return brief;
+}
+
+HistoryThumbStrip ComputeThumbStrip(size_t count)
+{
+    HistoryThumbStrip strip;
+    strip.m_shown = (count < kHistoryCardMaxThumbs) ? count : kHistoryCardMaxThumbs;
+    strip.m_extra = count - strip.m_shown;
+    return strip;
 }
 
 std::string FolderResultText(int result)
@@ -284,27 +540,27 @@ std::string FolderResultText(int result)
     {
     //接收端在气泡上点了「拒绝」，一个字节都没有传
     case ::folder_state_rejected:
-        return "已拒绝";
+        return TR8("已拒绝");
 
     //发送端在对方应答前撤回了邀请
     case ::folder_state_canceled:
-        return "已撤回";
+        return TR8("已撤回");
 
     //发起邀请时对方无在线连接，或响铃期间对方退出登录
     case ::folder_state_peer_offline:
-        return "对方不在线";
+        return TR8("对方不在线");
 
     //邀请在服务端配置的时限内无人应答，服务端自动结束了会话
     case ::folder_state_timeout:
-        return "邀请已超时";
+        return TR8("邀请已超时");
 
     //传输过程中任一端出错、通道断开，或用户中途取消（协议侧都按失败 + 错误码表达）
     case ::folder_state_failed:
-        return "传输失败";
+        return TR8("传输失败");
 
     //全部文件传完并通过校验
     case ::folder_state_completed:
-        return "已完成";
+        return TR8("已完成");
 
     //非终态（响铃中 / 传输中）与未知取值：记录条按协议只会带终态，走到这里说明
     //content 是脏的，此时宁可不显示结局，也不要显示一个编不出名字的状态
@@ -335,17 +591,17 @@ std::string BuildFolderRowText(const HistoryContentBrief& brief)
     //"[文件夹] 项目资料" 逐字一致
     if (brief.m_folderName.empty())
     {
-        line = "[文件夹]";
+        line = TR8("[文件夹]");
     }
     else
     {
-        line = "[文件夹] " + brief.m_folderName;
+        line = TR8("[文件夹]") + " " + brief.m_folderName;
     }
 
     //文件数为 0 是合法的（发送了一个空目录），此时不写这一段，免得出现"0 个文件"
     if (brief.m_folderTotalFiles > 0)
     {
-        AppendRowSegment(line, std::to_string((long long)brief.m_folderTotalFiles) + " 个文件");
+        AppendRowSegment(line, TRF8("{0} 个文件", (long long)brief.m_folderTotalFiles));
     }
     //FormatFileSize 对 0 与负数返回空串，AppendRowSegment 因而自动略过这一段
     AppendRowSegment(line, FormatFileSize(brief.m_folderTotalSize));
@@ -577,11 +833,11 @@ std::string FormatDateGroupLabel(int64_t dayKey, int64_t todayKey)
         const int64_t diff = DaysFromCivil(ty, tm, td) - DaysFromCivil(y, m, d);
         if (diff == 0)
         {
-            return "今天";
+            return TR8("今天");
         }
         if (diff == 1)
         {
-            return "昨天";
+            return TR8("昨天");
         }
     }
 
@@ -614,24 +870,36 @@ std::vector<bool> ComputeCompactFlags(const std::vector<int64_t>& senderIds,
     return flags;
 }
 
-//类型胶囊对应的中文名，供空状态文案拼句子用。kHistoryTypeAll 与 Pin 不走这里
-//（前者压根不该进这个分支，后者有自己的整句文案）。
-static std::string TypeFilterDisplayName(HistoryTypeFilter type)
+//按类型筛选搜空时的标题：每种类型各一组整句（限定了时间范围 / 没有限定），不再用类型名拼句子，
+//以便各语言整句翻译。kHistoryTypeAll 与 Pin 不走这里（前者压根不该进这个分支，后者有自己的整句文案）；
+//传入其它取值时返回 false。
+static bool TypeFilterEmptyTitle(HistoryTypeFilter type, bool ranged, std::string& title)
 {
     switch (type)
     {
+    //文字消息
     case kHistoryTypeText:
-        return "文字";
+        title = ranged ? TR8("所选时间范围内没有文字消息") : TR8("这个会话还没有文字消息");
+        return true;
+    //图片消息
     case kHistoryTypeImage:
-        return "图片";
+        title = ranged ? TR8("所选时间范围内没有图片消息") : TR8("这个会话还没有图片消息");
+        return true;
+    //文件消息
     case kHistoryTypeFile:
-        return "文件";
+        title = ranged ? TR8("所选时间范围内没有文件消息") : TR8("这个会话还没有文件消息");
+        return true;
+    //语音消息
     case kHistoryTypeVoice:
-        return "语音";
+        title = ranged ? TR8("所选时间范围内没有语音消息") : TR8("这个会话还没有语音消息");
+        return true;
+    //链接消息
     case kHistoryTypeLink:
-        return "链接";
+        title = ranged ? TR8("所选时间范围内没有链接消息") : TR8("这个会话还没有链接消息");
+        return true;
+    //全部与 Pin：不属于按类型筛选
     default:
-        return std::string();
+        return false;
     }
 }
 
@@ -644,49 +912,47 @@ HistoryEmptyText BuildEmptyStateText(const HistoryFilter& filter)
     const bool ranged = (filter.m_range != kHistoryTimeAll);
 
     //关键字优先：用户刚敲完字，最想知道的是"这个词没搜到"，而不是别的。
-    if (!filter.m_keyword.empty())
+    //勾选通配符时只输了 '*' 不算关键字（HasKeywordFilter）
+    if (HasKeywordFilter(filter))
     {
-        text.m_title    = "没有找到「" + filter.m_keyword + "」相关的消息";
-        text.m_subtitle = "换个词，或者把类型与时间的筛选放宽试试";
+        text.m_title    = TRF8("没有找到「{0}」相关的消息", filter.m_keyword);
+        text.m_subtitle = TR8("换个词，或者把类型与时间的筛选放宽试试");
         return text;
     }
 
     //选了发送人：说成"这个会话还没有消息"是误导，别人发的消息可能有一堆
     if (filter.m_fromid > 0)
     {
-        text.m_title    = "所选发送人在当前筛选条件下没有消息";
-        text.m_subtitle = "把发送人改回「全部成员」试试";
+        text.m_title    = TR8("所选发送人在当前筛选条件下没有消息");
+        text.m_subtitle = TR8("把发送人改回「全部成员」试试");
         return text;
     }
 
     if (filter.m_type == kHistoryTypePinned)
     {
-        text.m_title    = ranged ? "所选时间范围内没有被钉住的消息"
-                                 : "还没有钉住任何消息";
-        text.m_subtitle = "在聊天气泡上右键就能把重要消息钉在这里";
+        text.m_title    = ranged ? TR8("所选时间范围内没有被钉住的消息")
+                                 : TR8("还没有钉住任何消息");
+        text.m_subtitle = TR8("在聊天气泡上右键就能把重要消息钉在这里");
         return text;
     }
 
-    const std::string typeName = TypeFilterDisplayName(filter.m_type);
-    if (!typeName.empty())
+    if (TypeFilterEmptyTitle(filter.m_type, ranged, text.m_title))
     {
-        text.m_title = ranged ? ("所选时间范围内没有" + typeName + "消息")
-                              : ("这个会话还没有" + typeName + "消息");
         if (ranged)
         {
-            text.m_subtitle = "把时间范围放宽试试";
+            text.m_subtitle = TR8("把时间范围放宽试试");
         }
         return text;
     }
 
     if (ranged)
     {
-        text.m_title    = "所选时间范围内没有消息";
-        text.m_subtitle = "把时间范围放宽试试";
+        text.m_title    = TR8("所选时间范围内没有消息");
+        text.m_subtitle = TR8("把时间范围放宽试试");
         return text;
     }
 
-    text.m_title = "这个会话还没有消息";
+    text.m_title = TR8("这个会话还没有消息");
     return text;
 }
 

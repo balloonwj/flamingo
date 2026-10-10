@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 3 章：个人资料与账号（本人资料、号码公开范围、修改头像、修改密码、登出）。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人资料与账号 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c03">
+<article class="doc">
+  <h1>个人资料与账号</h1>
+  <p class="lead">本章介绍怎样查看和修改自己的资料、控制手机号和座机对同事是否可见、更换头像、修改登录密码，以及登出当前账号。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：已登录</li>
+  </ul>
+
+  <h2 id="open">打开本人资料</h2>
+  <p>以下任意一种方式都会打开「<i>你的名字</i>的资料」窗口：</p>
+  <ul>
+    <li>点主面板左下角的 ≡，在系统菜单中选 <span class="ui">个人信息</span>；</li>
+    <li>点主面板头部的昵称；</li>
+    <li>在「联系人」页签的组织架构树里双击自己，或右键自己选 <span class="ui">查看资料</span>；</li>
+    <li>在主面板的搜索结果里选中自己。</li>
+  </ul>
+  <figure class="shot center">
+    <img src="../img/n_my_profile.png" width="600" alt="本人资料窗口">
+    <figcaption>罗俊辉的资料窗口</figcaption>
+  </figure>
+  <p>窗口上半部分是头像、姓名、岗位、账号、个性签名和所在部门的完整路径；下半部分「个人资料」列出昵称、个性签名、性别、生日、所在地、岗位、邮箱、座机和手机号，没有填写的项显示「未填写」。</p>
+  <ul>
+    <li>点 <span class="ui">组织架构</span>：窗口关闭，主面板切到「联系人」页签，逐级展开部门并选中你所在的那一行，方便看清自己在组织架构中的位置。</li>
+    <li>点左上角的头像：打开 <span class="ui">修改头像</span> 对话框，见本章<a href="#avatar">「修改头像」</a>一节。</li>
+  </ul>
+
+  <h2 id="edit">修改资料</h2>
+  <p>每一项资料右侧的铅笔图标表示这一项可以修改：</p>
+  <figure class="shot center">
+    <img src="../img/n_my_profile_edit.png" width="600" alt="就地编辑所在地">
+    <figcaption>点「所在地」右侧的铅笔后，这一项变成输入框</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>点要修改的那一项右侧的铅笔图标，该项就地变成输入框（性别是下拉框，可选保密、男、女）。</li>
+    <li>输入新的内容，例如在「所在地」里填写「上海市浦东新区」。</li>
+    <li>按 <kbd>Enter</kbd> 保存；在别处点一下也会保存；按 <kbd>Esc</kbd> 放弃修改，恢复原来的内容。</li>
+  </ol>
+  <p>保存成功后新内容立即显示出来，填写了所在地时，它还会显示在头部账号的后面，例如「账号 MY0309 · 上海市浦东新区」。同事看你的资料时看到的也是新内容。</p>
+  <table>
+    <tr><th>资料项</th><th>填写要求</th></tr>
+    <tr><td>昵称</td><td>即同事看到的姓名，不能为空</td></tr>
+    <tr><td>生日</td><td>按 <code>YYYY-MM-DD</code> 格式填写，如 <code>1992-05-06</code></td></tr>
+    <tr><td>邮箱</td><td>必须包含「@」</td></tr>
+    <tr><td>座机</td><td>只能包含数字、空格和 <code>+ - ( )</code></td></tr>
+  </table>
+  <p>内容不符合要求时，保存时会弹出提示说明原因，并停留在这一项上等你修改。</p>
+  <div class="callout note"><b>手机号不能在这里修改</b>「手机号」右侧没有铅笔图标，只能设置它对同事是否可见（见下一节）。个性签名除了在这里修改，也可以直接点主面板头部的签名就地修改，见<a href="02-main-panel.html#header">「认识主面板」</a>。</div>
+
+  <h2 id="visibility">手机号与座机的公开范围</h2>
+  <p>手机号和座机属于个人联系方式，你可以分别决定是否让同事看到：</p>
+  <figure class="shot center">
+    <img src="../img/n_my_profile_visible.png" width="600" alt="公开范围菜单">
+    <figcaption>点手机号旁的「仅自己可见」弹出公开范围菜单</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>点「手机号」或「座机」标题右侧的橙色文字（显示当前的公开范围）。</li>
+    <li>在弹出的菜单中选择：
+      <ul>
+        <li><b>对同事可见</b>：同事查看你的资料时能看到这个号码；</li>
+        <li><b>仅自己可见</b>：号码只在你自己的资料窗口里显示，同事看不到。</li>
+      </ul>
+    </li>
+  </ol>
+  <p>选择后立即生效。示例中罗俊辉的座机设为「对同事可见」，手机号设为「仅自己可见」。</p>
+
+  <h2 id="avatar">修改头像</h2>
+  <p>点主面板头部的头像，或本人资料窗口左上角的头像，打开 <span class="ui">修改头像</span> 对话框。对话框顶部是预览，下面有三种设置方式，选好后点 <span class="ui">使用此头像</span>。修改后，联系人列表、消息气泡和个人资料等处会同步更新。</p>
+
+  <h3>系统头像</h3>
+  <figure class="shot center">
+    <img src="../img/n_avatar_system.png" width="578" alt="系统头像">
+    <figcaption>「系统头像」页签</figcaption>
+  </figure>
+  <p>第一个是默认头像，按你名字的第一个字自动生成；下面是一组带不同字样和底色的系统头像，点一个即可在顶部预览。</p>
+
+  <h3>首字母</h3>
+  <figure class="shot center">
+    <img src="../img/n_avatar_letter.png" width="578" alt="首字母头像">
+    <figcaption>「首字母」页签</figcaption>
+  </figure>
+  <p>字母头像默认取你昵称的第一个字。也可以在 <span class="ui">字母 / 字符</span> 框里手动输入 1~2 个字符，再在 <span class="ui">背景色</span> 里选一种底色。</p>
+
+  <h3>本地上传</h3>
+  <figure class="shot center">
+    <img src="../img/n_avatar_local.png" width="578" alt="本地上传头像">
+    <figcaption>「本地上传」页签</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>点虚线框里的「点击选择本地图片」，选一张图片。支持 JPG、PNG、GIF 格式，大小不超过 2MB。</li>
+    <li>图片会自动居中裁剪为 1:1 的正方形，在顶部预览中确认效果。</li>
+    <li>点 <span class="ui">使用此头像</span> 上传。</li>
+  </ol>
+  <div class="callout warn"><b>上传失败怎么办</b>图片超过 2MB 时会提示「图片大小须在 2MB 以内，请换一张。」；图片无法识别时请换一张。上传头像需要联网，提示「头像上传失败，请检查网络后重试。」时请检查网络连接。</div>
+
+  <h2 id="password">修改密码</h2>
+  <p>管理员为你开通或重置账号后，建议尽快把初始密码改成只有自己知道的密码。点主面板左下角的 ≡，在系统菜单中选 <span class="ui">修改密码</span>（也可以在<a href="28-settings.html#security">「系统设置 → 账号安全」</a>里点 <span class="ui">修改密码</span> 一行的 <span class="ui">修改</span>）：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/n_change_pwd.png" width="460" alt="修改密码"><figcaption>修改密码对话框</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ol class="steps">
+        <li>在 <span class="ui">当前密码</span> 中输入现在使用的密码。</li>
+        <li>在 <span class="ui">新密码</span> 和 <span class="ui">确认新密码</span> 中两次输入相同的新密码。输入框右侧的眼睛图标可以临时显示明文。</li>
+        <li>点 <span class="ui">保存</span>。</li>
+      </ol>
+    </div>
+  </div>
+  <p>新密码至少 8 位，建议同时包含字母、数字和符号，并且不能与当前密码相同。修改成功后会提示「密码修改成功！其它设备需用新密码重新登录。」</p>
+  <div class="callout tip"><b>忘记了当前密码？</b>当前密码不正确时无法修改。忘记密码请联系企业管理员重置，见<a href="01-quick-start.html#login">「快速开始」</a>中的「忘记密码」。</div>
+
+  <h2 id="logout">登出</h2>
+  <p>需要换一个账号登录，或离开电脑前想退出当前账号时，可以登出：</p>
+  <ol class="steps">
+    <li>点主面板左下角的 ≡，在系统菜单最后一组中选 <span class="ui">登出</span>（也可以右键托盘图标选 <span class="ui">登出</span>）。</li>
+    <li>在确认框中点 <span class="ui">是(Y)</span>。</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/zz_logout_confirm.png" width="390" alt="登出确认框">
+    <figcaption>登出前的确认框</figcaption>
+  </figure>
+  <p>登出后客户端断开与服务器的连接、关闭所有聊天窗口并回到登录窗口，程序本身不会退出。如果想彻底关闭程序，请用托盘菜单的 <span class="ui">退出</span>，见<a href="02-main-panel.html#tray">「认识主面板」</a>。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

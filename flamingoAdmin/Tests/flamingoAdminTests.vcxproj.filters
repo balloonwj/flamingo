@@ -38,7 +38,112 @@
     <ClCompile Include="ClientVersionApiTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SensitiveWordTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EnterpriseQaTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EnterpriseBotTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ServiceBindingTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ComposeEditScheduleTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ClientVersionValidateTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EmployeeFormTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RememberPasswordTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ShellSessionTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LoginTextTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AnnouncementRepushTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EnterpriseFilterTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TimeTextTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FlamingoLinkTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FlamingoLinkLiveTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FlamingoLinkHostTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\PluginLibrary.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\LinkPageState.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\EnterpriseDetailScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\OrgDetailPanel.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\ServicesPanel.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\LinkPageSlot.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\FlamingoLink\Core\LinkProtocol.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\FlamingoLink\Core\OnlineTable.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\FlamingoLink\Core\LinkText.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\flamingoclient\Source\net\FrameCodec.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="ColumnFitTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AdminFrameGuardTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="CommonWidgetsTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SharedTableWidgetsTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SensitiveWordsScreenTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SensitiveImportExportTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SensitiveHitsTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FileShareScreensTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FeatureSwitchesPageTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FileShareAdminApiTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AnnouncementPreviewPanelTests.cpp">
@@ -74,10 +179,109 @@
     <ClCompile Include="..\Util\DpapiSecret.cpp">
       <Filter>Source Files\Under Test</Filter>
     </ClCompile>
+    <ClCompile Include="..\Util\LoginText.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\TimeText.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\ColumnFit.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\AppConfig.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\SensitiveWordText.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\Widgets.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\EnterpriseSettingsModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\SettingsScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\FileShareAuditScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\FileSharesScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\FileShareCenterScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\FeatureSwitchesPage.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\FeatureSwitchPanel.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\CloudRecordQuotaPanel.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\FileShareUi.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\KeyValueGrid.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\FileShareText.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\TextFileSave.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
     <ClCompile Include="..\Util\AdminApi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Widgets\CommonWidgets.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\PagerBar.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\ActionTable.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\ColumnHeader.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\SensitiveWordsScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\SensitiveWordModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\QaAdminApi.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\EnterpriseQaScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\EnterpriseQaModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\BotAdminApi.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\BotRuleText.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\EnterpriseBotScreen.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\EnterpriseBotModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\BotRuleModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\BotDomainsModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\SensitiveImportModal.cpp">
       <Filter>Source Files\Under Test</Filter>
     </ClCompile>
     <ClCompile Include="..\Widgets\UiHelpers.cpp">
@@ -87,6 +291,15 @@
       <Filter>Source Files\Under Test</Filter>
     </ClCompile>
     <ClCompile Include="..\Screens\AnnouncementPreviewPanel.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\ComposeModal.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Shell\TopBar.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Shell\Sidebar.cpp">
       <Filter>Source Files\Under Test</Filter>
     </ClCompile>
   </ItemGroup>
@@ -100,7 +313,67 @@
     <ClInclude Include="..\Util\OrgToolbarLayout.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\Util\SensitiveWordText.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\Widgets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\EnterpriseSettingsModal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\SettingsScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\FileShareAuditScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\FileSharesScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\FileShareCenterScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\FeatureSwitchesPage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\FeatureSwitchPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\CloudRecordQuotaPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\FileShareUi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\KeyValueGrid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Util\FileShareText.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Util\TextFileSave.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\Widgets\CommonWidgets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\PagerBar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\ActionTable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\ColumnHeader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\SensitiveWordsScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\SensitiveWordModal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\SensitiveImportModal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\Widgets\UiHelpers.h">
@@ -110,6 +383,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\Screens\AnnouncementPreviewPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLink\FlamingoLinkApi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLink\Core\LinkProtocol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLink\Core\OnlineTable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoLink\Core\LinkText.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Util\PluginLibrary.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Util\LinkPageState.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -4,7 +4,7 @@
  *  「群资料」对话框的 balloonui 客户区控件树构造种子 + 数据注入 + 群名片
  *  查看/编辑双态切换。把对话框"长什么样"从对话框类里抽出成一个可独立编译、
  *  可被单元测试直接调用的纯逻辑模块 —— CBalloonGroupInfoDlg 与 FlamingoUnit
- *  测试工程共用本文件（与 BalloonProfileLayout 同套路）。
+ *  测试工程共用本文件（与已删除的 BalloonProfileLayout 同套路）。
  *
  *  设计稿:design/群资料.png。自上而下:
  *    · 顶部 Banner:群头像(字形 monogram)+ 群名(大字)+ "群号 N · M 人" +
@@ -12,7 +12,8 @@
  *    · 群公告:浅橙填充圆角框(空时占位"暂无群公告")
  *    · "我在本群的昵称":右对齐值,整行点击就地编辑(view DuiLabel ↔ edit
  *      DuiEdit)
- *    · "消息免打扰" / "置顶群聊":各一个 DuiSwitch
+ *    · "消息提醒":DuiComboBox 下拉框,五种提醒模式(2026-10-03 起取代"消息免打扰"开关)
+ *    · "置顶群聊":DuiSwitch
  *    · 底部:"查看消息记录"(本轮占位) / "退出群聊"(危险红)
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 它要被 Flamingo.vcxproj 与
@@ -37,7 +38,7 @@ namespace balloonmain {
 /**
  *  GroupInfoCtrlId —— 群资料对话框里"需要被代码引用"的所有控件数字 id。
  *
- *  取 360 段,与个人信息对话框(300 段)、主面板(200 段)互不重叠。装饰性
+ *  取 360 段,与主面板(200 段)互不重叠(300 段原属个人信息对话框,该对话框 2026-10-07 已删除)。装饰性
  *  spacer / 固定静态文字在控件树里不写 id(GetCtrlId() 返 0),不属于本 enum。
  *  注意 DuiFrameWindow 保留 ctrlId 1/2/3(标题栏 min/max/close),360 段安全。
  */
@@ -55,17 +56,36 @@ enum GroupInfoCtrlId : UINT
     // ---- 我在本群的昵称(查看/编辑双态;整行点击进编辑) ----
     kIdGroupCardLabel    = 365,  // 行左标签"我在本群的昵称"(可点,点了进编辑)
     kIdGroupCardView     = 366,  // 群名片值 查看 DuiLabel(可点,点了进编辑)
-    kIdGroupCardEdit     = 367,  // 群名片值 编辑 DuiEdit(回车/失焦提交)
+    kIdGroupCardEdit     = 367,  // 群名片值 编辑 DuiEdit(回车或失焦提交、Esc 取消;回车与 Esc 2026-10-07 起生效)
 
-    // ---- 开关 ----
-    kIdGroupMuteSwitch   = 368,  // 消息免打扰 DuiSwitch
+    // ---- 提醒模式与置顶 ----
+    // 368 原为"消息免打扰" DuiSwitch,2026-10-03 改成下拉框 kIdGroupNotifyCombo,此号作废、不得复用
     kIdGroupPinSwitch    = 369,  // 置顶群聊 DuiSwitch
 
     // ---- 底部按钮 ----
     kIdGroupBtnHistory   = 370,  // 查看消息记录(打开本群的消息记录窗口)
     kIdGroupBtnQuit      = 371,  // 退出群聊(危险红)
     kIdGroupBtnDismiss   = 372,  // 解散群聊(危险红,仅群主可见)
+
+    // ---- 提醒模式(续) ----
+    kIdGroupNotifyCombo  = 373,  // 消息提醒 DuiComboBox;第 i 项即 NotifyModeMenu.h 的 GetNotifyModeChoices(true) 第 i 个模式
+
+    // ---- 群简介(2026-10-10 补上;此前群管理页说「显示在群资料页」,这里却没有) ----
+    kIdGroupIntro        = 374,  // 群简介正文 DuiLabel(单行,放不下以省略号结尾;空时显占位"暂无群简介")
 };
+
+// ---- 群资料对话框尺寸(逻辑像素,对照 design/群资料.png) ----
+// 含标题栏的整窗初始尺寸。2026-10-02 修复 ResizeClient 叠加系统边框的问题时由 460×408 加上原先多叠加的 18×47
+//（120 DPI 实测），保持当时的窗口大小；2026-10-10 补群简介一段（小标题、正文与间距）时整窗加高 kGroupInfoIntroBlockH。
+// 放在头文件里，供布局单测按设计尺寸检查排得下。
+const int kGroupInfoIntroBlockH = 52;    // 群简介一段占的高度：小标题 18 + 间距 4 + 正文 20 + 间距 10
+const int kGroupInfoWidth       = 478;   // 整窗初始宽
+const int kGroupInfoHeight      = 455 + kGroupInfoIntroBlockH;   // 整窗初始高（含标题栏）
+const int kGroupInfoTitleBarH   = 36;    // 标题栏高
+const int kGroupInfoMinWidth    = 460;   // 整窗最小宽
+// 整窗最小高（含标题栏）：按最小宽排下全部内容实测需要 469（用例 GI10），取 470。原先的 408 连没有群简介时的内容
+// 都排不下（差 9 像素，窗口拉到最小时底部按钮越出窗口），2026-10-10 补群简介时由 GI10 查出并一并改正
+const int kGroupInfoMinHeight   = 470;
 
 /**
  *  GroupInfoViewData —— 群资料对话框的数据输入(纯字段,与对话框类解耦,
@@ -78,16 +98,17 @@ struct GroupInfoViewData
     CString  groupName;     // 群名(空时头像 / 标题用占位)
     int      memberCount;   // 群成员总数(用于"M 人")
     CString  ownerName;     // 群主显示名(群名片优先,空回退账号昵称;未知时空串)
+    CString  intro;         // 群简介(空时显占位"暂无群简介";群管理「基本信息」页里编辑)
     CString  announcement;  // 群公告(空时显占位"暂无群公告")
     CString  myCard;        // 我在本群的昵称(空时显占位"未设置")
-    bool     mute;          // 消息免打扰当前态
+    int      notifyMode;    // 消息提醒模式当前态(Protocol.h 的 enum conversation_notify_mode)
     bool     pinned;        // 置顶群聊当前态
     bool     isOwner;       // 本人是否为群主:为 true 时底部多出"解散群聊"按钮,"退出群聊"走先转让再退出
 
     GroupInfoViewData()
         : groupid(0)
         , memberCount(0)
-        , mute(false)
+        , notifyMode(0)
         , pinned(false)
         , isOwner(false)
     {
@@ -106,7 +127,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody();
 
 /**
  *  把 GroupInfoViewData 写入对话框控件树:群名、"群号 N · M 人"、群主行、
- *  公告(空→占位)、我的群名片(view 文字 + edit 初值)、两个开关初值,并按 data.isOwner
+ *  群简介(空→占位)、公告(空→占位)、我的群名片(view 文字 + edit 初值)、提醒模式下拉框与置顶开关初值,并按 data.isOwner
  *  显示 / 隐藏"解散群聊"按钮(显隐变化时自行让底部按钮行重新排版)。群名片的查看 / 编辑态
  *  可见性不在这里切换(由 SetGroupInfoCardEditMode 处理)。
  *    root  BuildGroupInfoBody 返回的客户区根控件;null 返 false。

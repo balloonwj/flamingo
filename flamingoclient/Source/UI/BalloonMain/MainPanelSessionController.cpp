@@ -31,6 +31,22 @@
 #include "../../Common/Util/EncodeUtil.h"
 #include "../../resource.h"
 #include "../../Feature/FolderTransfer/FolderTransferManager.h"  // 登出 / 被踢下线时停掉全部文件夹传输
+#include "../../Feature/FileShare/FileShareHost.h"       // 登录成功后加载文件共享模块，登出时通知它
+#include "../../Feature/FileShare/ShareNoticePolicy.h"   // 退出、登出前还有文件共享传输时的提示文字
+#include "../../Feature/P2P/P2PHost.h"                   // 登录成功与登出时通知 P2P 模块
+#include "../../Feature/Caption/CaptionHost.h"           // 登录成功与登出时通知语音字幕宿主
+#include "../../Feature/SecretChat/SecretChatHost.h"     // 登录成功与登出时通知单聊密聊宿主
+#include "../../Feature/ThreadGroup/ThreadGroupHost.h"   // 登录成功与登出时通知帖子群宿主
+#include "../../net/IUSocket.h"                          // SendGetAutoReply：登录成功后拉一次自动回复设置
+#include "../../Feature/ScreenShare/RecordEntry.h"   // 登录后注册录屏快捷键、推送录制设置
+#include "../../../FlamingoMedia/Api/FlamingoMediaApi.h"   // MediaCloudExitKind / MediaCloudExitChoice：退出前的云端录像对话框
+#include "../../Feature/Screenshot/ScreenshotEntry.h"   // 登录后注册截图快捷键（默认 Alt+Z）
+#include "../BalloonMemo/MemoCenter.h"              // 登录成功后拉取备忘、开始安排提醒
+#include "../../Feature/Lock/LockHost.h"            // IsScreenLocked：锁屏期间延后提示框、升级窗与显示主面板
+#include "../../Feature/Lock/LockSuppressPolicy.h"  // DecideDuringLock
+#include "../../App/AppRestart.h"                   // 改了界面语言后「立即重启」
+#include "../BalloonMarkdown/MarkdownEditorManager.h" // 退出前询问未保存的 Markdown 文档
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 //进程的隐藏属主窗口，建于 Startup.cpp。登录窗以它作属主，这样登录窗最小化时
 //不会在任务栏留下一个空白按钮。
@@ -51,6 +67,7 @@ CSessionController::CSessionController(CFlamingoClient* pFMGClient)
     , m_bEnableReconnect(true)
     , m_uReconnectInterval(3000)
     , m_bKickoutNoticeShowing(false)
+    , m_lockDeferredShowPanel(false)
 {
     // BEGIN_MSG_MAP_EX 声明的这个标志在首次派发时会被先读后写，非窗口类必须自己置初值。
     m_bMsgHandled = FALSE;
@@ -109,11 +126,11 @@ bool CSessionController::PumpTimer(UINT_PTR nIDEvent)
     // 过程中用户选了离线」这条路上，定时器会一直把用户连回服务器 —— 与 OnNetError 里的
     // 判断共用同一个守卫函数，避免再出现一处判了另一处没判。
     const bool userWentOffline = (m_nSessionStatus == kSessionUserGoOffline);
-    if (!ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
+    if (!ShouldAutoReconnect(m_bAlreadyLogin != FALSE, userWentOffline, m_bEnableReconnect))
     {
         LOG_INFO("Reconnect timer fired but reconnect is suppressed: "
-            "userWentOffline=%d, enableReconnect=%d.",
-            userWentOffline ? 1 : 0, m_bEnableReconnect ? 1 : 0);
+            "alreadyLogin=%d, userWentOffline=%d, enableReconnect=%d.",
+            m_bAlreadyLogin ? 1 : 0, userWentOffline ? 1 : 0, m_bEnableReconnect ? 1 : 0);
         ::KillTimer(m_hHost, m_dwReconnectTimerId);
         m_dwReconnectTimerId = 0;
         return true;
@@ -121,7 +138,7 @@ bool CSessionController::PumpTimer(UINT_PTR nIDEvent)
 
     //一轮重连里同一时刻只有一个登录请求在途：上一个还没有结果就不再发，也不再弹托盘气泡。
     //原先这里的标志从没被置真，每次触发都发一个请求，单次尝试比重连间隔长时请求会在发送
-    //队列里越积越多（bugs.md 的 BUG-21）。
+    //队列里越积越多。
     const balloonmain::ReconnectTickAction action = m_reconnectThrottle.OnTick();
     if (action == balloonmain::kReconnectTickWait)
     {
@@ -160,7 +177,7 @@ bool CSessionController::StartLogin(BOOL bAutoLogin/* = FALSE*/)
     //链路在 v2 改造后已经跑不通、早已删除；登录前的更新检查由登录窗自己做。
 
     // 尚未登录：GetConnectionUiState 为离线，托盘先挂灰色图标。
-    m_pPanel->TrayController().AddIcon(_T("Flamingo未登录"));
+    m_pPanel->TrayController().AddIcon(TRF(L"{0}未登录", g_strAppTitle).c_str());
 
     m_LoginDlg.m_lpFMGClient = m_lpFMGClient;
     m_LoginDlg.m_pLoginAccountList = &m_LoginAccountList;
@@ -218,6 +235,10 @@ void CSessionController::ShowLoginOrMainPanel()
     if (hTarget == NULL)
         return;
 
+    // 主面板贴边收起时先移回屏幕边缘，否则显示出来的只是边缘上的一条细条
+    if (hTarget == m_pPanel->m_hWnd)
+        m_pPanel->RevealFromDockEdge();
+
     // 关键：窗口被最小化(iconic)时只有 SW_RESTORE 能还原，SW_SHOW 对最小化窗口无效
     // （会"看上去没反应"）。主面板标题栏最小化按钮走 WM_SYSCOMMAND/SC_MINIMIZE
     // （见 balloonui DuiFrameWindow），故此处必须按是否最小化分别处理。
@@ -232,6 +253,40 @@ void CSessionController::ShowLoginOrMainPanel()
 
 void CSessionController::DoExit()
 {
+    //有未保存修改的 Markdown 编辑器时先询问；编辑器不依赖登录，登录前后都可能开着（docs/Markdown消息方案.md 第 11.3 节）
+    if (!balloonmd::CMarkdownEditorManager::GetInstance().ConfirmCloseAllForExit(NULL))
+    {
+        LOG_INFO("SessionController::DoExit: cancelled because of unsaved markdown documents.");
+        return;
+    }
+    //云端录像还在合成、上传或已暂停时先问（屏幕共享方案第 14.4 节，2026-10-07）：「退出，下次继续」时原始帧与已上传的部分
+    //仍在服务器上，下次登录接着做；「退出并放弃这些录像」时模块已请服务端删除；「不退出」则不退出
+    if (m_pPanel->HasCloudRecordWork())
+    {
+        const int choice = m_pPanel->ConfirmCloudRecordExit(flamingomedia::media_cloud_exit_app);
+        if (choice == flamingomedia::media_cloud_exit_cancel)
+        {
+            LOG_INFO("SessionController::DoExit: cancelled in the cloud record dialog.");
+            return;
+        }
+        LOG_INFO("SessionController::DoExit: cloud record dialog choice %d, exiting.", choice);
+    }
+    //文件共享还有传输没完成时先确认（docs/文件共享方案.md 第 14 节）：浏览窗口关了的传输也在后台进行，退出会中断它们
+    const uint32_t shareTransfers = balloonfileshare::CFileShareHost::GetInstance().GetActiveTransferCount();
+    if (shareTransfers > 0)
+    {
+        HWND hOwner = m_pPanel->IsWindow() ? m_pPanel->m_hWnd : m_hHost;
+        const std::wstring text = balloonfileshare::FileShareTransferExitWarning(shareTransfers, false) + L"\r\n"
+                                  + TR(L"确定要退出吗？");
+        if (::MessageBox(hOwner, text.c_str(), g_strAppTitle.c_str(), MB_YESNO | MB_ICONQUESTION) != IDYES)
+        {
+            LOG_INFO("SessionController::DoExit: cancelled because %u file share transfers are in progress.",
+                     static_cast<unsigned>(shareTransfers));
+            return;
+        }
+        LOG_INFO("SessionController::DoExit: exiting with %u file share transfers in progress, confirmed by the user.",
+                 static_cast<unsigned>(shareTransfers));
+    }
     if (m_LoginDlg.IsWindow())
         m_LoginDlg.PostMessage(WM_CLOSE);
     else if (::IsWindow(m_hHost))
@@ -257,9 +312,10 @@ LRESULT CSessionController::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
     ::SendMessage(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
     ::SendMessage(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
 
-    //没有开启重连或者用户主动下线都不要重连（守卫与 OnTimer 的重连分支共用同一函数）。
+    //没有登录、没有开启重连、用户主动下线都不要重连（守卫与 OnTimer 的重连分支共用同一函数）。
+    //没有登录这一条不是多余的：登出时连接被关闭，本消息随后异步到达，那时已经回到登录窗
     const bool userWentOffline = (m_nSessionStatus == kSessionUserGoOffline);
-    if (balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
+    if (balloonmain::ShouldAutoReconnect(m_bAlreadyLogin != FALSE, userWentOffline, m_bEnableReconnect))
     {
         m_nSessionStatus = kSessionReconnecting;
         //新一轮重连：丢弃上一轮遗留的等待状态。例如上次重连的请求发出后用户切到了离线，
@@ -290,7 +346,7 @@ LRESULT CSessionController::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
 // 压住自动重连是这里的另一件要紧事：网络层收到推送后会关掉 socket，而关 socket 会被
 // OnNetError 当成掉线、起重连定时器把客户端连回服务器重新登录，登录又会把刚在另一台机器
 // 上登上去的那一端顶下来，两端来回顶号没完。
-LRESULT CSessionController::OnV2Kickout(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
+LRESULT CSessionController::OnV2Kickout(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     const int nReason = (int)wParam;
 
@@ -335,6 +391,15 @@ LRESULT CSessionController::OnV2Kickout(UINT /*uMsg*/, WPARAM wParam, LPARAM /*l
     }
     m_pPanel->TrayController().RefreshTrayIconForStatus();
     BroadcastConnectionState();
+
+    //【4.5】锁屏期间到此为止：连接已断开、自动重连已压住，提示框与回到登录窗的收尾等解锁后再做
+    //      （docs/锁屏方案.md 第 4.9 节）。解锁时重新投递本消息，上面几步是幂等的，会再走一遍
+    if (balloonlock::DecideDuringLock(balloonlock::kLockEvtKickout, balloonlock::IsScreenLocked()) == balloonlock::kLockActDefer)
+    {
+        LOG_INFO("SessionController::OnV2Kickout: screen is locked, notice dialog deferred until unlock.");
+        DeferUntilUnlock(uMsg, wParam, lParam);
+        return 0;
+    }
 
     //【5】取托盘图标位置，供提示框贴着它弹出。必须赶在下面收尾序列里的 RemoveIcon 之前
     //     取 —— 图标摘掉之后就再也问不出它在哪儿了。取不到时给空矩形，提示框自会退回
@@ -391,21 +456,15 @@ LRESULT CSessionController::OnNetworkResumed(UINT /*uMsg*/, WPARAM /*wParam*/, L
         m_nSessionStatus, userWentOffline ? 1 : 0,
         m_bEnableReconnect ? 1 : 0, m_bAlreadyLogin ? 1 : 0);
 
-    if (!balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
+    // 未登录时也不要自己连回去（守卫函数里的 alreadyLogin 一项）：被顶下线回到登录界面后，账号与
+    // 密码仍留在 m_UserInfo 里供登录窗预填（见 ReturnToLoginWindow），CFlamingoClient::Login 正是
+    // 读这两个字段，不判的话网络一恢复就会拿旧账号悄悄登回去，把别处刚登上的那一端又顶下来。
+    // 这条判断原先只写在本调用点，理由是掉线事件与重连定时器只可能在登录后触发；2026-10-03 实测
+    // 登出时掉线事件照样会到，于是并进三处共用的守卫函数
+    if (!balloonmain::ShouldAutoReconnect(m_bAlreadyLogin != FALSE, userWentOffline, m_bEnableReconnect))
     {
-        LOG_INFO("SessionController::OnNetworkResumed: offline (or auto reconnect disabled), "
-            "不自动连回服务器，等用户自己选\"在线\"。");
-        return 0;
-    }
-
-    // 未登录时也不要自己连回去。这条判断只在本调用点需要：另外两个调用点（掉线事件、
-    // 重连定时器）只可能在登录后触发，而"网络恢复"在停在登录窗时照样会来。
-    // 不判的后果是实打实的：被顶下线回到登录界面后，账号与密码仍留在 m_UserInfo 里供
-    // 登录窗预填（见 ReturnToLoginWindow），CFlamingoClient::Login 正是读这两个字段，
-    // 于是网络一恢复就会拿旧账号悄悄登回去，把别处刚登上的那一端又顶下来。
-    if (!m_bAlreadyLogin)
-    {
-        LOG_INFO("SessionController::OnNetworkResumed: not logged in (still at the login window), skip auto login.");
+        LOG_INFO("SessionController::OnNetworkResumed: not logged in, offline, or auto reconnect disabled; "
+            "do not log in again automatically.");
         return 0;
     }
 
@@ -460,7 +519,6 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         //把状态复位后返回，下面那套「弹窗 + StartLogin」不再执行。
         if (nCode != LOGIN_SUCCESS)
         {
-            m_pPanel->TrayController().StopLoginAnimation();
             m_pPanel->TrayController().ReloadAppIcon();
             m_bResumingOnline = false;
             m_nSessionStatus = kSessionNotLogin;
@@ -480,11 +538,10 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         m_LoginDlg.CloseAfterLoginSuccess();
     }
 
-    m_pPanel->TrayController().StopLoginAnimation();
-
     // 此刻 m_bAlreadyLogin 还没置真（成功分支下面才置），GetConnectionUiState 会算成
-    // "连接未就绪"、取灰色图标；登录成功分支末尾会再调一次 RefreshTrayIconForStatus
-    // 换成彩色。这样登录失败时托盘自然停在灰色，无需另行处理。
+    // "离线"（没登录时在线状态一律是离线，见 ResolveSessionPresence）、取灰色图标，托盘不会
+    // 亮灰交替；登录成功分支末尾会再调一次 RefreshTrayIconForStatus 换成彩色。这样登录失败时
+    // 托盘自然停在灰色，无需另行处理。
     m_pPanel->TrayController().ReloadAppIcon();
 
     // 本次登录是不是"从离线恢复在线"发起的。下面各分支要用，取完即复位：无论成功还是
@@ -583,6 +640,21 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         LOG_INFO(_T("save login account: account=%s, nickname=%s."),
             m_stAccountInfo.szUser, m_lpFMGClient->m_UserMgr.m_UserInfo.m_strNickName.c_str());
 
+        // 记下本账号的 userid 与头像 —— 登录窗下次在账号下拉列表与大头像处画它。
+        // m_nFace 是 facetype，m_strCustomFaceName 按字节存 customface 的 UTF-8。
+        const CBuddyInfo& me = m_lpFMGClient->m_UserMgr.m_UserInfo;
+        m_LoginAccountList.SetAvatar(m_stAccountInfo.szUser, (long long)me.m_uUserID, (int)me.m_nFace,
+            me.m_strCustomFaceName.GetString());
+        LOG_INFO("save login account avatar: userid=%u, facetype=%u, customface bytes=%d.",
+            me.m_uUserID, me.m_nFace, me.m_strCustomFaceName.GetLength());
+
+        // 记下服务端返回的规范账号。用手机号或大小写不同的账号登录时，列表里这条记录的键
+        // 是输入的原文，而本地数据目录 Users\<账号>\ 按规范账号建；登录窗删除账号并勾选
+        // 「同时删除本地聊天记录」时要据它找到真正的目录（docs/登录账号与手机号登录方案.md）。
+        m_LoginAccountList.SetAccountName(m_stAccountInfo.szUser, me.m_strAccount.c_str());
+        LOG_INFO(_T("save login account name: key=%s, account=%s."),
+            m_stAccountInfo.szUser, me.m_strAccount.c_str());
+
         m_LoginAccountList.SetLastLoginUser(m_stAccountInfo.szUser);
         SaveLoginAccountListFile();
 
@@ -599,6 +671,21 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
 //#endif
 
         m_lpFMGClient->LoadUserConfig();
+        // 发送键改为存在本人账号配置里（BUG-119）：设置页与聊天窗 ▾ 菜单读写同一份；老配置没有这一项时
+        // 用 flamingo.ini 里的旧值迁移一次
+        m_sendModeStore.Attach(m_lpFMGClient);
+        balloonchatwnd::BindChatSendModeStore(&m_sendModeStore);
+        // 录屏：按该账号的设置注册 Ctrl+Alt+R，并把画质与保存目录交给 FlamingoMedia.dll
+        balloonscreenshare::ApplyRecordHotkey(m_hHost, m_lpFMGClient->m_UserConfig.IsEnableRecordHotkey() != FALSE);
+        // 截图：2026-10-07 起快捷键与「截图时隐藏当前窗口」存在全局配置里、所有账号共用（docs/截图独立模块方案.md
+        // 3.4 节）。全局配置里还没有时，先把这个账号配置里的两项迁移过去，再按全局配置注册快捷键（默认 Alt+Z，0 表示停用）
+        balloonscreenshot::MigrateAccountScreenshotPrefs(m_lpFMGClient->m_UserConfig.GetScreenshotHotkey(),
+                                                         m_lpFMGClient->m_UserConfig.IsScreenshotHideWindow() != FALSE);
+        balloonscreenshot::ApplyScreenshotHotkey(m_hHost, balloonscreenshot::LoadGlobalScreenshotPrefs().m_hotkey);
+        balloonscreenshare::PushRecordSettings((int)m_lpFMGClient->m_UserConfig.GetRecordQuality(),
+                                               m_lpFMGClient->m_UserConfig.GetRecordFolder());
+        // 屏幕共享与录屏的鼠标效果设置（第 16 期）：没有改过时为空，模块按默认设置（只开光圈）
+        balloonscreenshare::PushMouseEffectSettings(m_lpFMGClient->m_UserConfig.GetMouseEffects());
         // 把该账号的「自动识别链接」设置灌进进程级开关：气泡在测量阶段读它决定
         // 要不要识别，故必须在任何聊天窗打开之前设好（配置里没有这一项时默认开）。
         balloonchatwnd::SetChatLinkOptionEnabled(
@@ -643,6 +730,62 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         // （默认 5，发送与接收各算一笔）。每次登录都重读一次，改了配置重新登录即生效；
         // 缺失或取值非法时管理器自行回落默认值并记一条日志。
         foldertransfer::FolderTransferManager::GetInstance().LoadConfig();
+        // 文件共享模块（FlamingoFileShare.dll）：本进程首次登录成功时加载并初始化，之后每次
+        // 登录成功（含断线重连成功）都通知它，模块据此重新拉取「我的共享」并报告可提供状态。
+        // DLL 不存在时只记一条日志，客户端照常运行（docs/文件共享方案.md 7.3）。
+        {
+            // 账号快照交给宿主，DLL 据此打开本账号的 fileshare.db（个人目录下的 ChatLog）
+            balloonfileshare::FileShareLoginInfo shareLogin;
+            shareLogin.m_userId = static_cast<int64_t>(m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID);
+            shareLogin.m_account = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount;
+            shareLogin.m_nickName = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strNickName;
+            shareLogin.m_personalDir = m_lpFMGClient->m_UserMgr.GetPersonalFolder();
+            // 主面板为宿主提供显示名（发起共享对话框的成员名）
+            balloonfileshare::CFileShareHost::GetInstance().SetDirectory(m_pPanel);
+            // 本企业的文件共享开关（登录应答的 features.fileshare）：关着时宿主不加载、不激活模块
+            balloonfileshare::CFileShareHost::GetInstance().SetFeatureEnabled(m_lpFMGClient->m_UserMgr.m_bFileShareFeature);
+            balloonfileshare::CFileShareHost::GetInstance().OnLoginSucceeded(shareLogin);
+            // 模块就绪后底部主操作按钮由「查找」变为「文件共享」
+            m_pPanel->RefreshBottomAction();
+        }
+        // P2P 模块在启动时已加载：登录成功（含断线重连成功）都通知它，模块据此向服务端报到（cmd_p2p_register）。
+        // DLL 不存在时宿主只记日志，各业务继续走原来的中转（docs/P2P通信方案.md 4.2）。
+        balloonp2p::CP2PHost::GetInstance().OnLoginSucceeded();
+        // 语音字幕：记下本企业的字幕开关、读入本账号的字幕设置；DLL 要到第一次用到字幕时才加载（docs/语音字幕方案.md 4.1）
+        ballooncaption::CCaptionHost::GetInstance().OnLoginSucceeded(m_lpFMGClient->m_UserMgr.m_bCaptionFeature,
+                                                                     m_lpFMGClient->m_UserMgr.GetPersonalFolder());
+        // 单聊密聊（FlamingoSecretChat.dll）：开关打开时本进程首次登录成功时加载，之后每次登录成功都通知模块报到（2601）；
+        // 应答到达后已打开的单聊窗才显示「密聊」按钮。DLL 不存在时只记日志，客户端照常运行（docs/密聊方案.md 6.2）
+        {
+            balloonsecret::CSecretChatHost& secretHost = balloonsecret::CSecretChatHost::GetInstance();
+            secretHost.SetSink(m_pPanel);
+            secretHost.SetFeatureEnabled(m_lpFMGClient->m_UserMgr.m_bSecretChatFeature);
+            secretHost.OnLoginSucceeded(static_cast<int64_t>(m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID));
+        }
+        // 帖子群（FlamingoThreadGroup.dll）：开关打开时本进程首次登录成功时加载，之后每次登录成功都通知模块，已打开的帖子群窗口
+        // 据此重新登记「正在查看」并刷新。DLL 不存在或开关关闭时帖子群从各处隐藏，客户端照常运行（docs/帖子群方案.md 4.7、7.2）
+        {
+            balloonthread::CThreadGroupHost& threadHost = balloonthread::CThreadGroupHost::GetInstance();
+            threadHost.SetDirectory(m_pPanel);
+            threadHost.SetFeatureEnabled(m_lpFMGClient->m_UserMgr.m_bThreadGroupFeature);
+            threadHost.OnLoginSucceeded(static_cast<int64_t>(m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID));
+        }
+        // 机器人管理界面（FlamingoBot.dll）：开关打开时本进程首次登录成功时加载，之后每次登录成功都通知模块。
+        // DLL 不存在或开关关闭时「管理」「我的机器人」入口隐藏，机器人消息照常显示（docs/机器人方案.md §8.2）
+        m_pPanel->OnBotLoginSucceeded();
+        // 按改写序号同步：离线期间被改写过（公告卡片被删、通话结束、屏幕共享改标题、帖子被编辑或删除）或被撤回的消息，
+        // 按本地库里的水位逐页取回，覆盖本地库已有的行（docs/消息改写离线同步方案.md）
+        m_pPanel->OnRewrittenSyncLoginSucceeded();
+        // 「离开 / 忙碌自动回复」已迁到服务端（docs/机器人方案.md §11 Q2）：企业打开了机器人时拉一次服务端设置，
+        // 应答经 FMG_MSG_V2_AUTO_REPLY 回到主面板，服务端还没有设置时把本机旧设置上传一次
+        if (m_lpFMGClient->m_UserMgr.m_bBotFeature)
+        {
+            CIUSocket::GetInstance().SendGetAutoReply();
+        }
+        // 图片文字识别模块（FlamingoOcr.dll）2026-10-07 起在启动阶段预加载（CAppShell::Startup），未登录时截图也能识别文字
+        // Markdown 编辑器：登录成功后由主面板提供选对象与发送的能力（断线重连再走到这里时重复设置无妨）；
+        // 登录前打开的编辑器随即刷新底部，可以发送（docs/Markdown消息方案.md 第 11.3 节）
+        balloonmd::CMarkdownEditorManager::GetInstance().SetHost(m_pPanel);
         {
             CIniFile iniFile;
             CString strIniPath(g_szHomePath);
@@ -662,8 +805,17 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         // 开着，ShowAfterLogin 是幂等的，重复调用只是再刷一次 Header、再显示一次。
         // 界面数据由下面的 RequestContacts / RequestConversations / RequestUserGroups
         // 重新拉取刷新。
-        m_pPanel->ShowAfterLogin();
-        ::SetFocus(m_pPanel->m_hWnd);
+        // 锁屏期间不显示、不抢前台，解锁后再做（ReplayDeferredAfterUnlock）
+        if (balloonlock::DecideDuringLock(balloonlock::kLockEvtRaisePanel, balloonlock::IsScreenLocked()) == balloonlock::kLockActDefer)
+        {
+            m_lockDeferredShowPanel = true;
+            LOG_INFO("SessionController::OnLoginResult: screen is locked, showing the main panel deferred until unlock.");
+        }
+        else
+        {
+            m_pPanel->ShowAfterLogin();
+            ::SetFocus(m_pPanel->m_hWnd);
+        }
 
         //本轮登录重新开始记账："收到陌生人消息就补拉通讯录"那道兜底闸门要清零。
         //掉线重连期间组织架构可能变过、cmd_org_structure_notify 也可能错过，
@@ -691,11 +843,17 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         //FMG_MSG_V2_USER_GROUPS 回投，在 OnUserGroupsArrived 里填"群"Tab。
         CIUSocket::GetInstance().RequestUserGroups();
 
-        //登录成功后拉取发给本人的平台公告（主面板 Banner 上的「消息盒子」），应答经
+        //登录成功后拉取发给本人的平台公告（主面板 Banner 上的「公告中心」），应答经
         //FMG_MSG_V2_ANNOUNCEMENTS 回投，在 OnAnnouncementsArrived 里落本地库并刷角标。
         //这一条走主面板而不是直接调 CIUSocket：增量游标要从主面板持有的本地公告库里取，
         //本机已有的那些不必再拉一遍。
         m_pPanel->RequestAnnouncements();
+
+        //登录成功（含重连成功）后拉取本人可见的全部备忘，应答经 FMG_MSG_V2_MEMO_LIST 回投给备忘中枢；
+        //中枢同时载入本机的已提醒记录，开始安排提醒（docs/备忘与提醒方案.md 第 4 节）
+        balloonmemo::CMemoCenter::Instance().OnLoginSucceeded(
+            m_pPanel->m_hWnd, (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID,
+            m_lpFMGClient->m_UserMgr.GetPersonalFolder(), m_pPanel);
 
         //登录成功：托盘图标转回彩色、提示文字刷新。
         m_pPanel->TrayController().RefreshTrayIconForStatus();
@@ -713,11 +871,11 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         //让他稍后再试。ResumeOnlineFailed 负责退回并提示。
         if (bResuming)
         {
-            ResumeOnlineFailed(_T("网络故障，恢复在线失败，仍保持离线状态。"));
+            ResumeOnlineFailed(TR(L"网络故障，恢复在线失败，仍保持离线状态。"));
             break;
         }
 
-        ::MessageBox(m_hHost, _T("网络故障，登录失败！"), g_strAppTitle.c_str(), MB_OK);
+        ::MessageBox(m_hHost, TR(L"网络故障，登录失败！"), g_strAppTitle.c_str(), MB_OK);
         StartLogin();
 
         m_nSessionStatus = kSessionNotLogin;
@@ -731,11 +889,11 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         //升级窗并立即检查更新。检查更新走的是登录前白名单，此刻未登录也能查、能下。
         if (bResuming)
         {
-            ResumeOnlineFailed(_T("恢复在线失败：客户端版本过低，请升级后重试。"));
+            ResumeOnlineFailed(TR(L"恢复在线失败：客户端版本过低，请升级后重试。"));
             break;
         }
 
-        ::MessageBox(m_hHost, _T("当前客户端版本过低，无法登录，请先升级。"),
+        ::MessageBox(m_hHost, TR(L"当前客户端版本过低，无法登录，请先升级。"),
                    g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
         StartLogin();
         m_nSessionStatus = kSessionNotLogin;
@@ -749,10 +907,10 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
     {
         if (bResuming)
         {
-            ResumeOnlineFailed(_T("恢复在线失败：该账号未注册，仍保持离线状态。"));
+            ResumeOnlineFailed(TR(L"恢复在线失败：该账号未注册，仍保持离线状态。"));
             break;
         }
-        ::MessageBox(m_hHost, _T("用户名未注册！"), g_strAppTitle.c_str(), MB_OK);
+        ::MessageBox(m_hHost, TR(L"用户名未注册！"), g_strAppTitle.c_str(), MB_OK);
         StartLogin();
         m_nSessionStatus = kSessionNotLogin;
     }
@@ -762,7 +920,7 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
     {
         if (bResuming)
         {
-            ResumeOnlineFailed(_T("恢复在线失败：密码错误，仍保持离线状态。"));
+            ResumeOnlineFailed(TR(L"恢复在线失败：密码错误，仍保持离线状态。"));
             break;
         }
         //服务端明确说了密码不对：把本机存下的这个密码忘掉，并取消"记住密码" /
@@ -770,7 +928,7 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         //弹一次"密码错误"，而在那之前他根本没有界面可以取消勾选。
         ForgetSavedPasswordForCurrentAccount();
 
-        ::MessageBox(m_hHost, _T("密码错误！"), g_strAppTitle.c_str(), MB_OK);
+        ::MessageBox(m_hHost, TR(L"密码错误！"), g_strAppTitle.c_str(), MB_OK);
         StartLogin();
         m_nSessionStatus = kSessionNotLogin;
     }
@@ -780,11 +938,11 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
     {
         if (bResuming)
         {
-            ResumeOnlineFailed(_T("恢复在线失败：服务器拒绝了登录请求，仍保持离线状态。"));
+            ResumeOnlineFailed(TR(L"恢复在线失败：服务器拒绝了登录请求，仍保持离线状态。"));
             break;
         }
         // PR7: 不再切到旧"正在登录"面板 —— 主窗口始终隐藏。
-        ::MessageBox(m_hHost, _T("服务器拒绝您的登录请求！"), g_strAppTitle.c_str(), MB_OK);
+        ::MessageBox(m_hHost, TR(L"服务器拒绝您的登录请求！"), g_strAppTitle.c_str(), MB_OK);
         StartLogin();
         m_nSessionStatus = kSessionNotLogin;
     }
@@ -807,19 +965,34 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 // 注销返回消息
-LRESULT CSessionController::OnExitForUpdate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+LRESULT CSessionController::OnExitForUpdate(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    //锁屏期间不退出：进程一退，锁屏界面随之消失，等解锁后再退出并交给更新程序
+    if (balloonlock::DecideDuringLock(balloonlock::kLockEvtForcedUpdateExit, balloonlock::IsScreenLocked()) == balloonlock::kLockActDefer)
+    {
+        LOG_INFO("SessionController::OnExitForUpdate: screen is locked, exit deferred until unlock.");
+        DeferUntilUnlock(uMsg, wParam, lParam);
+        return 0;
+    }
     LOG_INFO("SessionController::OnExitForUpdate: update package is ready, exit now and hand over to the updater.");
     //直接退出，不经 OnClose 的「退出还是最小化」询问
     m_pAppHost->RequestAppExit();
     return 0;
 }
 
-LRESULT CSessionController::OnSilentUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+LRESULT CSessionController::OnSilentUpdateResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     update::UpdateTaskResult* pResult = (update::UpdateTaskResult*)lParam;
     if (pResult == NULL)
     {
+        return 0;
+    }
+
+    //锁屏期间不弹升级窗：结果原样记下（不释放），解锁后重新投递给本函数
+    if (balloonlock::DecideDuringLock(balloonlock::kLockEvtUpdatePrompt, balloonlock::IsScreenLocked()) == balloonlock::kLockActDefer)
+    {
+        LOG_INFO("SessionController::OnSilentUpdateResult: screen is locked, result deferred until unlock.");
+        DeferUntilUnlock(uMsg, wParam, lParam);
         return 0;
     }
 
@@ -873,7 +1046,7 @@ LRESULT CSessionController::OnV2UpdateProfileResult(UINT /*uMsg*/, WPARAM /*wPar
     m_pPanel->OnUpdateProfileResult(*pResp);
     delete pResp;
 
-    //资料更新走的是"乐观更新 + 失败回退"（见 CBalloonProfileDlg::OnSaveResult），
+    //资料更新走的是"乐观更新 + 失败回退"（见 CBalloonMainPanel::OnUpdateProfileResult；资料窗里改昵称也走这里），
     //上面这一路处理完之后 m_UserInfo 里的昵称就是最终生效的值。若它和历史登录
     //列表里存的姓名对不上（用户刚改了昵称），写回并落盘，使下次在登录窗切到本
     //账号时头像下方显示的是新姓名。没变则不写，避免每次改签名都动一次文件。
@@ -895,6 +1068,29 @@ void CSessionController::SyncNickNameToLoginAccountList()
     LOG_INFO(_T("nickname changed, update login account list: account=%s, nickname=%s."),
         m_stAccountInfo.szUser, strNickName.c_str());
     m_LoginAccountList.SetNickName(m_stAccountInfo.szUser, strNickName.c_str());
+    SaveLoginAccountListFile();
+}
+
+// 把当前登录账号的 userid 与头像同步进历史登录账号列表（有变化才写盘）
+void CSessionController::SyncAvatarToLoginAccountList()
+{
+    if (m_lpFMGClient == NULL)
+        return;
+    LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(m_stAccountInfo.szUser);
+    if (lpAccount == NULL)
+        return;
+
+    const CBuddyInfo& me = m_lpFMGClient->m_UserMgr.m_UserInfo;
+    if (me.m_uUserID == 0)
+        return;
+    const CStringA& customface = me.m_strCustomFaceName;
+    if (lpAccount->nUserId == (long long)me.m_uUserID && lpAccount->nFaceType == (int)me.m_nFace
+        && customface == lpAccount->szCustomFace)
+        return;
+
+    LOG_INFO("avatar changed, update login account list: userid=%u, facetype=%u.", me.m_uUserID, me.m_nFace);
+    m_LoginAccountList.SetAvatar(m_stAccountInfo.szUser, (long long)me.m_uUserID, (int)me.m_nFace,
+        customface.GetString());
     SaveLoginAccountListFile();
 }
 
@@ -962,10 +1158,29 @@ LRESULT CSessionController::OnSetAutoLogin(UINT /*uMsg*/, WPARAM wParam, LPARAM 
     return 0;
 }
 
+// 系统设置改了界面语言并选了「立即重启」：wParam / lParam 未用，无堆负载。
+// 先启动新进程（它会等本进程退出后再继续），再走与托盘「退出」相同的退出流程；
+// 新进程启动失败时不退出，只记日志，新语言等用户下次手动重启后生效。
+LRESULT CSessionController::OnRestartApp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    if (!apprestart::LaunchRestart())
+    {
+        LOG_ERROR("SessionController::OnRestartApp: failed to launch the new instance (error %lu), not exiting.",
+                  ::GetLastError());
+        return 0;
+    }
+    LOG_INFO("SessionController::OnRestartApp: new instance launched, exiting for the language change.");
+    DoExit();
+    return 0;
+}
+
 // 忘掉当前账号在本机存下的密码，并取消"记住密码" / "自动登录"
 void CSessionController::ForgetSavedPasswordForCurrentAccount()
 {
-    const tstring& strAccount = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount;
+    //历史列表以登录窗里输入的原文为键，而此时本人资料里的账号已是服务端返回的规范账号；
+    //用手机号或大小写不同的账号登录时两者不同，必须用原文查（docs/登录账号与手机号登录方案.md）
+    const tstring strAccount = PickLoginAccountListKey(m_stAccountInfo.szUser,
+        m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str());
     if (strAccount.empty())
     {
         LOG_INFO("SessionController::ForgetSavedPasswordForCurrentAccount: account is empty, skipped.");
@@ -1080,7 +1295,9 @@ LRESULT CSessionController::OnChangeMyPresence(UINT /*uMsg*/, WPARAM wParam, LPA
         m_bResumingOnline = true;
 
         //此刻连接尚未建立，界面进入"正在连接"中间态：提示条改成正在连接、各项功能仍然
-        //拦住（胶囊已经乐观显示成在线，但消息这会儿发出去也到不了服务器）。
+        //拦住（胶囊已经乐观显示成在线，但消息这会儿发出去也到不了服务器）。托盘图标随之
+        //开始亮灰交替，与其它几处连接态变化一样先刷新托盘再广播。
+        m_pPanel->TrayController().RefreshTrayIconForStatus();
         BroadcastConnectionState();
 
         LOG_INFO("SessionController::OnChangeMyPresence: resuming online, logging in again, target presence=%d.",
@@ -1111,13 +1328,36 @@ LRESULT CSessionController::OnLogout(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*
     if (m_pPanel->IsWindow())
         hOwner = m_pPanel->m_hWnd;
 
-    if (::MessageBox(hOwner,
-                     _T("确定要登出当前账号吗？\r\n登出后将断开连接并关闭所有聊天窗口。"),
-                     g_strAppTitle.c_str(),
-                     MB_YESNO | MB_ICONQUESTION) != IDYES)
+    //云端录像还在合成、上传或已暂停（屏幕共享方案第 14.4 节，2026-10-07）：弹「云端录像」对话框，它本身就是登出的确认，
+    //用户可以选「登出，下次继续」「登出并放弃这些录像」或「不登出」
+    const bool cloudWork = m_pPanel->HasCloudRecordWork();
+    if (cloudWork)
     {
-        LOG_INFO("SessionController::OnLogout: cancelled by the user in the confirm dialog, logout aborted.");
-        return 0;
+        const int choice = m_pPanel->ConfirmCloudRecordExit(flamingomedia::media_cloud_exit_logout);
+        if (choice == flamingomedia::media_cloud_exit_cancel)
+        {
+            LOG_INFO("SessionController::OnLogout: cancelled in the cloud record dialog, logout aborted.");
+            return 0;
+        }
+        LOG_INFO("SessionController::OnLogout: cloud record dialog choice %d, logging out.", choice);
+    }
+    //文件共享还有传输没完成时加一句（docs/文件共享方案.md 第 14 节）：登出会中断浏览窗口关闭后在后台进行的传输
+    const uint32_t shareTransfers = balloonfileshare::CFileShareHost::GetInstance().GetActiveTransferCount();
+    //云端录像的对话框已经确认过登出：只在还有文件共享传输时再问一次
+    if (!cloudWork || shareTransfers > 0)
+    {
+        std::wstring confirmText = TR(L"确定要登出当前账号吗？\r\n登出后将断开连接并关闭所有聊天窗口。");
+        if (shareTransfers > 0)
+            confirmText += L"\r\n" + balloonfileshare::FileShareTransferExitWarning(shareTransfers, true);
+        if (::MessageBox(hOwner,
+                         confirmText.c_str(),
+                         g_strAppTitle.c_str(),
+                         MB_YESNO | MB_ICONQUESTION) != IDYES)
+        {
+            LOG_INFO("SessionController::OnLogout: cancelled by the user in the confirm dialog, logout aborted. cloudWork=%d, "
+                     "share transfers=%u.", cloudWork ? 1 : 0, static_cast<unsigned>(shareTransfers));
+            return 0;
+        }
     }
 
     //收尾与"被踢下线"完全相同，共用同一个序列（见 ReturnToLoginWindow）。区别只在于
@@ -1165,6 +1405,25 @@ void CSessionController::ReturnToLoginWindow(int exitKind, int kickoutReason)
     //之前做 —— 状态机的进度回调是投给代理窗口再转到聊天窗的，窗口先没了会白投一轮。
     foldertransfer::FolderTransferManager::GetInstance().Reset();
 
+    //文件共享模块：关闭它的全部窗口、结束全部访问会话。DLL 保持加载，下次登录直接复用；
+    //共享记录本身不受退出登录影响（只有主动取消才失效，见 docs/文件共享方案.md 2.3）。
+    balloonfileshare::CFileShareHost::GetInstance().OnLoggingOut();
+
+    //P2P 模块：结束全部链路。DLL 保持加载，下次登录直接复用
+    balloonp2p::CP2PHost::GetInstance().OnLoggingOut();
+
+    //语音字幕：此后不可用，FlamingoMedia 随之停止正在进行的字幕识别；DLL 保持加载
+    ballooncaption::CCaptionHost::GetInstance().OnLoggingOut();
+
+    //单聊密聊：结束全部密聊（通知对方后清零密钥），单聊窗里的密聊内容随下面关窗一起销毁；DLL 保持加载
+    balloonsecret::CSecretChatHost::GetInstance().OnLoggingOut();
+
+    //帖子群：关闭全部帖子群窗口；DLL 保持加载，下次登录直接复用
+    balloonthread::CThreadGroupHost::GetInstance().OnLoggingOut();
+
+    //机器人：插件关闭全部窗口、主面板清空各群的 2801 缓存；DLL 保持加载，下次登录直接复用
+    m_pPanel->OnBotLoggingOut();
+
 
     //把主面板复位到"未登录"状态，然后隐藏它。主面板是常驻窗口，登出<u>不销毁</u>，
     //下次登录复用同一个窗口（见 OnInitDialog 里 EnsureCreated 处的说明）。
@@ -1182,10 +1441,19 @@ void CSessionController::ReturnToLoginWindow(int exitKind, int kickoutReason)
     m_pPanel->ResetForLogout();
     m_pPanel->HideForLogout();
 
+    //发送键不再读写上一个账号的配置：解绑后退回 flamingo.ini，下次登录重新绑定（BUG-119）
+    balloonchatwnd::BindChatSendModeStore(NULL);
+    m_sendModeStore.Attach(NULL);
+
     //账号与密码要在登录窗里回填（登出 / 被踢后两者都保留），而紧接着的 ClearUserInfo /
     //Reset 会把 m_UserInfo 整个清空，故先留存、清完再写回 —— StartLogin 正是从这两个
     //字段取登录窗的默认账号与默认密码。
-    tstring strAccount  = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount;
+    //账号回填的是本次登录时输入的原文，而不是登录后换上的规范账号：用手机号或大小写不同
+    //的账号登录时两者不同，历史列表以原文为键，回填规范账号会让登录窗认不出这条记录
+    //（不显示姓名与头像、勾选项为空），再登录一次还会多出一条同一个人的记录。未登录时
+    //该字段本来就存放输入的原文（见 CFlamingoClient::SetUser），这里写回原文与之一致。
+    tstring strAccount  = PickLoginAccountListKey(m_stAccountInfo.szUser,
+        m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str());
     tstring strPassword = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strPassword;
 
     m_lpFMGClient->m_UserMgr.ClearUserInfo();
@@ -1202,7 +1470,8 @@ void CSessionController::ReturnToLoginWindow(int exitKind, int kickoutReason)
     //必须在这里清、而且要立刻落盘：不清的话，用户点了"登出"、本次进程内确实回到了登录窗，
     //可下次启动照样被自动登进去——而自动登录一旦成功就直接进主面板，他再也没有机会看到
     //登录窗去取消那个勾选，等于绕不出来。
-    //账号取上面留存下来的 strAccount：紧邻的 ClearUserInfo 已经把 m_UserInfo 清过一遍了。
+    //账号取上面留存下来的 strAccount（输入的原文，即历史列表里的键）：紧邻的 ClearUserInfo
+    //已经把 m_UserInfo 清过一遍了。
     if (balloonmain::ShouldClearAutoLoginOnExit(exitKind, kickoutReason))
     {
         ClearAutoLoginFlag(strAccount.c_str());
@@ -1312,21 +1581,16 @@ void CSessionController::BroadcastConnectionState()
 
 int CSessionController::GetCurrentPresence()
 {
-    // 主面板在时以状态胶囊为准 —— 托盘菜单标记的当前项、托盘悬停提示的状态文字，
-    // 与用户在主面板上看到的胶囊必然是同一个值。
-    if (m_pPanel->IsWindow())
-    {
-        return m_pPanel->GetPresence();
-    }
-
-    // 主面板不在（未登录 / 登出后已销毁），或用户主动点了"离线"：都按"离线"呈现。
-    if (!m_bAlreadyLogin || m_nSessionStatus == kSessionUserGoOffline)
-    {
-        return kMyPresenceOffline;
-    }
-
-    // 其余情形（含登录中 / 重连中）退回期望在线状态。
-    return CIUSocket::GetInstance().GetRecordOnlineStatus();
+    // 判断顺序见 balloonmain::ResolveSessionPresence：没有登录时一律是离线（登出后主面板只是隐藏、
+    // 窗口还在，胶囊上仍是登出前的状态）；已登录且主面板在时以胶囊为准 —— 托盘菜单标记的当前项、
+    // 托盘悬停提示的状态文字，与用户在主面板上看到的胶囊必然是同一个值；主面板不在时，用户主动点了
+    // "离线"是离线，其余（登录中 / 重连中）退回期望在线状态。
+    const bool hasPanel = m_pPanel->IsWindow() ? true : false;
+    return balloonmain::ResolveSessionPresence(m_bAlreadyLogin != FALSE,
+                                               m_nSessionStatus == kSessionUserGoOffline,
+                                               hasPanel,
+                                               hasPanel ? m_pPanel->GetPresence() : kMyPresenceOffline,
+                                               CIUSocket::GetInstance().GetRecordOnlineStatus());
 }
 
 void CSessionController::CreateEssentialDirectories()
@@ -1382,6 +1646,60 @@ void CSessionController::RequestLogout()
 void CSessionController::RequestExit()
 {
     DoExit();
+}
+
+void CSessionController::DeferUntilUnlock(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    //被挤下线的推送可能重复到达，只保留最后一条，免得解锁后连弹两个提示框
+    if (uMsg == FMG_MSG_V2_KICKOUT)
+    {
+        for (size_t i = 0; i < m_lockDeferredMsgs.size(); ++i)
+        {
+            if (m_lockDeferredMsgs[i].m_msg == FMG_MSG_V2_KICKOUT)
+            {
+                m_lockDeferredMsgs.erase(m_lockDeferredMsgs.begin() + i);
+                break;
+            }
+        }
+    }
+    LockDeferredMsg item;
+    item.m_msg = uMsg;
+    item.m_wParam = wParam;
+    item.m_lParam = lParam;
+    m_lockDeferredMsgs.push_back(item);
+    LOG_INFO("SessionController::DeferUntilUnlock: msg=%u deferred, queued=%u.", uMsg,
+             (unsigned int)m_lockDeferredMsgs.size());
+}
+
+void CSessionController::ReplayDeferredAfterUnlock()
+{
+    std::vector<LockDeferredMsg> msgs;
+    msgs.swap(m_lockDeferredMsgs);
+    const bool showPanel = m_lockDeferredShowPanel;
+    m_lockDeferredShowPanel = false;
+    LOG_INFO("SessionController::ReplayDeferredAfterUnlock: msgs=%u, showPanel=%d.", (unsigned int)msgs.size(),
+             showPanel ? 1 : 0);
+
+    //先显示主面板（重连成功那一步），再补投延后的消息：被挤下线的提示框以主面板为 owner
+    if (showPanel && m_bAlreadyLogin && m_pPanel != NULL && m_pPanel->IsWindow())
+    {
+        m_pPanel->ShowAfterLogin();
+        ::SetFocus(m_pPanel->m_hWnd);
+    }
+    //重新投递而不是直接调用处理函数：被挤下线与强制升级退出都要求跑在由 PostMessage 投递而来的调用栈上
+    for (size_t i = 0; i < msgs.size(); ++i)
+    {
+        if (!::PostMessage(m_hHost, msgs[i].m_msg, msgs[i].m_wParam, msgs[i].m_lParam))
+        {
+            LOG_ERROR("SessionController::ReplayDeferredAfterUnlock: PostMessage msg=%u failed, error=%u.",
+                      msgs[i].m_msg, ::GetLastError());
+            //升级检查结果的堆对象无人接收，就地释放
+            if (msgs[i].m_msg == FMG_MSG_UPDATE_RESULT)
+            {
+                delete (update::UpdateTaskResult*)msgs[i].m_lParam;
+            }
+        }
+    }
 }
 
 } // namespace balloonmain

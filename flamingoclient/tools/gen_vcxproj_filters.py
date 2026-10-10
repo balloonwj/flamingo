@@ -57,6 +57,41 @@ ITEM_TYPES = ("ClCompile", "ClInclude", "ResourceCompile", "Image", "Text", "Non
 TARGETS = (
     (os.path.join("..", "Source", "Flamingo.vcxproj"), None),
     (os.path.join("..", "Source", "Tests", "FlamingoUnit.vcxproj"), "Tests"),
+    # 2026-10-02 起新增的 DLL 工程（屏幕共享 / 录制 / 音视频）。工程目录下只有
+    # DllMain.cpp 与 .def 两个构建用文件，直接挂在工程节点下不分组。
+    (os.path.join("..", "FlamingoMedia", "FlamingoMedia.vcxproj"), None),
+    # 2026-10-02 起新增的文件共享 DLL 工程（docs/文件共享方案.md 7.1）。工程目录下的
+    # DllMain.cpp、FileShareModule.*、FileShareApi.h 等直接挂在工程节点下不分组，
+    # Engine/、UI/ 两个子目录各成一组。
+    (os.path.join("..", "FlamingoFileShare", "FlamingoFileShare.vcxproj"), None),
+    # 2026-10-03 起新增的 P2P 通信 DLL 工程（docs/P2P通信方案.md 4.2）。工程目录下的 DllMain.cpp、
+    # FlamingoP2PApi.h 等直接挂在工程节点下不分组，Host/ 子目录成一组。
+    (os.path.join("..", "FlamingoP2P", "FlamingoP2P.vcxproj"), None),
+    # 2026-10-03 起新增的界面语言包 DLL 工程（docs/多语言方案.md 第 6 节）。工程目录下的源文件、
+    # 头文件、.rc 与 .def 直接挂在工程节点下不分组，lang/ 子目录（四个 .po）成一组。
+    (os.path.join("..", "FlamingoLang", "FlamingoLang.vcxproj"), None),
+    # 2026-10-05 起新增的图片文字识别 DLL 工程（docs/图片文字识别方案.md 第 9 节）。工程目录下的
+    # DllMain.cpp、FlamingoOcrApi.h、函数表等直接挂在工程节点下不分组，Core/、WinOcr/ 两个子目录各成一组。
+    (os.path.join("..", "FlamingoOcr", "FlamingoOcr.vcxproj"), None),
+    # 2026-10-06 起新增的锁屏 DLL 工程（docs/锁屏方案.md 第 4.1 节）。工程目录下的 DllMain.cpp、
+    # FlamingoLockApi.h 等直接挂在工程节点下不分组，Host/、Core/、Render/、Session/、Scene/ 各成一组。
+    (os.path.join("..", "FlamingoLock", "FlamingoLock.vcxproj"), None),
+    # 2026-10-06 起新增的语音字幕 DLL 工程与模型资源 DLL 工程（docs/语音字幕方案.md 第 11 节）。工程目录下的
+    # DllMain.cpp、CaptionApi.h、.def 直接挂在工程节点下不分组，Model/、Engine/、Record/、Render/、Host/ 等各成一组。
+    (os.path.join("..", "FlamingoCaption", "FlamingoCaption.vcxproj"), None),
+    (os.path.join("..", "FlamingoCaptionModel", "FlamingoCaptionModel.vcxproj"), None),
+    # 2026-10-07 起新增的单聊密聊 DLL 工程（docs/密聊方案.md 第 4.1 节）。工程目录下的 DllMain.cpp、
+    # SecretChatApi.h、.def 直接挂在工程节点下不分组，Host/、Core/、Tests/ 各成一组。
+    (os.path.join("..", "FlamingoSecretChat", "FlamingoSecretChat.vcxproj"), None),
+    # 2026-10-07 起新增的帖子群 DLL 工程（docs/帖子群方案.md 第 7 节）。工程目录下的 DllMain.cpp、
+    # ThreadGroupApi.h、.def 直接挂在工程节点下不分组，Host/、Core/、UI/ 各成一组。
+    (os.path.join("..", "FlamingoThreadGroup", "FlamingoThreadGroup.vcxproj"), None),
+    # 2026-10-07 起新增的截图 DLL 工程（docs/截图独立模块方案.md 第 3.1 节）。工程目录下的 DllMain.cpp、
+    # ScreenshotApi.h、.def 直接挂在工程节点下不分组，Host/ 等子目录各成一组。
+    (os.path.join("..", "FlamingoScreenshot", "FlamingoScreenshot.vcxproj"), None),
+    # 2026-10-08 起新增的机器人管理界面 DLL 工程（docs/机器人方案.md 8.2）。工程目录下的 DllMain.cpp、
+    # BotApi.h、.def 直接挂在工程节点下不分组，Host/、Core/、UI/ 各成一组。
+    (os.path.join("..", "FlamingoBot", "FlamingoBot.vcxproj"), None),
 )
 
 

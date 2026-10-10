@@ -33,6 +33,8 @@
 #include <vector>
 
 #include "../UI/BalloonHistory/MergedRecordRows.h"
+#include "../UI/BalloonHistory/HistoryRowFormat.h"     // V2V-SYS2：系统提示行的发送人与头像底色
+#include "../net/Protocol.h"                           // V2V-SYS2：::message_type_*
 #include "../UI/BalloonHistory/HistoryWindowLayout.h"   // BuildListContent / kIdHistoryCardBase
 #include "../UI/BalloonHistory/HistoryContentView.h"    // 行内正文内容块（量正文宽度与高度）
 #include "../UI/BalloonChatWnd/ChatFileCard.h"          // FileCardHeight / FileCardSkipsReject / kFileCardWidth
@@ -483,4 +485,21 @@ TEST_CASE("FWD-C18d 查看窗文件行的行高：名字行加完整卡片，各
         CHECK(rcCard.top >= rcRow.top);
         CHECK(rcCard.bottom <= rcRow.bottom);
     }
+}
+
+// ---- 系统提示行的发送人与头像底色（2026-10-03 起，HistoryRowFormat）----
+
+TEST_CASE("V2V-SYS2 系统提示行的发送人与头像底色", "[history][systemtip]")
+{
+    const int64_t kSomeUser = 5127;
+    //系统提示：不管服务端把它记在谁名下（群提示为 0，单聊的屏幕共享结束提示记在发起人名下）
+    CHECK(HistorySenderName(::message_type_system, CString(_T("用户0"))) == CString(_T("系统消息")));
+    CHECK(HistorySenderName(::message_type_system, CString(_T("张勇"))) == CString(_T("系统消息")));
+    CHECK(HistoryAvatarColor(::message_type_system, 0) == kHistorySystemAvatarColor);
+    CHECK(HistoryAvatarColor(::message_type_system, kSomeUser) == kHistorySystemAvatarColor);
+
+    //其余消息：名字与底色照旧
+    CHECK(HistorySenderName(::message_type_text, CString(_T("张勇"))) == CString(_T("张勇")));
+    CHECK(HistoryAvatarColor(::message_type_text, kSomeUser) == ColorForId(kSomeUser));
+    CHECK(HistoryAvatarColor(::message_type_relay, kSomeUser) == ColorForId(kSomeUser));
 }

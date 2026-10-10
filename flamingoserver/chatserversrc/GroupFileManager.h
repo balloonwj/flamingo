@@ -94,5 +94,30 @@ public:
     bool checkDownloadAccess(int64_t fileid, int64_t userid,
                              bool& isGroupFile, bool& isMember);
 
+    /**
+     *  按文件名关键字搜索某用户所在全部群的群文件（cmd_search_group_files 用）。只查该用户在
+     *  t_group_member 里有成员行的群：退群、被移出、群被解散后成员行都会被删除，自然搜不到。
+     *  文件名匹配不区分英文大小写；关键字里的 ! % _ 按普通字符匹配（见 buildNameLikePattern）。
+     *  @param userid  搜索者 userid
+     *  @param keyword 文件名关键字（UTF-8），调用方须已去掉首尾空白且保证非空
+     *  @param limit   最多返回几条，须大于 0
+     *  @param out     [出参] 命中的群文件，按登记时间倒序（同一时间按条目ID倒序）；uploadername 留空，
+     *                 由会话层补全；调用前会被清空
+     *  @param hasMore [出参] 命中条数是否超过 limit（超过时 out 只含最近的 limit 条）
+     *  @return 数据库访问成功返回 true（零条也算成功）；limit 非法或出错返回 false
+     */
+    bool searchGroupFilesByName(int64_t userid, const std::string& keyword, int limit,
+                                std::vector<SearchedGroupFile>& out, bool& hasMore);
+
+    /**
+     *  把文件名关键字转成 LIKE 的匹配串：前后各加一个 %，并在 ! % _ 三个字符前加转义符 !，
+     *  配合语句里的 ESCAPE '!' 让它们按普通字符匹配。转义符取 ! 而不是反斜杠：反斜杠在 MySQL
+     *  字符串字面量里本身是转义字符、在 SQLite 里却不是，写成 ESCAPE '\' 两种库无法同时成立。
+     *  结果仍须经 dbapi::EscapeString 处理后才能拼进 SQL。
+     *  @param keyword 关键字（UTF-8）
+     *  @return LIKE 匹配串
+     */
+    static std::string buildNameLikePattern(const std::string& keyword);
+
 private:
 };

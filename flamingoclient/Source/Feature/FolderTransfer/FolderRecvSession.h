@@ -79,7 +79,9 @@
 
 #include "FolderRelayFraming.h"   // 应用帧编解码、清单重组器
 #include "FolderRelayClient.h"    // 一条中转通道的连接
+#include "FolderLaneTransport.h"  // 通道传输抽象：中转连接或 P2P 可靠通道（P2P 方案第 5 期）
 #include "FolderManifest.h"       // 路径安全校验、长路径、UTF-8 与 UTF-16 互转
+#include "FolderTransferHooks.h"  // IFolderRecvHooks：文件共享的传输子会话用来定制前置交换、落点与覆盖规则
 #include "../../Common/Util/MD5Core.h"           // MD5_CTX / MD5Init / MD5Update / MD5Final（增量 MD5，与下载路径共用同一份实现）
 
 namespace foldertransfer {
@@ -394,6 +396,23 @@ inline FolderChunkVerdict ClassifyFolderChunk(int64_t writtenBytes, int64_t chun
     //其余情形本片尾部有新字节：跳过开头已有的部分（正好接续时为 0）后收下
     outSkipBytes = writtenBytes - chunkOffset;
     return kFolderChunkAccept;
+}
+
+/**
+ *  数据通道的对端断开时，是否应判整个会话失败。纯函数。
+ *  发送端在最后一个文件校验通过、发出 ft_complete 之后会立即关闭全部通道；接收端各通道的线程
+ *  各自处理断开，数据通道可能先于控制通道处理完 ft_complete 就看到断开。此时数据通道上已不会
+ *  再有数据，不应判失败，整体是否完成由控制通道（收到 ft_complete、或控制通道断开）决定。
+ *  @param manifestReady  清单是否已收齐（未收齐时文件总数未知，断开一律判失败）
+ *  @param completedFiles 已校验通过并落地的文件个数
+ *  @param totalFiles     清单里的文件总数
+ *  @return 应判失败返回 true；全部文件都已完成时返回 false
+ */
+inline bool IsDataLaneCloseFatal(bool manifestReady, int64_t completedFiles, int64_t totalFiles)
+{
+    if (!manifestReady)
+        return true;
+    return completedFiles < totalFiles;
 }
 
 } // namespace folderrecv
@@ -719,10 +738,21 @@ struct FolderRecvSessionParams
     std::string  m_relayToken;     //中转令牌（token 字段），本端 N+1 条通道共用同一枚
     int          m_dataLanes;      //数据通道条数 N（lanes 字段），取值 1..kFolderMaxDataLanes
     std::wstring m_saveParentDir;  //用户选定的保存位置（根目录将建在它下面）；重试时若状态里已有根目录则忽略本字段
+    //服务器长期公钥（32 字节），用于各条通道的协议加密握手；NULL 表示服务端未配置公钥、通道全程明文。
+    //不接管所有权，指向的内存须在 Start 返回之后仍然有效。由调用方传入的理由同 FolderSendSessionParams
+    const unsigned char* m_serverPubKey;
+    //扩展点（不拥有，生命周期须长于会话）；NULL 表示单聊文件夹传输，行为不变（见 FolderTransferHooks.h）
+    IFolderRecvHooks*    m_hooks;
+    //通道工厂（不拥有，生命周期须长于会话）；NULL 表示各条通道都是到 fileserver 的中转连接，行为不变。
+    //单聊文件夹传输在 1816 带 p2psessionid 时给出 P2P 的工厂（先等 P2P 链路，建链失败再退回中转）
+    IFolderLaneTransportFactory* m_transportFactory;
 
     FolderRecvSessionParams()
         : m_relayPort(0)
         , m_dataLanes(1)
+        , m_serverPubKey(NULL)
+        , m_hooks(NULL)
+        , m_transportFactory(NULL)
     {
     }
 };
@@ -736,15 +766,16 @@ class FolderRecvLane : public FolderRelayClientHandler
 public:
     /**
      *  @param laneIndex 本通道的序号：0 为控制通道，1..N 为数据通道
+     *  @param transport 本通道的传输（接管所有权，不可为 NULL）
      */
-    explicit FolderRecvLane(int laneIndex);
+    FolderRecvLane(int laneIndex, IFolderLaneTransport* transport);
     virtual ~FolderRecvLane();
 
     FolderRecvLane(const FolderRecvLane&) = delete;
     FolderRecvLane& operator=(const FolderRecvLane&) = delete;
 
-    //本通道的中转连接。由会话负责 Connect / Close。
-    FolderRelayClient& GetClient();
+    //本通道的传输（中转连接或 P2P 可靠通道）。由会话负责 Connect / Close。
+    IFolderLaneTransport& GetClient();
 
     //本通道的序号（0 控制 / 1..N 数据）。
     int GetLaneIndex() const;
@@ -773,7 +804,7 @@ private:
 
 private:
     const int               m_laneIndex;   //本通道序号，构造后不再变
-    FolderRelayClient       m_client;      //本通道的中转连接，生命周期与本对象相同
+    std::unique_ptr<IFolderLaneTransport> m_client;   //本通道的传输（中转连接或 P2P 可靠通道），生命周期与本对象相同
     mutable std::mutex      m_mtx;         //保护 m_queue / m_closed / m_peerClosed
     std::condition_variable m_notEmpty;    //队列由空变非空、或被关闭时通知取帧方
     std::condition_variable m_notFull;     //队列由满变不满、或被关闭时通知入队方
@@ -787,7 +818,7 @@ private:
 //一个实例只用一次 —— 失败之后不能再 Start()，重试请新建一个实例并传入<u>同一份</u>
 //FolderReceiveState。全部方法都可在 UI 线程调用（Start 立即返回、Cancel 只置标志），
 //唯独 Stop() 会等工作线程结束，故不可在本会话的回调里调用它。
-class FolderRecvSession
+class FolderRecvSession : private IFolderControlSender
 {
 public:
     FolderRecvSession();
@@ -880,6 +911,9 @@ private:
 
     //在控制通道上发一个应用帧（回执 / 中止）。@return 发出返回 true
     bool SendControlFrame(const std::string& frame);
+
+    //IFolderControlSender：经控制通道发扩展点的自定义帧
+    virtual bool SendControl(const std::string& frame) override;
 
     //控制通道收到 ft_complete、或某个文件刚校验通过时调用：判断整体是否已完成。
     void MaybeFinish();

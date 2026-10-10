@@ -11,7 +11,9 @@
  *  转发音视频帧（中转层复用远程桌面的 RelaySession / RelayHub，本类不参与中转
  *  数据）。相比远程桌面会话管理，本类额外提供两项：isUserBusy（“对方忙”判断，
  *  防止给正在通话的用户再发起呼叫）与 reapTimedOutSessions（响铃超时清理，呼叫
- *  无人应答时自动结束）。
+ *  无人应答时自动结束）。另有掉线宽限：参与方最后一个登录连接断开时
+ *  markUserOffline 记下时刻，宽限期内重新登录由 markUserOnline 清掉，超过宽限期仍未回来的
+ *  通话由 reapOfflineSessions 收集并移除，调用方据此通知仍在线的一方。
  *
  *  全局单例，经 Singleton<CallManager> 访问；会话表受内部互斥量保护，可被多个
  *  EventLoop 工作线程并发访问。本类为纯逻辑（不触网、不查库），便于单元测试，
@@ -36,9 +38,15 @@ struct CallSessionInfo
     int         media;       //媒体类型，取值见 enum call_media（纯语音 / 音视频）
     int         state;       //会话状态，取值见 enum call_state
     int64_t     createTime;  //会话创建时间，Unix 毫秒（供响铃超时清理）
+    int64_t     callerOfflineAt;   //主叫最后一个登录连接断开的时刻，Unix 毫秒；0 表示在线（掉线宽限用）
+    int64_t     calleeOfflineAt;   //被叫最后一个登录连接断开的时刻，Unix 毫秒；0 表示在线（掉线宽限用）
+    int64_t     connectTime;       //接通时刻，Unix 毫秒；0 表示还没接通（通话卡片据此算时长，markConnected 设置）
+    int64_t     cardMsgId;         //这通电话写在两人单聊里的通话卡片的 msgid；0 表示没有写成（结束时不改写，setCard 设置）
+    std::string cardContent;       //通话卡片当前的 content（紧凑 JSON），结束时在它上面改写（setCard 设置）
 
     CallSessionInfo()
-        : callerId(0), calleeId(0), media(0), state(0), createTime(0)
+        : callerId(0), calleeId(0), media(0), state(0), createTime(0), callerOfflineAt(0), calleeOfflineAt(0),
+          connectTime(0), cardMsgId(0)
     {
     }
 };
@@ -58,6 +66,10 @@ public:
     //relay 令牌有效期（毫秒）：仅覆盖“拿令牌去连 imgserver 建立中转”这一步，
     //连上后中转层不再校验令牌；5 分钟足够覆盖接听到建连的间隔
     static const int64_t kRelayTokenTtlMs = 5 * 60 * 1000;
+
+    //参与方掉线后保留通话的默认宽限期（毫秒）：期内重新登录则通话继续，超过则由服务端结束。
+    //可由 chatserver.conf 的 callofflinegracems 覆盖
+    static const int64_t kDefaultOfflineGraceMs = 30 * 1000;
 
     /**
      *  配置音视频通话域运行参数；main.cpp 读取配置文件后调用。
@@ -96,6 +108,31 @@ public:
      *  @return 会话存在并更新返回 true，否则 false
      */
     bool setState(const std::string& sessionid, int state);
+
+    /**
+     *  记下接通：状态置为 call_state_connected，并记下接通时刻（通话卡片据此算时长）。
+     *  @param sessionid 会话 id
+     *  @param now       接通时刻，Unix 毫秒
+     *  @return 会话存在并更新返回 true，否则 false
+     */
+    bool markConnected(const std::string& sessionid, int64_t now);
+
+    /**
+     *  记下这通电话写在两人单聊里的通话卡片（呼叫时写入后调用），结束时据此改写。
+     *  @param sessionid 会话 id
+     *  @param msgId     卡片消息的 msgid
+     *  @param content   卡片的 content（紧凑 JSON）
+     *  @return 会话存在并更新返回 true，否则 false
+     */
+    bool setCard(const std::string& sessionid, int64_t msgId, const std::string& content);
+
+    /**
+     *  响铃中的会话还剩多少毫秒超时（第 15 期，随来电邀请推送下发，来电弹窗据此显示倒计时）。
+     *  @param sessionid 会话 id
+     *  @param now       当前时间，Unix 毫秒
+     *  @return 剩余毫秒数，已到或已过超时为 0；会话不存在或不在响铃中返回 -1
+     */
+    int64_t ringRemainingMs(const std::string& sessionid, int64_t now);
 
     /**
      *  删除会话（拒绝 / 取消 / 挂断 / 超时时调用）。
@@ -146,6 +183,15 @@ public:
     bool isUserBusy(int64_t userId);
 
     /**
+     *  查出某用户当前所在的那通通话（作主叫或被叫均算）。用于「通话中共享屏幕」时判断
+     *  共享对象是不是通话对端、通话是否已接通（见 ScreenShareRules::checkCallConflict）。
+     *  @param userId 待查询用户 userid
+     *  @param out    [出参] 查到时填入会话信息的拷贝；查不到时不修改
+     *  @return 该用户在某个活跃会话里返回 true，否则 false
+     */
+    bool getUserCall(int64_t userId, CallSessionInfo& out);
+
+    /**
      *  收集并移除所有“响铃超时”的会话（仍处于 call_state_ringing 且
      *  now - createTime >= kRingingTimeoutMs）。已接通的会话不受超时影响。
      *  供 chatserver 的周期定时器调用：据返回的会话信息向双方推送 call_state_timeout。
@@ -154,6 +200,35 @@ public:
      */
     void reapTimedOutSessions(int64_t now, std::vector<CallSessionInfo>& out);
 
+    /**
+     *  设置掉线宽限期。
+     *  @param graceMs 宽限期，单位毫秒；不大于 0 时按 kDefaultOfflineGraceMs 处理
+     */
+    void setOfflineGraceMs(int64_t graceMs);
+
+    //当前的掉线宽限期，单位毫秒
+    int64_t offlineGraceMs() const;
+
+    /**
+     *  用户最后一个登录连接断开：给他参与的每通通话记下掉线时刻。已记过的不改（以第一次为准）。
+     *  @param userId 掉线的用户
+     *  @param now    当前时间，Unix 毫秒
+     */
+    void markUserOffline(int64_t userId, int64_t now);
+
+    /**
+     *  用户重新登录：清掉他参与的通话的掉线时刻，通话继续。
+     *  @param userId 登录的用户
+     */
+    void markUserOnline(int64_t userId);
+
+    /**
+     *  收集并移除「有参与方掉线已达宽限期」的通话（响铃中与已接通的都算）。
+     *  @param now 当前时间，Unix 毫秒
+     *  @param out [出参] 追加被移除的会话（含双方掉线时刻）；调用前不清空由调用方负责
+     */
+    void reapOfflineSessions(int64_t now, std::vector<CallSessionInfo>& out);
+
 private:
     mutable std::mutex                       m_mutex;        //保护会话表
     std::map<std::string, CallSessionInfo>   m_sessions;     //sessionid → 会话
@@ -161,4 +236,5 @@ private:
     std::string                              m_relayTokenKey;//relay 令牌 HMAC 密钥
     std::string                              m_relayHost;    //imgserver 中转对外主机地址
     int                                      m_relayPort;    //imgserver 中转端口
+    int64_t                                  m_offlineGraceMs;   //掉线宽限期（毫秒），由 setOfflineGraceMs 设置
 };

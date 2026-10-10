@@ -53,6 +53,8 @@ extern CAppModule _Module;
 #include "AuthInputField.h"
 #include "../BalloonMain/AvatarPalette.h"   // 头像底色调色板（与主面板共用一份）
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../Common/I18n/I18n.h"      // TR / TR_NOOP：界面文字的多语言查找
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：内嵌 XML 的文字属性换成译文
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 状态区文字（ApplyLoginStatusView）
@@ -74,7 +76,8 @@ namespace {
 //   · 顶部品牌 Banner（AuthBanner 自绘控件：橙色渐变 + 火烈鸟 + 标题）。
 //   · 表单 vbox（weight=1，吃掉 Banner 以下的全部高度）：
 //       账号下拉框 / 密码框 / 「记住密码·自动登录·忘记密码」一行 /
-//       底部 vbox：登录按钮 / 状态区 / 「注册账号·网络设置」一行。
+//       底部 vbox：登录按钮 / 状态区 / 「注册账号·网络设置·语言」一行（语言链接的文字运行时
+//         填入当前语言的名称，语言包不存在时隐藏，见 CBalloonLoginDlg::InitLanguageLink）。
 //
 // 底部 vbox 的间距是 8，比表单其余部分的 12 紧凑：这三行视觉上是一组，
 // 2026-09-30 之前这里还夹着一块弹性空白，链接行离登录按钮 106 像素，显得松散。
@@ -126,6 +129,7 @@ const char* const kLoginBodyXml = u8R"xml(
       <hbox fixedHeight="22" gap="12">
         <auth-link id="130" text="注册账号" link-color="255,122,69" weight="1"/>
         <auth-link id="131" text="网络设置" link-color="107,107,107" weight="1"/>
+        <auth-link id="134" text="" link-color="107,107,107" weight="1"/>
       </hbox>
     </vbox>
   </vbox>
@@ -173,8 +177,10 @@ COLORREF ParseRgbColor(const std::string& s, COLORREF def)
 // 圆角输入框内嵌控件的填充色 #F5F4F1（design Input 背景 --bg-list）。
 const COLORREF kFieldFillColor = RGB(0xF5, 0xF4, 0xF1);
 
-// 账号下拉框的占位文字。与密码框的"密码"对称，账号框为空时显示。
-const wchar_t* const kAccountPlaceholder = L"账号";
+// 账号下拉框的占位文字。与密码框的"密码"对称，账号框为空时显示。2026-10-06 起账号与手机号都能登录
+// （docs/登录账号与手机号登录方案.md），占位文字写明两者都可以填。
+//文件作用域常量在语言确定之前就已初始化，只能用 TR_NOOP 标记，到使用处再调 TR
+const wchar_t* const kAccountPlaceholder = TR_NOOP(L"账号 / 手机号");
 
 // 取出下拉框内嵌的那个输入框子控件。
 //
@@ -260,7 +266,7 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
             std::unique_ptr<DuiEdit> edit(new DuiEdit());
             edit->SetCtrlId(kIdPasswordEdit);
             edit->SetPassword(true);
-            edit->SetPlaceholder(L"密码");
+            edit->SetPlaceholder(TR(L"密码"));
             edit->SetBgColor(kFieldFillColor);
             edit->SetShowBorder(false);
             field->AddChild(std::unique_ptr<DuiControl>(edit.release()));
@@ -285,7 +291,7 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
             DuiEdit* accountEdit = FindComboEditHost(combo.get());
             if (accountEdit != NULL)
             {
-                accountEdit->SetPlaceholder(kAccountPlaceholder);
+                accountEdit->SetPlaceholder(TR(kAccountPlaceholder));
             }
 
             field->AddChild(std::unique_ptr<DuiControl>(combo.release()));
@@ -312,7 +318,8 @@ bool IsBlank(const CString& s)
 
 std::unique_ptr<DuiControl> BuildLoginBody()
 {
-    return DuiXmlBuilder::FromString(kLoginBodyXml, &CreateLoginCustomControl);
+    //XML 里的界面文字先换成当前语言的译文（简体中文时原样返回）
+    return DuiXmlBuilder::FromString(i18n::TranslateXml(kLoginBodyXml).c_str(), &CreateLoginCustomControl);
 }
 
 LoginInputResult ValidateLoginInput(const CString& account, const CString& password)
@@ -486,6 +493,12 @@ void ApplyLoginStatusView(balloonwjui::DuiControl* root, LoginStatusView view, L
     const RECT rcArea = area->GetRect();
     area->ForceLayout(rcArea);
     area->Invalidate();
+}
+
+ForgotPasswordHintPlace ChooseForgotPasswordHintPlace(bool logining)
+{
+    // 登录中状态区显示着「正在登录…」与进度条，换成提示文字会让用户以为登录已经结束，这时改为弹提示框
+    return logining ? kForgotPwdHintMessageBox : kForgotPwdHintInStatusArea;
 }
 
 } // namespace balloonauth

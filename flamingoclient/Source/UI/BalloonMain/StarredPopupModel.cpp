@@ -12,6 +12,7 @@
  */
 
 #include "StarredPopupModel.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -21,11 +22,11 @@ CString FormatStarredPresenceText(const CString& name, int64_t userid, bool onli
     CString shown = name;
     if (shown.IsEmpty())
     {
-        shown.Format(_T("用户%lld"), (long long)userid);
+        shown.Format(TR(L"用户%lld"), (long long)userid);
     }
 
     CString text;
-    text.Format(_T("%s %s"), (LPCTSTR)shown, online ? _T("已上线") : _T("已离线"));
+    text.Format(_T("%s %s"), (LPCTSTR)shown, online ? TR(L"已上线") : TR(L"已离线"));
     return text;
 }
 
@@ -93,7 +94,7 @@ std::vector<StarredPopupRow> BuildStarredPopupRows(
     {
         StarredPopupRow row;
         //N 是被折叠掉的人数，不是总人数 —— 上面已经列出来的那几个不该再数一遍。
-        row.m_text.Format(_T("等 %d 人"), total - shownCount);
+        row.m_text.Format(TR(L"等 %d 人"), total - shownCount);
         row.m_userid    = 0;   //汇总行没有对应的人，点它不开窗
         row.m_isSummary = true;
         rows.push_back(row);

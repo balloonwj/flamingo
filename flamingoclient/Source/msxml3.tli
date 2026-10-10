@@ -2,7 +2,7 @@
 //
 // E:\flamingo\flamingoclient\Source\msxml3.tli
 //
-// Wrapper implementations for Win32 type library msxml3.dll
+// Wrapper implementations for type library msxml3.dll
 // compiler-generated file - DO NOT EDIT!
 
 #pragma once

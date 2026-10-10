@@ -37,8 +37,11 @@ HBITMAP MakeRoundTitleIcon(LPCTSTR glyph, COLORREF avatarColor,
  *  失败（图片解码失败等）返回 NULL，调用方可回退到 MakeRoundTitleIcon。
  *  位图所有权归调用方（用完 DeleteObject）。
  *    imagePath：本地图片完整路径；barBg：标题栏背景色；sizePx：边长。
+ *    gray：     是否把图片画成灰度（对方离线时为 true，2026-10-03）。只有圆内的图片变灰，
+ *               圆外仍是 barBg 原色，标题栏上看不出方形的边。灰度权重与 MakeGrayColor 相同（Rec.601）。
  */
-HBITMAP MakeRoundTitleIconFromImage(LPCWSTR imagePath, COLORREF barBg, int sizePx);
+HBITMAP MakeRoundTitleIconFromImage(LPCWSTR imagePath, COLORREF barBg, int sizePx,
+                                    bool gray = false);
 
 /**
  *  把一个 32bpp 头像位图转成 HICON（用于任务栏 / Alt-Tab）。失败返回 NULL。

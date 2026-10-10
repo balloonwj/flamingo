@@ -8,6 +8,7 @@
  *    · ComputeDownloadPercent：常规换算、总数为 0 不除零、已收超总数钳到 100、
  *      3GiB 级别大包不溢出；
  *    · ShouldBlockLogin：只有强制升级才拦，检查失败一律放行。
+ *    · UVM13：有可用新版本时视图状态带上更新说明，其余形态为空。
  *
  *  界面本身不测（不创建窗口 / 不依赖消息循环），纯内存断言。框架 Catch2 v3。
  *  balloonwj@qq.com   2026-08-12
@@ -232,4 +233,31 @@ TEST_CASE("UVM12 检查失败或超时一律放行", "[update]")
     weird.m_hasUpdate   = true;
     weird.m_forced      = true;
     CHECK_FALSE(ShouldBlockLogin(weird));
+}
+
+//关于页「检查更新」的结果由升级窗自己的结果处理函数呈现，那条路径只应用了视图状态、没有填更新说明，
+//说明框一直是空的。2026-10-10 起更新说明并入视图状态，两条呈现路径都经 ApplyViewState 填写。
+TEST_CASE("UVM13 有可用新版本时视图状态带上更新说明，其余形态为空", "[update]")
+{
+    //管理台保存的多行说明行间只有 CR，原样带出，由界面交给富文本控件显示
+    UpdateTaskResult r = MakeHasUpdate();
+    r.m_releaseNote = "1. 新增群接龙\r2. 修复若干问题\r3. 优化启动速度";
+    CHECK(BuildUpdateViewState(r, L"3.2.1").releaseNoteUtf8 == r.m_releaseNote);
+
+    //强制升级同样显示说明
+    r.m_forced = true;
+    CHECK(BuildUpdateViewState(r, L"3.2.1").releaseNoteUtf8 == r.m_releaseNote);
+
+    //包信息不全按无更新处理：不显示说明
+    UpdateTaskResult unusable = MakeHasUpdate();
+    unusable.m_packageUsable = false;
+    CHECK(BuildUpdateViewState(unusable, L"3.2.1").releaseNoteUtf8.empty());
+
+    //已是最新、检查失败：不显示说明
+    UpdateTaskResult latest = MakeHasUpdate();
+    latest.m_hasUpdate = false;
+    CHECK(BuildUpdateViewState(latest, L"3.3.0").releaseNoteUtf8.empty());
+    UpdateTaskResult failed = MakeHasUpdate();
+    failed.m_transportOk = false;
+    CHECK(BuildUpdateViewState(failed, L"3.2.1").releaseNoteUtf8.empty());
 }

@@ -6,7 +6,8 @@
  *       有效扩展名取值（m_ext 优先、空则从文件名取、大小写归一）、文件名搜索
  *       （子串 / 大小写不敏感 / 空关键字）、分类+搜索组合、分页（每页切分 / 末页
  *       不满 / 页码越界钳定 / 空结果算 1 页 / pageSize<=0 兜底）、变更推送的
- *       Upsert（新增 / 按 entryid 覆盖）与 RemoveByEntryId。框架 Catch2 v3。
+ *       Upsert（新增 / 按 entryid 覆盖）与 RemoveByEntryId，以及按条目求所在页
+ *       （PageOfEntry，主面板全局搜索定位群文件用）。框架 Catch2 v3。
  *  纯逻辑，不创建窗口、不联网。
  *  balloonwj@qq.com   2026-06-08
  */
@@ -297,4 +298,45 @@ TEST_CASE("GFLIB12 CanDeleteGroupFile 权限规则与服务端一致")
     CHECK(GroupFileLibrary::CanDeleteGroupFile(-1, false) == false);
     // 边界：非成员即便 isOwnUpload 这种矛盾输入也按"上传者本人"放行（上层保证 role>=0 才会出现 own）。
     CHECK(GroupFileLibrary::CanDeleteGroupFile(-1, true) == true);
+}
+
+TEST_CASE("GFLIB13 PageOfEntry 与 Query 同一口径求条目所在页", "[globalsearch]")
+{
+    GroupFileLibrary lib;
+    lib.SetAll(SampleSet());   // 9 条，entryid "1"~"9" 依次排列
+
+    // 全部、不搜索、每页 4 条：第 1、5、9 条分别在第 0、1、2 页
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "", "1", 4) == 0);
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "", "5", 4) == 1);
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "", "9", 4) == 2);
+
+    // 表格分类只剩 xlsx（"4"）与 csv（"5"）：每页 1 条时 "5" 在第 1 页；pdf 被筛掉返回 -1
+    CHECK(lib.PageOfEntry(kGroupFileCatSheet, "", "5", 1) == 1);
+    CHECK(lib.PageOfEntry(kGroupFileCatSheet, "", "1", 1) == -1);
+
+    // 搜「发布」只剩 "3"、"4"：每页 1 条时 "4" 在第 1 页
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "发布", "4", 1) == 1);
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "发布", "9", 1) == -1);
+
+    // 与 Query 互相印证：翻到算出的那一页，确实能取到这个条目
+    std::vector<GroupFileEntry> items;
+    int total = 0;
+    int pageCount = 0;
+    int curPage = 0;
+    const int page = lib.PageOfEntry(kGroupFileCatAll, "", "7", 3);
+    lib.Query(kGroupFileCatAll, "", page, 3, items, total, pageCount, curPage);
+    bool found = false;
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        if (items[i].m_entryid == "7")
+        {
+            found = true;
+        }
+    }
+    CHECK(found);
+
+    // 不存在、空 id 返回 -1；pageSize<=0 视为每页 1 条
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "", "404", 4) == -1);
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "", "", 4) == -1);
+    CHECK(lib.PageOfEntry(kGroupFileCatAll, "", "3", 0) == 2);
 }

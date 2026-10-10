@@ -37,6 +37,8 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "StarredPopupModel.h"    // StarredPresenceEvent（成员按值持有，需完整类型）
+#include "CornerPopupCountdown.h"  // CornerCountdown（标题后的倒计时，第 15 期）
+#include "TitleBarIcon.h"          // ProgramWindowIcons（任务栏按钮的程序图标，第 15 期）
 
 namespace balloonwjui {
 class DuiListBox;
@@ -107,6 +109,9 @@ private:
     //停掉自动关闭计时（鼠标悬停时调）。
     void StopAutoCloseTimer();
 
+    //按剩余时间刷新标题（「特别关注 · 5 秒后关闭」，第 15 期）；暂停中时停在暂停时的秒数。
+    void RefreshTitle();
+
 private:
     HWND m_panelHwnd;   //主面板窗口句柄（点行时请它打开单聊）；NULL=调试入口，点行只记日志
     bool m_built;       //骨架是否已构建
@@ -120,4 +125,10 @@ private:
 
     //标题栏图标位图（程序图标合成到标题栏底色上）。SetIcon 仅借用，本类持有、析构时释放。
     HBITMAP m_titleIconBmp;
+
+    //任务栏按钮的程序图标（第 15 期，本窗口有任务栏按钮）。本对象持有，窗口先于它销毁。
+    balloonmain::ProgramWindowIcons m_taskIcons;
+
+    //自动关闭的倒计时（第 15 期）：新事件到达或鼠标移开时从头开始，鼠标停留时暂停。
+    balloonmain::CornerCountdown m_countdown;
 };

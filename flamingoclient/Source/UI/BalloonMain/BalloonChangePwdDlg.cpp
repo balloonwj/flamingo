@@ -31,6 +31,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth      = 460;   // 客户区宽
@@ -190,13 +191,13 @@ void CBalloonChangePwdDlg::OpenForChange(HWND /*owner*/)
     if (!IsWindow())
     {
         // owner 传 NULL：让子控件通知自路由回本对话框（与新建群对话框同处理）。
-        if (Create(NULL, CWindow::rcDefault, _T("修改密码"),
+        if (Create(NULL, CWindow::rcDefault, TR(L"修改密码"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR(_T("修改密码对话框 Create 失败。"));
             return;
         }
-        SetTitle(_T("修改密码"));
+        SetTitle(TR(L"修改密码"));
         SetTitleBarHeight(kDlgTitleBarH);
         SetButtons(false, false, true);   // 只留关闭按钮
         SetMinSize(kDlgMinWidth, kDlgMinHeight);
@@ -217,10 +218,13 @@ void CBalloonChangePwdDlg::OpenForChange(HWND /*owner*/)
         {
             SetIcon(m_titleIconBmp);
         }
+        //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+        m_taskIcons.ApplyTaskIcons(m_hWnd);
 
         m_built = false;
         BuildUiOnce();
-        ResizeClient(kDlgWidth, kDlgHeight);
+        //kDlgHeight 是标题栏以下的内容高度，整窗高度要加上标题栏（DuiFrameWindow::ResizeClient 设的是整窗）
+        ResizeClient(kDlgWidth, kDlgHeight + kDlgTitleBarH);
         CenterWindow();
     }
 
@@ -288,9 +292,9 @@ void CBalloonChangePwdDlg::BuildUiOnce()
     root->SetGap(kRootGap);
 
     // ---- 三个密码字段 ----
-    AddField(root.get(), _T("当前密码"),   kIdOldPwd,     &m_oldEdit);
-    AddField(root.get(), _T("新密码"),     kIdNewPwd,     &m_newEdit);
-    AddField(root.get(), _T("确认新密码"), kIdConfirmPwd, &m_confirmEdit);
+    AddField(root.get(), TR(L"当前密码"),   kIdOldPwd,     &m_oldEdit);
+    AddField(root.get(), TR(L"新密码"),     kIdNewPwd,     &m_newEdit);
+    AddField(root.get(), TR(L"确认新密码"), kIdConfirmPwd, &m_confirmEdit);
 
     // ---- 琥珀提示框 ----
     {
@@ -300,7 +304,7 @@ void CBalloonChangePwdDlg::BuildUiOnce()
         hint->SetPadding(12);
 
         std::unique_ptr<balloonwjui::DuiLabel> tip(new balloonwjui::DuiLabel());
-        tip->SetText(_T("密码至少 8 位，建议包含字母、数字和符号。修改后需在所有设备重新登录。"));
+        tip->SetText(TR(L"密码至少 8 位，建议包含字母、数字和符号。修改后需在所有设备重新登录。"));
         tip->SetTextColor(kHintTextColor);
         tip->SetTextAlign(DT_LEFT | DT_TOP | DT_WORDBREAK);
         hint->AddChild(std::move(tip), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -320,14 +324,14 @@ void CBalloonChangePwdDlg::BuildUiOnce()
         cancel->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         cancel->SetVariant(balloonwjui::DuiButton::Variant::Default);
         cancel->SetCtrlId(kIdCancel);
-        cancel->SetText(_T("取消"));
+        cancel->SetText(TR(L"取消"));
         bottom->AddChild(std::move(cancel), balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth));
 
         std::unique_ptr<balloonwjui::DuiButton> save(new balloonwjui::DuiButton());
         save->SetButtonType(balloonwjui::DuiButton::StylePushButton);
         save->SetVariant(balloonwjui::DuiButton::Variant::Primary);
         save->SetCtrlId(kIdSave);
-        save->SetText(_T("保存"));
+        save->SetText(TR(L"保存"));
         bottom->AddChild(std::move(save), balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth));
 
         root->AddChild(std::move(bottom), balloonwjui::DuiLayout::Hint().Fixed(kBottomBarH));
@@ -392,34 +396,34 @@ void CBalloonChangePwdDlg::DoSave()
         oldPwd.GetString(), newPwd.GetString(), confirmPwd.GetString());
     if (vr != balloonmain::kCpwOk)
     {
-        LPCTSTR msg = _T("请检查输入。");
+        LPCTSTR msg = TR(L"请检查输入。");
         balloonwjui::DuiEdit* focusTo = NULL;
         switch (vr)
         {
         case balloonmain::kCpwEmptyOld:
-            msg = _T("请输入当前密码。");
+            msg = TR(L"请输入当前密码。");
             focusTo = m_oldEdit;
             break;
         case balloonmain::kCpwEmptyNew:
-            msg = _T("请输入新密码。");
+            msg = TR(L"请输入新密码。");
             focusTo = m_newEdit;
             break;
         case balloonmain::kCpwTooShort:
-            msg = _T("新密码至少 8 位，请重新输入。");
+            msg = TR(L"新密码至少 8 位，请重新输入。");
             focusTo = m_newEdit;
             break;
         case balloonmain::kCpwMismatch:
-            msg = _T("两次输入的新密码不一致，请重新输入。");
+            msg = TR(L"两次输入的新密码不一致，请重新输入。");
             focusTo = m_confirmEdit;
             break;
         case balloonmain::kCpwSameAsOld:
-            msg = _T("新密码不能与当前密码相同。");
+            msg = TR(L"新密码不能与当前密码相同。");
             focusTo = m_newEdit;
             break;
         default:
             break;
         }
-        ::MessageBox(m_hWnd, msg, _T("修改密码"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, msg, TR(L"修改密码"), MB_OK | MB_ICONINFORMATION);
         if (focusTo != NULL)
         {
             focusTo->SetFocus();
@@ -432,8 +436,8 @@ void CBalloonChangePwdDlg::DoSave()
     std::string newHash = net::Sha256::hexDigest(CStrToUtf8(newPwd));
     if (oldHash.empty() || newHash.empty())
     {
-        ::MessageBox(m_hWnd, _T("内部错误：口令哈希失败，请重试。"),
-                     _T("修改密码"), MB_OK | MB_ICONERROR);
+        ::MessageBox(m_hWnd, TR(L"内部错误：口令哈希失败，请重试。"),
+                     TR(L"修改密码"), MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -468,8 +472,8 @@ void CBalloonChangePwdDlg::OnChangePwdResult(const net::ChangePasswordResponse& 
 
     if (resp.code == 0)
     {
-        ::MessageBox(hParent, _T("密码修改成功！其它设备需用新密码重新登录。"),
-                     _T("修改密码"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(hParent, TR(L"密码修改成功！其它设备需用新密码重新登录。"),
+                     TR(L"修改密码"), MB_OK | MB_ICONINFORMATION);
         ResetFields();
         if (IsWindow())
         {
@@ -480,11 +484,11 @@ void CBalloonChangePwdDlg::OnChangePwdResult(const net::ChangePasswordResponse& 
 
     if (resp.code == kRespCodeWrongOldPwd)
     {
-        ::MessageBox(hParent, _T("当前密码不正确，请重新输入。"),
-                     _T("修改密码"), MB_OK | MB_ICONWARNING);
+        ::MessageBox(hParent, TR(L"当前密码不正确，请重新输入。"),
+                     TR(L"修改密码"), MB_OK | MB_ICONWARNING);
         return;
     }
 
-    ::MessageBox(hParent, _T("密码修改失败，请稍后重试。"),
-                 _T("修改密码"), MB_OK | MB_ICONWARNING);
+    ::MessageBox(hParent, TR(L"密码修改失败，请稍后重试。"),
+                 TR(L"修改密码"), MB_OK | MB_ICONWARNING);
 }

@@ -31,6 +31,7 @@ enum ChatFileActionKind
     kChatFileOpenFolder = 5,   // 打开所在文件夹（在资源管理器里定位选中本地文件）
     kChatFileAccept     = 6,   // 接收文件（待接收态下点它才真正开始下载）
     kChatFileReject     = 7,   // 拒绝接收（仅本端置气泡为已拒绝态，不下载、不通知发送方）
+    kChatFileSendOffline = 8,  // 发送离线文件：单聊在线直传等待对方接收时，改为上传服务器（2026-10-04 起）
 };
 
 //文件传输状态。取值与 ChatMessage::fileState 一一对应，改动须同步那边的注释。
@@ -44,6 +45,9 @@ enum ChatFileState
     kFileDeleted       = 5,   // 已删除 / 失效：服务端已无此文件，不可再下载
     kFilePendingAccept = 6,   // 待接收：收到文件消息但尚未下载，等用户决定收不收
     kFileRejected      = 7,   // 已拒绝接收：用户点了「拒绝」；仍可反悔重新下载
+    kFileDirectWaiting = 8,   // 在线直传、等待对方接收（发送方，2026-10-04 起）：可改为发送离线文件或取消
+    kFileDirectToOffline = 9, // 在线直传已作废、本机没有文件（2026-10-04 起）：对方改为离线发送、撤回、超时、已拒绝、传输失败等，
+                              // 原因记在 ChatMessage::fileDirectEnd；没有按钮。对方改为离线发送时随后那条离线文件消息代替它
 };
 
 //一个文件气泡底部最多容纳的操作数（完成态的「打开 / 打开所在文件夹 / 另存为」是上限）。
@@ -70,6 +74,16 @@ enum ChatFilePeerState
 bool FileStateHasProgress(int state);
 
 /**
+ *  一张文件卡片要不要画进度条：在 FileStateHasProgress 的基础上，在线直传的文件被发送方取消后不画
+ *  （2026-10-05 用户确认）。直传多半是在等对方接收时就取消了，一格都没传，留一条空进度条没有意义；
+ *  状态行已写明「已取消发送」。卡片高度、进度条与按钮行位置都按它算。
+ *  @param state  文件传输状态，取值见 ChatFileState
+ *  @param direct 是不是在线直传的文件
+ *  @return 需要画进度条返回 true
+ */
+bool FileCardShowsProgress(int state, bool direct);
+
+/**
  *  该状态下气泡底部的操作数量。
  *  @param state  文件传输状态，取值见 ChatFileState
  *  @param fromMe 该条是否本端发出。只影响待接收态：对方发来的文件要用户决定收不收，
@@ -88,5 +102,15 @@ int FileStateButtonCount(int state, bool fromMe);
  *  @return 实际写入的动作个数，与 FileStateButtonCount(state, fromMe) 一致
  */
 int FileButtonActions(int state, bool fromMe, int out[kMaxChatFileActions]);
+
+/**
+ *  文件卡片要不要画「P2P」徽章（2026-10-04 起，docs/单聊文件P2P直传与P2P徽章方案.md 第 4 节）：
+ *  只有在线直传的文件、且链路是直连（局域网或打洞）时，在传输中、已完成、以及历史里本机没有文件（已失效）时画。
+ *  @param state        文件传输状态，取值见 ChatFileState
+ *  @param direct       这条是不是在线直传（ChatMessage::fileDirect）
+ *  @param linkIsDirect 链路是否直连，由调用方用 balloonmain::ShouldShowP2PBadge(链路路径) 算出
+ *  @return 要画返回 true
+ */
+bool FileCardShowsP2PBadge(int state, bool direct, bool linkIsDirect);
 
 } // namespace balloonchatwnd

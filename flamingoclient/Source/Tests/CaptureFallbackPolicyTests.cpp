@@ -5,7 +5,7 @@
  *  balloonwj@qq.com   2026-06-11
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/RemoteDesktop/CaptureFallbackPolicy.h"
+#include "../../FlamingoMedia/RemoteDesktop/CaptureFallbackPolicy.h"
 
 using namespace remotedesktop;
 

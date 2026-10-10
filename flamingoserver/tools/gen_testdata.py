@@ -219,7 +219,11 @@ def build_dataset():
                 gender = random.randint(0, 1)
                 byear = random.randint(1980, 2001)
                 birthday = byear * 10000 + random.randint(1, 12) * 100 + random.randint(1, 28)
-                phone = "1%d" % random.randint(3000000000, 9999999999)
+                # 手机号可用于登录，必须唯一：取 138 + 8 位用户 ID，与 testdata.sql 及开发库补的号码一致
+                # （docs/登录账号与手机号登录方案.md 第 6 节）。原先这里随机取号，可能重复；那次随机数调用
+                # 仍保留，使随机序列不变，其后生成的数据与改动前完全相同。
+                random.randint(3000000000, 9999999999)
+                phone = "138%08d" % uid
                 mail = "%s@%s.com" % (username, domain)
                 join_dt = dt_ago(700, 30)
                 emp_no = "%s%d%04d" % (domain[:2].upper(), join_dt.year, uid)

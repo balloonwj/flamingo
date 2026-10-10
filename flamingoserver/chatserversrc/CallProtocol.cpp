@@ -26,6 +26,11 @@ static bool parseObject(const std::string& json, Json::Value& root)
 }
 
 //把 JSON 里的字符串型 64 位 ID 取出；字段缺失或非字符串返回 0
+//一对一通话卡片 content 里 kind 的取值（群通话卡片为 groupcall，见 GroupCallProtocol）
+static const char* const kCardKindCall = "call";
+//毫秒换算成秒（卡片时长按秒记）
+static const int64_t kMsPerSecond = 1000;
+
 static int64_t getStringId(const Json::Value& root, const char* key)
 {
     if (!root[key].isString())
@@ -104,7 +109,7 @@ std::string CallProtocol::buildMediaChangedNotify(const std::string& sessionid, 
 }
 
 std::string CallProtocol::buildInviteResponse(int code, const std::string& msg,
-                                              const std::string& sessionid)
+                                              const std::string& sessionid, const std::string& p2pSessionId)
 {
     Json::Value root;
     root["code"] = code;
@@ -112,11 +117,15 @@ std::string CallProtocol::buildInviteResponse(int code, const std::string& msg,
     //仅成功且会话 id 非空时下发会话 id
     if (code == 0 && !sessionid.empty())
         root["sessionid"] = sessionid;
+    //建了 P2P 会话才写这个字段，没建时与第 6 期之前的应答逐字相同
+    if (code == 0 && !p2pSessionId.empty())
+        root["p2psessionid"] = p2pSessionId;
     return writeCompact(root);
 }
 
 std::string CallProtocol::buildInviteNotify(const std::string& sessionid, int64_t fromid,
-                                            const std::string& fromname, int media)
+                                            const std::string& fromname, int media, int64_t ringMs,
+                                            const std::string& p2pSessionId)
 {
     Json::Value root;
     root["sessionid"] = sessionid;
@@ -124,6 +133,12 @@ std::string CallProtocol::buildInviteNotify(const std::string& sessionid, int64_
     root["fromid"]    = std::to_string(fromid);
     root["fromname"]  = fromname;
     root["media"]     = media;
+    //剩余振铃毫秒数（第 15 期）：被叫的来电弹窗据此显示倒计时
+    if (ringMs >= 0)
+        root["ringms"] = static_cast<Json::Int64>(ringMs);
+    //建了 P2P 会话才写这个字段（P2P 方案第 6 期）
+    if (!p2pSessionId.empty())
+        root["p2psessionid"] = p2pSessionId;
     return writeCompact(root);
 }
 
@@ -147,5 +162,72 @@ std::string CallProtocol::buildStateNotify(const std::string& sessionid, int sta
     root["sessionid"] = sessionid;
     root["state"]     = state;
     root["msg"]       = msg;
+    return writeCompact(root);
+}
+
+std::string CallProtocol::buildCardContent(const std::string& sessionid, int media, int64_t callerId,
+                                           const std::string& callerName, int64_t calleeId, int64_t startTime)
+{
+    Json::Value root;
+    root["kind"] = kCardKindCall;
+    root["sessionid"] = sessionid;
+    root["media"] = media;
+    root["caller"] = std::to_string(callerId);
+    root["callername"] = callerName;
+    root["callee"] = std::to_string(calleeId);
+    root["starttime"] = std::to_string(startTime);
+    return writeCompact(root);
+}
+
+std::string CallProtocol::buildEndedCardContent(const std::string& oldContent, const std::string& sessionid,
+                                                int media, int64_t callerId, const std::string& callerName,
+                                                int64_t calleeId, int64_t startTime, int64_t connectTime, int result,
+                                                int64_t endTime)
+{
+    Json::Value root;
+    //原 content 不可用（解析失败或不是一对一通话卡片）时按会话信息重建
+    if (!parseObject(oldContent, root) || !root["kind"].isString() || root["kind"].asString() != kCardKindCall)
+    {
+        Json::Value rebuilt;
+        parseObject(buildCardContent(sessionid, media, callerId, callerName, calleeId, startTime), rebuilt);
+        root = rebuilt;
+    }
+    root["media"] = media;
+    root["result"] = result;
+    root["endtime"] = std::to_string(endTime);
+    //接通过才有时长；结束时刻早于接通时刻（时钟回拨）按 0 秒处理
+    if (connectTime > 0)
+    {
+        const int64_t seconds = (endTime > connectTime) ? (endTime - connectTime) / kMsPerSecond : 0;
+        root["duration"] = static_cast<Json::Int64>(seconds);
+    }
+    return writeCompact(root);
+}
+
+int CallProtocol::cardMedia(const std::string& content)
+{
+    Json::Value root;
+    if (!parseObject(content, root) || !root["kind"].isString() || root["kind"].asString() != kCardKindCall)
+        return 0;
+    if (!root["media"].isInt())
+        return 0;
+    const int media = root["media"].asInt();
+    if (media != call_media_audio && media != call_media_video)
+        return 0;
+    return media;
+}
+
+std::string CallProtocol::buildCardNotify(const std::string& sessionid, int64_t msgId, int64_t cid,
+                                          const std::string& content)
+{
+    Json::Value root;
+    root["sessionid"] = sessionid;
+    root["msgid"] = std::to_string(msgId);
+    root["cid"] = std::to_string(cid);
+    Json::Value card;
+    if (parseObject(content, card))
+        root["content"] = card;
+    else
+        root["content"] = Json::Value(Json::objectValue);
     return writeCompact(root);
 }

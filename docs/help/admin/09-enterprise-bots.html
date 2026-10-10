@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 9 章：企业机器人的新建、规则配置、外部系统推送、试一试与外部服务域名白名单。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>企业机器人 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a09">
+<article class="doc">
+  <h1>企业机器人</h1>
+  <p class="lead">企业机器人由管理员统一配置，可以在本企业的群里自动应答常见问题、定时发送提醒，或者把外部系统推来的通知转发到群里。本章介绍如何新建企业机器人、编写规则、对接外部系统，以及配置外部服务的域名白名单。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>位置：左侧导航「机器人」</li>
+    <li>需要：功能开关「机器人」处于开启状态（见<a href="05-feature-switches.html#bots">功能开关</a>）</li>
+    <li>上限：每个企业最多 50 个企业机器人，每个机器人最多 50 条规则</li>
+  </ul>
+
+  <h2 id="kinds">三种机器人</h2>
+  <table>
+    <tr><th>机器人</th><th>由谁配置</th><th>在哪里配置</th></tr>
+    <tr><td>企业机器人</td><td>企业管理员</td><td>管理控制台的「机器人」页面（本章）</td></tr>
+    <tr><td>群机器人</td><td>群主</td><td>客户端群管理窗口的「群机器人」页，见<a href="../client/25-bots.html">「机器人」</a></td></tr>
+    <tr><td>个人机器人</td><td>员工本人</td><td>客户端的「我的机器人」，在自己离开或忙碌时代为回复单聊，见<a href="../client/25-bots.html">「机器人」</a></td></tr>
+  </table>
+
+  <h2 id="list">机器人列表</h2>
+  <p>点左侧导航的 <span class="ui">机器人</span>，进入「企业机器人」页面：</p>
+  <figure class="shot">
+    <img src="../img/ad_bots.png" width="880" alt="企业机器人列表">
+    <figcaption>企业机器人页面，还没有添加任何机器人</figcaption>
+  </figure>
+  <ul>
+    <li>右上角三个按钮：<span class="ui">刷新</span>、<span class="ui">外部服务域名白名单</span>（见本章<a href="#domains">最后一节</a>）和 <span class="ui">新建机器人</span>。</li>
+    <li>列表各列依次是 <span class="ui">名称</span>、<span class="ui">应用范围</span>（全部群，或「N 个群：群名…」）、<span class="ui">群主可关闭</span>（允许或不允许）、<span class="ui">规则数</span>、<span class="ui">状态</span>（启用或停用）、<span class="ui">最近触发</span>（从未触发过时显示「还没有触发过」）和 <span class="ui">操作</span>。</li>
+    <li>每行的操作有 <span class="ui">编辑</span>、<span class="ui">停用</span> 或 <span class="ui">启用</span>、<span class="ui">删除</span>。删除后机器人不再响应任何消息，群里的历史消息仍显示它的名字。</li>
+  </ul>
+
+  <h2 id="create">新建企业机器人</h2>
+  <p>点 <span class="ui">新建机器人</span>，打开「新建企业机器人」对话框。左半部分填写机器人的基本信息，右半部分配置规则、外部系统推送和试一试：</p>
+  <figure class="shot">
+    <img src="../img/ad_bot_new.png" width="880" alt="新建企业机器人对话框">
+    <figcaption>新建企业机器人对话框</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>填写 <span class="ui">名称</span>，最多 20 个字，例如「IT 小助手」。</li>
+    <li>设置 <span class="ui">头像</span>：左侧框里填头像文字（最多 2 个字，留空时取名称的第一个字），再点一个色块选择底色。</li>
+    <li>填写 <span class="ui">简介</span>，最多 100 个字，显示在群里的机器人资料卡上。</li>
+    <li>选择 <span class="ui">状态</span>（启用或停用），并决定是否勾选 <span class="ui">允许群主在本群关闭</span>。勾选后，群主可以在自己的群里关掉这个机器人。</li>
+    <li>选择 <span class="ui">应用范围</span>，即机器人在哪些群里响应：<span class="ui">全部群</span>，或 <span class="ui">所选的群</span> 并在下方勾选群。</li>
+    <li>在右侧添加规则（见下一节）。</li>
+    <li>点 <span class="ui">保存</span>。</li>
+  </ol>
+
+  <h2 id="rules">编写规则</h2>
+  <p>规则决定机器人在什么情况下做什么。右侧的规则列表最多 50 条，<b>按顺序判定，只执行第一条命中的</b>，所以越具体的规则越要放在前面。列表下方的 <span class="ui">添加</span>、<span class="ui">编辑</span>、<span class="ui">上移</span>、<span class="ui">下移</span>、<span class="ui">删除</span> 用于管理规则，双击某条规则也可以编辑。</p>
+  <p>点 <span class="ui">添加</span> 打开「添加规则」对话框：</p>
+  <figure class="shot">
+    <img src="../img/ad_bot_rule.png" width="880" alt="添加规则对话框">
+    <figcaption>添加规则对话框，触发方式为「被 @ 时」、动作为「回复文字」</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>按需填写 <span class="ui">规则名称</span>（可留空，最多 32 个字），保持勾选 <span class="ui">启用这条规则</span>。</li>
+    <li>选择 <span class="ui">触发方式</span>，各种方式的区别见下表。</li>
+    <li>需要限制时段时，勾选 <span class="ui">只在以下时间段响应</span>，选择「每天」「工作日」或「周末」，再填开始和结束时刻。结束早于开始表示跨零点，两者相同表示全天。</li>
+    <li>选择 <span class="ui">动作</span>，并填写对应的内容（见下文）。</li>
+    <li>点 <span class="ui">确定</span>。</li>
+  </ol>
+  <div class="callout warn"><b>点「确定」后还要保存机器人</b>规则对话框底部写明：点「确定」后回到机器人编辑窗，在那里点「保存」才会生效。只点了规则的「确定」就关掉机器人编辑窗，规则不会保存。</div>
+  <h3>触发方式</h3>
+  <table>
+    <tr><th style="width:6.5em">触发方式</th><th>什么时候触发</th><th style="width:9.5em">可选的动作</th></tr>
+    <tr><td>被 @ 时</td><td>群成员在群里 @ 这个机器人</td><td>回复文字、用问答作答、呼叫外部服务</td></tr>
+    <tr><td>关键词</td><td>群消息命中关键词。关键词用逗号分隔，最多 20 个，每个最多 32 个字；匹配方式可选「包含」「完全相同」「以……开头」，比较前去掉首尾空白、不分大小写与全半角。可以勾选 <span class="ui">必须同时 @ 机器人</span></td><td>回复文字、用问答作答、呼叫外部服务</td></tr>
+    <tr><td>新成员入群</td><td>有新成员加入群</td><td>回复文字</td></tr>
+    <tr><td>定时</td><td>按「每天」「工作日」「每周」「每月」的某个时刻发送（按服务器所在时区），可以勾选发往的群，都不勾表示应用范围内的全部群</td><td>回复文字</td></tr>
+    <tr><td>外部系统推送</td><td>外部系统向机器人的 Webhook 地址推送消息，机器人把推来的内容原样发到群里</td><td>没有动作</td></tr>
+  </table>
+  <p>「只在以下时间段响应」适用于被 @ 时、关键词和新成员入群三种触发方式。</p>
+  <h3>动作</h3>
+  <ul>
+    <li><b>回复文字</b>：在 <span class="ui">回复文字</span> 中填写内容，最多 2048 个字。可以使用变量 <code>{发送者}</code>、<code>{日期}</code>，新成员入群时还可以用 <code>{新成员}</code>。回复被 @ 或关键词命中的消息时，机器人会自动 @ 发送者。勾选 <span class="ui">按 Markdown 显示</span> 后，回复按 Markdown 格式显示。</li>
+    <li><b>用问答作答</b>：机器人在本群问答和<a href="08-enterprise-qa.html">企业问答</a>里查找答案回复。可以填写兜底文字，问答里找不到答案时回复，也可以留空。</li>
+    <li><b>呼叫外部服务</b>：机器人把消息发给填写的外部服务地址，并把对方的回复发到群里。地址须是 http 或 https，主机须在<a href="#domains">外部服务域名白名单</a>内。可以填写兜底文字，外部服务连不上、超时或出错时回复。</li>
+  </ul>
+
+  <h2 id="webhook">外部系统推送（Webhook）</h2>
+  <p>要让外部系统（例如工单系统、监控告警）把通知推到群里，先给机器人添加一条触发方式为「外部系统推送」的规则，再把 Webhook 信息交给外部系统的开发人员：</p>
+  <ol class="steps">
+    <li>保存机器人。保存后，对话框右侧的 <span class="ui">外部系统推送（Webhook）</span> 区域会显示 <b>地址</b>、<b>令牌</b> 和 <b>签名密钥</b>。</li>
+    <li>点 <span class="ui">复制</span>，三项内容会一起复制到剪贴板。</li>
+    <li>把它们交给外部系统的开发人员，对方按协议文档（仓库中 <code>docs/协议设计-v2.md</code> 第 25.4 节）推送。</li>
+  </ol>
+  <p>令牌或签名密钥可能泄露时，点 <span class="ui">重新生成</span>，确认后旧的令牌与签名密钥立即失效，外部系统须改用新的令牌才能继续推送。</p>
+  <div class="callout note"><b>推送的限制</b>每个机器人每分钟最多接收 20 条推送，推来的内容同样要经过企业的敏感词检查。机器人应用到多个群时，外部系统推送时须指定群。</div>
+
+  <h2 id="try">试一试</h2>
+  <p>保存之前，可以先在对话框右下角的 <span class="ui">试一试</span> 区域检验规则是否符合预期。试一试按当前编辑的内容判定，不会发出任何消息：</p>
+  <ol class="steps">
+    <li>在输入框中输入一句模拟的群消息，例如「VPN 连不上怎么办」。</li>
+    <li>要模拟 @ 机器人时，勾选 <span class="ui">@ 机器人</span>。</li>
+    <li>在下拉框中选择一个群，规则使用「用问答作答」时会取该群的问答；选「不指定群（不取群问答）」时不取群问答。</li>
+    <li>点 <span class="ui">试一试</span>，结果会说明命中了哪条规则、会回复什么；没有规则命中时提示「没有规则命中，机器人不会回复」。对「呼叫外部服务」的规则，试一试只显示会呼叫的地址，不会真正调用。</li>
+  </ol>
+
+  <h2 id="domains">外部服务域名白名单</h2>
+  <p>为了防止群消息被发到不受信任的地方，机器人规则里「呼叫外部服务」的地址必须在白名单内。点页面右上角的 <span class="ui">外部服务域名白名单</span>：</p>
+  <figure class="shot">
+    <img src="../img/ad_bot_domains.png" width="880" alt="外部服务域名白名单对话框">
+    <figcaption>外部服务域名白名单对话框</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在文本框中一行写一个域名，例如 <code>example.com</code>，最多 50 条。域名只能包含字母、数字、点号与连字符。</li>
+    <li>点 <span class="ui">保存</span>。</li>
+  </ol>
+  <p>呼叫外部服务的地址，主机必须等于名单里的某一项，或是它的子域名。例如名单里有 <code>example.com</code> 时，<code>api.example.com</code> 也被允许。</p>
+  <div class="callout warn"><b>白名单为空时不能配置外部服务</b>白名单为空时，企业机器人与群机器人都不能配置「呼叫外部服务」的规则。群主给群机器人配置外部服务，还需要打开功能开关「允许群主给群机器人配置外部服务」，见<a href="05-feature-switches.html#bots">「功能开关」</a>。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

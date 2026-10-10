@@ -359,7 +359,8 @@ TEST_CASE("CFOLD13 未知错误码走兜底文案")
 
     //取几个不属于本组的取值：0（没填错误码）、文件上传域的码、远超本组的码
     CHECK(std::wstring(FolderErrorText(605)) == fallback);
-    CHECK(std::wstring(FolderErrorText(621)) == fallback);
+    //621（文件名或文件夹名包含敏感词）2026-10-02 起有专门文案，见 docs/敏感词方案.md 8.6；这里改用上传失败 600
+    CHECK(std::wstring(FolderErrorText(600)) == fallback);
     CHECK(std::wstring(FolderErrorText(99999)) == fallback);
     CHECK(std::wstring(FolderErrorText(-1)) == fallback);
 

@@ -9,6 +9,14 @@
  *      昵称为空时用"对方"兜底。
  *    · MakeCameraUnavailableTip —— 摄像头不可用时贴在本端画面上的提示：没检测到设备 / 打不开
  *      （多为被占用）/ 中途断流三种原因措辞不同，且都要带上"对方看不到你的画面"这句后果。
+ *    · ShouldEndCallAfterRelayLoss / MakeCallInterruptedTip —— 通话中中转意外断开：只有通话中态且
+ *      会话 id 已知时才在等待 kRelayLossGraceMs 后由本端自行结束；结束时聊天窗提示「通话已中断」，接通过就带上时长。
+ *    · PickUserCloseSignal —— 用户主动关窗（三个按钮与标题栏关闭按钮）时按形态发取消 / 拒绝 / 挂断，没有会话 id 时不发；
+ *      四条关窗路径统一经 CBalloonCallDlg::CloseByUser 收尾（请求停媒体会话）。
+ *    · ComputeCenteredOrigin —— 来电在右下角接听后，通话窗移到该显示器工作区正中（第 10 期 10a）：正常居中、
+ *      副屏坐标为负、窗口比工作区大时贴工作区左上角。
+ *    · ComputeVoiceArtLayout —— 语音态画面区的大号听筒图标、「语音通话中」与通话时长（第 10 期 10b、第 11 期 11b）：
+ *      区域够大时圆底直径 96、三者作为一组在区域里居中；区域矮时圆底按剩余高度缩小；区域有偏移时整体随之平移。
  *
  *  用 Catch2 v3（amalgamated）作框架，纯内存断言，不创建窗口 / 不碰控件。
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
@@ -20,7 +28,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../Feature/Call/CallDlgLayout.h"
+#include "../../FlamingoMedia/Call/CallDlgLayout.h"
 
 using namespace call;
 
@@ -105,4 +113,94 @@ TEST_CASE("MakeCameraUnavailableTip：未知原因有兜底措辞，且始终带
     REQUIRE(fallback == CString(_T("摄像头不可用\n对方看不到你的画面")));
     //传进来一个没定义过的取值也不能返回空串（界面上要么有话说，要么就别提示）
     REQUIRE(MakeCameraUnavailableTip(9999) == fallback);
+}
+
+TEST_CASE("ShouldEndCallAfterRelayLoss：只有通话中态且会话 id 已知时才自行结束", "[calldlg]")
+{
+    REQUIRE(ShouldEndCallAfterRelayLoss(kCallModeConnected, "5010-5001-1-1"));
+    //会话 id 未知（理论上接通后一定有）：不发挂断，也就无从自行结束
+    REQUIRE_FALSE(ShouldEndCallAfterRelayLoss(kCallModeConnected, ""));
+    //呼叫中 / 来电态还没建中转，不会收到中转断开；即便收到也不处理
+    REQUIRE_FALSE(ShouldEndCallAfterRelayLoss(kCallModeCalling, "5010-5001-1-1"));
+    REQUIRE_FALSE(ShouldEndCallAfterRelayLoss(kCallModeIncoming, "5010-5001-1-1"));
+    //等待正常挂断推送的时长为 5 秒（与用户 2026-10-03 确认的方案一致）
+    REQUIRE(kRelayLossGraceMs == 5000u);
+}
+
+TEST_CASE("MakeCallInterruptedTip：提示「通话已中断」，接通过就带上时长", "[calldlg]")
+{
+    REQUIRE(MakeCallInterruptedTip(CString()) == CString(_T("通话已中断")));
+    REQUIRE(MakeCallInterruptedTip(CString(_T("05:23"))) == CString(_T("通话已中断 05:23")));
+}
+
+TEST_CASE("PickUserCloseSignal：用户关窗按形态发取消 / 拒绝 / 挂断，没有会话 id 时不发", "[calldlg]")
+{
+    const std::string sessionId = "5127-5308-1791107856000-4";
+    REQUIRE(PickUserCloseSignal(kCallModeCalling, sessionId) == kCallCloseSignalCancel);
+    REQUIRE(PickUserCloseSignal(kCallModeIncoming, sessionId) == kCallCloseSignalReject);
+    //通话中点「挂断」按钮与点标题栏关闭按钮是同一个判定（2026-10-04 联调查出按钮一路曾漏掉停媒体会话）
+    REQUIRE(PickUserCloseSignal(kCallModeConnected, sessionId) == kCallCloseSignalHangup);
+    //未知形态按通话中处理，与原先标题栏关闭按钮的处理一致
+    REQUIRE(PickUserCloseSignal(9999, sessionId) == kCallCloseSignalHangup);
+    //呼叫刚发出、服务端还没应答时没有会话 id：哪种形态都不发信令
+    REQUIRE(PickUserCloseSignal(kCallModeCalling, "") == kCallCloseSignalNone);
+    REQUIRE(PickUserCloseSignal(kCallModeConnected, "") == kCallCloseSignalNone);
+}
+
+TEST_CASE("ComputeCenteredOrigin：窗口放在工作区正中，放不下时贴工作区左上角", "[calldlg]")
+{
+    //主屏 1920×1080，任务栏占底部 40
+    const RECT work = { 0, 0, 1920, 1040 };
+    const SIZE size = { 720, 569 };
+    POINT p = ComputeCenteredOrigin(work, size);
+    REQUIRE(p.x == (1920 - 720) / 2);
+    REQUIRE(p.y == (1040 - 569) / 2);
+
+    //左侧副屏，坐标为负
+    const RECT left = { -1280, 100, 0, 1100 };
+    p = ComputeCenteredOrigin(left, size);
+    REQUIRE(p.x == -1280 + (1280 - 720) / 2);
+    REQUIRE(p.y == 100 + (1000 - 569) / 2);
+
+    //窗口比工作区大：左上角对齐工作区，保证标题栏可见
+    const RECT tiny = { 10, 20, 610, 420 };
+    p = ComputeCenteredOrigin(tiny, size);
+    REQUIRE(p.x == 10);
+    REQUIRE(p.y == 20);
+}
+
+TEST_CASE("ComputeVoiceArtLayout：圆形图标、文字、时长三行作为一组居中，区域矮时图标缩小", "[calldlg]")
+{
+    //通话窗默认的画面区 720×405：圆底 96，组高 96 + 12 + 24 + 20 = 152，竖直居中
+    const RECT area = { 0, 0, 720, 405 };
+    VoiceArtLayout l = ComputeVoiceArtLayout(area);
+    REQUIRE(l.m_circle.left == 312);
+    REQUIRE(l.m_circle.top == 126);
+    REQUIRE(l.m_circle.right == 408);
+    REQUIRE(l.m_circle.bottom == 222);
+    REQUIRE(l.m_text.left == 0);
+    REQUIRE(l.m_text.right == 720);
+    REQUIRE(l.m_text.top == 234);
+    REQUIRE(l.m_text.bottom == 258);
+    //时长在文字下面紧接一行（第 11 期 11b：通话时长从标题栏挪到窗口里）
+    REQUIRE(l.m_subText.left == 0);
+    REQUIRE(l.m_subText.right == 720);
+    REQUIRE(l.m_subText.top == 258);
+    REQUIRE(l.m_subText.bottom == 278);
+
+    //只有 100 高：圆底缩到 100 - 12 - 24 - 20 = 44，组贴顶
+    const RECT shortArea = { 0, 0, 300, 100 };
+    l = ComputeVoiceArtLayout(shortArea);
+    REQUIRE(l.m_circle.right - l.m_circle.left == 44);
+    REQUIRE(l.m_circle.bottom - l.m_circle.top == 44);
+    REQUIRE(l.m_circle.left == 128);
+    REQUIRE(l.m_circle.top == 0);
+    REQUIRE(l.m_text.top == 56);
+    REQUIRE(l.m_subText.bottom == 100);
+
+    //区域有偏移：整体平移
+    const RECT moved = { 10, 20, 730, 425 };
+    l = ComputeVoiceArtLayout(moved);
+    REQUIRE(l.m_circle.left == 322);
+    REQUIRE(l.m_circle.top == 146);
 }

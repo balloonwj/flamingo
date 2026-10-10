@@ -54,6 +54,8 @@ extern CAppModule _Module;
 #include "MainPanelMockData.h"
 #include "MainPanelScrollView.h"
 #include "MainPanelTreeView.h"
+#include "../../Common/I18n/I18n.h"      // TR_NOOP：界面文字的多语言标记
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：翻译 XML 里的界面文字
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox
 
@@ -442,19 +444,21 @@ std::unique_ptr<DuiControl> BuildMainPanelBody()
     std::string xml;
     xml += "<vbox padding=\"0\" gap=\"0\">\n";
     xml += "  <main-header id=\"240\" fixedHeight=\"108\"/>\n";
-    xml += "  <edit id=\"200\" placeholder=\"";
-    xml += u8"搜索联系人、群、消息、文件…";
+    // 搜索框：左侧放大镜，文字非空时右侧出现清除叉号，点叉号清空（DuiSearchBox，2026-10-04
+    // 用户要求）。它继承自 DuiEdit，主面板按 DuiEdit 处理它的代码与通知都不用改。
+    xml += "  <searchbox id=\"200\" placeholder=\"";
+    xml += TR_NOOP(u8"搜索联系人、群、消息、文件…");
     xml += "\" fixedHeight=\"36\"/>\n";
     xml += "  <hbox fixedHeight=\"48\" gap=\"0\">\n";
     xml += "    <main-tab id=\"210\" kind=\"messages\" text=\"";
-    xml += u8"消息";
+    xml += TR_NOOP(u8"消息");
     // 角标初值 0（不显示）；登录后由 RefreshMessagesTabBadge 用真实未读总数刷新。
     xml += "\" badge=\"0\" weight=\"1\"/>\n";
     xml += "    <main-tab id=\"211\" kind=\"contacts\" text=\"";
-    xml += u8"联系人";
+    xml += TR_NOOP(u8"联系人");
     xml += "\" active=\"true\" weight=\"1\"/>\n";
     xml += "    <main-tab id=\"212\" kind=\"groups\" text=\"";
-    xml += u8"群组";
+    xml += TR_NOOP(u8"群组");
     xml += "\" weight=\"1\"/>\n";
     xml += "  </hbox>\n";
 
@@ -472,13 +476,14 @@ std::unique_ptr<DuiControl> BuildMainPanelBody()
     xml += "    <main-iconbtn id=\"230\" kind=\"list\" fixedWidth=\"34\"/>\n";
     xml += "    <control weight=\"1\"/>\n";
     xml += "    <main-action id=\"231\" text=\"";
-    xml += u8"查找";
+    xml += TR_NOOP(u8"查找");
     xml += "\" fixedWidth=\"80\"/>\n";
     xml += "  </hbox>\n";
     xml += "</vbox>\n";
 
+    // 拼进去的界面文字只做了标记（TR_NOOP），由 TranslateXml 统一换成当前语言的译文并按 XML 规则转义
     std::unique_ptr<DuiControl> root =
-        DuiXmlBuilder::FromString(xml.c_str(), &CreateMainCustomControl);
+        DuiXmlBuilder::FromString(i18n::TranslateXml(xml.c_str()).c_str(), &CreateMainCustomControl);
 
     // 把三个滚动视口的列表内容装进去（mock 数据拼成的 vbox）。
     if (root)

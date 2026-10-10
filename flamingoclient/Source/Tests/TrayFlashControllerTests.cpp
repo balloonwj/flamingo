@@ -249,3 +249,47 @@ TEST_CASE("FLASH7 闪烁间隔换算：异常取值回退、正常取值夹进�
         }
     }
 }
+
+// =====================================================================
+// FLASH8 —— 托盘悬停：有未读时系统提示为空，悬停交给未读消息浮窗（2026-10-03）
+// =====================================================================
+
+TEST_CASE("FLASH8 有未读且未读提醒放行时不显示系统提示，读完后恢复", "[trayflash][traytip]")
+{
+    //悬停时弹不弹未读浮窗看的是「有未读、且未读提醒放行」，系统提示按同一条件取反，两者不会同时出现
+    CTrayFlashController ctrl;
+    CHECK(ShouldShowTraySystemTip(ctrl, true));
+
+    ctrl.PushUnread(1, 1001, L"张三", L"在吗", L"张", kAnyColor);
+    ctrl.PushUnread(2, 2001, L"项目群", L"开会", L"项", kAnyColor);
+    CHECK_FALSE(ShouldShowTraySystemTip(ctrl, true));
+
+    //还剩一个未读会话：仍不显示
+    ctrl.ClearConversation(1, 1001);
+    CHECK_FALSE(ShouldShowTraySystemTip(ctrl, true));
+
+    //全部读完：恢复显示昵称 / 账号 / 状态
+    ctrl.ClearConversation(2, 2001);
+    CHECK(ShouldShowTraySystemTip(ctrl, true));
+
+    //注销等场合一次清空：同样恢复
+    ctrl.PushUnread(1, 1002, L"李四", L"b", L"李", kAnyColor);
+    CHECK_FALSE(ShouldShowTraySystemTip(ctrl, true));
+    ctrl.Clear();
+    CHECK(ShouldShowTraySystemTip(ctrl, true));
+}
+
+TEST_CASE("FLASH9 重连期间未读提醒暂停：有未读也显示系统提示", "[trayflash][traytip]")
+{
+    //重连期间与连上后的等待期里悬停不弹未读浮窗（2026-10-03 用户要求），此时显示系统提示，
+    //让用户看得到「正在连接」；未读本身保留，提醒恢复后系统提示再次让位
+    CTrayFlashController ctrl;
+    ctrl.PushUnread(1, 1001, L"张三", L"在吗", L"张", kAnyColor);
+    CHECK(ShouldShowTraySystemTip(ctrl, false));
+    CHECK_FALSE(ShouldShowTraySystemTip(ctrl, true));
+
+    //没有未读时放不放行都显示系统提示
+    CTrayFlashController empty;
+    CHECK(ShouldShowTraySystemTip(empty, false));
+    CHECK(ShouldShowTraySystemTip(empty, true));
+}

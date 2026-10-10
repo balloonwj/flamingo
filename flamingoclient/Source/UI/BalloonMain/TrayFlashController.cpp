@@ -109,6 +109,11 @@ bool CTrayFlashController::IsFlashing() const
     return !m_entries.empty();
 }
 
+bool ShouldShowTraySystemTip(const CTrayFlashController& flash, bool unreadAllowed)
+{
+    return !(flash.IsFlashing() && unreadAllowed);
+}
+
 int CTrayFlashController::GetConversationCount() const
 {
     return (int)m_entries.size();

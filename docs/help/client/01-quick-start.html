@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 1 章：启动客户端、登录、注册、网络设置与界面语言。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快速开始：登录与注册 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c01">
+<article class="doc">
+  <h1>快速开始：登录与注册</h1>
+  <p class="lead">本章介绍第一次使用 FlamingoIM 客户端时要做的几件事：确认服务器地址、登录账号、选择登录状态，以及在没有账号时自助注册。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>需要：管理员提供的账号与初始密码，或允许自助注册</li>
+  </ul>
+
+  <h2 id="start">启动客户端</h2>
+  <p>双击安装目录里的 <code>Flamingo.exe</code> 启动客户端，屏幕中央会出现登录窗口。客户端是绿色程序，整个程序目录可以复制到其他电脑直接运行，不需要额外安装运行库。</p>
+  <div class="callout tip"><b>第一次使用前</b>如果企业的服务器不在本机，请先点登录窗下方的 <span class="ui">网络设置</span>，填入管理员提供的服务器地址和端口，详见本章<a href="#net">「网络设置」</a>一节。</div>
+
+  <h2 id="login">登录</h2>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/a_login.png" width="380" alt="登录窗口">
+      <span class="pin" style="left:63%;top:43.7%">1</span>
+      <span class="pin" style="left:4%;top:53.5%">2</span>
+      <span class="pin" style="left:4%;top:62.5%">3</span>
+      <span class="pin" style="left:4%;top:70.1%">4</span>
+      <span class="pin" style="left:36%;top:70.1%">5</span>
+      <span class="pin" style="left:93%;top:70.1%">6</span>
+      <span class="pin" style="left:31%;top:78%">7</span>
+      <span class="pin" style="left:9%;top:94.3%">8</span>
+      <span class="pin" style="left:37%;top:94.3%">9</span>
+      <span class="pin" style="left:67%;top:94.3%">10</span>
+    </div>
+    <figcaption>登录窗口</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>登录状态</b>：登录后显示给同事的在线状态</li>
+    <li><b>账号</b>：工号账号或手机号，右侧箭头展开历史账号</li>
+    <li><b>密码</b>：右侧眼睛图标可临时显示明文</li>
+    <li><b>记住密码</b>：下次打开时自动填入密码</li>
+    <li><b>自动登录</b>：启动客户端后直接登录</li>
+    <li><b>忘记密码</b>：查看找回密码的办法</li>
+    <li><b>登录</b>：开始登录</li>
+    <li><b>注册账号</b>：自助注册新账号</li>
+    <li><b>网络设置</b>：配置服务器地址</li>
+    <li><b>界面语言</b>：切换客户端的显示语言</li>
+  </ol>
+
+  <h3>登录步骤</h3>
+  <ol class="steps">
+    <li>在 <span class="ui">账号</span> 框中输入你的账号。账号由企业管理员分配，形如 <code>MY0309</code>；也可以直接输入绑定的手机号。</li>
+    <li>在 <span class="ui">密码</span> 框中输入密码。</li>
+    <li>按需勾选 <span class="ui">记住密码</span> 和 <span class="ui">自动登录</span>。在公用电脑上请不要勾选。</li>
+    <li>点 <span class="ui">登 录</span>。登录过程中按钮会变成 <span class="ui">取消登录</span>，下方显示「正在登录…」进度条，需要中止时点它即可。</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/a_login_progress.png" width="380" alt="正在登录">
+    <figcaption>登录过程中可以随时点「取消登录」</figcaption>
+  </figure>
+  <p>登录成功后登录窗关闭，屏幕上出现主面板，下一章<a href="02-main-panel.html">「认识主面板」</a>会详细介绍它。</p>
+  <div class="callout note"><b>登录前会先检查新版本</b>如果管理员发布了新版本客户端，登录前会弹出升级提醒，可以选择立即更新或稍后再说；若该版本被设为强制升级，则必须更新后才能继续使用。详见<a href="29-about-update.html">「关于与自动升级」</a>。</div>
+
+  <h3>选择登录状态</h3>
+  <p>点头像下方的状态胶囊（默认显示 <span class="ui">在线</span>），可以在登录前选好状态：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/a_login_status.png" width="380" alt="登录状态菜单"><figcaption>登录前可选的三种状态</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <table>
+        <tr><th>状态</th><th>同事看到的效果</th></tr>
+        <tr><td>在线</td><td>头像右下角显示绿点，消息正常提醒</td></tr>
+        <tr><td>离开</td><td>显示黄色时钟，表示暂时不在电脑前；可以在设置里开启「离开时自动回复」</td></tr>
+        <tr><td>忙碌</td><td>显示红色标记，提醒同事你正在忙；可以开启「忙碌时自动回复」</td></tr>
+      </table>
+      <p>登录后还可以随时在主面板头部或托盘菜单里切换状态，那里另外提供 <span class="ui">离线</span>（对同事显示为离线）。</p>
+    </div>
+  </div>
+
+  <h3>切换与删除历史账号</h3>
+  <p>同一台电脑上登录过的账号会保存在账号框的下拉列表里。点账号框右侧的箭头即可选择其他账号；把鼠标移到某个账号上点右侧的删除按钮，可以把它从列表中移除，此时还可以勾选「同时删除该账号在本机的聊天记录与缓存」。</p>
+  <figure class="shot center">
+    <img src="../img/a_login_accounts.png" width="380" alt="历史账号下拉列表">
+    <figcaption>展开的历史账号列表</figcaption>
+  </figure>
+
+  <h3>忘记密码</h3>
+  <p>点 <span class="ui">忘记密码？</span> 会提示「请联系企业管理员重置密码」。企业管理员可以在管理控制台为你重置登录密码（见<a href="../admin/02-organization.html">「组织架构与员工」</a>），拿到新密码后请尽快在客户端里修改为自己的密码（见<a href="03-profile.html">「个人资料与账号」</a>）。</p>
+
+  <h2 id="register">注册新账号</h2>
+  <p>如果企业允许员工自助注册，可以在登录窗点 <span class="ui">注册账号</span> 自己开通账号：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/a_register.png" width="380" alt="注册新账号"><figcaption>注册新账号</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <ol class="steps">
+        <li>填写 <span class="ui">昵称</span>，即同事看到的名字，建议使用真实姓名。</li>
+        <li>两次输入相同的密码。</li>
+        <li>填写手机号。注册成功后既可以用系统分配的账号登录，也可以用这个手机号登录。</li>
+        <li>确认公司名称。这里要填写公司全称，必须与管理员在系统里登记的名称完全一致，默认值由管理员预先设置。</li>
+        <li>点 <span class="ui">提交注册</span>。成功页会显示系统为你生成的账号，点 <span class="ui">立即登录</span> 会把账号自动填回登录窗。</li>
+      </ol>
+    </div>
+  </div>
+  <div class="callout warn"><b>提示「这家公司已关闭自助注册」</b>说明企业管理员关闭了「允许用户自助注册」开关，这时请联系管理员为你开通账号。开关的位置见<a href="../admin/05-feature-switches.html">「功能开关」</a>。</div>
+
+  <h2 id="net">网络设置</h2>
+  <p>客户端要连接三组服务器：聊天服务器、图片服务器和文件服务器。点登录窗的 <span class="ui">网络设置</span>（登录后也可以从主面板的系统菜单进入）打开设置窗口：</p>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/a_netsettings.png" width="400" alt="网络设置"><figcaption>网络设置窗口，三张卡片分别显示各服务器的连接状态</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <ol class="steps">
+        <li>点选要修改的服务器卡片，卡片右侧显示 <span class="ui">已连接</span>、<span class="ui">连接中</span> 或 <span class="ui">未连接</span>。</li>
+        <li>在下方填入管理员提供的 <span class="ui">服务器地址</span> 和 <span class="ui">端口</span>。</li>
+        <li>点 <span class="ui">测试连接</span> 确认能连通。</li>
+        <li>点 <span class="ui">保存</span>，本次登录即生效。</li>
+      </ol>
+      <p>示例截图中的端口是演示环境的端口，实际取值以管理员提供的为准。</p>
+    </div>
+  </div>
+
+  <h2 id="language">切换界面语言</h2>
+  <p>登录窗右下角的链接显示当前语言（如 <span class="ui">简体中文</span>），点它可以选择 <b>跟随系统</b>、简体中文、繁體中文、English、日本語 或 한국어。切换后客户端会询问是否立即重启，重启后生效。登录后也可以在<a href="28-settings.html">「系统设置 → 通用 → 语言」</a>中修改。</p>
+  <figure class="shot center">
+    <img src="../img/a_login_language.png" width="403" alt="语言菜单">
+    <figcaption>界面语言菜单</figcaption>
+  </figure>
+  <div class="callout note"><b>看不到语言链接？</b>多语言由可选的语言包 <code>FlamingoLang.dll</code> 提供。程序目录里没有这个文件时，客户端只显示简体中文，语言链接也会隐藏。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

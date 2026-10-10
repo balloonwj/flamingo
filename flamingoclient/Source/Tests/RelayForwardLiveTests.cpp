@@ -22,7 +22,7 @@
  *      FlamingoUnit.exe "[live]"
  *
  *  跑之前需要准备一个独立的 imgserver 实例（不要用开发中正在联调的那个，端口会撞）：
- *    1. 把 flamingoserver/windowsproj/imgserver.exe 复制到 tmp/cryptotest/；
+ *    1. 把 flamingoserver/windowsproj/x64/Debug/imgserver.exe 复制到 tmp/cryptotest/；
  *    2. 在它的上一级建 etc/imgserver.conf（仓库里已有 tmp/etc/imgserver.conf），
  *       relaylistenport 设为 livetest::kTestRelayPort、encryption 设为 1、
  *       serverkeyfile 指向服务端真正在用的那份密钥、relaytokenkey 与本文件的

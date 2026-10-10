@@ -33,13 +33,20 @@ extern CAppModule _Module;
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 
+#include <string>
 #include <vector>
 
 #include "MainPanelTreeView.h"
 #include "TextWidthCache.h"        // 右侧文字宽度的测量结果缓存
 #include "BadgeRender.h"           // FormatBadgeText / ComputeBadgeWidth / ComputeBadgeRect
-#include "MainPanelIcons.h"        // DrawLineIcon / kIconMute（免打扰会话的静音图标）
+#include "MainPanelIcons.h"        // DrawLineIcon / kIconBellSlash / kIconDrawer / kIconBlock（提醒模式徽章）
+#include "ConversationRowLayout.h" // LayoutConvRowSecondLine / FitTextWithEllipsis：会话行第二行的排布与摘要截断
+#include "PresenceBadge.h"         // DrawPresenceBadge：头像右下角在线状态角标的字形与配色
+#include "../../net/Protocol.h"     // enum conversation_notify_mode
 #include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // 取基类右侧文字默认字体(画时间/量宽)
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
+#include "../BalloonChatWnd/ChatIcons.h"   // DrawChatIcon：「通话中」胶囊里的电话 / 摄像机图标
+#include "../BalloonChatWnd/GroupNotifyOnly.h"   // NotifyOnlyBadgeText：「仅通知」标签的文字（docs/群管理接入方案.md §14）
 
 namespace balloonmain {
 
@@ -55,13 +62,15 @@ const COLORREF kBadgeTextColor = RGB(255, 255, 255);
 const int kBadgeDiameter = 16;
 // 每多一位数字，胶囊横向加宽的逻辑像素（与 MainPanelTab 同口径）。
 const int kBadgeExtraPerChar = 7;
+// 「未读小红点」的直径（逻辑像素）：会话被手动标为未读、又没有未读数时画的不带数字的圆点，
+// 比数字胶囊小一圈，一眼能与「有 1 条未读」区分开（docs/会话标为未读方案.md）。
+const int kUnreadDotDiameter = 10;
 // 红点右端内距：对齐 DuiTreeView 单列右端 padding（其私有常量 kRightPad=8），
 // 使红点右边缘与上排时间右边缘对齐。
 const int kBadgeRightPad = 8;
-// 状态徽标与其左侧右侧列内容（时间 / 未读胶囊）之间的横向间距：对齐 DuiTreeView 在
-// 状态徽标与基类右侧文字之间留的间距（其私有常量 kCellPad=6），这样本类画的右侧列
-// 恰好落在基类为右侧文字预留的那段宽度里。
-const int kStatusIconGap = 6;
+// 与 DuiTreeView 单列绘制里的私有常量 kCellPad=6 同值：基类在头像与名字之间、名字列与右侧文字之间
+// 都留这么宽。本类据此从名字起点推出头像右边界（在线状态角标），并推出名字列的右边界（会话行摘要的上限）。
+const int kBaseCellPad = 6;
 // 红点垂直中心相对行中线 mid 的下移量（逻辑像素）：基类把"预览"副标签按
 // DT_TOP 画在 [mid, bottom]，其文字中心约在 mid + 副标签半字高处，这里取 6 让
 // 红点与预览同高。
@@ -98,8 +107,8 @@ const Gdiplus::REAL kPinnedAccentRadius = (Gdiplus::REAL)kPinnedAccentWidth / 2.
 const Gdiplus::Color kBadgeMutedGray(255, 0x9A, 0xA0, 0xA6);
 
 // 静音图标边长（逻辑像素）。与未读胶囊同排，故比胶囊直径略小。
-// 「特别关注」星标：画在主标签文字之后，金色实心五角星。
-// 12px 与静音图标、在线状态徽标同尺寸，一行里几个装饰视觉重量才一致。
+// 「特别关注」星标：画在主标签文字之后（会话行版式画在第二行），金色实心五角星。
+// 12px 与静音图标、在线状态角标的圆底大致同尺寸，一行里几个装饰视觉重量才一致。
 const int kStarIconSize = 12;
 // 星与名字末尾之间的间距。留 4px：贴太紧会像名字的一部分，拉太开又不知道它属于谁。
 const int kStarIconGap = 4;
@@ -117,11 +126,105 @@ const int kFavoriteIconGap = 4;
 //（蓝色系的颜色在选中行上会看不清，故不取）。
 const Gdiplus::Color kFavoriteIconColor(255, 0xEC, 0x48, 0x99);
 
+// 「字幕模式」徽章（docs/聊天字幕模式方案.md 第 1 节第 13 条）：这个会话的桌面字幕开着时，画在名字（有星标、
+// 收藏徽章时在它们）之后、「通话中」胶囊之前；图形与聊天窗头部的「字幕模式」按钮相同（ChatIcons 的
+// kChatIconSubtitle）。尺寸与间距同收藏徽章，一行里几个装饰视觉重量一致。
+const int kSubtitleIconSize = 12;
+const int kSubtitleIconGap = 4;
+// 蓝 #3B82F6（用户 2026-10-05 选定）。选中行的底色是品牌蓝 #2D6CDF，蓝色徽章在上面看不清，选中行改画白色
+const Gdiplus::Color kSubtitleIconColor(255, 0x3B, 0x82, 0xF6);
+const Gdiplus::Color kSubtitleIconSelectedColor(255, 0xFF, 0xFF, 0xFF);
+// 图标描边宽度（以 viewBox 24 为基准）：12 像素下约 1.3 像素，比头部按钮的 2 粗一点，缩小后线条仍清楚
+const Gdiplus::REAL kSubtitleIconStroke = 2.6f;
+
+// 「通话中」胶囊（docs/音视频通话优化方案.md 第 3 项）：画在名字（有星标、收藏徽章时在它们）之后。
+// 胶囊高 16，与未读胶囊同高；左右内边距 6；图标边长 10；图标与文字间距 3；与左边内容的间距 6
+//（比星标、收藏徽章的 4 宽一点：它带文字，贴太近会像名字的一部分）。
+const int kInCallCapsuleH = 16;
+const int kInCallPadX = 6;
+const int kInCallIconSize = 10;
+const int kInCallIconTextGap = 3;
+const int kInCallGap = 6;
+// 绿 #1FA85C 底、白色图标与文字。与在线状态的绿 #12B76A 相近但更深，白字在上面清晰；
+// 在白底、悬停浅蓝、选中品牌蓝三种行底色上都醒目
+const Gdiplus::Color kInCallFill(255, 0x1F, 0xA8, 0x5C);
+const Gdiplus::Color kInCallInk(255, 0xFF, 0xFF, 0xFF);
+// 图标描边宽度（以 viewBox 24 为基准，与聊天窗头部按钮同为 2）
+const Gdiplus::REAL kInCallIconStroke = 2.0f;
+// 胶囊里文字的字号相对默认字体缩小的比例：默认字体是名字的字号，胶囊里写同样大的字会喧宾夺主
+const Gdiplus::REAL kInCallTextScale = 0.85f;
+
+// 「仅通知」标签（docs/群管理接入方案.md §14）：灰底、深灰字，高度、内边距、与前一个标记的间距、文字缩放都与
+// 「通话中」胶囊相同，只是没有图标、颜色是中性的灰（它说明的是群的状态，不需要醒目）
+const Gdiplus::Color kNotifyOnlyFill(255, 0xEC, 0xEC, 0xEC);
+const Gdiplus::Color kNotifyOnlyInk(255, 0x80, 0x80, 0x80);
+// 媒体类型：与 IMediaHost::OnCallPresence 的 media 取值一致
+const int kInCallMediaVideo = 2;
+
+// 提醒模式徽章（铃铛加斜线 / 抽屉柜 / 禁止符）的边长（逻辑像素）。与未读胶囊同排，故比胶囊
+// 直径略小；与星标、收藏徽章同为 12，一行里几个装饰视觉重量一致。
 const int kMuteIconSize = 12;
-// 静音图标与其右侧未读胶囊之间的横向间距（逻辑像素）。
+// 徽章与其右侧未读胶囊之间的横向间距（逻辑像素）。
 const int kMuteIconGap = 4;
-// 静音图标的描边宽度，以 MainPanelIcons 的 viewBox 24 为基准（与菜单图标同口径）。
+// 徽章的描边宽度，以 MainPanelIcons 的 viewBox 24 为基准（与菜单图标同口径）。
 const Gdiplus::REAL kMuteIconStroke = 2.0f;
+
+// ---- 会话行版式的第二行（docs/消息提醒模式与消息盒子方案.md 第 13 节）----
+
+// 第二行各项之间、摘要与右侧徽章区之间的统一间距（逻辑像素）。取提醒模式图标与未读胶囊之间原有的间距，
+// 这两项的位置因此与改版前完全相同（它们仍由 OnPaint 的右侧列那一段按 kMuteIconGap 摆放）。
+const int kSecondLineGap = kMuteIconGap;
+// 摘要至少保留的宽度（逻辑像素），约三个汉字加省略号。徽章区要挤占这个宽度时，先省略低优先级的徽章。
+const int kConvSummaryMinWidth = 48;
+// 摘要为空时写进基类副标签的占位文字：一个空格。基类只有副标签非空才按两行排版，名字才会留在上半行与时间同高。
+const wchar_t kEmptySummaryPlaceholder[] = L" ";
+
+// ---- 头像右下角的在线状态角标 ----
+
+// 角标字形的绘制方框边长（逻辑像素）。状态徽标的圆底占方框的 20/24，12 对应直径 10 的圆底，
+// 与原来行右端徽标的圆底一样大；再小时钟指针会糊成一团（2026-08-12 实拍确认）。
+const int kPresenceCornerBox = 12;
+// 圆底直径占绘制方框的比例：MainPanelIcons 里状态徽标圆底半径 10，viewBox 24。
+const Gdiplus::REAL kPresenceDiscRatio = 20.0f / 24.0f;
+// 圆底外面描边的宽度（逻辑像素），把角标与头像本身的颜色隔开，与搜索下拉里头像状态点的白描边同宽。
+const Gdiplus::REAL kPresenceCornerRingW = 2.0f;
+// 角标圆心离头像右边、下边的距离（逻辑像素）。取 5：36 与 32 两种头像上，圆心都大致落在圆形头像轮廓的
+// 右下 45° 处，角标一半压在头像上、一半在外，看得出属于这个头像。
+const int kPresenceCornerInset = 5;
+// 描边颜色：普通行用白色；选中行改用选中底色品牌蓝 #2D6CDF（DuiTreeView 默认的选中底色，主面板三棵树
+// 都没有改它），角标在蓝底上看起来是从头像上挖出的缺口，不会多出一圈白边。
+const Gdiplus::Color kPresenceRingColor(255, 0xFF, 0xFF, 0xFF);
+const Gdiplus::Color kPresenceRingSelectedColor(255, 0x2D, 0x6C, 0xDF);
+
+// 某个在线状态要不要在头像右下角画角标：只有离开、忙碌两种画；在线不画，离线由头像灰度表示。
+bool PresenceHasCorner(int presence)
+{
+    return presence == presence_away || presence == presence_busy;
+}
+
+// 某种提醒模式在行右下角画哪个徽章；不画徽章的模式（允许提醒、特别关注、不认识的值）返回 -1。
+int NotifyModeIconKind(int notifyMode)
+{
+    switch (notifyMode)
+    {
+    //接收消息但不提醒；只提醒 @我和关注的人平时同样不提醒，沿用同一个徽章
+    case notify_mode_silent:
+    case notify_mode_mention_follow:
+        return kIconBellSlash;
+
+    //收进消息盒子且不提醒
+    case notify_mode_msgbox:
+        return kIconDrawer;
+
+    //屏蔽消息（仅群聊）
+    case notify_mode_block:
+        return kIconBlock;
+
+    //允许提醒、特别关注（星标画在名字后面），以及不认识的值：不画
+    default:
+        return -1;
+    }
+}
 
 // 向 path 添加一个圆角矩形（四段 90° 圆弧 + 闭合）。radius == 高/2 且为正方形时
 // 即为正圆；宽 > 高时呈横向胶囊。半径会被 clamp 到不超过宽 / 高的一半。
@@ -159,7 +262,7 @@ void DrawBadgeText(HDC hdc, LPCWSTR text, const RECT& rc)
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -270,7 +373,7 @@ struct BadgeDraw
 {
     RECT    m_rc;      // 红点外形矩形（客户区坐标）
     CString m_text;    // 红点内显示的数字文字
-    bool    m_muted;   // 该会话是否免打扰：true 用灰底，false 用红底
+    bool    m_muted;   // 该会话是否处于不提醒的模式（接收不提醒 / 收进消息盒子 / 屏蔽）：true 用灰底，false 用红底
 
     BadgeDraw()
         : m_muted(false)
@@ -283,6 +386,28 @@ struct BadgeDraw
 };
 
 } // anonymous namespace
+
+/**
+ *  会话行版式的一行在一次绘制里的排布结果。PrepareConvRows_ 在基类绘制之前算好，PaintNameMarks 据此
+ *  画第二行的标记；只在一次 OnPaint 期间存在。
+ */
+struct ConvRowPaint
+{
+    int                     m_id;        // 节点 id
+    int                     m_centerY;   // 第二行标记的垂直中心（客户区坐标），与未读胶囊、摘要同高
+    bool                    m_selected;  // 这一行是否为选中行（字幕徽章在选中行上画白色）
+    ConvRowSecondLineLayout m_layout;    // 第二行各项的横向排布
+
+    ConvRowPaint()
+        : m_id(-1)
+        , m_centerY(0)
+        , m_selected(false)
+    {
+    }
+};
+
+// 类内初始化的静态常量在被按引用使用时（如单元测试的断言）需要一处定义。
+const int MainPanelTreeView::kNoPresence;
 
 MainPanelTreeView::MainPanelTreeView()
 {
@@ -324,7 +449,7 @@ void MainPanelTreeView::SetItemRightStacked(int id, LPCTSTR timeText, int badgeC
     SetItemRightTopText(id, timeText);
 }
 
-void MainPanelTreeView::SetItemConversationFlags(int id, bool pinned, bool muted)
+void MainPanelTreeView::SetItemConversationFlags(int id, bool pinned, int notifyMode)
 {
     if (pinned)
     {
@@ -335,19 +460,74 @@ void MainPanelTreeView::SetItemConversationFlags(int id, bool pinned, bool muted
         m_pinnedRows.erase(id);
     }
 
-    if (muted)
+    if (NotifyModeIconKind(notifyMode) >= 0)
     {
-        m_mutedRows.insert(id);
+        m_notifyModeRows[id] = notifyMode;
     }
     else
     {
-        m_mutedRows.erase(id);
+        m_notifyModeRows.erase(id);
     }
 
-    // 免打扰会在未读胶囊左边多出一个静音图标，右下角占位变宽，须重算预留宽，
+    // 提醒模式徽章会在未读胶囊左边多出一个图标，右下角占位变宽，须重算预留宽，
     // 否则左侧的预览文字会顶到图标底下。
     UpdateRightReserve_(id);
     Invalidate();
+}
+
+void MainPanelTreeView::SetItemNotifyMode(int id, int notifyMode)
+{
+    const int current = GetItemNotifyMode(id);
+    const int target = (NotifyModeIconKind(notifyMode) >= 0) ? notifyMode : (int)notify_mode_allow;
+    if (current == target)
+    {
+        return;   // 状态没变，不必重绘
+    }
+
+    if (target == notify_mode_allow)
+    {
+        m_notifyModeRows.erase(id);
+    }
+    else
+    {
+        m_notifyModeRows[id] = target;
+    }
+
+    // 理由同 SetItemConversationFlags：徽章宽度计入右侧占位。
+    UpdateRightReserve_(id);
+    Invalidate();
+}
+
+int MainPanelTreeView::GetItemNotifyMode(int id) const
+{
+    std::map<int, int>::const_iterator it = m_notifyModeRows.find(id);
+    if (it == m_notifyModeRows.end())
+    {
+        return notify_mode_allow;
+    }
+    return it->second;
+}
+
+void MainPanelTreeView::SetItemQuietUnread(int id, bool quiet)
+{
+    if (IsItemQuietUnread(id) == quiet)
+    {
+        return;
+    }
+    if (quiet)
+    {
+        m_quietRows.insert(id);
+    }
+    else
+    {
+        m_quietRows.erase(id);
+    }
+    Invalidate();
+}
+
+bool MainPanelTreeView::IsItemQuietUnread(int id) const
+{
+    return m_quietRows.count(id) != 0;
 }
 
 void MainPanelTreeView::SetItemStarred(int id, bool starred)
@@ -368,7 +548,7 @@ void MainPanelTreeView::SetItemStarred(int id, bool starred)
     }
 
     // 星标画在名字之后，但它的宽度要计入右侧占位：名字过长时让基类先截断名字、给星
-    // 留出位置，否则星会跟在截断处之后压到右侧的时间 / 状态徽标上。
+    // 留出位置，否则星会跟在截断处之后压到右侧的时间上。
     UpdateRightReserve_(id);
     Invalidate();
 }
@@ -395,11 +575,37 @@ void MainPanelTreeView::SetItemFavorite(int id, bool favorite)
     Invalidate();
 }
 
+void MainPanelTreeView::SetItemSubtitle(int id, bool subtitle)
+{
+    const bool had = (m_subtitleRows.count(id) != 0);
+    if (had == subtitle)
+    {
+        return;   // 状态没变，不必重绘
+    }
+
+    if (subtitle)
+    {
+        m_subtitleRows.insert(id);
+    }
+    else
+    {
+        m_subtitleRows.erase(id);
+    }
+
+    // 理由同 SetItemStarred：徽章宽度计入右侧占位。
+    UpdateRightReserve_(id);
+    Invalidate();
+}
+
 void MainPanelTreeView::ClearAllRowDecorations()
 {
     if (m_rightTopText.empty() && m_badges.empty()
-        && m_pinnedRows.empty() && m_mutedRows.empty()
+        && m_pinnedRows.empty() && m_notifyModeRows.empty()
+        && m_quietRows.empty()
         && m_starredRows.empty() && m_favoriteRows.empty()
+        && m_subtitleRows.empty()
+        && m_inCallRows.empty() && m_notifyOnlyRows.empty() && m_unreadDotRows.empty()
+        && m_summaryRows.empty() && m_presenceRows.empty()
         && m_rightSpacerLen.empty())
     {
         return;
@@ -407,32 +613,111 @@ void MainPanelTreeView::ClearAllRowDecorations()
     m_rightTopText.clear();
     m_badges.clear();
     m_pinnedRows.clear();
-    m_mutedRows.clear();
+    m_notifyModeRows.clear();
+    m_quietRows.clear();
     m_starredRows.clear();
     m_favoriteRows.clear();
+    m_subtitleRows.clear();
+    m_inCallRows.clear();
+    m_notifyOnlyRows.clear();
+    m_unreadDotRows.clear();
+    m_summaryRows.clear();
+    m_presenceRows.clear();
     m_rightSpacerLen.clear();
     Invalidate();
 }
 
-int MainPanelTreeView::StatusIconReserve_(int id) const
+void MainPanelTreeView::SetItemSummary(int id, LPCTSTR text)
 {
-    HBITMAP icon = GetItemStatusIcon(id);
-    if (icon == NULL)
+    const CString summary = (text != NULL) ? text : _T("");
+    std::map<int, CString>::const_iterator it = m_summaryRows.find(id);
+    const bool wasConvLayout = (it != m_summaryRows.end());
+    if (wasConvLayout && it->second == summary)
     {
-        return 0;
+        return;   // 摘要没变，不必重绘
     }
-    // 与基类绘制时同一取法：按位图自身宽度摆放，取不到尺寸时基类不画，这里也不让位。
-    BITMAP bm;
-    ::ZeroMemory(&bm, sizeof(bm));
-    if (::GetObject(icon, sizeof(bm), &bm) == 0 || bm.bmWidth <= 0 || bm.bmHeight <= 0)
+    m_summaryRows[id] = summary;
+
+    // 先把原文写进基类副标签，使这一行立即按两行排版；绘制前 PrepareConvRows_ 会按当时的宽度换成截断后的文字。
+    // 原文为空时写一个空格占位，名字仍在上半行与时间同高
+    SetItemSubLabel(id, summary.IsEmpty() ? kEmptySummaryPlaceholder : (LPCTSTR)summary);
+
+    // 第一次变成会话行版式时，名字之后的标记移到第二行，右侧占位只按时间算，须重算
+    if (!wasConvLayout)
     {
-        return 0;
+        UpdateRightReserve_(id);
     }
-    return bm.bmWidth + kStatusIconGap;
+    Invalidate();
+}
+
+CString MainPanelTreeView::GetItemSummary(int id) const
+{
+    std::map<int, CString>::const_iterator it = m_summaryRows.find(id);
+    return (it != m_summaryRows.end()) ? it->second : CString();
+}
+
+void MainPanelTreeView::SetItemPresence(int id, int presence)
+{
+    const int current = GetItemPresence(id);
+    const int target = (presence >= 0) ? presence : kNoPresence;
+    if (current == target)
+    {
+        return;   // 状态没变，不必重绘
+    }
+    if (target == kNoPresence)
+    {
+        m_presenceRows.erase(id);
+    }
+    else
+    {
+        m_presenceRows[id] = target;
+    }
+    // 角标画在头像上，不占文字宽度，不必重算右侧占位
+    Invalidate();
+}
+
+int MainPanelTreeView::GetItemPresence(int id) const
+{
+    std::map<int, int>::const_iterator it = m_presenceRows.find(id);
+    return (it != m_presenceRows.end()) ? it->second : kNoPresence;
+}
+
+int MainPanelTreeView::UnreadWidth_(int id) const
+{
+    std::map<int, int>::const_iterator itBadge = m_badges.find(id);
+    if (itBadge != m_badges.end() && itBadge->second > 0)
+    {
+        const CString badgeText = FormatBadgeText(itBadge->second);
+        return ComputeBadgeWidth(badgeText.GetLength(), kBadgeDiameter, kBadgeExtraPerChar);
+    }
+    if (m_unreadDotRows.count(id) != 0)
+    {
+        return kUnreadDotDiameter;   // 没有未读数时才画小红点
+    }
+    return 0;
+}
+
+int MainPanelTreeView::BaseTextRight_(int id) const
+{
+    // 与 DuiTreeView 单列绘制同口径：行右端减去右内边距；有右侧文字时再减去它的宽度与一个间距。
+    // 本类管理的行，右侧文字就是 UpdateRightReserve_ 写进去的那串空格，按记下的个数量宽即可。
+    int right = m_rcItem.right - kBadgeRightPad;
+    std::map<int, int>::const_iterator it = m_rightSpacerLen.find(id);
+    if (it != m_rightSpacerLen.end() && it->second > 0)
+    {
+        const CString spacer(L' ', it->second);
+        right -= MeasureDefaultTextWidth(GetDefaultFont(), (LPCWSTR)spacer) + kBaseCellPad;
+    }
+    return right;
 }
 
 int MainPanelTreeView::NameMarksWidth_(int id) const
 {
+    // 会话行版式的标记画在第二行，名字之后不占位
+    if (m_summaryRows.count(id) != 0)
+    {
+        return 0;
+    }
     int width = 0;
     if (m_starredRows.count(id) != 0)
     {
@@ -442,7 +727,102 @@ int MainPanelTreeView::NameMarksWidth_(int id) const
     {
         width += kFavoriteIconGap + kFavoriteIconSize;
     }
+    if (m_subtitleRows.count(id) != 0)
+    {
+        width += kSubtitleIconGap + kSubtitleIconSize;
+    }
+    if (m_inCallRows.count(id) != 0)
+    {
+        width += kInCallGap + InCallCapsuleWidth_();
+    }
+    if (m_notifyOnlyRows.count(id) != 0)
+    {
+        width += kInCallGap + NotifyOnlyCapsuleWidth_();
+    }
     return width;
+}
+
+int MainPanelTreeView::NotifyOnlyCapsuleWidth_() const
+{
+    const int textW = MeasureDefaultTextWidth(GetDefaultFont(), balloonchatwnd::NotifyOnlyBadgeText());
+    //文字与「通话中」胶囊一样缩小绘制，宽度按比例折算后向上取整
+    const int scaledW = (int)(textW * kInCallTextScale + 0.99f);
+    return kInCallPadX + scaledW + kInCallPadX;
+}
+
+void MainPanelTreeView::SetItemNotifyOnly(int id, bool on)
+{
+    const bool had = (m_notifyOnlyRows.count(id) != 0);
+    if (had == on)
+    {
+        return;   // 状态没变，不必重绘
+    }
+    if (on)
+    {
+        m_notifyOnlyRows.insert(id);
+    }
+    else
+    {
+        m_notifyOnlyRows.erase(id);
+    }
+    // 理由同 SetItemStarred：标签宽度计入右侧占位
+    UpdateRightReserve_(id);
+    Invalidate();
+}
+
+void MainPanelTreeView::SetItemUnreadDot(int id, bool on)
+{
+    const bool had = (m_unreadDotRows.count(id) != 0);
+    if (had == on)
+    {
+        return;   // 状态没变，不必重绘
+    }
+    if (on)
+    {
+        m_unreadDotRows.insert(id);
+    }
+    else
+    {
+        m_unreadDotRows.erase(id);
+    }
+    // 红点占下排的位置，须重算右侧预留宽
+    UpdateRightReserve_(id);
+    Invalidate();
+}
+
+int MainPanelTreeView::InCallCapsuleWidth_() const
+{
+    const int textW = MeasureDefaultTextWidth(GetDefaultFont(), TR(L"通话中"));
+    //文字按 kInCallTextScale 缩小绘制，宽度按比例折算后向上取整
+    const int scaledW = (int)(textW * kInCallTextScale + 0.99f);
+    return kInCallPadX + kInCallIconSize + kInCallIconTextGap + scaledW + kInCallPadX;
+}
+
+void MainPanelTreeView::SetItemInCall(int id, int media)
+{
+    std::map<int, int>::iterator it = m_inCallRows.find(id);
+    const int had = (it != m_inCallRows.end()) ? it->second : 0;
+    if (had == media)
+    {
+        return;   // 状态没变，不必重绘
+    }
+    if (media > 0)
+    {
+        m_inCallRows[id] = media;
+    }
+    else
+    {
+        m_inCallRows.erase(id);
+    }
+    // 理由同 SetItemStarred：胶囊宽度计入右侧占位
+    UpdateRightReserve_(id);
+    Invalidate();
+}
+
+int MainPanelTreeView::GetItemInCallMedia(int id) const
+{
+    std::map<int, int>::const_iterator it = m_inCallRows.find(id);
+    return (it != m_inCallRows.end()) ? it->second : 0;
 }
 
 void MainPanelTreeView::UpdateRightReserve_(int id)
@@ -455,32 +835,30 @@ void MainPanelTreeView::UpdateRightReserve_(int id)
         topW = MeasureDefaultTextWidth(GetDefaultFont(), (LPCWSTR)itTop->second);
     }
 
-    // 下排宽 = 未读胶囊宽（按位数算）+ 免打扰时的静音图标宽与间距。
-    int bottomW = 0;
-    std::map<int, int>::const_iterator itBadge = m_badges.find(id);
-    if (itBadge != m_badges.end() && itBadge->second > 0)
+    int reserveW = topW;
+    if (m_summaryRows.count(id) == 0)
     {
-        CString badgeText = FormatBadgeText(itBadge->second);
-        bottomW = ComputeBadgeWidth(badgeText.GetLength(),
-                                    kBadgeDiameter, kBadgeExtraPerChar);
-    }
-    if (m_mutedRows.count(id) != 0)
-    {
-        bottomW += kMuteIconSize;
-        if (bottomW > kMuteIconSize)
+        // 下排宽 = 未读胶囊宽（按位数算）+ 有提醒模式徽章时的徽章宽与间距。
+        int bottomW = UnreadWidth_(id);
+        if (m_notifyModeRows.count(id) != 0)
         {
-            bottomW += kMuteIconGap;   // 图标与胶囊之间的间距，只在两者都在时才需要
+            bottomW += kMuteIconSize;
+            if (bottomW > kMuteIconSize)
+            {
+                bottomW += kMuteIconGap;   // 图标与胶囊之间的间距，只在两者都在时才需要
+            }
         }
-    }
 
-    // 名字之后的标记（星标 / 收藏徽章）也要占位：它们跟在名字后面，名字过长时须由
-    // 基类先截断名字才放得下。代价是这类行的第二行预览也随之少显示这么宽。
-    const int marksW = NameMarksWidth_(id);
+        // 名字之后的标记（星标 / 收藏徽章等）也要占位：它们跟在名字后面，名字过长时须由
+        // 基类先截断名字才放得下。代价是这类行的第二行预览也随之少显示这么宽。
+        const int marksW = NameMarksWidth_(id);
+        reserveW = ((topW > bottomW) ? topW : bottomW) + marksW;
+    }
+    // 会话行版式的行只为上排时间让位：名字只按时间截断；第二行的摘要由 PrepareConvRows_ 按徽章区自己截断。
 
     // 换算成等宽空格塞进基类 rightText，让基类把左侧标题 / 预览裁剪在右侧列左边。
     // 空格个数与上次写入的相同就不再写回：基类 SetItemRightText 要按 id 逐个扫描节点。
     // 比较的是空格个数而不是预留宽度 —— 字体变化后同样的宽度对应的个数会变，照样写回。
-    int reserveW = ((topW > bottomW) ? topW : bottomW) + marksW;
     const CString spacer = BuildSpacerForWidth(GetDefaultFont(), reserveW);
     std::map<int, int>::const_iterator itLen = m_rightSpacerLen.find(id);
     if (itLen != m_rightSpacerLen.end() && itLen->second == spacer.GetLength())
@@ -537,9 +915,146 @@ void MainPanelTreeView::DirtyRowRange_(const RECT& rcDirty, int& outFirst, int& 
     }
 }
 
-void MainPanelTreeView::PaintNameMarks(HDC hdc, const RECT& rcDirty)
+void MainPanelTreeView::PrepareConvRows_(HDC hdc, const RECT& rcDirty, std::vector<ConvRowPaint>& outRows)
 {
-    if (m_starredRows.empty() && m_favoriteRows.empty())
+    outRows.clear();
+    const int rowHeight = GetRowHeight();
+    if (m_summaryRows.empty() || rowHeight <= 0)
+    {
+        return;   // 没有会话行版式的行（通讯录树、群树）：零开销
+    }
+
+    const int rightEdge   = m_rcItem.right - kBadgeRightPad;
+    const int inCallW     = m_inCallRows.empty() ? 0 : InCallCapsuleWidth_();
+    const int notifyOnlyW = m_notifyOnlyRows.empty() ? 0 : NotifyOnlyCapsuleWidth_();
+
+    // 摘要用基类副标签的字体测量（基类按 SetSubLabelPointSize 的字号画副标签）
+    HFONT subFont = GetFontByPointSize(GetSubLabelPointSize(), false);
+    HGDIOBJ oldFont = (subFont != NULL) ? ::SelectObject(hdc, subFont) : NULL;
+
+    int firstRow = 0;
+    int lastRow  = -1;
+    DirtyRowRange_(rcDirty, firstRow, lastRow);
+    for (int row = firstRow; row <= lastRow; ++row)
+    {
+        const int nodeId = GetIdAtVisibleRow(row);
+        std::map<int, CString>::const_iterator itSum = m_summaryRows.find(nodeId);
+        if (itSum == m_summaryRows.end())
+        {
+            continue;
+        }
+
+        const int rowTop = m_rcItem.top + row * rowHeight;
+        const int mid    = rowTop + rowHeight / 2;
+
+        ConvRowSecondLineInput in;
+        in.m_right = rightEdge;
+        // 摘要的起点就是名字的起点（基类在同一个横坐标画主标签与副标签）。取不到名字矩形（可用宽度已被挤没）时
+        // 按没有摘要空间处理：可省略的徽章全部省略，只留必须保留的几项。
+        RECT rcLabel;
+        in.m_left = GetItemLabelTextRect(nodeId, rcLabel) ? rcLabel.left : rightEdge;
+        in.m_summaryCap = BaseTextRight_(nodeId);
+        in.m_hasSummary = !itSum->second.IsEmpty();
+        in.m_minSummaryWidth = kConvSummaryMinWidth;
+        in.m_gap = kSecondLineGap;
+        in.m_markWidth[conv_row_mark_star]     = (m_starredRows.count(nodeId) != 0) ? kStarIconSize : 0;
+        in.m_markWidth[conv_row_mark_favorite] = (m_favoriteRows.count(nodeId) != 0) ? kFavoriteIconSize : 0;
+        in.m_markWidth[conv_row_mark_subtitle] = (m_subtitleRows.count(nodeId) != 0) ? kSubtitleIconSize : 0;
+        in.m_markWidth[conv_row_mark_in_call]  = (m_inCallRows.count(nodeId) != 0) ? inCallW : 0;
+        in.m_markWidth[conv_row_mark_notify_only] = (m_notifyOnlyRows.count(nodeId) != 0) ? notifyOnlyW : 0;
+        std::map<int, int>::const_iterator itMode = m_notifyModeRows.find(nodeId);
+        const bool hasModeIcon = (itMode != m_notifyModeRows.end()) && (NotifyModeIconKind(itMode->second) >= 0);
+        in.m_notifyIconWidth = hasModeIcon ? kMuteIconSize : 0;
+        in.m_unreadWidth = UnreadWidth_(nodeId);
+
+        ConvRowPaint paint;
+        paint.m_id       = nodeId;
+        paint.m_centerY  = mid + kBadgePreviewCenterOffset;
+        paint.m_selected = (GetCurSel() == nodeId);
+        paint.m_layout   = LayoutConvRowSecondLine(in);
+        outRows.push_back(paint);
+
+        // 摘要截断到摘要矩形的宽度，写进基类副标签；与现有内容相同时不写（写入会请求重画）
+        const int summaryW = paint.m_layout.m_summaryRight - paint.m_layout.m_summaryLeft;
+        const std::wstring fitted = FitTextWithEllipsis(hdc, std::wstring((LPCWSTR)itSum->second), summaryW);
+        const CString subLabel = fitted.empty() ? CString(kEmptySummaryPlaceholder) : CString(fitted.c_str());
+        if (GetItemSubLabel(nodeId) != subLabel)
+        {
+            SetItemSubLabel(nodeId, subLabel);
+        }
+    }
+
+    if (oldFont != NULL)
+    {
+        ::SelectObject(hdc, oldFont);
+    }
+}
+
+void MainPanelTreeView::PaintPresenceCorners_(HDC hdc, const RECT& rcDirty)
+{
+    const int rowHeight = GetRowHeight();
+    const int iconSize  = GetIconSize();
+    if (m_presenceRows.empty() || rowHeight <= 0 || iconSize <= 0)
+    {
+        return;
+    }
+
+    // 先收集要画的角标（圆心与状态），再统一开一次 GDI+ 画完
+    std::vector<POINT> centers;
+    std::vector<int>   presences;
+    std::vector<bool>  selected;
+    int firstRow = 0;
+    int lastRow  = -1;
+    DirtyRowRange_(rcDirty, firstRow, lastRow);
+    for (int row = firstRow; row <= lastRow; ++row)
+    {
+        const int nodeId = GetIdAtVisibleRow(row);
+        std::map<int, int>::const_iterator it = m_presenceRows.find(nodeId);
+        if (it == m_presenceRows.end() || !PresenceHasCorner(it->second) || GetItemIcon(nodeId) == NULL)
+        {
+            continue;
+        }
+        // 头像位置按基类的排布推出：头像右边界 = 名字起点 - 间距，头像在行内垂直居中。取不到名字矩形时不画
+        RECT rcLabel;
+        if (!GetItemLabelTextRect(nodeId, rcLabel))
+        {
+            continue;
+        }
+        const int rowTop     = m_rcItem.top + row * rowHeight;
+        const int iconRight  = rcLabel.left - kBaseCellPad;
+        const int iconTop    = rowTop + (rowHeight - iconSize) / 2;
+        const int iconBottom = iconTop + iconSize;
+        POINT center;
+        center.x = iconRight - kPresenceCornerInset;
+        center.y = iconBottom - kPresenceCornerInset;
+        centers.push_back(center);
+        presences.push_back(it->second);
+        selected.push_back(GetCurSel() == nodeId);
+    }
+    if (centers.empty())
+    {
+        return;
+    }
+
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    const Gdiplus::REAL box   = (Gdiplus::REAL)kPresenceCornerBox;
+    const Gdiplus::REAL ringR = box * kPresenceDiscRatio / 2.0f + kPresenceCornerRingW;
+    for (size_t i = 0; i < centers.size(); ++i)
+    {
+        const Gdiplus::REAL cx = (Gdiplus::REAL)centers[i].x;
+        const Gdiplus::REAL cy = (Gdiplus::REAL)centers[i].y;
+        // 先垫一个比圆底大一圈的实心圆作描边，把角标与头像隔开；再画状态字形
+        Gdiplus::SolidBrush ring(selected[i] ? kPresenceRingSelectedColor : kPresenceRingColor);
+        g.FillEllipse(&ring, cx - ringR, cy - ringR, ringR * 2.0f, ringR * 2.0f);
+        DrawPresenceBadge(g, presences[i], false, cx - box / 2.0f, cy - box / 2.0f, box);
+    }
+}
+
+void MainPanelTreeView::PaintNameMarks(HDC hdc, const RECT& rcDirty, const std::vector<ConvRowPaint>& convRows)
+{
+    if (m_starredRows.empty() && m_favoriteRows.empty() && m_subtitleRows.empty() && m_inCallRows.empty()
+        && m_notifyOnlyRows.empty())
     {
         return;
     }
@@ -548,9 +1063,58 @@ void MainPanelTreeView::PaintNameMarks(HDC hdc, const RECT& rcDirty)
     // Graphics 对象建一次就够，逐行新建既慢又容易与 GDI 交错出问题。
     std::vector<RECT> starRects;
     std::vector<RECT> favoriteRects;
+    std::vector<RECT> subtitleRects;      // 「字幕模式」徽章的矩形
+    std::vector<bool> subtitleSelected;   // 与 subtitleRects 一一对应：这一行是否为选中行（选中行画白色）
+    std::vector<RECT> inCallRects;   // 「通话中」胶囊的矩形
+    std::vector<int>  inCallMedia;   // 与 inCallRects 一一对应的媒体类型
+    std::vector<RECT> notifyOnlyRects;   // 「仅通知」标签的矩形
     const int markRight = m_rcItem.right - kBadgeRightPad;
+    const int capsuleW = m_inCallRows.empty() ? 0 : InCallCapsuleWidth_();
+    const int notifyOnlyW = m_notifyOnlyRows.empty() ? 0 : NotifyOnlyCapsuleWidth_();
 
-    // 只看与脏区相交的那几行。原先遍历全部可见行、对每个带标记的行都算一次名字区域
+    // 会话行版式的行：标记画在第二行，位置取自 PrepareConvRows_ 算好的排布，与摘要、未读胶囊同一条中线
+    for (size_t i = 0; i < convRows.size(); ++i)
+    {
+        const ConvRowPaint& paint = convRows[i];
+        const ConvRowSecondLineLayout& lay = paint.m_layout;
+        const int iconTop    = paint.m_centerY - kStarIconSize / 2;
+        const int capsuleTop = paint.m_centerY - kInCallCapsuleH / 2;
+        if (lay.m_markLeft[conv_row_mark_star] != kConvRowNotDrawn)
+        {
+            RECT rc = { lay.m_markLeft[conv_row_mark_star], iconTop,
+                        lay.m_markLeft[conv_row_mark_star] + kStarIconSize, iconTop + kStarIconSize };
+            starRects.push_back(rc);
+        }
+        if (lay.m_markLeft[conv_row_mark_favorite] != kConvRowNotDrawn)
+        {
+            RECT rc = { lay.m_markLeft[conv_row_mark_favorite], iconTop,
+                        lay.m_markLeft[conv_row_mark_favorite] + kFavoriteIconSize, iconTop + kFavoriteIconSize };
+            favoriteRects.push_back(rc);
+        }
+        if (lay.m_markLeft[conv_row_mark_subtitle] != kConvRowNotDrawn)
+        {
+            RECT rc = { lay.m_markLeft[conv_row_mark_subtitle], iconTop,
+                        lay.m_markLeft[conv_row_mark_subtitle] + kSubtitleIconSize, iconTop + kSubtitleIconSize };
+            subtitleRects.push_back(rc);
+            subtitleSelected.push_back(paint.m_selected);
+        }
+        if (lay.m_markLeft[conv_row_mark_in_call] != kConvRowNotDrawn)
+        {
+            RECT rc = { lay.m_markLeft[conv_row_mark_in_call], capsuleTop,
+                        lay.m_markLeft[conv_row_mark_in_call] + capsuleW, capsuleTop + kInCallCapsuleH };
+            inCallRects.push_back(rc);
+            std::map<int, int>::const_iterator itCall = m_inCallRows.find(paint.m_id);
+            inCallMedia.push_back((itCall != m_inCallRows.end()) ? itCall->second : 0);
+        }
+        if (lay.m_markLeft[conv_row_mark_notify_only] != kConvRowNotDrawn)
+        {
+            RECT rc = { lay.m_markLeft[conv_row_mark_notify_only], capsuleTop,
+                        lay.m_markLeft[conv_row_mark_notify_only] + notifyOnlyW, capsuleTop + kInCallCapsuleH };
+            notifyOnlyRects.push_back(rc);
+        }
+    }
+
+    // 其余的行：标记画在名字之后。只看与脏区相交的那几行。原先遍历全部可见行、对每个带标记的行都算一次名字区域
     // （其中要在全部可见行里找这一行），5000 人的通讯录每画一次要几十到一百毫秒，
     // 而真正落在屏幕上的标记只有十几个（2026-10-01 基准实测）。
     int firstRow = 0;
@@ -559,9 +1123,17 @@ void MainPanelTreeView::PaintNameMarks(HDC hdc, const RECT& rcDirty)
     for (int row = firstRow; row <= lastRow; ++row)
     {
         const int nodeId = GetIdAtVisibleRow(row);
+        if (m_summaryRows.count(nodeId) != 0)
+        {
+            continue;   // 会话行版式的行上面已经按第二行处理过
+        }
         const bool starred  = (m_starredRows.count(nodeId) != 0);
         const bool favorite = (m_favoriteRows.count(nodeId) != 0);
-        if (!starred && !favorite)
+        const bool subtitle = (m_subtitleRows.count(nodeId) != 0);
+        std::map<int, int>::const_iterator itCall = m_inCallRows.find(nodeId);
+        const int callMedia = (itCall != m_inCallRows.end()) ? itCall->second : 0;
+        const bool notifyOnly = (m_notifyOnlyRows.count(nodeId) != 0);
+        if (!starred && !favorite && !subtitle && callMedia == 0 && !notifyOnly)
         {
             continue;
         }
@@ -605,14 +1177,59 @@ void MainPanelTreeView::PaintNameMarks(HDC hdc, const RECT& rcDirty)
             rcFav.right  = rcFav.left + kFavoriteIconSize;
             rcFav.top    = (rcText.top + rcText.bottom - kFavoriteIconSize) / 2;
             rcFav.bottom = rcFav.top + kFavoriteIconSize;
-            if (rcFav.right <= markRight)
+            if (rcFav.right > markRight)
             {
-                favoriteRects.push_back(rcFav);
+                continue;
+            }
+            favoriteRects.push_back(rcFav);
+            cursor = rcFav.right;
+        }
+        if (subtitle)
+        {
+            RECT rcSub;
+            rcSub.left   = cursor + kSubtitleIconGap;
+            rcSub.right  = rcSub.left + kSubtitleIconSize;
+            rcSub.top    = (rcText.top + rcText.bottom - kSubtitleIconSize) / 2;
+            rcSub.bottom = rcSub.top + kSubtitleIconSize;
+            if (rcSub.right > markRight)
+            {
+                continue;
+            }
+            subtitleRects.push_back(rcSub);
+            subtitleSelected.push_back(GetCurSel() == nodeId);
+            cursor = rcSub.right;
+        }
+        if (callMedia > 0)
+        {
+            RECT rcCall;
+            rcCall.left   = cursor + kInCallGap;
+            rcCall.right  = rcCall.left + capsuleW;
+            rcCall.top    = (rcText.top + rcText.bottom - kInCallCapsuleH) / 2;
+            rcCall.bottom = rcCall.top + kInCallCapsuleH;
+            if (rcCall.right > markRight)
+            {
+                continue;
+            }
+            inCallRects.push_back(rcCall);
+            inCallMedia.push_back(callMedia);
+            cursor = rcCall.right;
+        }
+        if (notifyOnly)
+        {
+            RECT rcNo;
+            rcNo.left   = cursor + kInCallGap;
+            rcNo.right  = rcNo.left + notifyOnlyW;
+            rcNo.top    = (rcText.top + rcText.bottom - kInCallCapsuleH) / 2;
+            rcNo.bottom = rcNo.top + kInCallCapsuleH;
+            if (rcNo.right <= markRight)
+            {
+                notifyOnlyRects.push_back(rcNo);
             }
         }
     }
 
-    if (starRects.empty() && favoriteRects.empty())
+    if (starRects.empty() && favoriteRects.empty() && subtitleRects.empty() && inCallRects.empty()
+        && notifyOnlyRects.empty())
     {
         return;
     }
@@ -633,22 +1250,101 @@ void MainPanelTreeView::PaintNameMarks(HDC hdc, const RECT& rcDirty)
                      (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top,
                      (Gdiplus::REAL)kFavoriteIconSize, kFavoriteIconColor, 0.0f);
     }
+    for (size_t i = 0; i < subtitleRects.size(); ++i)
+    {
+        const RECT& rc = subtitleRects[i];
+        balloonchatwnd::DrawChatIcon(g, balloonchatwnd::kChatIconSubtitle,
+                                     (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)kSubtitleIconSize,
+                                     subtitleSelected[i] ? kSubtitleIconSelectedColor : kSubtitleIconColor,
+                                     kSubtitleIconStroke);
+    }
+    if (inCallRects.empty() && notifyOnlyRects.empty())
+    {
+        return;
+    }
+
+    // 「通话中」胶囊：圆角底 + 图标 + 文字。文字用默认字体缩小绘制，白色、在胶囊里垂直居中
+    Gdiplus::Font baseFont(hdc, GetDefaultFont());
+    Gdiplus::FontFamily family;
+    baseFont.GetFamily(&family);
+    Gdiplus::Font textFont(&family, baseFont.GetSize() * kInCallTextScale, baseFont.GetStyle(), baseFont.GetUnit());
+    Gdiplus::SolidBrush fill(kInCallFill);
+    Gdiplus::SolidBrush ink(kInCallInk);
+    Gdiplus::StringFormat format;
+    format.SetAlignment(Gdiplus::StringAlignmentNear);
+    format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    format.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    const CString label = TR(L"通话中");
+    for (size_t i = 0; i < inCallRects.size(); ++i)
+    {
+        const RECT& rc = inCallRects[i];
+        const Gdiplus::REAL radius = kInCallCapsuleH / 2.0f;
+        Gdiplus::GraphicsPath path;
+        path.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, radius * 2, radius * 2, 90.0f, 180.0f);
+        path.AddArc((Gdiplus::REAL)rc.right - radius * 2, (Gdiplus::REAL)rc.top, radius * 2, radius * 2, 270.0f, 180.0f);
+        path.CloseFigure();
+        g.FillPath(&fill, &path);
+
+        const int iconKind = (inCallMedia[i] == kInCallMediaVideo) ? balloonchatwnd::kChatIconVideo
+                                                                     : balloonchatwnd::kChatIconPhone;
+        const Gdiplus::REAL iconX = (Gdiplus::REAL)(rc.left + kInCallPadX);
+        const Gdiplus::REAL iconY = (Gdiplus::REAL)(rc.top + (kInCallCapsuleH - kInCallIconSize) / 2);
+        balloonchatwnd::DrawChatIcon(g, iconKind, iconX, iconY, (Gdiplus::REAL)kInCallIconSize, kInCallInk,
+                                     kInCallIconStroke);
+
+        const Gdiplus::REAL textX = iconX + kInCallIconSize + kInCallIconTextGap;
+        const Gdiplus::RectF textRc(textX, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)rc.right - textX,
+                                    (Gdiplus::REAL)kInCallCapsuleH);
+        g.DrawString((LPCWSTR)label, label.GetLength(), &textFont, textRc, &format, &ink);
+    }
+
+    // 「仅通知」标签：灰底圆角 + 深灰文字，字体与「通话中」胶囊相同，没有图标（docs/群管理接入方案.md §14）
+    if (notifyOnlyRects.empty())
+    {
+        return;
+    }
+    Gdiplus::SolidBrush noFill(kNotifyOnlyFill);
+    Gdiplus::SolidBrush noInk(kNotifyOnlyInk);
+    const CString noLabel = balloonchatwnd::NotifyOnlyBadgeText();
+    for (size_t i = 0; i < notifyOnlyRects.size(); ++i)
+    {
+        const RECT& rc = notifyOnlyRects[i];
+        const Gdiplus::REAL radius = kInCallCapsuleH / 2.0f;
+        Gdiplus::GraphicsPath path;
+        path.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, radius * 2, radius * 2, 90.0f, 180.0f);
+        path.AddArc((Gdiplus::REAL)rc.right - radius * 2, (Gdiplus::REAL)rc.top, radius * 2, radius * 2, 270.0f, 180.0f);
+        path.CloseFigure();
+        g.FillPath(&noFill, &path);
+
+        const Gdiplus::REAL textX = (Gdiplus::REAL)(rc.left + kInCallPadX);
+        const Gdiplus::RectF textRc(textX, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)rc.right - textX,
+                                    (Gdiplus::REAL)kInCallCapsuleH);
+        g.DrawString((LPCWSTR)noLabel, noLabel.GetLength(), &textFont, textRc, &format, &noInk);
+    }
 }
 
 void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
 {
+    // 会话行版式的行：先按当前宽度排好第二行，把截断后的摘要写进基类副标签，基类接着就按它画
+    std::vector<ConvRowPaint> convRows;
+    PrepareConvRows_(hdc, rcDirty, convRows);
+
     // 先让基类把整行其余内容画完（行底色 / 头像 / 标题 / 预览）。被本类接管的行，
     // 基类右侧文字是占位空格、不可见；未接管的行（如联系人树）右侧文字仍由基类正常绘制。
     DuiTreeView::OnPaint(hdc, rcDirty);
 
-    // 名字之后的标记（特别关注星标、收藏徽章）单独一段：它们画在<u>名字之后</u>，与下面
-    // 那套右侧装饰（时间 / 未读 / 静音 / 置顶）在坐标上毫不相干，混在一起写只会让两边
-    // 都难读。一个标记都没有时这一段整段跳过。
-    PaintNameMarks(hdc, rcDirty);
+    // 头像右下角的在线状态角标紧接着基类的头像画，排在置顶底色之前：置顶行上它与头像一起被覆上底色，
+    // 描边的白色与覆色后的行底色一致，不会多出一圈亮边。
+    PaintPresenceCorners_(hdc, rcDirty);
+
+    // 行标记（特别关注星标、收藏徽章等）单独一段：通讯录与群行画在<u>名字之后</u>，会话行画在第二行，
+    // 与下面那套右侧装饰（时间 / 未读 / 静音 / 置顶）分开写，两边都好读。一个标记都没有时这一段整段跳过。
+    PaintNameMarks(hdc, rcDirty, convRows);
 
     // 一样都没接管的树（联系人树）直接短路，零开销。
     if (m_rightTopText.empty() && m_badges.empty()
-        && m_pinnedRows.empty() && m_mutedRows.empty())
+        && m_pinnedRows.empty() && m_notifyModeRows.empty() && m_unreadDotRows.empty())
     {
         return;
     }
@@ -663,10 +1359,11 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
     const COLORREF topTextClr = GetRightTextColor();   // 与基类右侧文字同色（默认灰）
     const HFONT defaultFont   = GetDefaultFont();      // 按本控件 DPI 取，与基类绘制文字同一字体
 
-    // ---- 第一遍：遍历与脏区相交的行，收集置顶行底色 / 画上排时间 / 收集下排静音图标与红点 ----
+    // ---- 第一遍：遍历与脏区相交的行，收集置顶行底色 / 画上排时间 / 收集下排提醒模式徽章与红点 ----
     // 只看与脏区相交的那几行，不必把几千个可见行逐个过一遍再跳过。
     std::vector<RECT>      pinnedRects;   // 待覆盖淡暗色的置顶行矩形
-    std::vector<RECT>      muteRects;     // 待画静音图标的矩形
+    std::vector<RECT>      muteRects;     // 待画提醒模式徽章的矩形
+    std::vector<int>       muteKinds;     // 与 muteRects 一一对应的徽章图标（MainPanelIcons 的 IconKind）
     std::vector<BadgeDraw> draws;
     int firstRow = 0;
     int lastRow  = -1;
@@ -689,12 +1386,16 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
         }
 
         const int  mid   = (rcRow.top + rcRow.bottom) / 2;
-        const bool muted = (m_mutedRows.count(nodeId) != 0);
+        std::map<int, int>::const_iterator itMode = m_notifyModeRows.find(nodeId);
+        const int  modeIcon = (itMode != m_notifyModeRows.end()) ? NotifyModeIconKind(itMode->second) : -1;
+        // 胶囊灰底：有提醒模式徽章的行，以及只要灰底、不画徽章的行（消息盒子那一行）
+        const bool muted = (modeIcon >= 0) || (m_quietRows.count(nodeId) != 0);
 
-        // 本行右侧列（上排文字 / 下排胶囊与静音图标）的右边缘。行上有状态徽标（单聊会话行
-        // 的在线状态）时，基类把徽标贴在行右端、整行垂直居中，右侧列须整体让到它左边，
-        // 否则时间与未读胶囊会压在徽标上（回归用例见 MainPanelRowMarkTests 的 CRL1）。
-        const int rowRightEdge = rightEdge - StatusIconReserve_(nodeId);
+        // 本行右侧列（上排文字 / 下排胶囊与静音图标）的右边缘。所有行都贴同一条右边线，时间与未读数在
+        // 各行之间上下对齐。2026-10-07 之前单聊行右端有在线状态徽标，右侧列要让到它左边，单聊行的时间
+        // 因此比群行靠左 18 像素；在线状态改画在头像右下角以后不再有这个让位（回归用例见
+        // MainPanelRowMarkTests 的 CRL1）。
+        const int rowRightEdge = rightEdge;
 
         // 置顶行：整行覆一层淡暗色。这里只收集矩形，实际填充统一放到第二遍的 GDI+
         // 块里做，避免在同一 HDC 上与下面的 GDI 文字绘制交错。
@@ -712,8 +1413,8 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
             DrawRightTopText(hdc, defaultFont, (LPCWSTR)itTop->second, rcTop, topTextClr);
         }
 
-        // 下排：静音图标 + 未读胶囊，右对齐排列，与预览同高（基类预览画在
-        // [mid, bottom] 内、DT_TOP）。免打扰时胶囊改灰底。
+        // 下排：提醒模式徽章 + 未读胶囊，右对齐排列，与预览同高（基类预览画在
+        // [mid, bottom] 内、DT_TOP）。不提醒的几种模式下胶囊改灰。
         const int centerY = mid + kBadgePreviewCenterOffset;
         int bottomRight = rowRightEdge;   // 下排从右往左排布的游标
 
@@ -729,11 +1430,20 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
                                                    kBadgeDiameter, kBadgeExtraPerChar);
                 d.m_rc = ComputeBadgeRect(bottomRight, badgeWidth, kBadgeDiameter, centerY);
                 draws.push_back(d);
-                bottomRight = d.m_rc.left - kMuteIconGap;   // 静音图标让到胶囊左边
+                bottomRight = d.m_rc.left - kMuteIconGap;   // 徽章让到胶囊左边
             }
         }
+        else if (m_unreadDotRows.count(nodeId) != 0)
+        {
+            //手动标为未读、又没有未读数：画一个不带数字的小圆点，配色与胶囊同一套（不提醒的模式下为灰）
+            BadgeDraw d;
+            d.m_muted = muted;
+            d.m_rc = ComputeBadgeRect(bottomRight, kUnreadDotDiameter, kUnreadDotDiameter, centerY);
+            draws.push_back(d);
+            bottomRight = d.m_rc.left - kMuteIconGap;
+        }
 
-        if (muted)
+        if (modeIcon >= 0)
         {
             RECT rcMute;
             rcMute.right  = bottomRight;
@@ -741,6 +1451,7 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
             rcMute.top    = centerY - kMuteIconSize / 2;
             rcMute.bottom = rcMute.top + kMuteIconSize;
             muteRects.push_back(rcMute);
+            muteKinds.push_back(modeIcon);
         }
     }
 
@@ -749,7 +1460,7 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
         return;
     }
 
-    // ---- 第二遍：GDI+ 抗锯齿画置顶行底色、胶囊底、静音图标 ----
+    // ---- 第二遍：GDI+ 抗锯齿画置顶行底色、胶囊底、提醒模式徽章 ----
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -788,7 +1499,7 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
             }
         }
 
-        // 未读胶囊（单字符即正圆）：免打扰用灰底，其余用红底。
+        // 未读胶囊（单字符即正圆）：不提醒的几种模式用灰底，其余用红底。
         Gdiplus::SolidBrush redBrush(kBadgeRed);
         Gdiplus::SolidBrush grayBrush(kBadgeMutedGray);
         for (size_t i = 0; i < draws.size(); ++i)
@@ -799,17 +1510,17 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
                              (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top,
                              (Gdiplus::REAL)(rc.right - rc.left),
                              (Gdiplus::REAL)(rc.bottom - rc.top),
-                             (Gdiplus::REAL)kBadgeDiameter / 2.0f);
+                             (Gdiplus::REAL)(rc.bottom - rc.top) / 2.0f);
             g.FillPath(draws[i].m_muted ? &grayBrush : &redBrush, &path);
         }
 
-        // 静音图标：与右侧文字同色（默认灰），描边风格与菜单图标同源。
+        // 提醒模式徽章：与右侧文字同色（默认灰），描边风格与菜单图标同源。
         const Gdiplus::Color muteColor(255, GetRValue(topTextClr),
                                        GetGValue(topTextClr), GetBValue(topTextClr));
         for (size_t i = 0; i < muteRects.size(); ++i)
         {
             const RECT& rc = muteRects[i];
-            DrawLineIcon(g, kIconMute,
+            DrawLineIcon(g, muteKinds[i],
                          (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top,
                          (Gdiplus::REAL)kMuteIconSize, muteColor, kMuteIconStroke);
         }
@@ -818,6 +1529,11 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
     // ---- 第三遍：GDI 画白色数字（GDI+ 块已结束，不与 GDI 交错）----
     for (size_t i = 0; i < draws.size(); ++i)
     {
+        //未读小红点没有数字
+        if (draws[i].m_text.IsEmpty())
+        {
+            continue;
+        }
         DrawBadgeText(hdc, (LPCWSTR)draws[i].m_text, draws[i].m_rc);
     }
 }

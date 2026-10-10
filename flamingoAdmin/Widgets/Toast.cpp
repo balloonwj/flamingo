@@ -48,6 +48,7 @@ void RootContainer::ShowPage(balloonwjui::DuiControl* page)
     }
     m_current = page;
     Invalidate();
+    FireLayerChanged();
 }
 
 void RootContainer::AddModal(std::unique_ptr<balloonwjui::DuiControl> modal)
@@ -77,6 +78,7 @@ void RootContainer::ShowModal(balloonwjui::DuiControl* modal)
     }
     m_activeModal = modal;
     Invalidate();
+    FireLayerChanged();
 }
 
 void RootContainer::HideModal()
@@ -87,6 +89,21 @@ void RootContainer::HideModal()
     }
     m_activeModal = nullptr;
     Invalidate();
+    FireLayerChanged();
+}
+
+void RootContainer::SetLayerChangedCallback(LayerChangedFn fn, void* user)
+{
+    m_layerChanged = fn;
+    m_layerChangedUser = user;
+}
+
+void RootContainer::FireLayerChanged()
+{
+    if (m_layerChanged != nullptr)
+    {
+        m_layerChanged(m_layerChangedUser);
+    }
 }
 
 bool RootContainer::IsModalVisible() const

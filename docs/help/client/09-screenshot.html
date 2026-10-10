@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 9 章：截图（框选、标注、发送与保存）、截图快捷键与选项，以及图片文字识别。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>截图与图片文字识别 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c09">
+<article class="doc">
+  <h1>截图与图片文字识别</h1>
+  <p class="lead">FlamingoIM 自带截图工具：框选屏幕上的任意区域，加上矩形、箭头、文字、马赛克等标注，然后直接发到聊天里、复制或保存。截图和图片里的文字还可以识别出来，复制成可编辑的文本。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>截图不需要登录</li>
+    <li>文字识别需要：Windows 10 及以上，并安装对应语言的识别组件</li>
+  </ul>
+
+  <h2 id="start">开始截图</h2>
+  <p>有以下几种方式开始截图：</p>
+  <ul>
+    <li>在聊天窗口的输入工具栏点剪刀按钮 <span class="ui">截图（Alt+Z）</span>。</li>
+    <li>在任何地方按全局快捷键 <kbd>Alt</kbd>+<kbd>Z</kbd>。快捷键可以在系统设置里修改，见下文<a href="#options">「快捷键与选项」</a>。</li>
+    <li>右键任务栏的 FlamingoIM 托盘图标，选 <span class="ui">截图（Alt+Z）</span>。登录前也可以使用。</li>
+  </ul>
+  <p>聊天窗口里剪刀右侧的 ▾ 是截图选项菜单：</p>
+  <figure class="shot center"><img src="../img/e_shot_dropdown.png" width="760" alt="剪刀旁的截图选项菜单"><figcaption>点剪刀右侧的 ▾ 打开截图选项</figcaption></figure>
+  <ul>
+    <li><span class="ui">截图（Alt+Z）</span>：与点剪刀相同。</li>
+    <li><span class="ui">截取全屏</span>：进入截图后，选区直接是鼠标所在的整块显示器。</li>
+    <li><span class="ui">截图时隐藏当前窗口</span>：勾选后，从聊天窗口发起截图时先把这个聊天窗口隐藏起来，截图里不会出现它。</li>
+  </ul>
+
+  <h2 id="select">框选区域</h2>
+  <p>开始截图后，整个屏幕变暗，顶部显示提示「拖动鼠标框选区域 · Ctrl+A 截取全屏 · Esc 退出」。</p>
+  <figure class="shot">
+    <img src="../img/e_shot_overlay.png" width="880" alt="进入截图后的全屏遮罩">
+    <figcaption>进入截图后屏幕变暗，顶部显示操作提示</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>按住鼠标左键拖出要截取的区域，松开后选区内恢复正常亮度，左上角显示选区的尺寸（宽 × 高，单位为像素）。按 <kbd>Ctrl</kbd>+<kbd>A</kbd> 可以直接选中整个屏幕。</li>
+    <li>选区四周有调整手柄。用绘图工具栏最左边的 <span class="ui">选择 / 移动</span> 工具，可以拖动选区或拖动手柄改变大小；点操作栏的 <span class="ui">重选</span> 则重新框选。</li>
+    <li>任何时候按 <kbd>Esc</kbd> 或点 <span class="ui">取消</span>，都会放弃这次截图。</li>
+  </ol>
+
+  <h2 id="annotate">添加标注</h2>
+  <p>选好区域后，选区下方出现两行工具栏：上面一行是绘图工具，下面一行是操作按钮。</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/e_shot_selected.png" width="880" alt="选好区域后的绘图工具栏，带编号标注">
+      <span class="pin" style="left:2.4%;top:79.6%">1</span>
+      <span class="pin" style="left:6.4%;top:79.6%">2</span>
+      <span class="pin" style="left:10.3%;top:79.6%">3</span>
+      <span class="pin" style="left:14.2%;top:79.6%">4</span>
+      <span class="pin" style="left:18.1%;top:79.6%">5</span>
+      <span class="pin" style="left:21.9%;top:79.6%">6</span>
+      <span class="pin" style="left:25.8%;top:79.6%">7</span>
+      <span class="pin" style="left:29.7%;top:79.6%">8</span>
+      <span class="pin" style="left:43.9%;top:79.6%">9</span>
+      <span class="pin" style="left:62.1%;top:79.6%">10</span>
+      <span class="pin" style="left:70.5%;top:79.6%">11</span>
+      <span class="pin" style="left:74.6%;top:79.6%">12</span>
+    </div>
+    <figcaption>从聊天窗口发起截图、选好区域之后（选区左上角显示尺寸 334 × 388）</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>选择 / 移动</b>：拖动或缩放选区</li>
+    <li><b>矩形</b>：拖出一个矩形框</li>
+    <li><b>椭圆</b>：拖出一个椭圆框</li>
+    <li><b>箭头</b>：画一个箭头</li>
+    <li><b>画笔</b>：自由绘制线条</li>
+    <li><b>马赛克（拖框打码）</b>：拖出一个矩形，框内打上马赛克</li>
+    <li><b>马赛克（涂抹打码）</b>：在需要遮盖的地方涂抹</li>
+    <li><b>文字</b>：在选区里点一下，输入文字</li>
+    <li><b>颜色</b>：九种标注颜色，当前颜色带圆环</li>
+    <li><b>线宽</b>：细线、中等线、粗线三档</li>
+    <li><b>撤销</b>：撤销上一步标注</li>
+    <li><b>重做</b>：恢复刚撤销的标注</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/e_shot_annotated.png" width="880" alt="加了标注的截图">
+    <figcaption>用红色矩形框出「研发部交流群」这一行，并画了一条线指向它</figcaption>
+  </figure>
+  <div class="callout tip"><b>遮盖敏感信息</b>发送截图前，可以用两种马赛克工具遮住手机号、密码等不想让别人看到的内容。</div>
+
+  <h2 id="finish">完成截图</h2>
+  <p>下面一行操作按钮的内容取决于你从哪里发起截图。</p>
+  <h3>从聊天窗口发起</h3>
+  <table>
+    <tr><th>按钮</th><th>作用</th></tr>
+    <tr><td>重选</td><td>重新框选区域</td></tr>
+    <tr><td>复制</td><td>复制到剪贴板</td></tr>
+    <tr><td>保存</td><td>保存为 PNG 图片</td></tr>
+    <tr><td>识别文字</td><td>识别选区里的文字，见下文<a href="#ocr">「图片文字识别」</a></td></tr>
+    <tr><td>发送到对话框</td><td>把截图插入聊天输入框，可以再补充文字后一起发送（橙色按钮）</td></tr>
+    <tr><td>发送</td><td>立即发送到当前会话</td></tr>
+    <tr><td>取消</td><td>放弃这次截图，与按 <kbd>Esc</kbd> 相同</td></tr>
+  </table>
+  <figure class="shot center"><img src="../img/e_shot_in_input.png" width="760" alt="截图插入输入框"><figcaption>「发送到对话框」：截图出现在输入框里，等你发送</figcaption></figure>
+  <figure class="shot center"><img src="../img/e_shot_sent.png" width="760" alt="截图已发出"><figcaption>「发送」：截图立即作为图片消息发出</figcaption></figure>
+  <h3>从托盘菜单或快捷键发起</h3>
+  <p>这时截图不属于任何会话，操作按钮是 <span class="ui">重选</span>、<span class="ui">保存</span>、<span class="ui">识别文字</span>、<span class="ui">取消</span> 和 <span class="ui">完成</span>。点 <span class="ui">完成</span> 会把截图放入剪贴板，之后可以粘贴到任意程序，包括聊天输入框。</p>
+  <div class="callout note"><b>没有「识别文字」按钮？</b>图片文字识别组件没有加载时，截图工具栏不显示「识别文字」，图片右键菜单和图片查看窗口里的识别入口也会一并隐藏。</div>
+
+  <h2 id="options">快捷键与选项</h2>
+  <ul>
+    <li><b>截图快捷键</b>：默认是 <kbd>Alt</kbd>+<kbd>Z</kbd>。在系统设置的「快捷键」页点「截图」一行的键帽，然后按下新的组合键即可修改。剪刀按钮的提示文字会随之更新。</li>
+    <li><b>截图时隐藏当前窗口</b>：既可以在剪刀旁的 ▾ 菜单里勾选，也可以在系统设置的「聊天」页打开或关闭，作用是从单聊、群聊发起截图时，截图里不包含这个聊天窗口。</li>
+  </ul>
+  <p>这两项设置对本机登录的所有账号都有效，系统设置的用法见<a href="28-settings.html">「系统设置」</a>。</p>
+
+  <h2 id="ocr">图片文字识别</h2>
+  <p>图片文字识别能把截图或图片里的文字识别出来，变成可以编辑、复制的文本。以下几个地方都能打开「图片文字识别」窗口：</p>
+  <ul>
+    <li>截图操作栏的 <span class="ui">识别文字</span>，识别选区里的内容；</li>
+    <li>聊天中图片的右键菜单 <span class="ui">图片文字识别</span>；</li>
+    <li>图片查看窗口工具栏最右边的识别按钮；</li>
+    <li>主面板系统菜单里的 <span class="ui">图片文字识别</span>，打开后点 <span class="ui">打开图片</span> 选择本机的一张图片。</li>
+  </ul>
+  <figure class="shot center"><img src="../img/e_ocr_result.png" width="560" alt="图片文字识别窗口"><figcaption>识别一张登录窗口截图的结果</figcaption></figure>
+  <ol class="steps">
+    <li>从截图或聊天图片打开时，窗口会立即开始识别；完成后右上角显示「识别完成，共 N 行」，文字显示在中间的文本框里。</li>
+    <li>识别结果可能有个别错字（例如图中的「简微中文」），可以直接在文本框里修改。</li>
+    <li>识别效果不理想时，在左上角 <span class="ui">识别语言</span> 下拉框里换一种语言，再点 <span class="ui">重新识别</span>。</li>
+    <li>点 <span class="ui">复制全部</span> 把文本复制到剪贴板；点 <span class="ui">打开图片</span> 可以换一张图片识别。</li>
+  </ol>
+  <div class="callout warn"><b>使用条件</b>文字识别使用 Windows 自带的识别引擎，需要 Windows 10 或更高版本；在更早的系统上点击识别入口会提示「当前系统不支持文字识别，需要 Windows 10 或更高版本。」系统里还要装有对应语言的识别组件，没有时会提示到系统设置的「语言」页面添加中文或英文，装好后重新启动客户端即可。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

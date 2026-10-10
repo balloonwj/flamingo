@@ -11,6 +11,7 @@
 
 #include "stdafx.h"
 #include "BalloonGroupManageWindow.h"
+#include "../../App/BrandText.h"   // g_strAppTitle（窗口与弹窗标题用的产品名称）
 
 #include <memory>
 
@@ -27,6 +28,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 #include "GroupManageNavItem.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using namespace balloonwjui;
 using namespace balloongroupmanage;
@@ -34,10 +36,10 @@ using namespace balloongroupmanage;
 namespace {
 
 // 整页重建或切页时要保留输入内容的输入框（控件编号见 GroupManageLayout.h）：
-// 公告标题、公告正文、新增敏感词、群名称、群简介、成员页搜索框
+// 公告标题、公告正文、群名称、群简介、成员页搜索框
 const int kDraftInputIds[] =
 {
-    kIdEditAnnounceTitle, kIdEditAnnounceBody, kIdEditSensitiveNew, kIdEditGroupName, kIdEditIntro,
+    kIdEditAnnounceTitle, kIdEditAnnounceBody, kIdEditGroupName, kIdEditIntro,
     kIdSearchMembers,
 };
 const size_t kDraftInputCount = sizeof(kDraftInputIds) / sizeof(kDraftInputIds[0]);
@@ -59,9 +61,6 @@ static const int kGmHeaderHeight = 46;
 
 // 左侧导航栏宽度。
 static const int kGmNavWidth = 188;
-
-// 右侧内容区滚动条宽度（96 DPI 下的像素）。
-static const int kGmScrollBarWidth = 10;
 
 // 标题栏左侧图标边长（96 DPI 下的像素）。
 static const int kGmTitleIconSize = 16;
@@ -112,6 +111,11 @@ void CBalloonGroupManageWindow::SetGroupContext(int64_t groupId, LPCTSTR name, i
     ApplyGroupContext(groupId, name, myRole, m_model);
 }
 
+void CBalloonGroupManageWindow::SetThreadGroup(bool isThreadGroup)
+{
+    m_model.m_isThreadGroup = isThreadGroup;
+}
+
 CBalloonGroupManageWindow::~CBalloonGroupManageWindow()
 {
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
@@ -128,14 +132,14 @@ CBalloonGroupManageWindow::~CBalloonGroupManageWindow()
 
 bool CBalloonGroupManageWindow::BuildWindow(HWND hWndParent)
 {
-    if (Create(hWndParent, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(hWndParent, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("Group manage window: Create failed.");
         return false;
     }
 
-    SetTitle(_T("群管理"));
+    SetTitle(TR(L"群管理"));
     SetTitleBarHeight(GmScale(kGmTitleBarHeight));
     SetTitleBarTransparent(true);
     SetTitleTextColor(kGmCaptionColor);
@@ -147,6 +151,8 @@ bool CBalloonGroupManageWindow::BuildWindow(HWND hWndParent)
     {
         SetIcon(m_hTitleIcon);
     }
+    //没有所有者、会出现在任务栏：任务栏与 Alt+Tab 也用程序图标（2026-10-07，UI 约定第 10 条）
+    m_taskIcons.ApplyTaskIcons(m_hWnd);
 
     SetButtons(true, true, true);     // 最小化 / 最大化 / 关闭
     SetResizable(true);
@@ -239,7 +245,18 @@ void CBalloonGroupManageWindow::InitUi()
 
     std::unique_ptr<DuiControl> nav = BuildNav(m_model);
     m_pNav = nav.get();
-    body->AddChild(std::move(nav), Hint().Fixed(GmScale(kGmNavWidth)));
+    //非简体中文界面：译文较长时导航栏按最长一项的文字宽度只增不减地加宽（多语言第 4 期），
+    //简体中文的导航文字都放得下，宽度与设计相同
+    int navWidth = GmScale(kGmNavWidth);
+    if (!i18n::IsSourceLanguage())
+    {
+        const int needWidth = MeasureNavRequiredWidth(nav.get());
+        if (needWidth > navWidth)
+        {
+            navWidth = needWidth;
+        }
+    }
+    body->AddChild(std::move(nav), Hint().Fixed(navWidth));
 
     std::unique_ptr<DuiSeparator> midSep(new DuiSeparator());
     midSep->SetOrientation(DuiSeparator::Vertical);
@@ -248,7 +265,7 @@ void CBalloonGroupManageWindow::InitUi()
 
     std::unique_ptr<DuiScrollView> scroll(new DuiScrollView());
     scroll->SetAutoContentHeight(true);
-    scroll->SetScrollBarWidth(GmScale(kGmScrollBarWidth));
+    // 滚动条用 balloonui 统一的悬浮式细滑块与默认命中带宽（2026-10-04 起不再单独设宽）
     scroll->SetContent(BuildPage(kPageMembers, m_model));
     m_pContentScroll = scroll.get();
 
@@ -282,7 +299,7 @@ void CBalloonGroupManageWindow::InitUi()
              m_model.PendingRequestCount(), (int)m_model.m_requestsState);
 }
 
-void CBalloonGroupManageWindow::SwitchToPage(int pageId)
+void CBalloonGroupManageWindow::SwitchToPage(int pageId, bool reloadPageData)
 {
     if (pageId == m_currentPage)
     {
@@ -311,6 +328,13 @@ void CBalloonGroupManageWindow::SwitchToPage(int pageId)
     UpdateNavActive(pageId);
 
     RestoreInputDrafts();
+
+    //加群链接页：用户每次切进来都重拉一次，链接可能在别处被生成或作废。
+    //整体重建后切回本页时不重拉，原因见头文件里 reloadPageData 的说明
+    if (pageId == kPageLinks && reloadPageData)
+    {
+        RequestGroupLinks();
+    }
 }
 
 void CBalloonGroupManageWindow::OnMemberSearchChanged()
@@ -414,8 +438,8 @@ void CBalloonGroupManageWindow::UpdateNavActive(int pageId)
     }
     const int pageIds[] =
     {
-        kPageMembers, kPageApproval, kPageMute,
-        kPageAnnouncement, kPageBasicInfo, kPagePerms, kPageDanger,
+        kPageMembers, kPageApproval, kPageMute, kPageLinks,
+        kPageAnnouncement, kPageBasicInfo, kPagePerms, kPageDanger, kPageBots,
     };
     const int count = (int)(sizeof(pageIds) / sizeof(pageIds[0]));
     for (int i = 0; i < count; ++i)
@@ -481,11 +505,14 @@ LRESULT CBalloonGroupManageWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         case kPageMembers:
         case kPageApproval:
         case kPageMute:
+        case kPageLinks:
         case kPageAnnouncement:
         case kPageBasicInfo:
         case kPagePerms:
         case kPageDanger:
-            SwitchToPage((int)pNotify->ctrlId);
+        //群机器人页（docs/机器人方案.md §14.9）
+        case kPageBots:
+            SwitchToPage((int)pNotify->ctrlId, true);
             return 0;
         default:
             break;

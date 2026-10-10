@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "IUProtocolData.h"
+#include "Protocol.h"   // enum profile_visibility
 
 //class NetData
 CNetData::CNetData()
@@ -60,16 +61,24 @@ CLoginResult::CLoginResult()
 	m_uAccountID = 0;
 	//默认不带轮次号：自动登录这类不经登录窗的路径就用这个值
 	m_uLoginGeneration = 0;
-	memset(m_szAccountName, 0, sizeof(m_szAccountName));
-	memset(m_szNickName, 0, sizeof(m_szNickName));
-	memset(m_szSignature, 0, sizeof(m_szSignature));
+	//默认关闭：失败应答与老服务端都没有 features
+	m_nFileShareFeature = 0;
+	m_nInviteConfirmFeature = 0;
+	m_nGroupCallFeature = 0;
+	m_nCaptionFeature = 0;
+	m_nCloudRecordFeature = 0;
+	m_nSecretChatFeature = 0;
+	m_nThreadGroupFeature = 0;
+	m_nBotFeature = 0;
+	m_nBotGroupFeature = 0;
+	m_nBotPersonalFeature = 0;
+	m_nBotGroupExternalFeature = 0;
 	m_nFace = 0;
-    memset(m_szCustomFace, 0, sizeof(m_szCustomFace));
     m_nGender = 0;
     m_nBirthday = 19900101;
-    memset(m_szAddress, 0, sizeof(m_szAddress));
-    memset(m_szPhoneNumber, 0, sizeof(m_szPhoneNumber));
-    memset(m_szMail, 0, sizeof(m_szMail));
+    //公开范围默认值与服务端两列的默认值一致：手机号仅本人可见、座机对同事可见
+    m_nPhoneVisible = profile_visibility_self_only;
+    m_nLandlineVisible = profile_visibility_colleagues;
 	m_nStatus = STATUS_OFFLINE;
 }
 

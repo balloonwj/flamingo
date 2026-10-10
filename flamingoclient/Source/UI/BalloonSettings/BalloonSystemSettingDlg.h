@@ -25,8 +25,10 @@
 #include "BalloonCacheCleanDlg.h"   // m_cacheCleanDlg 按值持有，需完整类型
 #include "BalloonChatCleanDlg.h"    // m_chatCleanDlg 按值持有，需完整类型
 #include "../BalloonChatWnd/FontSettingPopup.h"   // m_chatFontPopup 按值持有，需完整类型
+#include "../../Common/I18n/LanguageSetting.h"    // m_languageChoices 按值持有，需完整类型
 
 #include <vector>
+#include "../BalloonMain/TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 class CFlamingoClient;
 
@@ -53,6 +55,13 @@ public:
      *           回本对话框（与修改密码 / 新建群对话框同处理），owner 仅作语义留存。
      */
     void OpenSettings(HWND owner);
+
+    /**
+     *  同上，打开后切到指定页（发送按钮 ▾ 菜单的「设置快捷回复…」打开「聊天」页，docs/快捷回复方案.md §3.5）。
+     *    owner：同上。
+     *    page： 页号，取值见 balloonsettings::SettingsPageId；越界时按最近的合法页处理。
+     */
+    void OpenSettings(HWND owner, int page);
 
     /**
      *  设置「账号安全」页「自动登录」开关应显示的状态。
@@ -87,14 +96,30 @@ public:
      */
     void OnChatCleanResult(int code, int64_t beginTime, int64_t endTime);
 
+    /**
+     *  「语言」下拉框选中新项后投给自己的消息（窗口私有，WM_APP 段）。wParam 为 m_languageChoices 的下标。
+     *  选中通知来自下拉框浮层的消息处理过程：若在通知里同步弹询问框，浮层会在消息框的模态循环里被销毁，
+     *  浮层内的宿主对象在 m_hWnd 尚未清空时被释放，触发 ATL 断言（atlwin.h「Object deleted before window
+     *  was destroyed」）。因此通知里只投递本消息，等浮层的消息处理全部返回后再写配置并询问是否重启。
+     */
+    static const UINT kMsgLanguageChosen = WM_APP + 0xF9;
+
     BEGIN_MSG_MAP(CBalloonSystemSettingDlg)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
+        //窗口销毁前把还没存盘的自动回复文字写进配置（关窗、主面板登出时直接销毁两种情形都经过这里）
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroyMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
+        //「语言」下拉框的选择，延后到下拉框浮层的通知处理完之后再处理
+        MESSAGE_HANDLER(kMsgLanguageChosen, OnLanguageChosenMsg)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
 private:
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    // kMsgLanguageChosen：wParam 为语言下标，转交 OnLanguageChosen。
+    LRESULT OnLanguageChosenMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    // WM_DESTROY：存盘还没写盘的自动回复文字，然后交给基类继续处理（bHandled 置 FALSE）。
+    LRESULT OnDestroyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // 构建一次静态骨架（左导航 + 右内容区 7 个分页）。
@@ -163,12 +188,58 @@ private:
      */
     void ApplyKeepAwakeExclusion(bool keepAwakeOn);
 
+    // 往「聊天」页追加一组自动回复：上面一行开关（左标题 / 副标题，右开关），下面单独一行多行输入框
+    // （见 AutoReplySettingsRows.h）。
+    //   switchId / editId：开关与输入框的控件 id。
+    //   on：开关初始状态；关闭时输入框置灰。
+    //   text：输入框初始文字（配置里的原文）；placeholder：为空时显示的默认文字。
+    //   addDivider：是否在行下追加分隔线。
+    void AddAutoReplyRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
+                         UINT switchId, bool on, UINT editId, LPCTSTR text, LPCTSTR placeholder,
+                         bool addDivider);
+
+    // 自动回复输入框的文字变了：把文字写进内存里的配置（不立即存盘，避免每按一个键都重写整个
+    // 配置文件），并记下有待存盘的改动。
+    //   editId：发生变化的输入框 id。
+    void OnAutoReplyTextChanged(UINT editId);
+
+    // 把有待存盘的自动回复文字写盘；没有待存盘的改动时什么都不做。输入框失去焦点与窗口销毁时调用。
+    void FlushAutoReplyText();
+
+    // 把当前的自动回复设置上传服务端（2811，docs/机器人方案.md §11 Q2）。企业没有打开机器人时什么都不做（退回本机自动回复）。
+    // 开关切换与文字存盘之后调用；结果经 FMG_MSG_V2_SET_AUTO_REPLY_RESULT 回到主面板，失败时由主面板提示。
+    void PushAutoReplyToServer();
+
+    // 聊天页要不要出现「我的机器人」一行：企业打开了机器人且允许个人机器人、FlamingoBot.dll 已就绪时为 true。
+    // 只在建页时判断一次，设置窗口开着时开关变了不跟着增删这一行。
+    bool IsMyBotsRowVisible() const;
+
+    // 往聊天页追加「快捷回复」一组（docs/快捷回复方案.md §3.5）：标题行带「恢复默认」按钮，下面一行并排三个
+    // 单行输入框（最多 kQuickReplyMaxChars 个字），组后加分隔线。输入框的初始文字取本人账号配置。
+    //   page：聊天页。
+    void AddQuickReplyRows(balloonwjui::DuiVBox* page);
+
+    // 快捷回复输入框的控件 id 对应第几条（0 起）；不是快捷回复输入框时返回 -1。
+    static int QuickReplyIndexOfEdit(UINT ctrlId);
+
+    // 快捷回复输入框的文字变了：写进内存里的配置（清空也算设置，这一条不再显示），并记下有待存盘的改动。
+    //   editId：发生变化的输入框 id。
+    void OnQuickReplyTextChanged(UINT editId);
+
+    // 把有待存盘的快捷回复写盘；没有待存盘的改动时什么都不做。输入框失去焦点与窗口销毁时调用。
+    void FlushQuickReplyText();
+
+    // 「恢复默认」：三条快捷回复都换回默认文字，立即存盘，并把三个输入框的文字换掉（不发通知）。
+    void ResetQuickReplies();
+
     // 往页里追加一行"下拉行"（左标题/副标题，右 DuiComboBox）。
     //   options/count：下拉选项文本表首元素指针与项数。
     //   selIndex：初始选中索引。
+    //   translateOptions：true 表示选项表是只做了标记（TR_NOOP）的原文，逐项用 TR 取译文；
+    //                     false 表示选项已是最终显示文字（如语言行的语言名称），原样显示。
     void AddComboRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
                      UINT ctrlId, const wchar_t* const* options, int count, int selIndex,
-                     bool addDivider);
+                     bool addDivider, bool translateOptions = true);
 
     // 往页里追加一行"按钮行"（左标题/副标题，右 DuiButton）。
     //   ctrlId：按钮控件 id；btnText：按钮文字；danger：true 用危险红样式（如"注销"）。
@@ -181,6 +252,27 @@ private:
 
     // 往页里追加一行"键帽行"（左快捷键名，右 DuiBadge 键帽 chip，只读）。
     void AddKeyCapRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR keyText, bool addDivider);
+
+    // 往「快捷键」页追加「截图」一行（docs/截图快捷键与隐藏当前窗口方案.md）：左边标题与一行提示
+    // （录入说明、组合不合规的原因或「已被其他程序占用」），右边可录入的键帽与「恢复默认」按钮。
+    //   page：目标页；addDivider：行下是否加分隔线。
+    void AddScreenshotHotkeyRow(balloonwjui::DuiVBox* page, bool addDivider);
+
+    // 点了截图键帽：暂停本程序的全局快捷键（否则按下的组合恰好是本程序的快捷键时会被系统拦走），
+    // 让键帽进入录入状态，并把提示换成录入说明。
+    void BeginScreenshotHotkeyCapture();
+
+    // 键帽录入到新组合（或按 Backspace 停用），以及点了「恢复默认」：校验通过则保存、重新注册
+    // 并刷新提示；不通过则保持原组合，提示具体原因。无论结果如何都恢复本程序的全局快捷键。
+    //   hotkey：新的组合编码（见 Feature/Screenshot/ScreenshotHotkey.h），0 表示停用。
+    void ApplyScreenshotHotkeyChoice(DWORD hotkey);
+
+    // 键帽录入被取消（Esc / 失去焦点），或窗口销毁时仍在录入：组合不变，恢复本程序的全局快捷键。
+    void EndScreenshotHotkeyCapture();
+
+    // 刷新「截图」一行的提示。message 为 NULL 时按当前配置与注册结果给出默认提示（停用、被占用
+    // 或录入说明）；否则显示 message，isError 为 true 时用红色。
+    void RefreshScreenshotHotkeyRow(LPCTSTR message, bool isError);
 
     // 把某个设置控件的新值写回 CUserConfig（开机自启动写注册表）并即时持久化。
     //   ctrlId：触发变更的控件 id。
@@ -197,6 +289,14 @@ private:
     // 存储位置的读与写、启动时清空历史日志的读写），路径只在这里拼一次。
     CString AppIniPath();
 
+    // 语言包 FlamingoLang.dll 的完整路径（与 exe 同目录）。
+    std::wstring LanguagePackPath();
+
+    // 「语言」下拉框选了第 index 项：写进 flamingo.ini 的 [ui] language；下次启动生效的语言与当前不同时，
+    // 询问是否立即重启，用户同意则请主面板重启（FMG_MSG_RESTART_APP）。
+    //   index：m_languageChoices 的下标；越界时不做任何事。
+    void OnLanguageChosen(int index);
+
     // 本次会话真正在用的数据根目录（g_szDataRoot）。它在进程启动时按 flamingo.ini 的
     // [storage] datapath 算好，运行期不再变。
     CString EffectiveDataRoot();
@@ -211,6 +311,15 @@ private:
     // "更改"按钮：弹选目录框 → 确认框（讲清后果与手动迁移步骤）→ 写 flamingo.ini →
     // 刷新显示并提示重启。<u>不</u>改动本次会话的任何行为，也不做数据迁移。
     void ChooseDataRoot();
+
+    //「录屏保存位置」的「更改」：弹选目录框，写进用户配置并交给 FlamingoMedia.dll，就地刷新显示
+    void ChooseRecordFolder();
+
+    //「录屏保存位置」那一行要显示的路径：没有设过时显示默认目录
+    CString RecordFolderDisplayText();
+
+    //把当前的录制设置（画质、保存目录）交给 FlamingoMedia.dll
+    void PushRecordSettings();
 
     // 仅切换各分页的可见性 + 更新 m_curPage，不触发重新布局（建窗期用）。
     //   index：要显示的页索引（会经夹取）。
@@ -247,13 +356,24 @@ private:
     int  m_curPage;                   // 当前显示页索引；初值 -1 表示尚未定页
     HWND m_ownerHwnd;                 // 打开本对话框的宿主（主面板）HWND；"修改密码"按钮据此转发
     bool m_autoLoginOn;               // 「自动登录」开关的初始状态，由主面板经 SetAutoLoginSwitchState 传入；默认 false
+    bool m_autoReplyTextDirty;        // 自动回复文字是否改过、还没存盘；输入框失去焦点或窗口销毁时存盘并复位
+    bool m_quickReplyDirty;           // 快捷回复是否改过、还没存盘；输入框失去焦点或窗口销毁时存盘并复位
+    bool m_shotHotkeyCapturing;       // 截图键帽是否正在录入（期间本程序的全局快捷键已暂停）；录入结束或窗口销毁时恢复并复位
+
+    // 「语言」下拉框的选项，与下拉项一一对应；建「通用」页时填充，之后不变。语言包不存在时为空（不显示这一行）。
+    std::vector<i18n::LanguageChoice> m_languageChoices;
+    // 传给下拉框的选项文字，指向 m_languageChoices 各项的 m_name；与 m_languageChoices 同时填充、同生命周期。
+    std::vector<const wchar_t*>       m_languageOptionTexts;
 
     // 控件指针（借用，控件树持有所有权）：切页 / 重排时用。
     balloonsettings::CSettingsNavList* m_pNav;          // 左侧导航
     balloonwjui::DuiVBox*              m_pContentHost;  // 右侧内容容器（承载 7 分页）
     std::vector<balloonwjui::DuiControl*> m_pages;      // 7 个分页容器，按页序号索引
     balloonwjui::DuiLabel*             m_pRecvPathLabel; // 存储页"文件保存位置"路径标签（借用），改路径后就地刷新
+    balloonwjui::DuiLabel*             m_pRecordPathLabel;   // 音视频页「录屏保存位置」路径标签（借用），改目录后就地刷新
     HBITMAP                            m_hTitleIcon;     // 标题栏左侧图标位图（程序图标合成到标题栏底色，本类持有、析构释放）
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
 
     // 「立即清理」弹出的清理对话框。按值持有（与主面板持有改密对话框同套路），
     // 由本窗负责其生命周期；未打开时不占任何资源。

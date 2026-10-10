@@ -1,0 +1,295 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoThreadGroup.vcxproj — 帖子群的 DLL 工程（由 flamingoclient/tools/gen_threadgroup_vcxproj.py 生成，不要手改）
+  balloonwj@qq.com   2026-10-07
+
+  产出 FlamingoThreadGroup.dll，由 Flamingo.exe 在登录成功后按企业开关用 LoadLibrary 动态加载（不链接导入库）。
+  接口约定见 ThreadGroupApi.h，方案见 docs/帖子群方案.md。
+
+  关键约束：
+   · CharacterSet=Unicode、CRT 静态（Debug /MTd、Release /MT），与 Flamingo.exe 及 balloonui_static 一致。
+     exe 与 DLL 因此各有独立的堆，接口只用纯虚类、基本类型与固定布局的结构体。
+   · 四种配置都定义 WIN32（仓库代码判断的是它而不是 _WIN32），由单元测试 TGG2 守住。
+   · 四种配置的 OutDir 与 Flamingo.exe 相同：Debug|x64 输出到资源齐全的 ..\Debug\，其余三个分别输出到 ..\Release\、..\Debug_Win32\、..\Release_Win32\。
+   · 导出名由 FlamingoThreadGroup.def 固定；导入库与 .exp 放进中间目录，不污染输出目录。
+   · 所有配置都带 /utf-8：源文件为 UTF-8 无 BOM。
+   · 日志：DLL 不编译 exe 的 IULog.cpp，由 Host\HostLogBridge.cpp 实现 CIULog::Log，经宿主写日志。
+   · 静态链接自己的一份 balloonui（帖子群窗口），DLL 有自己的 _Module（见 DllMain.cpp）。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{26046FB0-D58E-4BBD-B48F-D32F55193C40}</ProjectGuid>
+    <RootNamespace>FlamingoThreadGroup</RootNamespace>
+    <ProjectName>FlamingoThreadGroup</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\Debug_Win32\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <TargetName>FlamingoThreadGroup</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\Release_Win32\</OutDir>
+    <IntDir>Release\</IntDir>
+    <TargetName>FlamingoThreadGroup</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\Debug\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <TargetName>FlamingoThreadGroup</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\Release\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <TargetName>FlamingoThreadGroup</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoThreadGroup.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoThreadGroup.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoThreadGroup.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoThreadGroup.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="ThreadGroupApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h" />
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h" />
+    <ClInclude Include="..\Source\Common\I18n\I18n.h" />
+    <ClInclude Include="..\Source\Common\I18n\BalloonUiText.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarImageUtil.h" />
+    <ClInclude Include="..\Source\UI\BalloonChatWnd\GroupMentionModel.h" />
+    <ClInclude Include="Host\ThreadGroupModule.h" />
+    <ClInclude Include="Host\ThreadLog.h" />
+    <ClInclude Include="Host\ThreadWindowApi.h" />
+    <ClInclude Include="Core\ThreadCodec.h" />
+    <ClInclude Include="Core\ThreadComposeModel.h" />
+    <ClInclude Include="Core\ThreadDetailModel.h" />
+    <ClInclude Include="Core\ThreadFeedModel.h" />
+    <ClInclude Include="Core\ThreadMembers.h" />
+    <ClInclude Include="Core\ThreadMention.h" />
+    <ClInclude Include="Core\ThreadReactions.h" />
+    <ClInclude Include="Core\ThreadRules.h" />
+    <ClInclude Include="Core\ThreadSession.h" />
+    <ClInclude Include="Core\ThreadText.h" />
+    <ClInclude Include="Core\ThreadTime.h" />
+    <ClInclude Include="Core\ThreadTypes.h" />
+    <ClInclude Include="UI\ThreadBitmapCache.h" />
+    <ClInclude Include="UI\ThreadCardMetrics.h" />
+    <ClInclude Include="UI\ThreadCommentEdit.h" />
+    <ClInclude Include="UI\ThreadComposeLayout.h" />
+    <ClInclude Include="UI\ThreadComposeWindow.h" />
+    <ClInclude Include="UI\ThreadComposer.h" />
+    <ClInclude Include="UI\ThreadDetailPane.h" />
+    <ClInclude Include="UI\ThreadFacePicker.h" />
+    <ClInclude Include="UI\ThreadFeedList.h" />
+    <ClInclude Include="UI\ThreadMemberPicker.h" />
+    <ClInclude Include="UI\ThreadPostCard.h" />
+    <ClInclude Include="UI\ThreadRichText.h" />
+    <ClInclude Include="UI\ThreadToolIcons.h" />
+    <ClInclude Include="UI\ThreadUiFactory.h" />
+    <ClInclude Include="UI\ThreadUiText.h" />
+    <ClInclude Include="UI\ThreadWidgets.h" />
+    <ClInclude Include="UI\ThreadWindow.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp" />
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarImageUtil.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonChatWnd\GroupMentionModel.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="Host\HostLogBridge.cpp" />
+    <ClCompile Include="Host\ThreadGroupModule.cpp" />
+    <ClCompile Include="Host\ThreadLog.cpp" />
+    <ClCompile Include="Core\ThreadCodec.cpp" />
+    <ClCompile Include="Core\ThreadComposeModel.cpp" />
+    <ClCompile Include="Core\ThreadDetailModel.cpp" />
+    <ClCompile Include="Core\ThreadFeedModel.cpp" />
+    <ClCompile Include="Core\ThreadMembers.cpp" />
+    <ClCompile Include="Core\ThreadMention.cpp" />
+    <ClCompile Include="Core\ThreadReactions.cpp" />
+    <ClCompile Include="Core\ThreadRules.cpp" />
+    <ClCompile Include="Core\ThreadSession.cpp" />
+    <ClCompile Include="Core\ThreadText.cpp" />
+    <ClCompile Include="Core\ThreadTime.cpp" />
+    <ClCompile Include="UI\ThreadBitmapCache.cpp" />
+    <ClCompile Include="UI\ThreadCardMetrics.cpp" />
+    <ClCompile Include="UI\ThreadCommentEdit.cpp" />
+    <ClCompile Include="UI\ThreadComposeLayout.cpp" />
+    <ClCompile Include="UI\ThreadComposeWindow.cpp" />
+    <ClCompile Include="UI\ThreadComposer.cpp" />
+    <ClCompile Include="UI\ThreadDetailPane.cpp" />
+    <ClCompile Include="UI\ThreadFacePicker.cpp" />
+    <ClCompile Include="UI\ThreadFeedList.cpp" />
+    <ClCompile Include="UI\ThreadMemberPicker.cpp" />
+    <ClCompile Include="UI\ThreadPostCard.cpp" />
+    <ClCompile Include="UI\ThreadRichText.cpp" />
+    <ClCompile Include="UI\ThreadToolIcons.cpp" />
+    <ClCompile Include="UI\ThreadUiFactory.cpp" />
+    <ClCompile Include="UI\ThreadUiText.cpp" />
+    <ClCompile Include="UI\ThreadWidgets.cpp" />
+    <ClCompile Include="UI\ThreadWindow.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoThreadGroup.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj">
+      <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 版本信息（文件说明、版权）：UTF-8 编码，单独按 /c65001 编译；由 tools/version_rc.py 生成 -->
+    <ResourceCompile Include="FlamingoThreadGroupVersion.rc">
+      <AdditionalOptions>/c65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

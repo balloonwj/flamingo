@@ -12,6 +12,7 @@
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "Protocol.h"   //file_scene 枚举值
+#include "../utils/FileToken.h"   //场景归属的判定（getServerForScene）
 
 FileStoreManager::FileStoreManager()
     : m_imgPort(0), m_imgTls(false), m_filePort(0), m_fileTls(false)
@@ -47,8 +48,10 @@ const std::string& FileStoreManager::getTokenKey() const
 
 void FileStoreManager::getServerForScene(int scene, std::string& host, int& port, bool& tls) const
 {
-    //头像、图片消息走 imgserver；聊天文件、群文件走 fileserver
-    if (scene == file_scene_avatar || scene == file_scene_image_msg)
+    //头像、图片消息、云端录像走 imgserver；聊天文件、群文件、升级包走 fileserver。
+    //与 fileserver / imgserver 的场景门禁（FileSession.cpp 的 isSceneAllowedOnServer）共用 FileToken::isImageScene，
+    //新增场景时两边不会不一致（2026-10-07 之前这里只列了头像与图片消息，云端录像的令牌被指向 fileserver 而遭拒绝）
+    if (FileToken::isImageScene(scene))
     {
         host = m_imgHost;
         port = m_imgPort;

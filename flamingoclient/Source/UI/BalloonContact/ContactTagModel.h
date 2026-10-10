@@ -35,7 +35,7 @@
 namespace ballooncontact {
 
 // 单个标签的最大字符数。取 16 是被库结构卡死的：t_contact_tag 的 f_tag 列是
-// varchar(16)（见 flamingoserver/table.sql），超了会被库悄悄截断，界面上就会
+// varchar(16)（见 flamingoserver/table_mysql.sql），超了会被库悄悄截断，界面上就会
 // 出现"改完显示的是全的、重登之后少一截"的怪事，故在提交前就拦住。
 const int kContactTagMaxLen = 16;
 

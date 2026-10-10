@@ -3,6 +3,8 @@
  *  balloonwj@qq.com   2026-05-21
  */
 #include "ContactsProtocol.h"
+#include "ProfileProtocol.h"   //maskNumbersForViewer：按查看者隐藏不公开的号码
+#include "UserManager.h"       //struct User
 #include "../jsoncpp1.9.0/json.h"
 
 //把 Json::Value 序列化为紧凑（无缩进、无换行）的 JSON 文本
@@ -69,6 +71,8 @@ std::string ContactsProtocol::buildContactsResponse(const ContactsData& data)
         jc["address"]     = c.address;
         jc["phonenumber"] = c.phonenumber;
         jc["mail"]        = c.mail;
+        jc["landline"]    = c.landline;
+        jc["post"]        = c.post;
         jc["presence"]    = c.presence;
         jc["clienttype"]  = c.clienttype;
         //备注名一律写出（未设置时为空串），不做"空则省略字段"的优化：客户端
@@ -99,17 +103,6 @@ std::string ContactsProtocol::buildContactsResponse(const ContactsData& data)
     }
     root["favorites"] = favorites;
 
-    //「特别关注」的联系人列表，按标记时间倒序。与 favorites 不同，这里是<u>扁平的
-    //ID 数组</u>而不是对象数组 —— 特别关注只能是人，不存在"是人还是群"的歧义，
-    //多带一个 ctype 反而会让人误以为群也能标。
-    //客户端据本数组判断某人上下线时要不要弹右下角提示（服务端不参与该判断）。
-    Json::Value starred(Json::arrayValue);
-    for (int64_t uid : data.starred)
-    {
-        starred.append(std::to_string(uid));
-    }
-    root["starred"] = starred;
-
     //服务号的用户ID列表，客户端据此渲染"服务号"分区
     Json::Value serviceaccounts(Json::arrayValue);
     for (int64_t id : data.serviceaccounts)
@@ -132,4 +125,26 @@ std::string ContactsProtocol::buildContactsResponse(const ContactsData& data)
     root["groups"] = groups;
 
     return writeCompact(root);
+}
+
+void ContactsProtocol::fillContactFromUser(ContactInfo& c, const User& u, int64_t viewerUserId)
+{
+    c.userid      = u.userid;
+    c.username    = u.username;
+    c.nickname    = u.nickname;
+    c.usertype    = u.usertype;
+    c.facetype    = u.facetype;
+    c.customface  = u.customface;
+    c.gender      = u.gender;
+    c.birthday    = u.birthday;
+    c.signature   = u.signature;
+    c.address     = u.address;
+    c.phonenumber = u.phonenumber;
+    c.landline    = u.landline;
+    c.post        = u.post;
+    c.mail        = u.mail;
+    //不公开的号码只发给本人（通讯录树里有本人那一行，那一行要完整）
+    ProfileProtocol::maskNumbersForViewer(u.phonevisible, u.landlinevisible,
+                                          viewerUserId == static_cast<int64_t>(u.userid),
+                                          c.phonenumber, c.landline);
 }

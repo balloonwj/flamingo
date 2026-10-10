@@ -5,7 +5,7 @@
 # 以后加完文件跑一次本脚本即可，不会再漏。
 #
 # 归类规则，三条，优先级从上到下：
-#   1. 第三方源码目录（jsoncpp1.9.0 / zlib1.2.11 / sqlite3）归到 third-party\<目录名> 下，
+#   1. 第三方源码目录（jsoncpp1.9.0 / zlib1.3.2 / sqlite3）归到 third-party\<目录名> 下，
 #      使自家代码与外来代码在树里一眼分开；
 #   2. chatserver 工程的 chatserversrc、以及 Tests 工程的 tests，文件太多，按下面两张
 #      映射表再分一层。表里查不到的文件会被报出来提醒归类，不会悄悄丢到根节点；
@@ -20,7 +20,7 @@ $projDir = (Resolve-Path "$PSScriptRoot\..").Path
 $xmlns = "http://schemas.microsoft.com/developer/msbuild/2003"
 
 #随仓库携带的第三方源码目录，统一收进 third-party 分组
-$thirdPartyDirs = @("jsoncpp1.9.0", "zlib1.2.11", "sqlite3")
+$thirdPartyDirs = @("jsoncpp1.9.0", "zlib1.3.2", "sqlite3")
 
 # chatserversrc 的二级分组。core = 进程骨架与连接层，admin = HTTP 控制台及其后台数据，
 # app = 面向 IM 客户端的协议与业务管理器。键是不带扩展名的文件名，.cpp 与 .h 共用一条
@@ -76,7 +76,7 @@ $testsGroup = @{
 
     #—— db：数据库层本身 ——
     "test_sqlite_translator" = "db"; "test_sqlite_database" = "db"
-    "test_sqlite_schema" = "db"; "test_sqldialect" = "db"; "test_dbbackend" = "db"
+    "test_sqlite_schema" = "db"; "test_sqldialect" = "db"; "test_dbbackend" = "db"; "test_mariadbclient" = "db"
 
     #—— net：帧编解码 ——
     "test_framecodec" = "net"; "test_framecompress" = "net"; "test_framecrypto" = "net"

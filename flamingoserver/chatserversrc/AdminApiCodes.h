@@ -89,4 +89,42 @@ enum error_code
     error_code_account_disabled      = 117, //账号被 admin 控制台管理员停用，禁止登录任何客户端
     error_code_dept_isroot           = 118, //目标部门是代表企业本身的"公司根部门"，不允许删除或移动
     error_code_enterprise_nameexist  = 119, //企业全称已被占用；admin 控制台新建企业或给企业改名时重名会返回它
+    //以下五个为企业级敏感词的管理后台接口（/admin/sensitive/*.do）所用，见 docs/敏感词方案.md 第 6.7 节；
+    //由 SensitiveWordManager 的写操作结果换算而来（sensitiveadmin::ToAdminCode），导入时也作为跳过原因
+    error_code_sensitive_word_invalid  = 120, //词条为空，或去掉空白、标点符号与表情之后为空
+    error_code_sensitive_word_toolong  = 121, //词条去掉首尾空白后超过 32 个字符
+    error_code_sensitive_word_exist    = 122, //归一化后与本企业已有词条重复（导入时也包括与同一批里靠前的行重复）
+    error_code_sensitive_word_full     = 123, //本企业的词条数已达 10000 条上限
+    error_code_sensitive_word_notexist = 124, //要修改的词条不存在，或不属于该企业
+
+    //以下四个为文件共享的管理后台接口（/admin/setting/*、/admin/fileshare/*）所用，见 docs/文件共享方案.md 6.5
+    error_code_fileshare_notexist      = 130, //共享不存在（shareid 无效）
+    error_code_fileshare_canceled      = 131, //共享已经取消过，不能再强制取消
+    error_code_fileshare_denied        = 132, //共享不属于企业管理员的本企业
+    error_code_feature_setting_invalid = 133, //功能设置项或取值不认识：开关类设置项以 FeatureSwitchManager.cpp 的 kKnownFeatures
+                                              //为准（如 fileshare.enabled、p2p.enabled、group.inviteconfirm、secretchat.enabled），取值 0 / 1
+
+    //以下为平台公告的管理后台接口（/admin/announcement/*）所用；140 起与上面按顺序追加的编号错开
+    error_code_announcement_notpublished = 140, //公告不是「已发布」状态（草稿或已撤回），不能重新推送
+
+    //以下为员工手机号与企业账号前缀所用（2026-10-06，docs/登录账号与手机号登录方案.md）；150 起另开一段
+    error_code_phone_invalid           = 150, //新建或编辑员工时手机号为空，或不是 11 位以 1 开头的数字
+    error_code_phone_taken             = 151, //新建或编辑员工时手机号已被其他账号使用（手机号可用于登录，必须全局唯一）
+    error_code_account_prefix_invalid  = 152, //企业账号前缀不合法：只能由字母与点号组成、1～10 个字符、至少一个字母
+
+    //以下为企业问答的管理后台接口（/admin/qa/*.do）所用（2026-10-07，docs/群问答方案.md）；160 起另开一段
+    error_code_qa_invalid              = 160, //问题或答案为空，或超过长度上限（问题 128 字、答案 2048 字）
+    error_code_qa_notexist             = 161, //要修改或删除的企业问答不存在，或不属于该企业
+    error_code_qa_full                 = 162, //本企业的企业问答已达上限
+    error_code_qa_group_invalid        = 163, //应用到所选的群时没有选群，或选了不属于本企业的群
+
+    //以下为机器人的管理后台接口（/admin/bot/*.do）所用（2026-10-08，docs/机器人方案.md 6.3）；170 起另开一段。
+    //与 Protocol.h 里给客户端用的 error_code_bot_* 不是一回事，故名称带 botadmin，免得两个头文件同时被引用时撞名
+    error_code_botadmin_invalid        = 170, //机器人或规则的字段不合法：名称为空或超长、关键词为空、回复为空、时间格式错误等
+    error_code_botadmin_notexist       = 171, //机器人不存在、已删除，或不是本企业的企业机器人
+    error_code_botadmin_full           = 172, //本企业的企业机器人已达上限（50 个），或规则、关键词超出上限
+    error_code_botadmin_group_invalid  = 173, //应用到所选的群时没有选群，或选了不属于本企业的群
+    error_code_botadmin_not_allowed    = 174, //规则用了不允许的触发方式或动作，或外部服务地址不在域名白名单内
+    error_code_botadmin_domain_invalid = 175, //域名白名单里有不合法的域名，或超过 50 条
+    error_code_botadmin_readonly       = 176, //仓库通知的机器人只能在「仓库通知」页修改
 };

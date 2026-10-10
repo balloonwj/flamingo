@@ -39,9 +39,24 @@
  *    · 「取消 Pin」的权限<u>不在客户端预判</u>：本端不一定知道一条历史消息是谁钉的
  *      （operator 只随推送来、历史行未必带），预判会出现"该显示的没显示"。故这一项
  *      一律给出，无权时由服务端以 error_code_pin_not_allowed 拒绝并提示。
- *    · 「转发」排在「定位到聊天窗」（以及「查看上下文」）之后、「Pin」之前，出现条件见
- *      CanForwardHistoryRow。转发不依赖本地文件：服务端按原消息重新落一条，图片 / 文件
- *      本地没下载、甚至正在下载时照样给出（方案见 docs/聊天消息转发方案.md §9 第 9 步）。
+ *    · 「转发」出现条件见 CanForwardHistoryRow。转发不依赖本地文件：服务端按原消息重新落
+ *      一条，图片 / 文件本地没下载、甚至正在下载时照样给出（方案见 docs/聊天消息转发方案.md
+ *      §9 第 9 步）。
+ *
+ *  菜单形态（2026-10-03 与用户确认的分组规则，与主面板、聊天窗几个右键菜单相同）：
+ *      <内容组>                 ← 随消息类型与本地文件 / 下载状态变化，见上文；可能为空
+ *      ──────────
+ *      定位到聊天窗             ← 恒有
+ *      查看上下文               ← 有筛选条件时
+ *      ──────────
+ *      转发                     ← 能转发时
+ *      多选                     ← msgid 已分配时
+ *      Pin / 取消 Pin           ← msgid 已分配、且不是共享卡片时
+ *      ──────────
+ *      删除                     ← msgid 已分配时
+ *      ──────────
+ *      清空聊天记录             ← m_canClearConversation 为真时
+ *  某一组整组为空时连同它前面的分隔线一起不出现，菜单首尾不会出现分隔线。
  *
  *  balloonwj@qq.com   2026-08-05
  */
@@ -75,10 +90,11 @@ enum HistoryRowMenuId
     kHistoryRowMenuLocate         = 9,   // 定位到聊天窗：所有类型的行都有，是本窗口的主操作 —— 跳到聊天窗并高亮这条
     kHistoryRowMenuPin            = 10,  // Pin / 取消 Pin：所有类型的行都有，文案随当前是否已钉住取反；msgid 未分配时整项不出现
     kHistoryRowMenuOpenFolderRoot = 11,  // 打开文件夹：仅文件夹传输记录行、且本机登记过这次传输的根目录且目录还在时出现，在资源管理器里打开<u>那个目录本身</u>。与 kHistoryRowMenuOpenFolder（打开文件所在的父目录并选中文件）不是一回事，故另开一个 id
-    kHistoryRowMenuDelete         = 12,  // 删除：所有类型的行都有，放在菜单末尾、前面隔一条线；msgid 未分配时整项不出现。本人视角的删除（cmd_delete_message），本机与本人其他设备都不再显示，对方不受影响；确认后发出，界面等删除推送到达再更新（见 docs/清理聊天记录方案.md §9.1）
+    kHistoryRowMenuDelete         = 12,  // 删除：所有类型的行都有，单独一组排在「清空聊天记录」之前；msgid 未分配时整项不出现。本人视角的删除（cmd_delete_message），本机与本人其他设备都不再显示，对方不受影响；确认后发出，界面等删除推送到达再更新（见 docs/清理聊天记录方案.md §9.1）
     kHistoryRowMenuViewContext    = 13,  // 查看上下文：当前有筛选条件（关键字、类型、时间、发送人）时出现，紧跟「定位到聊天窗」；清掉筛选、在本窗口里翻到这条所在的页并高亮它（判定见 HistoryModel.h 的 ShouldOfferViewContext）
-    kHistoryRowMenuForward        = 14,  // 转发：本条能转发时出现（判定见 CanForwardHistoryRow），排在「查看上下文」之后、「Pin」之前；点它打开主面板的目标选择窗，按逐条转发把这一条发给选定的会话
+    kHistoryRowMenuForward        = 14,  // 转发：本条能转发时出现（判定见 CanForwardHistoryRow），与「多选」「Pin」同在「定位到聊天窗」那组之后的一组，排在该组头一位；点它打开主面板的目标选择窗，按逐条转发把这一条发给选定的会话
     kHistoryRowMenuMultiSelect    = 15,  // 多选：msgid 已分配的行都有，紧跟「转发」；点它进入多选模式并预先选中这一条，之后可合并转发、逐条转发或批量删除（选择集合见 HistorySelection.h）
+    kHistoryRowMenuClearConversation = 16,  // 清空聊天记录：清空整个会话（本人视角），与这一行是哪条消息无关；m_canClearConversation 为真时单独一组出现在菜单最末（「删除」之后，中间隔一条线）。与底部「清空聊天记录」按钮同一条路径（2026-10-03 起从聊天窗头部移到消息记录窗）
 };
 
 /**
@@ -138,6 +154,9 @@ struct HistoryRowMenuContext
     //本模块不看筛选条件
     bool    m_canViewContext;
 
+    //是否给「清空聊天记录」。清空要经主面板发请求，消息记录窗有主面板时填 true；调试入口为 false
+    bool    m_canClearConversation;
+
     HistoryRowMenuContext()
         : m_msgType(0)
         , m_hasLocalFile(false)
@@ -145,6 +164,7 @@ struct HistoryRowMenuContext
         , m_pinned(false)
         , m_msgId(kHistoryRowMsgIdUnassigned)
         , m_canViewContext(false)
+        , m_canClearConversation(false)
     {
     }
 };
@@ -152,11 +172,9 @@ struct HistoryRowMenuContext
 /**
  *  算「消息记录」窗口列表行右键菜单的行模型。
  *
- *  菜单分两组，中间以一条分隔线隔开：
- *    · 内容组：随消息类型与本地文件 / 下载状态变化，可能<u>为空</u>（语音等未支持的类型）。
- *    · 通用组：「定位到聊天窗」恒有，其后是「Pin / 取消 Pin」（msgid 未分配时缺席）。
- *  内容组为空时那条分隔线不会出现，保证分隔线既不打头也不结尾、更不会连着两条。
- *  各组具体给哪几项、顺序如何，见本文件头的行为约定。
+ *  菜单最多五组，组与组之间一条分隔线，各组给哪几项见本文件头的「菜单形态」。
+ *  内容组可能<u>为空</u>（语音等未支持的类型），msgid 未分配时第三、四组整组为空；
+ *  空组前面的分隔线不会出现，保证分隔线既不打头也不结尾、更不会连着两条。
  *
  *  @param ctx 本行的类型与状态，各字段含义见 HistoryRowMenuContext；本函数只读它，
  *             不持有引用。

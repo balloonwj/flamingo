@@ -1,0 +1,55 @@
+// FileVersionInfo.rc2 —— PC 客户端各 exe / dll 共用的版本信息资源模板，内容即文件属性「详细信息」页显示的文件说明、产品名、版本等。
+//
+// 用法：每个工程有一个自己的 <文件名>Version.rc（UTF-8 无 BOM，编译时带 /c65001），依次：
+//   1. #include ClientVersion.h（版本号的唯一来源）；
+//   2. 定义下面四个宏；
+//   3. #include 本文件。
+//   FLAMINGO_FILE_DESCRIPTION    文件说明，中文，说明该文件的用途
+//   FLAMINGO_FILE_ORIGINAL_NAME  原始文件名，如 "FlamingoMedia.dll"
+//   FLAMINGO_FILE_INTERNAL_NAME  内部名称（不带扩展名），如 "FlamingoMedia"
+//   FLAMINGO_FILE_TYPE           文件类型：0x1L 表示应用程序（VFT_APP），0x2L 表示动态链接库（VFT_DLL）
+// 版本号与产品名只在这里写一次，各工程不重复。版本信息里不写版权（2026-10-10 起按用户要求去掉）。
+//
+// 本文件与各 Version.rc 必须保持 CRLF 换行：rc.exe 只认 CRLF，纯 LF 的文件会被当成一行，开头的 // 注释会把其后全部内容
+// 当作注释（详见 ClientVersion.h 的说明）。
+// 守卫用例：Source/Tests/FileVersionInfoTests.cpp（标签 [verinfo]）。
+// balloonwj@qq.com   2026-10-09
+
+// 产品名称
+#define FLAMINGO_PRODUCT_NAME     "FlamingoIM"
+
+// 版本资源的语言：简体中文（LANG_CHINESE 0x04，SUBLANG_CHINESE_SIMPLIFIED 0x02），与下面的 080404b0 块一致
+LANGUAGE 0x04, 0x02
+
+// 版本资源固定使用编号 1（VS_VERSION_INFO）
+1 VERSIONINFO
+ FILEVERSION FLAMINGO_CLIENT_VERSION_RC
+ PRODUCTVERSION FLAMINGO_CLIENT_VERSION_RC
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE FLAMINGO_FILE_TYPE
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // 0804 为简体中文，04b0 即 1200，表示字符串按 Unicode 存放
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "FileDescription", FLAMINGO_FILE_DESCRIPTION
+            VALUE "FileVersion", FLAMINGO_CLIENT_VERSION_RC_STR
+            VALUE "InternalName", FLAMINGO_FILE_INTERNAL_NAME
+            VALUE "OriginalFilename", FLAMINGO_FILE_ORIGINAL_NAME
+            VALUE "ProductName", FLAMINGO_PRODUCT_NAME
+            VALUE "ProductVersion", FLAMINGO_CLIENT_VERSION_RC_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

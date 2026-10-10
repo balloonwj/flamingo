@@ -7,8 +7,9 @@
  *    步骤 2 完成（展示服务端<u>自动生成</u>的账号与所加入的公司，提醒记住账号）
  *
  *  登录账号不由用户起名，一律由服务端按用户ID自动生成，注册成功后随应答
- *  回传，在完成页上突出显示。用户点"立即登录"关窗后，DoModal 返回 IDOK，
- *  登录窗据此把账号回填进账号框（见 RegisteredAccount）。
+ *  回传，在完成页上突出显示。用户点"立即登录"关窗后，RunModalFromLogin 返回 IDOK，
+ *  登录窗据此把账号回填进账号框（见 RegisteredAccount），再调 ReturnToLogin 翻回登录窗。
+ *  2026-10-07 起登录窗与注册窗之间以「翻转」过渡切换（balloonauth::SwitchDuiWindows）。
  *  "提交注册"先跑客户端格式校验，通过后在工作线程里发 cmd_register(1101)
  *  并等应答；成功则推进到完成页，失败按服务端错误码弹中文提示。
  *  "立即登录"关闭窗口。
@@ -103,19 +104,31 @@ public:
     void CreateAndShow(HWND hMainDlg);
 
     /**
-     *  以模态对话框形式打开注册窗口（供登录窗调用）。
-     *  在 hWndParent 上跑独立消息循环，模态期间禁用父窗口，关闭后返回。
-     *    hWndParent：父窗口句柄（登录窗），模态期间被禁用。
+     *  以模态方式打开注册窗口，从登录窗「翻转」过来（供登录窗调用，2026-10-07 起取代原来的 DoModal）。
+     *  本窗口建在登录窗的位置上（上边缘对齐、水平居中，超出工作区时挪回来），登录窗被禁用并隐藏，
+     *  两者之间播放翻转过渡（系统关闭了动画时直接切换，见 balloonauth::SwitchDuiWindows）；
+     *  随后跑独立消息循环，直到用户点「返回」「立即登录」或关闭窗口。
+     *
+     *  返回时<u>本窗口仍显示着、登录窗仍隐藏且禁用</u>：调用方先按结果回填登录框（登录窗隐藏时也能改），
+     *  再调用 ReturnToLogin 翻回登录窗，翻转画面里就是填好的登录窗。若调用方没有调用 ReturnToLogin，
+     *  本对象析构时会直接恢复登录窗（不播放翻转），不会留下两个窗口都看不见的状态。
+     *    login：登录窗（借用，须在 ReturnToLogin 或本对象析构之前一直有效），应当可见、可用。
      *  返回值：IDOK 表示注册成功且用户已确认（此时 RegisteredAccount() 与
      *          RegisteredPassword() 分别给出服务端分配的账号与用户设置的
      *          密码，调用方应把两者一并回填到登录框）；IDCANCEL 表示用户
-     *          中途关闭、或注册未成功。
+     *          中途关闭、注册未成功、建窗失败，或模态期间收到了退出消息（WM_QUIT 已转投给外层循环）。
      */
-    INT_PTR DoModal(HWND hWndParent);
+    INT_PTR RunModalFromLogin(balloonwjui::DuiFrameWindow& login);
+
+    /**
+     *  从注册窗翻回登录窗：恢复登录窗可用，播放反向翻转（注册窗 → 登录窗；条件不满足时直接切换），
+     *  登录窗显示并激活，随后销毁本窗口。只在 RunModalFromLogin 之后调用；重复调用安全（第二次什么都不做）。
+     */
+    void ReturnToLogin();
 
     /**
      *  取本次注册成功后服务端分配的登录账号。
-     *  仅当 DoModal 返回 IDOK 时有意义；其余情况为空串。
+     *  仅当 RunModalFromLogin 返回 IDOK 时有意义；其余情况为空串。
      *  返回：账号字符串的常引用，生命周期同本对象。
      */
     const CString& RegisteredAccount() const { return m_resultAccount; }
@@ -127,7 +140,7 @@ public:
      *  直接点"登录"；只回填账号的话，密码框里会留着登录窗打开时预填的上一个
      *  账号的密码，看上去像是"注册时设的密码没生效"。
      *
-     *  仅当 DoModal 返回 IDOK 时有意义；其余情况为空串。密码只在进程内传递，
+     *  仅当 RunModalFromLogin 返回 IDOK 时有意义；其余情况为空串。密码只在进程内传递，
      *  调用方不得把它写进任何落盘文件（是否记住密码由用户自己勾选决定）。
      *  返回：明文密码字符串的常引用，生命周期同本对象。
      */
@@ -142,11 +155,15 @@ public:
     END_MSG_MAP()
 
 private:
-    // 创建窗口、配置外观、构建首步客户区并显示。hWndParent 为父窗口
-    // （可为 NULL）。成功返回 true。CreateAndShow 与 DoModal 共用此方法。
-    bool BuildWindow(HWND hWndParent);
+    // 创建窗口、配置外观、构建首步客户区。hWndParent 为父窗口（可为 NULL）。
+    // show 为 true 时居中显示并激活（调试入口）；为 false 时保持隐藏，由调用方摆好位置再切换过来
+    // （登录窗翻转过来时）。成功返回 true。CreateAndShow 与 RunModalFromLogin 共用此方法。
+    bool BuildWindow(HWND hWndParent, bool show);
 
-    // 结束 DoModal 的模态循环，result 为 DoModal 的返回值。
+    // 不播放翻转、直接恢复登录窗（可用、显示、激活）并销毁本窗口：析构时调用方没有调用 ReturnToLogin 的兜底
+    void RestoreLoginDirectly();
+
+    // 结束 RunModalFromLogin 的模态循环，result 为它的返回值。
     void EndModal(INT_PTR result);
 
     // 配置 frame 外观（标题栏透明 / 按钮 / 9-grid 背景图）。须在 Create 后调。
@@ -199,11 +216,6 @@ private:
     //   result：服务端应答的解析结果，其 m_code 非 0 或 m_transportOk 为 false。
     void OnRegisterFailed(const RegisterResult& result);
 
-    // 把服务端错误码翻译成给用户看的中文提示。
-    //   code：服务端结果码，取值见 net/Protocol.h 的 enum error_code。
-    //   返回：常量字符串指针（静态存储，调用方不得释放）。
-    static LPCTSTR RegisterErrorMessage(int code);
-
     // "返回 / 立即登录"：关闭注册窗。
     void DoCloseWindow();
 
@@ -211,10 +223,12 @@ private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），只引用不持有
     HWND             m_hMainDlg;      // 主面板句柄
     HBITMAP          m_hBgBitmap;     // 窗体 9-grid 背景图（橙 banner + 白），本类持有
-    bool             m_modalRunning;  // DoModal 模态循环是否进行中
-    INT_PTR          m_modalResult;   // DoModal 的返回值
+    bool             m_modalRunning;  // RunModalFromLogin 的模态循环是否进行中
+    INT_PTR          m_modalResult;   // RunModalFromLogin 的返回值
+    bool             m_quitReceived;  // 模态循环里收到了 WM_QUIT（已转投给外层循环）：返回登录窗时不再播放翻转
+    balloonwjui::DuiFrameWindow* m_returnLogin; // 待翻回的登录窗（借用）；RunModalFromLogin 时设置，ReturnToLogin 后清空
     bool             m_submitting;    // 是否有注册请求正在途中，用于拦住重复点击"提交注册"
-    bool             m_registered;    // 本次是否已注册成功；决定 DoModal 返回 IDOK 还是 IDCANCEL
+    bool             m_registered;    // 本次是否已注册成功；决定 RunModalFromLogin 返回 IDOK 还是 IDCANCEL
     CString          m_resultAccount; // 注册成功后服务端分配的账号，完成页回显 + 回填登录框
     CString          m_resultCompany; // 注册成功后所加入企业的全称，完成页回显用
     CString          m_resultPassword;// 注册成功时用户设置的明文密码，仅用于回填登录窗密码框，不落盘

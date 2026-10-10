@@ -27,6 +27,9 @@
 #include <atltypes.h>
 
 #include "RegisterModel.h"
+#include "../../App/BrandText.h"         // g_strDefaultCompany / kDefaultCompany：注册的默认公司
+#include "../../Common/I18n/I18n.h"      // TR / TRF / TR_NOOP：界面文字的多语言查找
+#include "../../net/Protocol.h"          // enum error_code：注册应答的服务端错误码
 
 namespace balloonregister {
 
@@ -58,13 +61,27 @@ bool IsAllDigits(const CString& s)
 } // anonymous namespace
 
 // =======================================================================
+// 默认公司
+// =======================================================================
+
+CString RegDefaultCompany()
+{
+    //启动时读过 flamingo.ini 后用配置值；单元测试等不走启动流程的场合尚未读取，用内置值
+    if (g_strDefaultCompany.empty())
+        return CString(brandtext::kDefaultCompany);
+
+    return CString(g_strDefaultCompany.c_str());
+}
+
+// =======================================================================
 // 构造
 // =======================================================================
 
 RegisterModel::RegisterModel()
     : m_currentStep(kRegStepFillInfo)
+    , m_company(RegDefaultCompany())
 {
-    // CString 成员默认即空字符串，无需显式初始化。
+    // 公司名默认填好默认公司，注册窗打开时组合框显示的就是它；其余 CString 成员默认即空字符串。
 }
 
 // =======================================================================
@@ -226,23 +243,58 @@ LPCTSTR RegisterModel::ValidateMessage(int result)
     switch (result)
     {
     case kRegValidOk:
-        return _T("校验通过。");
+        return TR(L"校验通过。");
     case kRegValidNickEmpty:
-        return _T("请填写昵称。");
+        return TR(L"请填写昵称。");
     case kRegValidPwdEmpty:
-        return _T("请设置密码。");
+        return TR(L"请设置密码。");
     case kRegValidPwdTooShort:
-        return _T("密码长度至少 6 位。");
+        return TR(L"密码长度至少 6 位。");
     case kRegValidPwdMismatch:
-        return _T("两次输入的密码不一致。");
+        return TR(L"两次输入的密码不一致。");
     case kRegValidPhoneFormat:
-        return _T("请输入正确的 11 位手机号。");
+        return TR(L"请输入正确的 11 位手机号。");
     case kRegValidCompanyEmpty:
-        return _T("请填写公司名称。");
+        return TR(L"请填写公司名称。");
     case kRegValidCompanyTooLong:
-        return _T("公司名称过长，请填写公司全称的正确写法。");
+        return TR(L"公司名称过长，请填写公司全称的正确写法。");
     default:
-        return _T("输入有误，请检查后重试。");
+        return TR(L"输入有误，请检查后重试。");
+    }
+}
+
+LPCTSTR RegisterModel::ServerErrorMessage(int code)
+{
+    switch (code)
+    {
+    //公司全称匹配不到企业
+    case error_code_enterprise_not_exist:
+        return TR(L"找不到这家公司，请核对公司全称是否填写正确；\n"
+                  L"若确认无误，请联系公司管理员确认企业是否已开通。");
+    //企业待审核或已停用
+    case error_code_enterprise_disabled:
+        return TR(L"这家公司当前不可加入（尚未开通或已停用），请联系公司管理员。");
+    //企业尚未建立公司根部门
+    case error_code_enterprise_no_root_dept:
+        return TR(L"这家公司的组织架构尚未初始化，暂时无法加入，请联系公司管理员。");
+    //企业在管理台关闭了「允许用户自助注册」，新员工只能由管理员新建账号
+    case error_code_register_closed:
+        return TR(L"这家公司已关闭自助注册，请联系公司管理员为你开通账号。");
+    //手机号已被注册
+    case error_code_already_registered:
+        return TR(L"该账号或手机号已被注册，请更换后重试。");
+    //服务端落库建号失败：与用户填的内容无关（登录账号由服务端自动生成），只能稍后重试
+    case error_code_register_fail:
+        return TR(L"注册失败，请稍后重试。");
+    //请求不完整
+    case error_code_bad_request:
+        return TR(L"提交的信息不完整，请检查各项内容后重试。");
+    //昵称命中所选企业的敏感词库（docs/敏感词方案.md 8.6）
+    case error_code_profile_sensitive_word:
+        return TR(L"昵称包含敏感词，请修改后重试。");
+    //其余错误码与传输失败
+    default:
+        return TR(L"注册失败，请稍后重试。");
     }
 }
 

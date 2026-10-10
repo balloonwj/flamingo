@@ -20,6 +20,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "NetSettingsModel.h"
+#include "../BalloonMain/TitleBarIcon.h"   // m_programIcons：标题栏与任务栏的程序图标
 
 class CFlamingoClient;
 
@@ -163,6 +164,8 @@ private:
     INT_PTR          m_modalResult;   // DoModal 的返回值
     bool             m_testing;       // "测试连接"后台探测是否进行中（防重入）
     balloonnetsettings::NetSettingsModel m_model;   // 三组服务器配置模型
+    // 标题栏左侧与任务栏的程序图标（2026-10-07 起，开发约定文档 UI 约定第 10 条），随本对象释放，关窗再开时复用
+    balloonmain::ProgramWindowIcons m_programIcons;
 
     // 三张卡片当前显示的连接状态，下标对应 NetServerKind，取值见 NetConnState。
     // 由后台探测结果驱动：发起探测时置"连接中"，结果回来改成"已连接" / "未连接"。

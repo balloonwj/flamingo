@@ -8,7 +8,9 @@
  *    SCC4  改昵称 / 账号 / 地区各自触发该条重算；改签名、标签、头像、在线状态不触发；
  *    SCC5  删人、加人、在头部插入一人后，Sync 结果与从零新建的缓存逐条一致；
  *    SCC6  群：首次全部重算、不变时不重算、改群名只重算一条、其它字段不触发、增删后一致；
- *    SCC7  设了备注的人保留按原始昵称预处理的结果，没设备注的不保留。
+ *    SCC7  设了备注的人保留按原始昵称预处理的结果，没设备注的不保留；
+ *    SCC8  部门：首次全部重算、不变时不重算、改名或改上级只重算一条、成员与排序变化不触发、
+ *          删减后与部门列表一致，Clear 一并清空。
  *
  *  UTF-8 文本一律用 \x 转义写出，避免源文件编码影响；期望值用 MultiByteToWideChar
  *  独立转换，不借用被测代码里的转换函数。框架 Catch2 v3。
@@ -373,4 +375,64 @@ TEST_CASE("SCC7 设了备注的人保留按原始昵称预处理的结果", "[se
     CHECK(noRemark.m_nickName.m_lower.empty());
     CHECK(noRemark.m_nickName.m_syllables.empty());
     CHECK(noRemark.m_shownName.m_initials == "zs");
+}
+
+TEST_CASE("SCC8 部门候选：首次重算、不变不重算、改名或改上级重算、增删后一致", "[searchcache]")
+{
+    //部门数（与资料池同一规模即可）与第一个部门的 id
+    const int kDeptCount = 6;
+    const int64_t kFirstDeptId = 70001;
+    std::vector<net::DepartmentItem> depts;
+    for (int i = 0; i < kDeptCount; ++i)
+    {
+        net::DepartmentItem dept;
+        dept.m_deptid = kFirstDeptId + i;
+        dept.m_parentdeptid = (i == 0) ? 0 : kFirstDeptId;
+        dept.m_name = (i % 2 == 0) ? std::string(kHangZhouUtf8) : ("Dept" + std::to_string(i));
+        depts.push_back(dept);
+    }
+
+    SearchCandidateCache cache;
+    CHECK(cache.SyncDepartments(depts) == kDeptCount);
+    REQUIRE(cache.DepartmentCount() == depts.size());
+    for (size_t i = 0; i < depts.size(); ++i)
+    {
+        const balloonsearch::DepartmentCandidate& e = cache.DepartmentAt(i);
+        CHECK(e.m_deptid == depts[i].m_deptid);
+        CHECK(e.m_parentid == depts[i].m_parentdeptid);
+        CHECK(e.m_name == depts[i].m_name);
+        CHECK(SameName(e.m_preparedName, contactsearch::PrepareName(Wide(depts[i].m_name))));
+    }
+    //杭州的拼音首字母
+    CHECK(cache.DepartmentAt(0).m_preparedName.m_initials == "hz");
+
+    CHECK(cache.SyncDepartments(depts) == 0);
+
+    //改名、改上级各重算一条
+    depts[1].m_name = kLiSiUtf8;
+    depts[2].m_parentdeptid = kFirstDeptId + 1;
+    CHECK(cache.SyncDepartments(depts) == 2);
+    CHECK(cache.DepartmentAt(1).m_name == kLiSiUtf8);
+    CHECK(cache.DepartmentAt(2).m_parentid == kFirstDeptId + 1);
+
+    //成员、排序权重、负责人不参与，改了不重算
+    depts[3].m_deptorder = 9;
+    depts[3].m_leaderuserid = 12345;
+    depts[4].m_members.push_back(net::DeptMemberItem());
+    CHECK(cache.SyncDepartments(depts) == 0);
+
+    //删减
+    depts.erase(depts.begin() + 1);
+    cache.SyncDepartments(depts);
+    REQUIRE(cache.DepartmentCount() == depts.size());
+    for (size_t i = 0; i < depts.size(); ++i)
+    {
+        CHECK(cache.DepartmentAt(i).m_deptid == depts[i].m_deptid);
+    }
+
+    //部门与联系人、群互不影响；Clear 一并清空
+    CHECK(cache.ContactCount() == 0);
+    CHECK(cache.GroupCount() == 0);
+    cache.Clear();
+    CHECK(cache.DepartmentCount() == 0);
 }

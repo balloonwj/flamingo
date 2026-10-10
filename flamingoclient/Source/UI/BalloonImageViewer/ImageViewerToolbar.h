@@ -40,6 +40,7 @@ enum ToolbarItemKind
     kTbRotate,        // 向右旋转 90°（顺时针圆形箭头）
     kTbSaveAs,        // 另存为（下载箭头）
     kTbCopyImage,     // 复制图片（两个叠放的圆角矩形）：复制后可粘进聊天输入框直接发送
+    kTbOcr,           // 图片文字识别（四角取景框里一个「T」）：只在图片文字识别模块可用时出现，排在最后（docs/图片文字识别方案.md 第 8.5 节）
 };
 
 // 看图工具栏控件。
@@ -48,20 +49,33 @@ class ImageViewerToolbar : public balloonwjui::DuiControl
 public:
     // 构造。
     //   pCanvas：所属画布（本控件不持有，仅回调其看图动作）；不可为空。
-    explicit ImageViewerToolbar(ImageCanvas* pCanvas);
+    //   withOcr：是否带「图片文字识别」按钮（图片文字识别模块可用时为 true），构造后不变。
+    //   viewOnly：「只看不存」模式（密聊图片的大图浮层）：只有缩放、1:1、适应窗口与旋转，没有复制、另存与
+    //             「图片文字识别」（此时 withOcr 不起作用），构造后不变。
+    explicit ImageViewerToolbar(ImageCanvas* pCanvas, bool withOcr = false, bool viewOnly = false);
     ~ImageViewerToolbar() override;
 
-    // 工具栏整体固定尺寸（逻辑像素），供画布把它摆到底部中央。
+    // 工具栏整体固定尺寸（逻辑像素），供画布把它摆到底部中央。带「图片文字识别」按钮时宽一格。
     SIZE GetBarSize() const;
+
+    // 是否带「图片文字识别」按钮（构造时决定）。
+    bool HasOcrButton() const { return m_withOcr; }
 
     // ---- 按钮编排查询（纯数据，不依赖实例；供单元测试核对按钮顺序与属性）----
 
     // 工具栏元素个数（含比例读数与分隔线）。
-    static int ItemCount();
+    //   withOcr：是否带「图片文字识别」按钮；带时多一个元素，排在最后。
+    //   viewOnly：「只看不存」模式：只有前 8 个元素（缩放、1:1、适应窗口、旋转），withOcr 不起作用。
+    static int ItemCount(bool withOcr = false, bool viewOnly = false);
 
     // 从左往右第 index 个元素的种类。
-    //   index：0 ~ ItemCount()-1；越界返回 kTbSeparator（不可点击的占位）。
-    static ToolbarItemKind ItemKindAt(int index);
+    //   index：  0 ~ ItemCount(withOcr)-1；越界返回 kTbSeparator（不可点击的占位）。
+    //   withOcr / viewOnly：同 ItemCount。
+    static ToolbarItemKind ItemKindAt(int index, bool withOcr = false, bool viewOnly = false);
+
+    // 工具栏整体宽度（逻辑像素，含左右内边距）。
+    //   withOcr / viewOnly：同 ItemCount。
+    static int BarWidth(bool withOcr = false, bool viewOnly = false);
 
     // 某种元素是否可点击：图标 / 文字按钮可点，比例读数与分隔线不可点。
     static bool IsClickableKind(ToolbarItemKind kind);
@@ -94,6 +108,8 @@ private:
 private:
     ImageCanvas* m_pCanvas;   // 所属画布（引用，不持有）
     int          m_hoverIndex; // 当前鼠标悬停的元素下标；-1 表示无悬停（用于按钮高亮）
+    bool         m_withOcr;    // 是否带「图片文字识别」按钮；构造时由画布按识别模块是否可用决定，之后不变
+    bool         m_viewOnly;   // 是否「只看不存」模式（密聊图片的大图浮层）：没有复制、另存与识别文字；构造后不变
 };
 
 } // namespace balloonimageviewer

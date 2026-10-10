@@ -1,0 +1,279 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Chan">
+      <UniqueIdentifier>{6cdc2221-81c5-87aa-21e6-f24bf4977bec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{83168e6c-b289-d732-cc78-427b51f93153}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia">
+      <UniqueIdentifier>{98f39081-b9e1-2592-b58d-e85ecaacb667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FlamingoMedia\Host">
+      <UniqueIdentifier>{03aec04f-8c41-b803-2b57-1822961bbfa3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Host">
+      <UniqueIdentifier>{c2ca16d0-48ec-66e0-4bca-283eab048ec2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ice">
+      <UniqueIdentifier>{583d6a9f-e10d-6724-74e2-cdca476113b7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Io">
+      <UniqueIdentifier>{42a02b42-ec22-cfcb-d78a-af7a66a5ee09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Link">
+      <UniqueIdentifier>{97e7c9a7-d06e-ac00-6a28-bf05467fcc8b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31bbdd1-b3e8-5bcc-d652-680e16935819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common">
+      <UniqueIdentifier>{dea65f3c-8364-c289-5511-8b0f6baab7ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Log">
+      <UniqueIdentifier>{0b9d17e0-4d65-0c7c-cc05-3cbe6b35c766}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Common\Util">
+      <UniqueIdentifier>{619b9ea2-01a8-48eb-0989-f550bd74060f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\net">
+      <UniqueIdentifier>{586cf171-509c-ef9a-1318-b44b343ef18d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party">
+      <UniqueIdentifier>{9eab2112-6210-c38a-271b-d8cbe3106a1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\jsoncpp-1.9.0">
+      <UniqueIdentifier>{f4787265-9915-ba4f-0c42-241643d8f88f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\third-party\zlib1.2.11">
+      <UniqueIdentifier>{756e4991-ed32-307b-8b91-24926824bab9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party">
+      <UniqueIdentifier>{5492c6cc-82d1-3141-a851-7181d809afd6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\kcp">
+      <UniqueIdentifier>{9fd872a7-6092-dc87-2437-ec993f591ce9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClCompile>
+    <ClCompile Include="third-party\kcp\ikcp.c">
+      <Filter>third-party\kcp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>Source\third-party\jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FrameCodec.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FrameCrypto.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\FramePayload.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\net\HandshakeRunner.cpp">
+      <Filter>Source\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Common\Util\ZlibUtil.cpp">
+      <Filter>Source\Common\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\compress.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\deflate.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzclose.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzlib.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzread.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzwrite.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\infback.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\trees.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\uncompr.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c">
+      <Filter>Source\third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\HostLogBridge.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\P2PLog.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\P2PModule.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Host\P2PService.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\P2PCrypto.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\P2PPacket.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\P2PReplayWindow.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Ice\P2PAddressProber.cpp">
+      <Filter>Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="Ice\P2PCandidate.cpp">
+      <Filter>Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="Ice\P2PConnectivityChecker.cpp">
+      <Filter>Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="Ice\P2PStunClient.cpp">
+      <Filter>Ice</Filter>
+    </ClCompile>
+    <ClCompile Include="Link\P2PLinkSession.cpp">
+      <Filter>Link</Filter>
+    </ClCompile>
+    <ClCompile Include="Link\P2PSignalCodec.cpp">
+      <Filter>Link</Filter>
+    </ClCompile>
+    <ClCompile Include="Io\P2PAdapters.cpp">
+      <Filter>Io</Filter>
+    </ClCompile>
+    <ClCompile Include="Io\P2PEngine.cpp">
+      <Filter>Io</Filter>
+    </ClCompile>
+    <ClCompile Include="Io\P2PRelayConn.cpp">
+      <Filter>Io</Filter>
+    </ClCompile>
+    <ClCompile Include="Io\P2PUdpPort.cpp">
+      <Filter>Io</Filter>
+    </ClCompile>
+    <ClCompile Include="Chan\P2PBbrCc.cpp">
+      <Filter>Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="Chan\P2PChannelMux.cpp">
+      <Filter>Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="Chan\P2PDatagramFrag.cpp">
+      <Filter>Chan</Filter>
+    </ClCompile>
+    <ClCompile Include="Chan\P2PReliableChannel.cpp">
+      <Filter>Chan</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="FlamingoP2PApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h">
+      <Filter>Source\Common\Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h">
+      <Filter>FlamingoMedia\Host</Filter>
+    </ClInclude>
+    <ClInclude Include="third-party\kcp\ikcp.h">
+      <Filter>third-party\kcp</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\P2PLog.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\P2PModule.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Host\P2PService.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\P2PCrypto.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\P2PPacket.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\P2PReplayWindow.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Ice\P2PAddressProber.h">
+      <Filter>Ice</Filter>
+    </ClInclude>
+    <ClInclude Include="Ice\P2PCandidate.h">
+      <Filter>Ice</Filter>
+    </ClInclude>
+    <ClInclude Include="Ice\P2PConnectivityChecker.h">
+      <Filter>Ice</Filter>
+    </ClInclude>
+    <ClInclude Include="Ice\P2PStunClient.h">
+      <Filter>Ice</Filter>
+    </ClInclude>
+    <ClInclude Include="Link\P2PLinkSession.h">
+      <Filter>Link</Filter>
+    </ClInclude>
+    <ClInclude Include="Link\P2PSignalCodec.h">
+      <Filter>Link</Filter>
+    </ClInclude>
+    <ClInclude Include="Io\P2PAdapters.h">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Io\P2PEngine.h">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Io\P2PRelayConn.h">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Io\P2PUdpPort.h">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Chan\P2PBbrCc.h">
+      <Filter>Chan</Filter>
+    </ClInclude>
+    <ClInclude Include="Chan\P2PChannelMux.h">
+      <Filter>Chan</Filter>
+    </ClInclude>
+    <ClInclude Include="Chan\P2PDatagramFrag.h">
+      <Filter>Chan</Filter>
+    </ClInclude>
+    <ClInclude Include="Chan\P2PReliableChannel.h">
+      <Filter>Chan</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoP2PVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoP2P.def" />
+  </ItemGroup>
+</Project>

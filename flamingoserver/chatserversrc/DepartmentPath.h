@@ -2,7 +2,7 @@
  *  企业部门物化路径算法，DepartmentPath.h
  *  balloonwj@qq.com   2026.05.21
  *
- *  部门树采用"邻接表 + 物化路径"存储（见 table.sql 的 t_department）。
+ *  部门树采用"邻接表 + 物化路径"存储（见 table_mysql.sql 的 t_department）。
  *  本文件提供物化路径的纯计算函数：拼接、层级推导、祖先判定、成环检测、子树改写。
  *  全部为纯函数，仅依赖 STL，不触碰数据库与网络，便于单元测试。
  */

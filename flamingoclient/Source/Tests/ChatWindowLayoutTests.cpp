@@ -30,7 +30,9 @@
 #include "../UI/BalloonChatWnd/ChatMockData.h"
 #include "../net/MessageProtocolClient.h"   // canRecallMessage（验证回填前后撤回条件的变化）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../UI/BalloonChatWnd/ChatIconButton.h"   // W21 / G6h：截图下拉按钮 ▾ 的控件类型
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // 读头部按钮的布局提示（W18 / G6c）
 #include "../UI/BalloonChatWnd/ChatInputRichEdit.h"
 #include "../UI/BalloonChatWnd/ChatScrollThumb.h"   // IS2：与消息区共用的细滚动条常量
 
@@ -154,6 +156,18 @@ TEST_CASE("W5 单聊窗含头部四个图标按钮", "[p1a][chatwnd]")
     }
 }
 
+TEST_CASE("W5b 单聊窗头部不再有清空聊天记录按钮（2026-10-03 移到消息记录窗）", "[p1a][chatwnd][clearconv]")
+{
+    //416 是原先扫帚按钮的 id，枚举已删除，这里写成字面量
+    const UINT kRetiredClearId = 416;
+    auto root = BuildChatWindowBody();
+    REQUIRE(root != nullptr);
+    CHECK(root->FindCtrlById(kRetiredClearId) == nullptr);
+    //「…」仍在头部，「消息记录」按钮也还在
+    CHECK(dynamic_cast<DuiButton*>(root->FindCtrlById(kIdHdrMore)) != nullptr);
+    CHECK(dynamic_cast<DuiButton*>(root->FindCtrlById(kIdHdrHistory)) != nullptr);
+}
+
 TEST_CASE("W6 单聊窗含输入工具栏六个图标按钮", "[p1a][chatwnd]")
 {
     auto root = BuildChatWindowBody();
@@ -190,10 +204,42 @@ TEST_CASE("C1 单聊窗 CtrlId 各枚举值互不重复", "[p1a][chatwnd][ids]")
     const std::vector<UINT> allIds =
     {
         kIdMessageArea, kIdInputEdit, kIdSendButton, kIdInputSplitter,
-        kIdHdrVoice, kIdHdrVideo, kIdHdrRemoteDesktop, kIdHdrMore,
+        kIdHdrVoice, kIdHdrVideo, kIdHdrRemoteDesktop, kIdHdrScreenShare, kIdHdrMore,
         kIdTbEmoji, kIdTbImage, kIdTbFile, kIdTbScreenshot, kIdTbVoice, kIdTbPlus,
+        kIdTbFont, kIdTbShake, kIdTbFolder, kIdHdrShare, kIdTbRecord, kIdTbScreenshotMenu,
     };
     CHECK_FALSE(HasDuplicateId(allIds));
+}
+
+TEST_CASE("W18 单聊窗的「文件共享」按钮在头部、紧挨在「共享屏幕」右边，输入框工具栏里不再有", "[chatwnd][fileshare-entry]")
+{
+    auto root = BuildChatWindowBody();
+    REQUIRE(root != nullptr);
+    DuiControl* screenShare = root->FindCtrlById(kIdHdrScreenShare);
+    DuiControl* share = root->FindCtrlById(kIdHdrShare);
+    DuiControl* folder = root->FindCtrlById(kIdTbFolder);
+    REQUIRE(dynamic_cast<DuiButton*>(share) != nullptr);
+    REQUIRE(screenShare != nullptr);
+    REQUIRE(folder != nullptr);
+    //与「共享屏幕」同在头部那一行，不在「发送文件夹」所在的输入框工具栏里
+    REQUIRE(share->GetParent() == screenShare->GetParent());
+    CHECK(share->GetParent() != folder->GetParent());
+    const auto& kids = share->GetParent()->Children();
+    size_t screenAt = kids.size();
+    size_t shareAt = kids.size();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        if (kids[i].get() == screenShare)
+            screenAt = i;
+        if (kids[i].get() == share)
+            shareAt = i;
+    }
+    CHECK(shareAt == screenAt + 1);
+    //与头部其它按钮同宽
+    balloonwjui::DuiLayout* row = dynamic_cast<balloonwjui::DuiLayout*>(share->GetParent());
+    REQUIRE(row != nullptr);
+    CHECK(row->GetHint(share).fixedMain == row->GetHint(screenShare).fixedMain);
+    CHECK(kIdHdrShare == 431);
 }
 
 // =====================================================================
@@ -1081,4 +1127,78 @@ TEST_CASE("IS5 没有任何变化时重复绘制输入框，不再向引擎查�
     ::DeleteObject(bmp);
     ::DeleteDC(dc);
     Gdiplus::GdiplusShutdown(gdipToken);
+}
+
+TEST_CASE("W19 单聊窗头部的「共享屏幕」按钮紧挨在「远程桌面」右边", "[chatwnd][sscard]")
+{
+    auto root = BuildChatWindowBody();
+    REQUIRE(root != nullptr);
+    DuiControl* rd = root->FindCtrlById(kIdHdrRemoteDesktop);
+    DuiControl* share = root->FindCtrlById(kIdHdrScreenShare);
+    REQUIRE(dynamic_cast<DuiButton*>(share) != nullptr);
+    REQUIRE(rd != nullptr);
+    REQUIRE(share->GetParent() == rd->GetParent());
+    const auto& kids = share->GetParent()->Children();
+    size_t rdAt = kids.size();
+    size_t shareAt = kids.size();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        if (kids[i].get() == rd)
+            rdAt = i;
+        if (kids[i].get() == share)
+            shareAt = i;
+    }
+    CHECK(shareAt == rdAt + 1);
+    CHECK(kIdHdrScreenShare == 417);
+}
+
+TEST_CASE("W20 单聊窗工具栏的「屏幕录制」按钮紧挨在截图与其下拉按钮 ▾ 右边", "[chatwnd][record]")
+{
+    // 2026-10-05 截图右边加了 ▾（docs/截图快捷键与隐藏当前窗口方案.md），录屏从「截图右边第 1 个」变为第 2 个
+    auto root = BuildChatWindowBody();
+    REQUIRE(root != nullptr);
+    DuiControl* cut = root->FindCtrlById(kIdTbScreenshot);
+    DuiControl* record = root->FindCtrlById(kIdTbRecord);
+    REQUIRE(dynamic_cast<DuiButton*>(record) != nullptr);
+    REQUIRE(cut != nullptr);
+    REQUIRE(record->GetParent() == cut->GetParent());
+    const auto& kids = record->GetParent()->Children();
+    size_t cutAt = kids.size();
+    size_t recordAt = kids.size();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        if (kids[i].get() == cut)
+            cutAt = i;
+        if (kids[i].get() == record)
+            recordAt = i;
+    }
+    CHECK(recordAt == cutAt + 2);
+    CHECK(kIdTbRecord == 429);
+}
+
+TEST_CASE("W21 单聊窗工具栏的截图下拉按钮 ▾ 紧挨在「截图」右边、宽 14 像素", "[chatwnd][screenshot]")
+{
+    auto root = BuildChatWindowBody(false);
+    REQUIRE(root != nullptr);
+    RECT rc = { 0, 0, 800, 600 };
+    root->SetRect(rc);
+    DuiControl* cut = root->FindCtrlById(kIdTbScreenshot);
+    DuiControl* caret = root->FindCtrlById(kIdTbScreenshotMenu);
+    REQUIRE(cut != nullptr);
+    REQUIRE(dynamic_cast<ChatIconButton*>(caret) != nullptr);
+    REQUIRE(caret->GetParent() == cut->GetParent());
+    const auto& kids = caret->GetParent()->Children();
+    size_t cutAt = kids.size();
+    size_t caretAt = kids.size();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        if (kids[i].get() == cut)
+            cutAt = i;
+        if (kids[i].get() == caret)
+            caretAt = i;
+    }
+    CHECK(caretAt == cutAt + 1);
+    const int kCaretWidthPx = 14;   // 布局 XML 里 ▾ 的 fixedWidth
+    CHECK(caret->GetRect().right - caret->GetRect().left == kCaretWidthPx);
+    CHECK(kIdTbScreenshotMenu == 442);
 }

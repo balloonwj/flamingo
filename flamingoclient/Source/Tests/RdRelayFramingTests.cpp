@@ -15,10 +15,10 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../Feature/RemoteDesktop/RdRelayFraming.h"
+#include "../../FlamingoMedia/RemoteDesktop/RdRelayFraming.h"
 #include "../net/FrameCodec.h"
 #include "../net/Protocol.h"
-#include "../net/RemoteDesktopProtocolClient.h"
+#include "../../FlamingoMedia/RemoteDesktop/RemoteDesktopProtocolClient.h"
 #include "../third-party/jsoncpp-1.9.0/json.h"
 
 #include <string>

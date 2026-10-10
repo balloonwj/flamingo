@@ -12,18 +12,20 @@
 #include "../../net/UserCachePath.h"   // UserCacheDir / SanitizeAccountForPath（目录口径只此一处）
 
 #include <stdio.h>                  // swprintf_s（占用量文本的格式化）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonsettings {
 
 namespace {
 
 //三个类别的显示名。与对话框里的行标题一一对应，写在一处免得两边走样。
-const wchar_t* const kTitleChatFile  = L"聊天文件";
-const wchar_t* const kTitleChatImage = L"聊天图片";
-const wchar_t* const kTitleAvatar    = L"头像缓存";
+const wchar_t* const kTitleChatFile  = TR_NOOP(L"聊天文件");
+const wchar_t* const kTitleChatImage = TR_NOOP(L"聊天图片");
+const wchar_t* const kTitleAvatar    = TR_NOOP(L"头像缓存");
 
 //各类别对应的子目录名。头像有两个目录，对用户是一件事，合成一项。
 const wchar_t* const kDirChatFile   = L"ChatFile";
+const wchar_t* const kDirChatVoice  = L"ChatVoice";   //语音缓存，并入「聊天文件」一类（2026-10-04 用户确认）
 const wchar_t* const kDirChatImage  = L"ChatImage";
 const wchar_t* const kDirAvatar     = L"Avatar";
 const wchar_t* const kDirUserThumb  = L"UserThumb";
@@ -90,15 +92,15 @@ std::vector<CacheCleanEntry> BuildCacheCleanPlan(const std::wstring& dataRoot,
         return plan;
     }
 
-    const wchar_t* const chatFileDirs[]  = { kDirChatFile };
+    const wchar_t* const chatFileDirs[]  = { kDirChatFile, kDirChatVoice };
     const wchar_t* const chatImageDirs[] = { kDirChatImage };
     const wchar_t* const avatarDirs[]    = { kDirAvatar, kDirUserThumb };
 
-    AppendEntry(plan, kCacheChatFile,  kTitleChatFile,  dataRoot, account,
+    AppendEntry(plan, kCacheChatFile,  TR(kTitleChatFile),  dataRoot, account,
                 chatFileDirs,  sizeof(chatFileDirs) / sizeof(chatFileDirs[0]));
-    AppendEntry(plan, kCacheChatImage, kTitleChatImage, dataRoot, account,
+    AppendEntry(plan, kCacheChatImage, TR(kTitleChatImage), dataRoot, account,
                 chatImageDirs, sizeof(chatImageDirs) / sizeof(chatImageDirs[0]));
-    AppendEntry(plan, kCacheAvatar,    kTitleAvatar,    dataRoot, account,
+    AppendEntry(plan, kCacheAvatar,    TR(kTitleAvatar),    dataRoot, account,
                 avatarDirs,    sizeof(avatarDirs) / sizeof(avatarDirs[0]));
 
     return plan;
@@ -151,7 +153,7 @@ std::wstring FormatByteSize(unsigned long long bytes)
     {
         //不足 1 KB 时给具体字节数："0 字节"要能与"很小但不为空"区分开 ——
         //显示成 "0.0 KB" 的话用户分不清这一项到底有没有东西。
-        swprintf_s(buf, kBufChars, L"%llu 字节", bytes);
+        swprintf_s(buf, kBufChars, TR(L"%llu 字节"), bytes);
     }
     else if (bytes < kMB)
     {

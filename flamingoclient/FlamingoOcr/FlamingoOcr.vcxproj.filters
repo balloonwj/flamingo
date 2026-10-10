@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{83168e6c-b289-d732-cc78-427b51f93153}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="WinOcr">
+      <UniqueIdentifier>{f40334f1-dd9e-399a-16cf-e87d7ad3eddd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="OcrApiTable.cpp" />
+    <ClCompile Include="Core\OcrHostLog.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\OcrResultBuilder.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="WinOcr\OcrBitmapScaler.cpp">
+      <Filter>WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="WinOcr\OcrLanguagePolicy.cpp">
+      <Filter>WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="WinOcr\OcrLineAssembler.cpp">
+      <Filter>WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="WinOcr\OcrScalePolicy.cpp">
+      <Filter>WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="WinOcr\WinOcrEngine.cpp">
+      <Filter>WinOcr</Filter>
+    </ClCompile>
+    <ClCompile Include="WinOcr\WinRtRuntime.cpp">
+      <Filter>WinOcr</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="FlamingoOcrApi.h" />
+    <ClInclude Include="OcrApiTable.h" />
+    <ClInclude Include="OcrBackend.h" />
+    <ClInclude Include="Core\OcrHostLog.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\OcrResultBuilder.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="WinOcr\OcrBitmapScaler.h">
+      <Filter>WinOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="WinOcr\OcrLanguagePolicy.h">
+      <Filter>WinOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="WinOcr\OcrLineAssembler.h">
+      <Filter>WinOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="WinOcr\OcrScalePolicy.h">
+      <Filter>WinOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="WinOcr\WinOcrEngine.h">
+      <Filter>WinOcr</Filter>
+    </ClInclude>
+    <ClInclude Include="WinOcr\WinRtRuntime.h">
+      <Filter>WinOcr</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FlamingoOcrVersion.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoOcr.def" />
+  </ItemGroup>
+</Project>

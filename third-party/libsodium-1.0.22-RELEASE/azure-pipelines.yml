@@ -1,0 +1,144 @@
+trigger:
+  - stable
+  - next
+
+pr: none
+
+jobs:
+  - job: "windows"
+    pool:
+      vmImage: "windows-latest"
+    steps:
+      - powershell: |
+          cd builds\msvc\build
+          & .\buildbase.bat ..\vs2026\libsodium.sln 18
+        displayName: Compile it all
+      - powershell: |
+          mkdir bin\include\sodium
+          Copy-Item "src\libsodium\include\sodium\*.h" -Destination "bin\include\sodium" -Recurse
+          Copy-Item "src\libsodium\include\*.h" -Destination "bin\include\"
+        displayName: Copy header files
+      - task: PublishBuildArtifacts@1
+        condition: not(canceled())
+        inputs:
+          pathToPublish: bin
+          artifactName: libsodium
+
+  - job: "windows_2022"
+    pool:
+      vmImage: "windows-2022"
+    steps:
+      - powershell: |
+          cd builds\msvc\build
+          & .\buildbase.bat ..\vs2022\libsodium.sln 17
+        displayName: Compile it all
+      - powershell: |
+          mkdir bin\include\sodium
+          Copy-Item "src\libsodium\include\sodium\*.h" -Destination "bin\include\sodium" -Recurse
+          Copy-Item "src\libsodium\include\*.h" -Destination "bin\include\"
+        displayName: Copy header files
+      - task: PublishBuildArtifacts@1
+        condition: not(canceled())
+        inputs:
+          pathToPublish: bin
+          artifactName: libsodium
+
+  - job: "windows_2019"
+    pool:
+      vmImage: "windows-2022"
+    steps:
+      - powershell: |
+          choco install visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait" -y
+        displayName: Install VS2019 Build Tools
+      - powershell: |
+          cd builds\msvc\build
+          & .\buildbase.bat ..\vs2019\libsodium.sln 16
+        displayName: Compile it all
+      - powershell: |
+          mkdir bin\include\sodium
+          Copy-Item "src\libsodium\include\sodium\*.h" -Destination "bin\include\sodium" -Recurse
+          Copy-Item "src\libsodium\include\*.h" -Destination "bin\include\"
+        displayName: Copy header files
+      - task: PublishBuildArtifacts@1
+        condition: not(canceled())
+        inputs:
+          pathToPublish: bin
+          artifactName: libsodium
+
+  - job: mingw64
+    pool:
+      vmImage: "windows-2022"
+    steps:
+      - powershell: |
+          (New-Object Net.WebClient).DownloadFile("https://github.com/msys2/msys2-installer/releases/download/2026-03-22/msys2-base-x86_64-20260322.sfx.exe", "sfx.exe")
+          .\sfx.exe -y -o\
+          del sfx.exe
+        displayName: Install MSYS2
+      - script: |
+          set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+          %CD:~0,2%\msys64\usr\bin\bash -lc
+          %CD:~0,2%\msys64\usr\bin\bash -lc "pacman --noconfirm -Sydd filesystem"
+          %CD:~0,2%\msys64\usr\bin\bash -lc 'pacman --noconfirm -Syuu'
+          %CD:~0,2%\msys64\usr\bin\bash -lc 'pacman --noconfirm -Syuu'
+        displayName: Update MSYS2
+      - script: |
+          set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+          %CD:~0,2%\msys64\usr\bin\pacman --noconfirm --needed -S base-devel mingw-w64-x86_64-toolchain
+          %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Scc
+          %CD:~0,2%\msys64\usr\bin\sed -i "s|#CacheDir.*|CacheDir=/c/Users/%USERNAME%/AppData/Local/Temp|g" /etc/pacman.conf
+        displayName: Install Toolchain
+      - script: |
+          set PATH=C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;%CD:~0,2%\msys64\usr\bin;%CD:~0,2%\msys64\bin
+          set MSYS2_ROOT=%CD:~0,2%\msys64
+          set MSYSTEM=MINGW64
+          set CHERE_INVOKING=yes
+          %MSYS2_ROOT%\cmd\msystem MINGW64
+          %CD:~0,2%\msys64\usr\bin\bash -lc dist-build/msys2-win64.sh
+        env:
+          CHERE_INVOKING: yes
+          MSYS2_ARCH: x86_64
+        displayName: Compile libsodium
+      - task: PublishBuildArtifacts@1
+        condition: not(canceled())
+        inputs:
+          pathToPublish: libsodium-win64
+          artifactName: libsodium-win64
+
+  - job: mingw32
+    pool:
+      vmImage: "windows-2022"
+    steps:
+      - powershell: |
+          (New-Object Net.WebClient).DownloadFile("https://github.com/msys2/msys2-installer/releases/download/2026-03-22/msys2-base-x86_64-20260322.sfx.exe", "sfx.exe")
+          .\sfx.exe -y -o\
+          del sfx.exe
+        displayName: Install MSYS2
+      - script: |
+          set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+          %CD:~0,2%\msys64\usr\bin\bash -lc
+          %CD:~0,2%\msys64\usr\bin\bash -lc "pacman --noconfirm -Sydd filesystem"
+          %CD:~0,2%\msys64\usr\bin\bash -lc 'pacman --noconfirm -Syuu'
+          %CD:~0,2%\msys64\usr\bin\bash -lc 'pacman --noconfirm -Syuu'
+        displayName: Update MSYS2
+      - script: |
+          set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+          %CD:~0,2%\msys64\usr\bin\pacman --noconfirm --needed -S base-devel mingw-w64-i686-toolchain
+          %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Scc
+          %CD:~0,2%\msys64\usr\bin\sed -i "s|#CacheDir.*|CacheDir=/c/Users/%USERNAME%/AppData/Local/Temp|g" /etc/pacman.conf
+        displayName: Install Toolchain
+      - script: |
+          set PATH=C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;%CD:~0,2%\msys64\usr\bin;%CD:~0,2%\msys64\bin
+          set MSYS2_ROOT=%CD:~0,2%\msys64
+          set MSYSTEM=MINGW32
+          set CHERE_INVOKING=yes
+          %MSYS2_ROOT%\cmd\msystem MINGW32
+          %CD:~0,2%\msys64\usr\bin\bash -lc dist-build/msys2-win32.sh
+        env:
+          CHERE_INVOKING: yes
+          MSYS2_ARCH: x86_64
+        displayName: Compile libsodium
+      - task: PublishBuildArtifacts@1
+        condition: not(canceled())
+        inputs:
+          pathToPublish: libsodium-win32
+          artifactName: libsodium-win32

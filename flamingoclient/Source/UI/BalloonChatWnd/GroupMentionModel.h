@@ -42,16 +42,21 @@ const int kGroupRoleMemberVal = 0;   // 普通成员
 const int kGroupRoleAdminVal  = 1;   // 管理员
 const int kGroupRoleOwnerVal  = 2;   // 群主
 
+// 群设置「谁可以 @ 全体」（net::GroupInfoResult::m_atallscope，与服务端 group_at_all_scope 一致）
+const int kGroupAtAllOwnerAdminVal = 0;   // 仅群主和管理员（默认）
+const int kGroupAtAllEveryoneVal   = 1;   // 群内所有人
+
 /**
- *  判定某个角色能否使用「@所有人」。
+ *  判定本人能否使用「@所有人」（@ 浮层里有没有「所有人」）。
  *
- *  只有群主与管理员可以 —— @所有人 会给全群每个人都推一次提醒，放开给普通成员
- *  等于把打扰全群的权力交给任何人。与服务端的校验口径须一致（服务端校验待第二期
- *  接入，本函数是客户端侧的先行拦截，<u>不能</u>作为唯一防线）。
- *    role：群成员角色，取值见上面三个常量；越界值一律按普通成员处理。
+ *  与服务端 GroupProtocol::canMentionAll 同一条规则（2026-10-08 起按群设置判定）：
+ *  群主与管理员恒可；其他人只在群设置「谁可以 @ 全体」不是「仅群主和管理员」时可以。服务端发消息时
+ *  同样校验（content.at.all 也认），本函数只决定浮层里给不给这一项。
+ *    role：      本人在群里的角色，取值见上面三个常量；未知（如群资料还没到时的 -1）与越界值按普通成员处理。
+ *    atAllScope：群设置「谁可以 @ 全体」，取值见 kGroupAtAllOwnerAdminVal / kGroupAtAllEveryoneVal。
  *  @return 允许返回 true。
  */
-bool CanMentionAll(int role);
+bool CanMentionAll(int role, int atAllScope);
 
 /**
  *  协议侧的一个 @ 片段，对应 content.at.users 数组的一项。

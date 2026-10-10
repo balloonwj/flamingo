@@ -11,6 +11,8 @@
  *    V1-V5   登录输入校验
  *    A1-A13  Banner 头像底色 / 显示名 / 下拉框账号取法
  *    PR1-PR7 注册成功后回填登录表单
+ *    LGC1    账号与手机号都能登录：占位文字与「未注册」提示（2026-10-06，docs/登录账号与手机号登录方案.md）
+ *    FP1     「忘记密码？」：平时就地显示在状态区、登录中改为弹提示框，状态区一行放得下（2026-10-07）
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 + 断言，无需消息循环 / HWND。
@@ -27,12 +29,16 @@
 
 #include "../UI/BalloonAuth/BalloonLoginLayout.h"
 #include "../UI/BalloonAuth/AuthButtons.h"
+#include "../UI/BalloonAuth/LoginProgressState.h"   // LGC1：LoginErrorText 与登录结果码
+#include "../Common/I18n/I18n.h"                     // LGC1：模拟英文界面
 #include "../../../third-party/balloonui/balloonui/DuiNinePatch.h"
 #include "../UI/BalloonMain/AvatarPalette.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // FP1：状态文字
+#include "../Common/I18n/I18nLayout.h"                                        // FP1：量文字宽度
 
 #include <gdiplus.h>
 #include <set>
@@ -132,6 +138,67 @@ TEST_CASE("L8 账号下拉框的内嵌输入框带占位文字", "[p1a][login]")
 
     REQUIRE(accountEdit != NULL);
     CHECK_FALSE(accountEdit->GetPlaceholder().IsEmpty());
+}
+
+namespace {
+
+//LGC1 用的宿主查找函数：模拟英文语言包，只认识登录框的占位文字与「未注册」提示，其余返回 NULL（显示原文）
+const wchar_t* FakeLgcHost(const wchar_t* context, const wchar_t* source)
+{
+    if (context != NULL)
+    {
+        return NULL;
+    }
+    if (wcscmp(source, L"账号 / 手机号") == 0)
+    {
+        return L"Account or phone";
+    }
+    if (wcscmp(source, L"该账号或手机号未注册。") == 0)
+    {
+        return L"This account or phone number is not registered.";
+    }
+    return NULL;
+}
+
+//取登录页账号下拉框内嵌输入框的占位文字（做法同 L8）；找不到时返回空串
+CString AccountPlaceholderOf(DuiControl* root)
+{
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdAccountCombo));
+    if (combo == NULL)
+    {
+        return CString();
+    }
+    const std::vector<std::unique_ptr<DuiControl> >& children = combo->Children();
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        DuiEdit* candidate = dynamic_cast<DuiEdit*>(children[i].get());
+        if (candidate != NULL)
+        {
+            return candidate->GetPlaceholder();
+        }
+    }
+    return CString();
+}
+
+} // anonymous namespace
+
+TEST_CASE("LGC1 账号与手机号都能登录：登录框占位文字与「未注册」提示同时提到手机号，英文界面为译文", "[p1a][login]")
+{
+    //2026-10-06（docs/登录账号与手机号登录方案.md）：服务端先按账号、再按手机号找人，登录框只有一个输入框
+    i18n::ResetForTest();
+    std::unique_ptr<DuiControl> root = BuildLoginBody();
+    REQUIRE(root != nullptr);
+    CHECK(AccountPlaceholderOf(root.get()) == CString(L"账号 / 手机号"));
+    CHECK(std::wstring(auth::LoginErrorText(LOGIN_UNREGISTERED)) == L"该账号或手机号未注册。");
+
+    //英文界面：两处都是译文
+    i18n::InitFromHost(&FakeLgcHost, L"en-US", L"Segoe UI");
+    REQUIRE_FALSE(i18n::IsSourceLanguage());
+    std::unique_ptr<DuiControl> english = BuildLoginBody();
+    REQUIRE(english != nullptr);
+    CHECK(AccountPlaceholderOf(english.get()) == CString(L"Account or phone"));
+    CHECK(std::wstring(auth::LoginErrorText(LOGIN_UNREGISTERED)) == L"This account or phone number is not registered.");
+    i18n::ResetForTest();
 }
 
 TEST_CASE("L4 登录页含记住密码 / 自动登录复选框", "[p1a][login]")
@@ -1088,4 +1155,37 @@ TEST_CASE("LSA15 窗体背景图按窗口尺寸画出来后，灰边清晰、内
     // 刻意不调 GdiplusShutdown，理由见 ChatBubbleBackfillRepaintTests.cpp 同类用例的注释：
     // 产品代码按「初始化一次、从不关闭」使用 GDI+，测试中途关掉会让后续用例访问已释放的 GDI+。
     (void)token;
+}
+
+TEST_CASE("FP1 「忘记密码？」平时就地显示在状态区（不弹窗），登录中改为弹提示框", "[login][forgotpwd]")
+{
+    // 2026-10-07：企业版没有自助找回密码，点「忘记密码？」只提示联系企业管理员（管理员在 FlamingoAdmin 里重置）。
+    CHECK(ChooseForgotPasswordHintPlace(false) == kForgotPwdHintInStatusArea);
+    CHECK(ChooseForgotPasswordHintPlace(true) == kForgotPwdHintMessageBox);
+
+    // 状态区显示提示：只有一行文字、没有进度条，按钮与链接的位置不动
+    std::unique_ptr<DuiControl> root = BuildLoginBody();
+    REQUIRE(root != nullptr);
+    ApplyLoginStatusView(root.get(), kLoginStatusIdle, NULL);
+    RECT rcContent;
+    rcContent.left   = 0;
+    rcContent.top    = kTestTitleBarHeight;
+    rcContent.right  = kTestClientWidth;
+    rcContent.bottom = kTestClientHeight;
+    root->ForceLayout(rcContent);
+    const RECT linkIdle = RectOf(root.get(), kIdLinkRegister);
+
+    const CString hint = _T("请联系企业管理员重置密码。");
+    ApplyLoginStatusView(root.get(), kLoginStatusMessage, hint);
+    DuiLabel* label = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdStatusText));
+    REQUIRE(label != nullptr);
+    CHECK(label->GetText() == hint);
+    DuiControl* bar = root->FindCtrlById(kIdStatusProgress);
+    REQUIRE(bar != nullptr);
+    CHECK_FALSE(bar->IsVisible());
+    const RECT linkHint = RectOf(root.get(), kIdLinkRegister);
+    CHECK(::EqualRect(&linkIdle, &linkHint) != FALSE);
+    // 一行放得下：按界面字体（状态文字用 balloonui 的默认字体）量出的文字宽度不超过状态文字控件的宽度
+    const RECT text = RectOf(root.get(), kIdStatusText);
+    CHECK(i18n::MeasureUiTextWidth(hint, i18n::DefaultFontPixelHeight(), false) <= text.right - text.left);
 }

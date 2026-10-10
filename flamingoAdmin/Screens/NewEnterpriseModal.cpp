@@ -11,6 +11,7 @@
 #include "Widgets/IconRenderer.h"
 #include "Widgets/Widgets.h"
 #include "Widgets/CommonWidgets.h"
+#include "Util/AdminApi.h"   // adminapi::kIndustryOptions
 
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Basic/DuiLabel.h"
@@ -185,12 +186,11 @@ NewEnterpriseModal::NewEnterpriseModal()
 
         auto cbIndustry = std::make_unique<DuiComboBox>();
         cbIndustry->SetCtrlId(kIdModalIndustry);
-        cbIndustry->AddString(_T("软件与信息技术"));
-        cbIndustry->AddString(_T("金融服务"));
-        cbIndustry->AddString(_T("运输与仓储"));
-        cbIndustry->AddString(_T("生物医药"));
-        cbIndustry->AddString(_T("广告与设计"));
-        cbIndustry->AddString(_T("制造业"));
+        // 行业选项与企业列表的「更多筛选」共用一份（adminapi::kIndustryOptions）。
+        for (int i = 0; i < adminapi::kIndustryOptionCount; ++i)
+        {
+            cbIndustry->AddString(adminapi::kIndustryOptions[i]);
+        }
         cbIndustry->SetCurSel(0, false);
         m_cbIndustry = cbIndustry.get();
         row->AddChild(MakeField(_T("所属行业"), std::move(cbIndustry), nullptr),
@@ -211,10 +211,13 @@ NewEnterpriseModal::NewEnterpriseModal()
 
         auto cbPlan = std::make_unique<DuiComboBox>();
         cbPlan->SetCtrlId(kIdModalPlan);
-        cbPlan->AddString(_T("专业版"));
-        cbPlan->AddString(_T("企业版"));
-        cbPlan->AddString(_T("旗舰版"));
-        cbPlan->SetCurSel(0, false);
+        // 套餐选项与企业设置、「更多筛选」共用（下标即套餐编号），默认选「专业版」。
+        const int kDefaultPlan = 1;
+        for (int i = 0; i < adminapi::kPlanOptionCount; ++i)
+        {
+            cbPlan->AddString(adminapi::kPlanOptions[i]);
+        }
+        cbPlan->SetCurSel(kDefaultPlan, false);
         m_cbPlan = cbPlan.get();
         row->AddChild(MakeField(_T("套餐"), std::move(cbPlan), nullptr),
                       Hint().Weight(1));
@@ -235,7 +238,7 @@ NewEnterpriseModal::NewEnterpriseModal()
         auto editContact = MakeEdit(kIdModalContact, _T("admin@company.com"));
         m_editContact = editContact.get();
         row->AddChild(MakeField(_T("管理员邮箱 *"), std::move(editContact),
-                                _T("将向此邮箱发送初始密码与登录指引")),
+                                _T("创建后会显示初始密码，请转告该管理员")),
                       Hint().Weight(1));
 
         form->AddChild(std::move(row), Hint().Fixed(kFieldHintedH));

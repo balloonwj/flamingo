@@ -30,15 +30,6 @@
 namespace balloonmain {
 
 /**
- *  会话列表里文件夹邀请预览的前缀（UTF-8，含末尾那个分隔空格）。
- *
- *  取 "[文件夹] " 这一体例是为了与会话列表既有的类型占位对齐 —— 文件消息在那里显示
- *  的是 "[文件]"、图片是 "[图片]"（见 net::MessageProtocolClient::digestForMsgType）。
- *  与那些占位不同的是，文件夹邀请后面还要跟上文件夹名字，故这里带一个分隔空格。
- */
-extern const char* const kFolderInviteDigestPrefix;
-
-/**
  *  组装一条文件夹传输在会话列表里的预览文字。
  *
  *  <u>邀请阶段与事后的传输记录条共用本函数</u>，两处措辞因而逐字相同：
@@ -72,14 +63,16 @@ bool ShouldCountFolderInviteAsUnread(bool fromSelf, bool userWatchingChatWindow)
 /**
  *  这条文件夹邀请要不要闪托盘头像并播新消息提示音。
  *
- *  三项判据同样照搬普通单聊消息：聊天窗已经打开时邀请气泡已渲染进去，无须再闪；自己
- *  发起的不闪（否则闪的是自己的头像）；会话被设为免打扰时不闪不响 —— 未读数照常累加，
- *  这正是免打扰的含义。文件夹邀请没有"窗口抖动"那种突破规则的例外情形。
- *    chatWindowOpen     与该对端的聊天窗此刻是否已经打开（窗口对象存在且句柄有效）。
- *    fromSelf           邀请的发起方是否就是本端登录的这个账号。
- *    conversationMuted  该会话是否被设为消息免打扰。
+ *  判据与普通单聊消息完全相同，直接取 NotifyModePolicy 的 DecideArrival 的 m_flashTray：
+ *  聊天窗已经打开时邀请气泡已渲染进去，无须再闪；自己发起的不闪（否则闪的是自己的头像）；
+ *  会话设为接收不提醒、收进消息盒子、屏蔽时不闪不响；特别关注的会话不闪托盘，改为弹出聊天窗
+ *  （由调用方按 DecideArrival 的 m_popupWindow 处理）。
+ *    chatWindowOpen  与该对端的聊天窗此刻是否已经打开（窗口对象存在且句柄有效）。
+ *    fromSelf        邀请的发起方是否就是本端登录的这个账号。
+ *    notifyMode      该会话的消息提醒模式，取值见 Protocol.h 的 enum conversation_notify_mode
+ *                    （2026-10-03 之前是「是否免打扰」的布尔值）。
  *  @return 应当闪托盘并播提示音返回 true
  */
-bool ShouldNotifyFolderInvite(bool chatWindowOpen, bool fromSelf, bool conversationMuted);
+bool ShouldNotifyFolderInvite(bool chatWindowOpen, bool fromSelf, int notifyMode);
 
 } // namespace balloonmain

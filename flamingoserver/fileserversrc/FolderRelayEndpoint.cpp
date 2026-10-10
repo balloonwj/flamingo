@@ -7,6 +7,7 @@
 #include <time.h>
 #include "../base/AsyncLog.h"
 #include "../utils/RelayToken.h"
+#include "../utils/RelayRoleCheck.h"   //isAcceptedFileRelayRole：会话 id 前缀与角色是否相符
 #include "../jsoncpp1.9.0/json.h"
 #include "../chatserversrc/Protocol.h"   // enum error_code
 #include "FileSession.h"
@@ -107,12 +108,12 @@ int FolderRelayEndpoint::handleHello(const std::string& body, const SessionPtr& 
         return error_code_session_expired;
     }
 
-    //角色必须是文件夹传输的那两个：远程桌面与音视频的令牌（角色 1~4）虽然签名同样合法，
-    //但拿到这里来用属于两套中转互相混用，一律拒绝
-    if (payload.role != RelayToken::role_folder_sender
-        && payload.role != RelayToken::role_folder_receiver)
+    //角色必须与会话种类相符：文件共享的会话（share- 前缀）只认角色 9 / 10，其余只认文件夹传输的
+    //5 / 6。远程桌面与音视频的令牌（角色 1~4）虽然签名同样合法，但拿到这里来用属于两套中转互相混用，
+    //一律拒绝；按前缀核对还防止一枚文件夹传输的令牌与一枚文件共享的令牌被配成一对
+    if (!isAcceptedFileRelayRole(payload.sessionid, payload.role))
     {
-        LOGE("folder relay hello: role %d is not a folder transfer role, session: %s, client: %s",
+        LOGE("folder relay hello: role %d does not match session kind, session: %s, client: %s",
              payload.role, payload.sessionid.c_str(), peerAddr.c_str());
         return error_code_permission_denied;
     }

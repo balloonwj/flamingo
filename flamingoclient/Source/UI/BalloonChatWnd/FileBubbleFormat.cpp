@@ -6,6 +6,7 @@
 
 #include <cstdio>     // swprintf_s
 #include <ctime>      // time_t / localtime_s / mktime（相对时间格式化）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchatwnd {
 
@@ -91,7 +92,7 @@ std::wstring FormatRelativeDayTime(long long uploadMs, long long nowMs)
     //同一天：显示"今天 HH:MM"。
     if (tmUp.tm_year == tmNow.tm_year && tmUp.tm_yday == tmNow.tm_yday)
     {
-        swprintf_s(buf, L"今天 %02d:%02d", tmUp.tm_hour, tmUp.tm_min);
+        swprintf_s(buf, TR(L"今天 %02d:%02d"), tmUp.tm_hour, tmUp.tm_min);
         return std::wstring(buf);
     }
 
@@ -119,14 +120,14 @@ std::wstring FormatRelativeDayTime(long long uploadMs, long long nowMs)
 
     //前一天：显示"昨天"。
     if (dayDiff == 1)
-        return std::wstring(L"昨天");
+        return std::wstring(TR(L"昨天"));
 
     //更早但 6 天内：显示中文星期几。
     if (dayDiff >= 2 && dayDiff <= 6)
     {
         static const wchar_t* const kWeek[7] =
         {
-            L"周日", L"周一", L"周二", L"周三", L"周四", L"周五", L"周六"
+            TR(L"周日"), TR(L"周一"), TR(L"周二"), TR(L"周三"), TR(L"周四"), TR(L"周五"), TR(L"周六")
         };
         int wday = tmUp.tm_wday;
         if (wday < 0 || wday > 6)

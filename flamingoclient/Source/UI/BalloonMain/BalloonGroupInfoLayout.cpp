@@ -39,6 +39,8 @@ extern CAppModule _Module;
 #include "BalloonGroupInfoLayout.h"
 #include "MainPanelUserData.h"   // GetUserAvatarColor
 #include "MainPanelGroupMenu.h"  // FormatGroupNumber（点群号复制的文字，与右键菜单「复制群号」一致）
+#include "ClickableLabel.h"      // CClickableLabel：群名片行可点击的纯文本标签
+#include "NotifyModeMenu.h"      // 「消息提醒」下拉框的选项（与右键二级菜单同一份顺序和文字）
 #include "../../net/GroupProtocolClient.h"   // net::GroupMemberItem(ResolveXxx 用)
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
@@ -46,7 +48,10 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../Common/I18n/I18nLayout.h"   // GrowFixedWidthToText：译文较长时加宽行左标签
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -73,6 +78,12 @@ const int kFooterBtnHeight= 34;   // 底部按钮高
 const int kFontGroupName  = 13;   // 群名大字
 const int kFontMeta       = 9;    // 群号 / 人数 / 群主 / "群公告"小标题
 const int kFontBody       = 10;   // 公告正文 / 行标签 / 值 / 按钮
+
+// 「我在本群的昵称」行左标签的设计宽度（像素）
+const int kCardLabelWidth = 130;
+
+// 该标签按译文加宽时，文字宽度之外留出的余量（像素），避免文字贴着右侧的值
+const int kCardLabelPadW = 4;
 
 // CRoundedFillBox —— 圆角填充背景容器(子类化 DuiVBox,覆写最少虚函数)。
 // balloonui 容器无背景填充能力,DuiGroupBox 只描边不填充 —— 这里"差一小步":
@@ -117,35 +128,6 @@ public:
 private:
     COLORREF m_fillColor;   // 圆角底填充色
     int      m_radius;      // 圆角半径(像素)
-};
-
-// CClickableLabel —— 可点击的纯文本标签(子类化 DuiLabel,覆写最少虚函数)。
-// 坑:DuiLabel 覆写了 OnLButtonUp,在非 ModeLink(即 ModeText)时直接 return false、
-// <u>不发 DUIN_CLICK</u>(见 DuiLabel.cpp:213),而宿主点击不冒泡(DuiHost.cpp:603),
-// 故 ModeText 标签点了"没反应"。本子类把 OnLButtonUp 直接转回祖父 DuiControl 的实现
-// (它命中即发 DUIN_CLICK),让标签既保持普通文本外观(不像 ModeLink 那样带下划线 / 蓝色),
-// 又能被点击触发父对话框的 DUIN_CLICK —— 群名片行"整行点击就地编辑"靠它。不动 balloonui 库。
-class CClickableLabel : public balloonwjui::DuiLabel
-{
-public:
-    bool OnLButtonUp(POINT pt, UINT mkFlags) override
-    {
-        // 跳过 DuiLabel 的 ModeText 抑制,用祖父 DuiControl 的实现:命中且启用即
-        // NotifyParent(DUIN_CLICK)。
-        return balloonwjui::DuiControl::OnLButtonUp(pt, mkFlags);
-    }
-
-    bool OnSetCursor(POINT pt) override
-    {
-        // 悬停时给手型光标,提示"可点"。
-        RECT rc = GetRect();
-        if (::PtInRect(&rc, pt))
-        {
-            ::SetCursor(::LoadCursor(NULL, IDC_HAND));
-            return true;
-        }
-        return false;
-    }
 };
 
 // 造一个纯文本 DuiLabel。ctrlId 为 0 时不设 id(装饰性固定文字)。
@@ -224,6 +206,37 @@ std::unique_ptr<balloonwjui::DuiHBox> MakeSwitchRow(LPCTSTR title, UINT switchId
     return row;
 }
 
+// "消息提醒"下拉框的尺寸(逻辑像素):宽度放得下最长的选项"收进消息盒子且不提醒"连同右侧的
+// 下拉箭头(2026-10-03 联调时 176 在 125% 缩放下被截成省略号),高度与本窗口群名片编辑框目测一致
+const int kNotifyComboWidth  = 208;
+const int kNotifyComboHeight = 28;
+
+// 构造一行"左标签 + 右侧只读下拉框"。选项是群聊可用的五种提醒模式,顺序与文字取自
+// NotifyModeMenu,与右键菜单的"消息提醒设置"二级菜单一致。初始不选中任何项,由
+// ApplyGroupInfoDataToView 按数据置位。
+std::unique_ptr<balloonwjui::DuiHBox> MakeNotifyComboRow(LPCTSTR title, UINT comboId)
+{
+    std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
+    row->SetGap(12);
+
+    row->AddChild(MakeLabel(title, 0, kFontBody, false, kClrText,
+                            DT_LEFT | DT_VCENTER | DT_SINGLELINE),
+                  balloonwjui::DuiLayout::Hint().Weight(1));
+
+    std::unique_ptr<balloonwjui::DuiComboBox> combo(new balloonwjui::DuiComboBox());
+    combo->SetCtrlId(comboId);
+    combo->SetEditable(false);
+    const std::vector<int> modes = GetNotifyModeChoices(/*isGroup*/true);
+    for (size_t i = 0; i < modes.size(); ++i)
+    {
+        combo->AddString(GetNotifyModeLabel(modes[i]));
+    }
+    row->AddChild(std::move(combo),
+                  balloonwjui::DuiLayout::Hint().Fixed(kNotifyComboWidth, kNotifyComboHeight)
+                      .AlignC(balloonwjui::DuiLayout::AlignCenter));
+    return row;
+}
+
 // dynamic_cast 找指定 ctrlId 控件;模板省去重复 cast。
 template <typename T>
 T* FindCtrl(balloonwjui::DuiControl* root, UINT ctrlId)
@@ -279,9 +292,26 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
     AddSeparator(root.get());
     AddSpacer(root.get(), 10);
 
+    // ---- 群简介:小标题 + 单行正文(放不下以省略号结尾;空时显占位)。群管理「基本信息」页说明群简介「显示在
+    //      群资料页」,此前这里却没有这一段(2026-10-10 补上)。整段高度 kGroupInfoIntroBlockH,窗口随之加高 ----
+    {
+        const int kIntroTitleH = 18;    // 小标题行高
+        const int kIntroTitleGap = 4;   // 小标题与正文的间距
+        const int kIntroTextH = 20;     // 正文行高
+        const int kIntroBottomGap = 10; // 正文与下方群公告小标题的间距
+        root->AddChild(MakeLabel(TR(L"群简介"), 0, kFontMeta, false, kClrMuted,
+                                 DT_LEFT | DT_VCENTER | DT_SINGLELINE),
+                       balloonwjui::DuiLayout::Hint().Fixed(kIntroTitleH));
+        AddSpacer(root.get(), kIntroTitleGap);
+        root->AddChild(MakeLabel(_T(""), kIdGroupIntro, kFontBody, false, kClrText,
+                                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX),
+                       balloonwjui::DuiLayout::Hint().Fixed(kIntroTextH));
+        AddSpacer(root.get(), kIntroBottomGap);
+    }
+
     // ---- 群公告:小标题 + 浅橙填充圆角框(内含 wordwrap 正文) ----
     {
-        root->AddChild(MakeLabel(_T("群公告"), 0, kFontMeta, false, kClrMuted,
+        root->AddChild(MakeLabel(TR(L"群公告"), 0, kFontMeta, false, kClrMuted,
                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE),
                        balloonwjui::DuiLayout::Hint().Fixed(18));
         AddSpacer(root.get(), 6);
@@ -311,9 +341,12 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
         // 左标签可点(整行点击进编辑的一半命中区)。用 CClickableLabel,否则 ModeText
         // 标签不发 DUIN_CLICK、点了没反应。
-        row->AddChild(MakeClickableLabel(_T("我在本群的昵称"), kIdGroupCardLabel, kFontBody,
+        row->AddChild(MakeClickableLabel(TR(L"我在本群的昵称"), kIdGroupCardLabel, kFontBody,
                                          false, kClrText, DT_LEFT | DT_VCENTER | DT_SINGLELINE),
-                      balloonwjui::DuiLayout::Hint().Fixed(130));
+                      balloonwjui::DuiLayout::Hint().Fixed(kCardLabelWidth));
+        //译文较长时标签按文字宽度只增不减地加宽（多语言第 4 期），简体中文仍是设计宽度
+        i18n::GrowFixedWidthToText(row->FindCtrlById(kIdGroupCardLabel), TR(L"我在本群的昵称"),
+                                   i18n::PointToPixelHeight(kFontBody), false, kCardLabelPadW);
 
         // 值 view(右对齐,可点;占满右侧,覆盖整行另一半)。
         row->AddChild(MakeClickableLabel(_T(""), kIdGroupCardView, kFontBody, false,
@@ -333,13 +366,13 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
     AddSeparator(root.get());
 
-    // ---- 消息免打扰 ----
-    root->AddChild(MakeSwitchRow(_T("消息免打扰"), kIdGroupMuteSwitch, false),
+    // ---- 消息提醒(五种模式的下拉框;2026-10-03 起取代"消息免打扰"开关,行高不变) ----
+    root->AddChild(MakeNotifyComboRow(TR(L"消息提醒"), kIdGroupNotifyCombo),
                    balloonwjui::DuiLayout::Hint().Fixed(kRowHeight));
     AddSeparator(root.get());
 
     // ---- 置顶群聊 ----
-    root->AddChild(MakeSwitchRow(_T("置顶群聊"), kIdGroupPinSwitch, false),
+    root->AddChild(MakeSwitchRow(TR(L"置顶群聊"), kIdGroupPinSwitch, false),
                    balloonwjui::DuiLayout::Hint().Fixed(kRowHeight));
 
     AddSpacer(root.get(), 10);
@@ -354,7 +387,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
         std::unique_ptr<balloonwjui::DuiButton> btnHistory(new balloonwjui::DuiButton());
         btnHistory->SetCtrlId(kIdGroupBtnHistory);
-        btnHistory->SetText(_T("查看消息记录"));
+        btnHistory->SetText(TR(L"查看消息记录"));
         btnHistory->SetVariant(balloonwjui::DuiButton::Variant::Default);
         btnHistory->SetTextPointSize(kFontBody);
         footer->AddChild(std::move(btnHistory),
@@ -363,7 +396,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
         std::unique_ptr<balloonwjui::DuiButton> btnQuit(new balloonwjui::DuiButton());
         btnQuit->SetCtrlId(kIdGroupBtnQuit);
-        btnQuit->SetText(_T("退出群聊"));
+        btnQuit->SetText(TR(L"退出群聊"));
         btnQuit->SetVariant(balloonwjui::DuiButton::Variant::Default);
         btnQuit->SetTextPointSize(kFontBody);
         // 危险红字(浅红底位图由对话框 EnsureVisualResources 精修;此处先红字兜底)。
@@ -374,7 +407,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
         std::unique_ptr<balloonwjui::DuiButton> btnDismiss(new balloonwjui::DuiButton());
         btnDismiss->SetCtrlId(kIdGroupBtnDismiss);
-        btnDismiss->SetText(_T("解散群聊"));
+        btnDismiss->SetText(TR(L"解散群聊"));
         btnDismiss->SetVariant(balloonwjui::DuiButton::Variant::Default);
         btnDismiss->SetTextPointSize(kFontBody);
         // 与"退出群聊"同一套危险红样式(浅红底位图同样由对话框精修)。
@@ -419,7 +452,7 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
 
     // ---- "群号 N · M 人" ----
     CString meta;
-    meta.Format(_T("群号 %I64d · %d 人"), data.groupid, data.memberCount);
+    meta.Format(TR(L"群号 %I64d · %d 人"), data.groupid, data.memberCount);
     balloonwjui::DuiLabel* metaLbl = FindCtrl<balloonwjui::DuiLabel>(root, kIdGroupMeta);
     if (metaLbl != NULL)
     {
@@ -428,11 +461,32 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
 
     // ---- 群主行(显示名未知时只显"群主:") ----
     CString owner;
-    owner.Format(_T("群主：%s"), static_cast<LPCTSTR>(data.ownerName));
+    owner.Format(TR(L"群主：%s"), static_cast<LPCTSTR>(data.ownerName));
     balloonwjui::DuiLabel* ownerLbl = FindCtrl<balloonwjui::DuiLabel>(root, kIdGroupOwner);
     if (ownerLbl != NULL)
     {
         ownerLbl->SetText(owner);
+    }
+
+    // ---- 群简介(空→占位) ----
+    balloonwjui::DuiLabel* introLbl = FindCtrl<balloonwjui::DuiLabel>(root, kIdGroupIntro);
+    if (introLbl != NULL)
+    {
+        if (data.intro.IsEmpty())
+        {
+            introLbl->SetText(TR(L"暂无群简介"));
+            introLbl->SetTextColor(kClrMuted);
+        }
+        else
+        {
+            //群简介可以带换行，这里只占一行：换行换成空格，放不下的部分以省略号结尾
+            CString oneLine = data.intro;
+            oneLine.Replace(_T("\r\n"), _T(" "));
+            oneLine.Replace(_T("\r"), _T(" "));
+            oneLine.Replace(_T("\n"), _T(" "));
+            introLbl->SetText(oneLine);
+            introLbl->SetTextColor(kClrText);
+        }
     }
 
     // ---- 群公告(空→占位) ----
@@ -441,7 +495,7 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
     {
         if (data.announcement.IsEmpty())
         {
-            noticeLbl->SetText(_T("暂无群公告"));
+            noticeLbl->SetText(TR(L"暂无群公告"));
             noticeLbl->SetTextColor(kClrMuted);
         }
         else
@@ -457,7 +511,7 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
     {
         if (data.myCard.IsEmpty())
         {
-            cardView->SetText(_T("未设置"));
+            cardView->SetText(TR(L"未设置"));
             cardView->SetTextColor(kClrMuted);
         }
         else
@@ -472,11 +526,11 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
         cardEdit->SetText(data.myCard);
     }
 
-    // ---- 两个开关初值(静默,不发通知) ----
-    balloonwjui::DuiSwitch* muteSw = FindCtrl<balloonwjui::DuiSwitch>(root, kIdGroupMuteSwitch);
-    if (muteSw != NULL)
+    // ---- 提醒模式下拉框与置顶开关初值(静默,不发通知) ----
+    balloonwjui::DuiComboBox* notifyCombo = FindCtrl<balloonwjui::DuiComboBox>(root, kIdGroupNotifyCombo);
+    if (notifyCombo != NULL)
     {
-        muteSw->SetChecked(data.mute, /*animated*/false, /*notify*/false);
+        notifyCombo->SetCurSel(NotifyModeChoiceIndex(/*isGroup*/true, data.notifyMode), /*notify*/false);
     }
     balloonwjui::DuiSwitch* pinSw = FindCtrl<balloonwjui::DuiSwitch>(root, kIdGroupPinSwitch);
     if (pinSw != NULL)

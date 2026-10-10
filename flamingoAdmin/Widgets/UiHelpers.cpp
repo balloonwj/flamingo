@@ -62,6 +62,34 @@ void BuildRoundRectPath(Gdiplus::GraphicsPath& path, const RECT& rc, int radius)
 
 } // anonymous namespace
 
+CString GreetingForHour(int hour, const CString& name)
+{
+    // 各时段的起止小时（含起点、不含终点）。
+    const int kMorningStart   = 5;
+    const int kNoonStart      = 11;
+    const int kAfternoonStart = 13;
+    const int kEveningStart   = 18;
+
+    CString greeting = _T("晚上好");
+    if (hour >= kMorningStart && hour < kNoonStart)
+    {
+        greeting = _T("早上好");
+    }
+    else if (hour >= kNoonStart && hour < kAfternoonStart)
+    {
+        greeting = _T("中午好");
+    }
+    else if (hour >= kAfternoonStart && hour < kEveningStart)
+    {
+        greeting = _T("下午好");
+    }
+    if (name.IsEmpty())
+    {
+        return greeting;
+    }
+    return greeting + _T("，") + name;
+}
+
 HFONT UiFont(int pointSize, bool bold)
 {
     // 缓存键：磅值左移 1 位 + 粗细标志，足以区分本工程用到的全部字体规格。

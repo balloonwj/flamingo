@@ -82,6 +82,21 @@ void BuildGroupCandidate(const net::UserGroupItem& g, GroupCandidate& out)
     out.m_preparedName = contactsearch::PrepareName(Utf8ToWide(g.m_name));
 }
 
+// 部门候选的快照与部门列表里的部门是否一致（只比对参与匹配与路径的三项）。
+bool DepartmentSnapshotMatches(const DepartmentCandidate& e, const net::DepartmentItem& dept)
+{
+    return e.m_deptid == dept.m_deptid && e.m_parentid == dept.m_parentdeptid && e.m_name == dept.m_name;
+}
+
+// 按部门列表里的部门重算一条候选。
+void BuildDepartmentCandidate(const net::DepartmentItem& dept, DepartmentCandidate& out)
+{
+    out.m_deptid       = dept.m_deptid;
+    out.m_parentid     = dept.m_parentdeptid;
+    out.m_name         = dept.m_name;
+    out.m_preparedName = contactsearch::PrepareName(Utf8ToWide(dept.m_name));
+}
+
 } // namespace
 
 int SearchCandidateCache::SyncContacts(const std::vector<net::ContactItem>& contacts)
@@ -158,10 +173,48 @@ const GroupCandidate& SearchCandidateCache::GroupAt(size_t index) const
     return m_groups[index];
 }
 
+int SearchCandidateCache::SyncDepartments(const std::vector<net::DepartmentItem>& departments)
+{
+    //部门列表变短：截掉多出的条目
+    if (m_departments.size() > departments.size())
+    {
+        m_departments.erase(m_departments.begin() + departments.size(), m_departments.end());
+    }
+    m_departments.reserve(departments.size());
+
+    int rebuilt = 0;
+    for (size_t i = 0; i < departments.size(); ++i)
+    {
+        if (i == m_departments.size())
+        {
+            //部门列表变长：追加一条空候选，随后按部门资料重算
+            m_departments.push_back(DepartmentCandidate());
+        }
+        else if (DepartmentSnapshotMatches(m_departments[i], departments[i]))
+        {
+            continue;   // 快照一致，沿用上次的结果
+        }
+        BuildDepartmentCandidate(departments[i], m_departments[i]);
+        ++rebuilt;
+    }
+    return rebuilt;
+}
+
+size_t SearchCandidateCache::DepartmentCount() const
+{
+    return m_departments.size();
+}
+
+const DepartmentCandidate& SearchCandidateCache::DepartmentAt(size_t index) const
+{
+    return m_departments[index];
+}
+
 void SearchCandidateCache::Clear()
 {
     m_contacts.clear();
     m_groups.clear();
+    m_departments.clear();
 }
 
 } // namespace balloonsearch

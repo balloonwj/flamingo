@@ -4,8 +4,9 @@
  *  主面板群列表右键菜单行模型（BuildGroupMenuModel）与群号格式化（FormatGroupNumber）的
  *  单元测试（标签 [groupmenu][copymenu]）：
  *
- *    CM1  行序与分隔条位置：复制群号、复制群名紧跟「查看历史消息」；「群管理」只在群主 / 管理员
- *         的菜单里出现；命令 id 非 0 且互不重复；置顶 / 免打扰 / 收藏文案随状态取反。
+ *    CM1  行序与分隔条位置（2026-10-03 按统一的分组规则重排）；「群管理」只在群主 / 管理员
+ *         的菜单里出现；命令 id 非 0 且互不重复；置顶 / 收藏文案随状态取反；「消息提醒设置」
+ *         是二级菜单父项，文字不随当前模式变化。
  *    CM4  群号格式化：十进制数字串，不带"群号"字样；群 id 不大于 0 时为空串。
  *    CM5  群主的菜单在「退出群聊」之后多出「解散群聊」；管理员与普通成员没有。
  *
@@ -22,6 +23,7 @@
 
 #include "../UI/BalloonMain/MainPanelGroupMenu.h"
 #include "../UI/BalloonMain/FavoritesModel.h"   // GetMenuLabel（收藏项文案须与本模型一致）
+#include "../net/Protocol.h"                    // enum conversation_notify_mode
 
 using namespace balloonmain;
 
@@ -42,44 +44,52 @@ const wchar_t* LabelOf(const std::vector<GroupMenuEntry>& model, UINT id)
 
 } // anonymous namespace
 
-TEST_CASE("CM1 群列表菜单：复制群号与复制群名紧跟查看历史消息，群管理只给群主和管理员", "[groupmenu][copymenu]")
+TEST_CASE("CM1 群列表菜单：按进入、查看、标记与提醒、复制、清空、退出分组，群管理只给群主和管理员", "[groupmenu][copymenu]")
 {
     SECTION("群主 / 管理员：有群管理")
     {
         GroupMenuState st;
         st.m_canManage = true;
         const std::vector<GroupMenuEntry> m = BuildGroupMenuModel(st);
-        // 11 个功能项 + 1 条分隔条
-        REQUIRE(m.size() == 12);
+        // 11 个功能项 + 5 条分隔条（2026-10-03 按统一的分组规则重排）
+        REQUIRE(m.size() == 16);
         size_t i = 0;
         CHECK(m[i].m_id == kGroupMenuEnter);           ++i;
+        CHECK(m[i].m_isSeparator);                     ++i;
         CHECK(m[i].m_id == kGroupMenuViewInfo);        ++i;
-        CHECK(m[i].m_id == kGroupMenuFavorite);        ++i;
         CHECK(m[i].m_id == kGroupMenuViewHistory);     ++i;
+        CHECK(m[i].m_id == kGroupMenuManage);          ++i;
+        CHECK(m[i].m_isSeparator);                     ++i;
+        CHECK(m[i].m_id == kGroupMenuFavorite);        ++i;
+        CHECK(m[i].m_id == kGroupMenuPin);             ++i;
+        CHECK(m[i].m_id == kGroupMenuNotifyMode);      ++i;
+        CHECK(m[i].m_isSeparator);                     ++i;
         CHECK(m[i].m_id == kGroupMenuCopyGroupNo);     ++i;
         CHECK(m[i].m_id == kGroupMenuCopyGroupName);   ++i;
-        CHECK(m[i].m_id == kGroupMenuManage);          ++i;
-        CHECK(m[i].m_id == kGroupMenuPin);             ++i;
-        CHECK(m[i].m_id == kGroupMenuMute);            ++i;
         CHECK(m[i].m_isSeparator);                     ++i;
         CHECK(m[i].m_id == kGroupMenuClearMsgs);       ++i;
+        CHECK(m[i].m_isSeparator);                     ++i;
         CHECK(m[i].m_id == kGroupMenuQuit);            ++i;
         CHECK(i == m.size());
     }
     SECTION("普通成员：没有群管理，其余不变")
     {
         const std::vector<GroupMenuEntry> m = BuildGroupMenuModel(GroupMenuState());
-        REQUIRE(m.size() == 11);
+        REQUIRE(m.size() == 15);
         CHECK(LabelOf(m, kGroupMenuManage) == NULL);
-        CHECK(m[4].m_id == kGroupMenuCopyGroupNo);
-        CHECK(m[5].m_id == kGroupMenuCopyGroupName);
-        CHECK(m[6].m_id == kGroupMenuPin);
+        //「查看」一组只剩两项，后面紧跟分隔条
+        CHECK(m[3].m_id == kGroupMenuViewHistory);
+        CHECK(m[4].m_isSeparator);
+        CHECK(m[9].m_id == kGroupMenuCopyGroupNo);
+        CHECK(m[10].m_id == kGroupMenuCopyGroupName);
     }
 
     //文字
     const std::vector<GroupMenuEntry> m = BuildGroupMenuModel(GroupMenuState());
     REQUIRE(LabelOf(m, kGroupMenuCopyGroupNo) != NULL);
     REQUIRE(LabelOf(m, kGroupMenuCopyGroupName) != NULL);
+    REQUIRE(LabelOf(m, kGroupMenuViewHistory) != NULL);
+    CHECK(wcscmp(LabelOf(m, kGroupMenuViewHistory), L"查看消息记录") == 0);
     CHECK(wcscmp(LabelOf(m, kGroupMenuCopyGroupNo), L"复制群号") == 0);
     CHECK(wcscmp(LabelOf(m, kGroupMenuCopyGroupName), L"复制群名") == 0);
 
@@ -101,16 +111,18 @@ TEST_CASE("CM1 群列表菜单：复制群号与复制群名紧跟查看历史�
         CHECK(ids.insert(all[i].m_id).second);
     }
 
-    //置顶 / 免打扰 / 收藏的文案随状态取反
+    //置顶 / 收藏的文案随状态取反；「消息提醒设置」父项的文字固定，当前模式只体现在子菜单的勾上
     GroupMenuState on;
     on.m_pinned = true;
-    on.m_muted = true;
+    on.m_notifyMode = notify_mode_block;
     on.m_favorite = true;
     const std::vector<GroupMenuEntry> mOn = BuildGroupMenuModel(on);
     CHECK(wcscmp(LabelOf(m, kGroupMenuPin), L"置顶群聊") == 0);
     CHECK(wcscmp(LabelOf(mOn, kGroupMenuPin), L"取消置顶") == 0);
-    CHECK(wcscmp(LabelOf(m, kGroupMenuMute), L"消息免打扰") == 0);
-    CHECK(wcscmp(LabelOf(mOn, kGroupMenuMute), L"取消免打扰") == 0);
+    CHECK(wcscmp(LabelOf(m, kGroupMenuNotifyMode), L"消息提醒设置") == 0);
+    CHECK(wcscmp(LabelOf(mOn, kGroupMenuNotifyMode), L"消息提醒设置") == 0);
+    //6 曾是「消息免打扰」，作废后不得复用
+    CHECK(LabelOf(m, 6) == NULL);
     CHECK(wcscmp(LabelOf(m, kGroupMenuFavorite), FavoritesModel::GetMenuLabel(false)) == 0);
     CHECK(wcscmp(LabelOf(mOn, kGroupMenuFavorite), FavoritesModel::GetMenuLabel(true)) == 0);
 }
@@ -132,8 +144,10 @@ TEST_CASE("CM5 群主的菜单在退出群聊之后多出解散群聊，管理�
     owner.m_canManage = true;
     owner.m_isOwner = true;
     const std::vector<GroupMenuEntry> mOwner = BuildGroupMenuModel(owner);
-    //12 个功能项 + 1 条分隔条
-    REQUIRE(mOwner.size() == 13);
+    //12 个功能项 + 5 条分隔条；「退出群聊」「解散群聊」同在最后一组，与上面的「清空聊天记录」隔开
+    REQUIRE(mOwner.size() == 17);
+    CHECK(mOwner[mOwner.size() - 3].m_isSeparator);
+    CHECK(mOwner[mOwner.size() - 4].m_id == kGroupMenuClearMsgs);
     CHECK(mOwner[mOwner.size() - 2].m_id == kGroupMenuQuit);
     CHECK(mOwner[mOwner.size() - 1].m_id == kGroupMenuDismiss);
     REQUIRE(LabelOf(mOwner, kGroupMenuDismiss) != NULL);

@@ -69,7 +69,7 @@ void DrawGmNavIcon(Gdiplus::Graphics& g, int kind,
                    Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL size,
                    const Gdiplus::Color& color, Gdiplus::REAL strokeWidth)
 {
-    if (kind < kGmIconMembers || kind > kGmIconAnnounce || size <= 0.0f)
+    if (kind < kGmIconMembers || kind > kGmIconBot || size <= 0.0f)
     {
         return;
     }
@@ -228,6 +228,31 @@ void DrawGmNavIcon(Gdiplus::Graphics& g, int kind,
                                      Vp(10.4f, 16.6f, scale, x, y).Y,
                                      3.2f * scale, 3.2f * scale),
                       0.0f, 180.0f);
+        }
+        break;
+
+    case kGmIconBot:
+        {
+            // 机器人：圆角方头（外框）+ 两只眼睛（零长线 + 圆头 = 实心点）+ 头顶一根天线与顶端的圆点，
+            // 坐标与 MainPanelIcons.cpp 的 kIconBot 相同（viewBox 24）
+            const Gdiplus::REAL kHeadL = 4.0f;    // 头部左边
+            const Gdiplus::REAL kHeadT = 8.0f;    // 头部上边
+            const Gdiplus::REAL kHeadW = 16.0f;   // 头部宽
+            const Gdiplus::REAL kHeadH = 12.0f;   // 头部高
+            const Gdiplus::REAL kR = 3.0f;        // 圆角半径
+            const Gdiplus::REAL d = kR * 2.0f * scale;
+            Gdiplus::GraphicsPath head;
+            head.AddArc(x + kHeadL * scale, y + kHeadT * scale, d, d, 180.0f, 90.0f);
+            head.AddArc(x + (kHeadL + kHeadW - kR * 2.0f) * scale, y + kHeadT * scale, d, d, 270.0f, 90.0f);
+            head.AddArc(x + (kHeadL + kHeadW - kR * 2.0f) * scale, y + (kHeadT + kHeadH - kR * 2.0f) * scale, d, d,
+                        0.0f, 90.0f);
+            head.AddArc(x + kHeadL * scale, y + (kHeadT + kHeadH - kR * 2.0f) * scale, d, d, 90.0f, 90.0f);
+            head.CloseFigure();
+            g.DrawPath(&pen, &head);
+            g.DrawLine(&pen, Vp(9.0f, 13.5f, scale, x, y), Vp(9.0f, 13.7f, scale, x, y));     // 左眼
+            g.DrawLine(&pen, Vp(15.0f, 13.5f, scale, x, y), Vp(15.0f, 13.7f, scale, x, y));   // 右眼
+            g.DrawLine(&pen, Vp(12.0f, 4.5f, scale, x, y), Vp(12.0f, 8.0f, scale, x, y));     // 天线
+            g.DrawLine(&pen, Vp(12.0f, 3.0f, scale, x, y), Vp(12.0f, 3.2f, scale, x, y));     // 天线顶端的圆点
         }
         break;
 

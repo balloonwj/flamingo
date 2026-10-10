@@ -271,6 +271,55 @@ TEST_CASE("UCL5 未知参数被忽略而不是报错", "[updater]")
     CHECK(args.m_pid == 9UL);
 }
 
+TEST_CASE("UCL6 --lang 可选：解析出语言代码，入口可以先单独取出它", "[updater]")
+{
+    //带 --lang：完整解析与只取语言两条路都能拿到值
+    wchar_t* withLang[] = {
+        (wchar_t*)L"FlamingoUpdater.exe",
+        (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
+        (wchar_t*)L"--lang",   (wchar_t*)L"en-US",
+        (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
+        (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
+        (wchar_t*)L"--pid",    (wchar_t*)L"9"
+    };
+    const int kWithLangCount = static_cast<int>(sizeof(withLang) / sizeof(withLang[0]));
+    UpdateArgs args;
+    std::wstring err;
+    REQUIRE(ParseCommandLine(kWithLangCount, withLang, args, err));
+    CHECK(args.m_language == L"en-US");
+    CHECK(PeekLanguageArg(kWithLangCount, withLang) == L"en-US");
+
+    //不带 --lang：语言为空（跟随系统），其余照常解析
+    wchar_t* noLang[] = {
+        (wchar_t*)L"FlamingoUpdater.exe",
+        (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
+        (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
+        (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
+        (wchar_t*)L"--pid",    (wchar_t*)L"9"
+    };
+    const int kNoLangCount = static_cast<int>(sizeof(noLang) / sizeof(noLang[0]));
+    REQUIRE(ParseCommandLine(kNoLangCount, noLang, args, err));
+    CHECK(args.m_language.empty());
+    CHECK(PeekLanguageArg(kNoLangCount, noLang).empty());
+
+    //--lang 在最后且没有值：完整解析报错并点名 --lang，只取语言时返回空串
+    wchar_t* dangling[] = {
+        (wchar_t*)L"FlamingoUpdater.exe",
+        (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
+        (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
+        (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
+        (wchar_t*)L"--pid",    (wchar_t*)L"9",
+        (wchar_t*)L"--lang"
+    };
+    const int kDanglingCount = static_cast<int>(sizeof(dangling) / sizeof(dangling[0]));
+    CHECK_FALSE(ParseCommandLine(kDanglingCount, dangling, args, err));
+    CHECK(err.find(L"--lang") != std::wstring::npos);
+    CHECK(PeekLanguageArg(kDanglingCount, dangling).empty());
+
+    //参数为空
+    CHECK(PeekLanguageArg(0, NULL).empty());
+}
+
 // =====================================================================
 // ZPS. zip 条目名安全校验
 // =====================================================================

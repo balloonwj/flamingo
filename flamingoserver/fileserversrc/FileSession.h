@@ -7,7 +7,9 @@
  *
  *  一条连接同一时刻只处理一个文件（上传或下载）：上传写入 <md5>.part
  *  临时文件、按 offset 支持断点续传、末片校验 MD5 后改名为 <md5>；下载
- *  按客户端请求的 offset 逐片回传。
+ *  按客户端请求的 offset 逐片回传。同一文件被多个连接同时上传时，只有一个
+ *  会话使用 <md5>.part，其余会话各用私有分片 <md5>.<序号>.part，规则见
+ *  UploadPartPolicy.h。
  *
  *  同一个监听端口上还按帧 cmd 分流出第三种用途：单聊文件夹传输的多通道中转
  *  （cmd_folder_relay_hello / cmd_folder_relay_data，不新开端口）。这条路上
@@ -136,8 +138,10 @@ private:
 
     //中止当前上传：关闭并删除 .part 临时文件、复位状态
     void abortUpload();
-    //复位文件状态：关闭句柄、清空当前传输信息
+    //复位文件状态：关闭句柄、清空当前传输信息，并释放本会话占用的公共分片登记
     void resetFile();
+    //释放本会话在 UploadPartRegistry 中占用的公共分片登记（未占用时不做任何事）
+    void releasePartClaim();
 
 private:
     std::string m_strFileBaseDir;   //文件存储根目录
@@ -150,6 +154,9 @@ private:
     int64_t     m_expectSize;       //上传:期望总字节数; 下载:文件实际字节数
     int64_t     m_uploadOffset;     //上传:已写入 .part 的字节数（权威续传位点）
     std::string m_partPath;         //上传:.part 临时文件的完整路径
+    bool        m_partShared;       //上传:m_partPath 是否为公共续传分片 <md5>.part。为 true 时本会话占用着
+                                    //UploadPartRegistry 中 m_curMd5 的登记，结束上传时须释放；为 false 时
+                                    //用的是本会话私有分片 <md5>.<序号>.part，中止或断开时直接删除
 
     //本连接的文件夹传输中转端点：握手校验、配对与找对端都由它负责。会话建立时即构造
     //（此时尚未握手，不占配对表的位置），随会话一同销毁

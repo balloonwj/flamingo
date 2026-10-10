@@ -17,12 +17,40 @@
 #include "../utils/PasswordHasher.h"   //口令存储哈希与盐值生成
 #include "../utils/Sha256.h"           //服务端自行计算口令哈希的第一层（客户端不参与该场景）
 #include "UserManager.h"
-#include "DepartmentManager.h"   //改职务后同步组织架构缓存里的 position，见 updateEmployee
-#include "AccountName.h"   //登录账号生成规则，与自助注册共用
+#include "DepartmentManager.h"   //改职务、启停用后同步组织架构缓存里的 position / accountstatus，见 updateEmployee、setEmployeeStatus
+#include "AccountName.h"   //手机号格式规则（IsValidPhoneNumber），与自助注册共用
+#include "EnterpriseManager.h"   //建员工时取企业账号前缀
 
 //拼装 SQL 的字符缓冲区大小。
 //最长语句为建员工 INSERT：昵称/工号/签名等转义后总长远小于 4096，取 4096 留足余量。
 #define EMPLOYEE_SQL_BUF_LEN     4096
+
+//员工性别取值是否合法：只接受 0 保密 / 1 男 / 2 女（EmployeeManager.h 的 EMPLOYEE_GENDER_*），
+//与 PC 客户端改资料（ProfileProtocol.cpp 按 enum profile_gender）的校验一致。
+static bool isValidEmployeeGender(int32_t gender)
+{
+    return gender == EMPLOYEE_GENDER_UNSET || gender == EMPLOYEE_GENDER_MALE
+        || gender == EMPLOYEE_GENDER_FEMALE;
+}
+
+//员工手机号是否可用：必填、格式合法（AccountName.h 的 IsValidPhoneNumber）、不被别的账号用着。
+//手机号可用于登录，必须全局唯一（docs/登录账号与手机号登录方案.md 第 3.5 节）。
+//  phone：请求里的手机号；excludeUserId：编辑时传本人（保留原号码不算重复），新建时传 0
+//  返回 error_code_ok 表示可用；否则为 error_code_phone_invalid 或 error_code_phone_taken
+static int32_t checkEmployeePhone(const std::string& phone, int32_t excludeUserId)
+{
+    if (!IsValidPhoneNumber(phone))
+    {
+        LOGE("employee phone invalid: '%s', userid: %d", phone.c_str(), excludeUserId);
+        return error_code_phone_invalid;
+    }
+    if (Singleton<UserManager>::Instance().isPhoneTaken(phone, excludeUserId))
+    {
+        LOGE("employee phone already used by another account: %s, userid: %d", phone.c_str(), excludeUserId);
+        return error_code_phone_taken;
+    }
+    return error_code_ok;
+}
 
 //生成的初始密码长度（取 MD5 十六进制摘要的前若干位）。
 //10 位在「足够随机、不易撞」与「便于管理员转告员工」之间取平衡。
@@ -128,13 +156,14 @@ std::string EmployeeManager::generatePassword(int64_t userId)
 
 std::string EmployeeManager::buildListWhere(int64_t enterpriseId, int64_t deptId, const std::string& keyword)
 {
-    //始终排除群账号：员工列表只展示真实自然人。
+    //始终排除群账号：员工列表只展示真实自然人。机器人与服务号账号（f_usertype 非 0）同样排除（docs/机器人方案.md §3.2）
     std::string where = " WHERE u.f_user_id < ";
     {
         char buf[32] = { 0 };
         snprintf(buf, sizeof(buf), "%d", EMPLOYEE_USER_ID_MAX);
         where += buf;
     }
+    where += " AND u.f_usertype = 0";
 
     //企业过滤：enterpriseId 为 0 表示不限企业。
     if (enterpriseId != 0)
@@ -303,6 +332,15 @@ int32_t EmployeeManager::createEmployee(const CreateEmployeeReq& req, int64_t& o
         LOGE("createEmployee failed: empty name");
         return error_code_unknown;
     }
+    if (!isValidEmployeeGender(req.gender))
+    {
+        LOGE("createEmployee failed: invalid gender %d", req.gender);
+        return error_code_unknown;
+    }
+    //手机号必填且全局唯一：它可用于登录（docs/登录账号与手机号登录方案.md 第 3.5 节）
+    int32_t phoneCode = checkEmployeePhone(req.phone, 0);
+    if (phoneCode != error_code_ok)
+        return phoneCode;
 
     std::lock_guard<std::mutex> guard(m_mutex);
 
@@ -310,9 +348,9 @@ int32_t EmployeeManager::createEmployee(const CreateEmployeeReq& req, int64_t& o
     if (!pConn)
         return error_code_unknown;
 
-    //登录账号(f_username)与工号(f_employee_no)是两个独立字段：登录账号由
-    //服务器自动生成、全局唯一(取 "EMP"+用户ID)；工号取表单 employeeNo，可空。
-    //账号的生成规则与 PC 端自助注册共用 MakeEmployeeAccount，见 AccountName.h。
+    //登录账号(f_username)与工号(f_employee_no)是两个独立字段：登录账号由服务器自动生成、
+    //全局唯一（企业账号前缀 + 8 位随机数字，没设前缀时用 EMP）；工号取表单 employeeNo，可空。
+    //账号的生成规则与 PC 端自助注册共用 UserManager::allocRandomAccount，见 AccountName.h。
     std::string employeeNo = req.employeeNo;
 
     //工号非空时校验企业内不重复(对齐 uk_ent_employee_no 约束，先查给友好提示)。
@@ -331,15 +369,16 @@ int32_t EmployeeManager::createEmployee(const CreateEmployeeReq& req, int64_t& o
         }
     }
 
-    //分配新用户ID，并据此生成全局唯一的登录账号。
+    //分配新用户ID，并按企业账号前缀抽一个随机登录账号（不再用连续的用户ID拼账号，免得暴露注册先后）。
     //ID 一律向 UserManager 要 —— 它是本进程唯一的用户ID分配入口。本类历史上
     //自己维护过一份 m_baseUserId，两份基数启动时都取库中最大ID，管理员建员工
     //与用户自助注册同时发生时会分配出同一个ID、撞上 t_user 主键，已改掉。
     int64_t newUserId = Singleton<UserManager>::Instance().allocUserId();
-    std::string username = MakeEmployeeAccount(newUserId);
+    const std::string prefix = Singleton<EnterpriseManager>::Instance().getAccountPrefix(req.enterpriseId);
+    std::string username = Singleton<UserManager>::Instance().allocRandomAccount(prefix);
     if (username.empty())
     {
-        LOGE("createEmployee failed: cannot make account name for userid %lld", (long long)newUserId);
+        LOGE("createEmployee failed: cannot allocate account name for userid %lld", (long long)newUserId);
         return error_code_unknown;
     }
     //生成明文初始口令，并按 v2 的口令存储格式算出入库用的哈希与盐值。
@@ -382,10 +421,10 @@ int32_t EmployeeManager::createEmployee(const CreateEmployeeReq& req, int64_t& o
         "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_salt, f_facetype, "
         "f_gender, f_birthday, f_signature, f_phonenumber, f_mail, f_register_time, "
         "f_enterprise_id, f_role, f_employee_no, f_join_date, f_status) "
-        "VALUES(%lld, '%s', '%s', '%s', '%s', 0, 0, %d, '', '%s', '%s', NOW(), %lld, 0, %s, %s, 0)",
+        "VALUES(%lld, '%s', '%s', '%s', '%s', 0, %d, %d, '', '%s', '%s', NOW(), %lld, 0, %s, %s, 0)",
         (long long)newUserId, usernameEsc.c_str(), nicknameEsc.c_str(),
         storedPassword.c_str(), salt.c_str(),
-        EMPLOYEE_DEFAULT_BIRTHDAY, phoneEsc.c_str(), mailEsc.c_str(),
+        (int)req.gender, EMPLOYEE_DEFAULT_BIRTHDAY, phoneEsc.c_str(), mailEsc.c_str(),
         (long long)req.enterpriseId, employeeNoValue.c_str(), joinDateValue.c_str());
     if (!pConn->execute(sql))
     {
@@ -410,6 +449,15 @@ int32_t EmployeeManager::updateEmployee(const UpdateEmployeeReq& req)
         LOGE("updateEmployee failed: empty name, userid: %lld", (long long)req.userId);
         return error_code_unknown;
     }
+    if (req.gender != EMPLOYEE_GENDER_KEEP && !isValidEmployeeGender(req.gender))
+    {
+        LOGE("updateEmployee failed: invalid gender %d, userid: %lld", req.gender, (long long)req.userId);
+        return error_code_unknown;
+    }
+    //手机号必填且全局唯一，保留自己原来的号码不算重复
+    int32_t phoneCode = checkEmployeePhone(req.phone, static_cast<int32_t>(req.userId));
+    if (phoneCode != error_code_ok)
+        return phoneCode;
 
     std::lock_guard<std::mutex> guard(m_mutex);
 
@@ -429,6 +477,27 @@ int32_t EmployeeManager::updateEmployee(const UpdateEmployeeReq& req)
         }
     }
 
+    //工号：为空写 NULL（与 createEmployee 一致）。uk_ent_employee_no 把多个 NULL 视为互不相同、
+    //把空串视为同一个值，此前写空串时同一企业第二名没填工号的员工一保存就撞唯一索引。
+    //非空时先查本企业有没有别人用着（排除自己），给出与新建员工相同的错误码，而不是落到写库失败
+    std::string employeeNoValue = "NULL";
+    if (!req.employeeNo.empty())
+    {
+        const std::string noEsc = dbapi::EscapeString(req.employeeNo);
+        char sql[EMPLOYEE_SQL_BUF_LEN] = { 0 };
+        snprintf(sql, sizeof(sql),
+            "SELECT COUNT(*) FROM t_user WHERE f_employee_no = '%s' AND f_user_id <> %lld "
+            "AND f_enterprise_id = (SELECT f_enterprise_id FROM t_user WHERE f_user_id = %lld)",
+            noEsc.c_str(), (long long)req.userId, (long long)req.userId);
+        if (queryCount(pConn.get(), sql) > 0)
+        {
+            LOGE("updateEmployee failed: employee_no already used in the enterprise, userid: %lld, employee_no: %s",
+                 (long long)req.userId, req.employeeNo.c_str());
+            return error_code_registeralready;
+        }
+        employeeNoValue = "'" + noEsc + "'";
+    }
+
     std::string joinDateValue;
     if (req.joinDate.empty())
     {
@@ -439,16 +508,19 @@ int32_t EmployeeManager::updateEmployee(const UpdateEmployeeReq& req)
         joinDateValue = "'" + dbapi::EscapeString(req.joinDate) + "'";
     }
 
-    //1. 更新 t_user 基础字段。
+    //1. 更新 t_user 基础字段。性别只在请求里带了时才改（EMPLOYEE_GENDER_KEEP 表示保持原值）。
+    std::string genderClause;
+    if (req.gender != EMPLOYEE_GENDER_KEEP)
+        genderClause = ", f_gender = " + std::to_string(req.gender);
     char sql[EMPLOYEE_SQL_BUF_LEN] = { 0 };
     snprintf(sql, sizeof(sql),
-        "UPDATE t_user SET f_nickname = '%s', f_employee_no = '%s', f_join_date = %s, "
+        "UPDATE t_user SET f_nickname = '%s', f_employee_no = %s, f_join_date = %s, "
         "f_landline = '%s', f_workstation = '%s', f_phonenumber = '%s', f_mail = '%s', "
-        "f_signature = '%s' WHERE f_user_id = %lld",
-        dbapi::EscapeString(req.name).c_str(), dbapi::EscapeString(req.employeeNo).c_str(), joinDateValue.c_str(),
+        "f_signature = '%s'%s WHERE f_user_id = %lld",
+        dbapi::EscapeString(req.name).c_str(), employeeNoValue.c_str(), joinDateValue.c_str(),
         dbapi::EscapeString(req.landline).c_str(), dbapi::EscapeString(req.workstation).c_str(),
         dbapi::EscapeString(req.phone).c_str(), dbapi::EscapeString(req.email).c_str(),
-        dbapi::EscapeString(req.signature).c_str(), (long long)req.userId);
+        dbapi::EscapeString(req.signature).c_str(), genderClause.c_str(), (long long)req.userId);
     if (!pConn->execute(sql))
     {
         LOGE("updateEmployee failed: db execute error, sql: %s", sql);
@@ -514,6 +586,8 @@ int32_t EmployeeManager::setEmployeeStatus(int64_t userId, int32_t status)
 
     //同步进 IM 侧缓存：缓存的 status 更新后，IM 登录链路即可据此拒绝已停用账号。
     Singleton<UserManager>::Instance().reloadUserCache(static_cast<int32_t>(userId));
+    //同步进组织架构缓存：tree.do 里的 accountstatus 立即反映新状态
+    Singleton<DepartmentManager>::Instance().updateCachedMemberAccountStatus(userId, status);
     LOGI("setEmployeeStatus ok, userid: %lld, status: %d", (long long)userId, status);
     return error_code_ok;
 }
@@ -755,7 +829,7 @@ struct PermissionDef
 };
 
 //权限矩阵常量表：13 个权限项及各角色默认值固定为代码常量
-//（见 table.sql 中 t_user_permission 的注释），取自设计稿
+//（见 table_mysql.sql 中 t_user_permission 的注释），取自设计稿
 //design/FlamingoIM Enterprise Admin.html 的 PERMISSION_GROUPS。
 //Chinese 字面量须用 u8""，否则经 HTTP/JSON 输出会因 MSVC 按 GBK 编码而乱码。
 static const PermissionDef g_permissionDefs[] =

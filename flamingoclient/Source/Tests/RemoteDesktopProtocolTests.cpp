@@ -5,13 +5,14 @@
  *      buildRelayHello 的字段完整性、类型、紧凑性、64 位 ID 字符串编码；
  *    - 应答 / 推送解析：parseInviteResponse（成功/失败）、parseInviteNotify、
  *      parseRelayInfo、parseStateNotify、parseRelayHelloAck 的字段还原；
+ *    - RD10 parseRelayInfo 的可选字段 p2psessionid（P2P 方案第 6 期）：有就取出，没有时为空串；
  *    - 64 位 userid 经字符串编码 round-trip 不丢精度；
  *    - 畸形输入（非法 JSON / 缺关键字段）一律安全失败返回 false。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-06-08
  */
 #include "catch_amalgamated.hpp"
-#include "../net/RemoteDesktopProtocolClient.h"
+#include "../../FlamingoMedia/RemoteDesktop/RemoteDesktopProtocolClient.h"
 #include "../third-party/jsoncpp-1.9.0/json.h"
 
 using namespace net;
@@ -124,6 +125,22 @@ TEST_CASE("RD5 parseRelayInfo 解析中转地址/令牌/角色")
     CHECK(info.m_relayIp == "192.168.1.100");
     CHECK(info.m_relayPort == 12346);
     CHECK(info.m_token == "1|2|3|4|5.deadbeef");
+    CHECK(info.m_p2pSessionId.empty());
+}
+
+TEST_CASE("RD10 parseRelayInfo 取可选的 p2psessionid")
+{
+    Json::Value v;
+    v["sessionid"]    = "sess-abc-002";
+    v["role"]         = rd_role_controlled;
+    v["relayip"]      = "192.168.1.100";
+    v["relayport"]    = 12346;
+    v["token"]        = "1|2|3|4|5.deadbeef";
+    v["p2psessionid"] = "p2p-7-8-9-10";
+    RDRelayInfo info;
+    REQUIRE(RemoteDesktopProtocolClient::parseRelayInfo(writeCompact(v), info));
+    CHECK(info.m_p2pSessionId == "p2p-7-8-9-10");
+    CHECK(info.m_role == rd_role_controlled);
 }
 
 TEST_CASE("RD6 buildCancel / buildClose 仅带 sessionid")

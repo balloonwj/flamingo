@@ -5,6 +5,7 @@
 #include "HistoryExport.h"
 
 #include <wctype.h>   // towlower
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -151,16 +152,16 @@ std::wstring BuildHistoryHtml(const std::wstring& title, const std::vector<Histo
         {
             if (!row.m_imageRelPath.empty())
             {
-                html += L"<img src=\"" + HtmlEscape(row.m_imageRelPath) + L"\" alt=\"图片\">";
+                html += L"<img src=\"" + HtmlEscape(row.m_imageRelPath) + L"\" alt=\"" + HtmlEscape(TR(L"图片")) + L"\">";
             }
             else
             {
-                html += L"[图片未下载]";
+                html += TR(L"[图片未下载]");
             }
         }
         else if (row.m_kind == kHistoryExportFile)
         {
-            html += L"[文件] " + HtmlEscape(row.m_text);
+            html += HtmlEscape(TRF(L"[文件] {0}", row.m_text));
         }
         else
         {

@@ -9,6 +9,7 @@
 
 // 纯数据模型，与 FlamingoUnit 测试工程共用，<u>不</u> include stdafx.h，保持 PCH 无关。
 #include "SettingsPageModel.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonsettings {
 
@@ -19,13 +20,13 @@ std::vector<SettingsNavEntry> BuildSettingsNavModel()
 
     // 顺序、文本严格对照 design/系统设置1~7.png 左侧导航。implemented 标记本期
     // 是否已接入真实内容：前三页为本期范围，其余四页占位。
-    items.push_back(SettingsNavEntry{ kPageGeneral,    L"通用",     true  });
-    items.push_back(SettingsNavEntry{ kPageNotify,     L"消息通知", true  });
-    items.push_back(SettingsNavEntry{ kPageChat,       L"聊天",     true  });
-    items.push_back(SettingsNavEntry{ kPageAudioVideo, L"音视频",   false });
-    items.push_back(SettingsNavEntry{ kPageShortcut,   L"快捷键",   false });
-    items.push_back(SettingsNavEntry{ kPageStorage,    L"存储",     false });
-    items.push_back(SettingsNavEntry{ kPageAccount,    L"账号安全", false });
+    items.push_back(SettingsNavEntry{ kPageGeneral,    TR(L"通用"),     true  });
+    items.push_back(SettingsNavEntry{ kPageNotify,     TR(L"消息通知"), true  });
+    items.push_back(SettingsNavEntry{ kPageChat,       TR(L"聊天"),     true  });
+    items.push_back(SettingsNavEntry{ kPageAudioVideo, TR(L"音视频"),   false });
+    items.push_back(SettingsNavEntry{ kPageShortcut,   TR(L"快捷键"),   false });
+    items.push_back(SettingsNavEntry{ kPageStorage,    TR(L"存储"),     false });
+    items.push_back(SettingsNavEntry{ kPageAccount,    TR(L"账号安全"), false });
 
     return items;
 }

@@ -24,7 +24,8 @@
  *          return;
  *
  *  本类不是窗口，只是一个带消息映射的普通对象，靠 CHAIN_MSG_MAP_MEMBER 搭在宿主窗口的
- *  消息派发链上。理由与远程桌面 / 通话协调器相同，见 MainPanelRdCoordinator.h。
+ *  消息派发链上。之所以不让它自建窗口：网络应答的收件窗口全局只有一个（见
+ *  CFlamingoClient::SetCallBackWnd），另开窗口就得多一次转发。
  *
  *  balloonwj@qq.com   2026-08-19
  */

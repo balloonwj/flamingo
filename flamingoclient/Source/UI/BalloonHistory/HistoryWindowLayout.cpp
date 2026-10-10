@@ -36,6 +36,12 @@ extern CAppModule _Module;
 #include <gdiplus.h>
 
 #include "HistoryWindowLayout.h"
+#include "HistoryLayoutKit.h"   // layoutkit：把本文件的几个小工具公开给文件 / 图片页布局
+#include "HistoryLibraryLayout.h"   // kIdLibBody / kIdLibExpandLeft：分栏右侧的文件 / 图片页
+#include "HistoryStorageLayout.h"   // kIdStorBody：分栏右侧的本机存储占用页
+#include "HistoryTipSearchBox.h"    // 悬停时显示搜索语法说明的搜索框
+#include "HistoryTimelineLayout.h"  // 时间轴导航条的内容与宽度
+#include <set>
 #include "HistoryImageGrid.h"   // GridColumnCount：「图片」分类网格每行几张
 #include "HistoryView.h"              // BuildPagerModel / BuildEmptyStateText
 #include "HistoryHighlightLabel.h"    // 预览文字的关键字高亮
@@ -43,7 +49,14 @@ extern CAppModule _Module;
 #include "HistoryRow.h"               // 可悬停 / 可双击的行容器 + Pin 标记
 #include "../BalloonChatWnd/ChatFileCard.h"          // FileCardHeight / kFileCardWidth
 #include "../BalloonChatWnd/ChatFileCardControl.h"   // 聊天文件卡片控件（聊天记录查看窗的文件行）
+#include "../BalloonChatWnd/ChatVoiceStrip.h"        // 语音条控件（消息记录窗与查看窗的语音行，语音消息第 4 期）
+#include "../BalloonChatWnd/ChatCodeCardControl.h"   // 代码片段卡片控件（消息记录窗与查看窗的代码片段行）
+#include "../BalloonChatWnd/ChatMarkdownCardControl.h"   // Markdown 卡片控件（消息记录窗与查看窗的 Markdown 消息行）
 #include "../BalloonMain/MainPanelScrollView.h"   // 列表滚动视口：悬浮式自动隐藏的细滚动条
+#include "../BalloonMain/MainPanelTreeView.h"     // 聊天记录管理器左栏的会话列表（与主面板会话列表同一控件）
+#include "HistoryConversationList.h"              // 左栏类型筛选取值与范围按钮文字
+#include "../BalloonMain/AvatarSpec.h"            // 范围弹层的首字头像：AvatarFallbackGlyph / AvatarColorForUser
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 聊天记录管理器左右分栏
 
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSpinBox.h"   // 「选日期」弹层的年月日微调框
@@ -57,6 +70,7 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"
 #include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // 量文字宽度要用与控件同一支默认字体
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // 图片缩略图的悬停提示
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonhistory {
 
@@ -113,10 +127,20 @@ const int kFileSizeLineH     = 16;   // 卡片里大小那一行的高
 const int kFileCardH = (kFileCardBlockSize > kFileNameLineH + kFileSizeLineH)
                        ? kFileCardBlockSize : (kFileNameLineH + kFileSizeLineH);
 // 聊天记录卡片色块里写的字与缺省标题。色块沿用文件卡片的画法，未知扩展名取默认底色。
-const wchar_t* const kMergedCardBlockText    = L"记录";
-const wchar_t* const kMergedCardDefaultTitle = L"聊天记录";
+const wchar_t* const kMergedCardBlockText    = TR_NOOP(L"记录");
+const wchar_t* const kMergedCardDefaultTitle = TR_NOOP(L"聊天记录");
 const int kTitleLineH   = 26;   // 标题文字高
 const int kSubLineH     = 18;   // 副标题文字高
+// 标题区那一行（「»」+ 会话名 +「共 N 条消息」）
+const int kHeaderRowGap      = 8;     // 行内各控件之间的间距（像素）
+const int kExpandLeftW       = 24;    //「»」按钮宽（像素）
+const TCHAR* const kHistoryExpandLeftText = _T("»");   //「»」按钮的文字
+const int kHeaderTitlePt     = 10;    // 会话名的字号（磅），粗体
+const int kHeaderTitleMaxW   = 320;   // 会话名最多占多宽（像素），再长以省略号截断
+const int kHeaderTitleSlackW = 6;     // 会话名量宽之外再留的余量（像素）
+// 会话名是粗体、字号比默认字体大一磅，按默认字体量出的宽度要放大到这个百分比才放得下
+const int kBoldWidthPercent  = 125;
+const int kPercentBase       = 100;
 const int kAvatarSize   = 36;   // 头像边长
 const int kAvatarCorner = 8;    // 头像圆角
 const int kTimeWidth    = 96;   // 行内时间列宽
@@ -130,12 +154,13 @@ const int kTimeComboMinW = 120;  // 时间下拉的最小宽度（实测宽度�
 const int kSenderComboMinW = 140;
 const int kSearchRowGap    = 8;    // 搜索行里搜索框与发送人下拉之间的间距
 const int kDatePickPadW    = 24;   // 「选日期」按钮、日期区间标签的日期文字在文字宽度之外的左右留白合计
-const TCHAR* const kHistoryDatePickText = _T("选日期");     // 「选日期」按钮的文字
+const TCHAR* const kHistoryDatePickText = TR_NOOP(L"选日期");     // 「选日期」按钮的文字
 const TCHAR* const kHistoryDateRangeClearText = _T("×");   // 日期区间标签末尾关闭叉号的文字
 const int kDateRangeClearW = 28;  // 日期区间标签末尾关闭叉号按钮的宽度（像素）
 const int kPagerBtnW    = 48;   // 分页“首页/末页”按钮宽
 const int kPagerCellW   = 34;   // 分页箭头 / 页码按钮宽
 const int kExportW      = 96;   // 导出按钮宽
+const int kClearConvW   = 112;  // 「清空聊天记录」按钮宽（六个汉字 + 左右内边距）
 const int kSelectBoxW   = 20;   // 多选模式下行首复选框的边长（勾选框本身约 14，四周留点余量好点中）
 const int kSelectColumnW = kSelectBoxW + 10;   // 复选框一列占掉的正文宽度：边长 + 行内列间距（与 BuildRow 的 SetGap 一致）
 const int kSelectBtnW   = 84;   // 多选操作栏里「合并转发」「逐条转发」按钮宽
@@ -165,6 +190,34 @@ const int kListPadH = 8;
 // 取一个中等窗口下的典型值：正文照它折行，行高照它算，视觉上不会离谱。
 const int kListFallbackWidth = 860;
 
+// ---- 时间轴模式（docs/聊天记录管理器方案.md §11.7，布局图见 tmp/histenhance/layout.html 图 4）----
+// 每一行最前面是时间列与竖线节点列。竖线由每一行里竖向的 DuiSeparator 连接而成，所以时间轴样式的行
+// 自身不留上下内边距（原来的上下内边距挪到内层容器上），各行的竖线首尾相接
+const int kTimelineTimeW     = 52;   // 行首时间列宽（「HH:MM」靠右）
+const int kTimelineRailW     = 28;   // 竖线节点列宽
+const int kTimelineLeadW     = kTimelineTimeW + kTimelineRailW;   // 两列合计：正文列相应变窄
+const int kTimelineLineThick = 2;    // 竖线粗细
+const int kTimelineDotPt     = 7;    // 消息节点「●」的字号（磅）
+const int kTimelineDotH      = 12;   // 消息节点那一格的高
+const int kTimelineDayH      = 34;   // 日期大节点那一行的高
+const int kTimelineDayDotPt  = 11;   // 日期大节点「●」的字号（磅）
+const int kTimelineDayDotH   = 18;   // 日期大节点那一格的高
+const int kTimelineDayGap    = 8;    // 日期文字与右侧说明之间的间距
+const int kTimelineDayTextPt = 9;    // 日期文字的字号（磅），粗体
+const COLORREF kColorTimelineLine = RGB(0xD5, 0xDC, 0xE8);   // 竖线
+const COLORREF kColorTimelineDot  = RGB(0xB7, 0xC3, 0xD6);   // 普通消息节点
+const COLORREF kColorTimelineHit  = RGB(0xE0, 0xA8, 0x00);   // 命中关键字的消息节点
+const COLORREF kColorTimelineDay  = RGB(0x2D, 0x6C, 0xDF);   // 日期大节点
+const TCHAR* const kTimelineDotText = _T("\x25CF");   // 节点用的实心圆「●」
+const int kViewChipW   = 48;   // 搜索行最右边「列表」「时间轴」两枚胶囊的设计宽度；放不下文字时按文字加宽
+const int kHitBarH     = 36;   // 命中条高
+const int kHitBarPadV  = 4;    // 命中条上下内边距
+const int kHitPosW     = 120;  // 命中条「第 x / N 处」那一列的宽
+const int kHitBtnW     = 76;   // 命中条「▲ 上一处」「▼ 下一处」按钮的设计宽度
+const COLORREF kColorHitBarBg   = RGB(0xFF, 0xF9, 0xE3);   // 命中条底色（浅黄，与定位行的高亮同一色系）
+const COLORREF kColorHitBarText = RGB(0x5C, 0x4A, 0x12);   // 命中条文字
+const COLORREF kColorNavBg      = RGB(0xF7, 0xF8, 0xFA);   // 时间轴导航条底色（与 HistoryTimelineLayout.cpp 一致）
+
 // DuiComboBox 画只读文字时，控件宽度里有一截是留给内边距与右侧箭头的，文字只能用剩下
 // 那部分：左内边距 8 + 文字与箭头的间隙 4 + 箭头三角 14 + 箭头到右边框 8 = 34px
 // （对应 DuiComboBox.cpp 里的 kTextPadLPx / kTextArrowGap / kArrowWPx / kArrowPadRPx）。
@@ -185,6 +238,27 @@ const int kComboSlackW  = 8;
  *    text：待测量的文字；空串返回 0。
  *  返回：文字宽度（像素）；取不到设备上下文或字体时返回 0（调用方据此退回保守宽度）。
  */
+int MeasureDefaultFontWidth(LPCTSTR text);
+
+//文字比设计宽度更宽时，在文字宽度之外加的左右留白合计（像素）：胶囊带圆角边框留得多，纯文字标签只留一点余量。
+//两个值都保证简体中文的文字加上留白仍不超过原设计宽度，中文布局不变
+const int kGrowChipPadW  = 20;
+const int kGrowLabelPadW = 4;
+
+/**
+ *  按文字宽度「只增不减」地取控件宽度（多语言第 4 期）：文字放得下时保持设计宽度（简体中文布局不变），
+ *  放不下时（英文等译文较长）加宽到文字宽度加留白。
+ *  @param text        控件上的文字
+ *  @param designWidth 原设计宽度（像素）
+ *  @param padding     文字宽度之外的留白合计（像素），胶囊用 kGrowChipPadW，标签用 kGrowLabelPadW
+ *  @return 控件宽度（像素）
+ */
+int GrowWidthToFitText(LPCTSTR text, int designWidth, int padding)
+{
+    const int need = MeasureDefaultFontWidth(text) + padding;
+    return (need > designWidth) ? need : designWidth;
+}
+
 int MeasureDefaultFontWidth(LPCTSTR text)
 {
     if (text == NULL || *text == 0)
@@ -245,16 +319,59 @@ std::unique_ptr<DuiControl> MakeChip(LPCTSTR text, UINT ctrlId, bool active)
     return MakeButton(text, ctrlId, active ? DuiButton::Variant::Primary : DuiButton::Variant::Default);
 }
 
+//「通配符」复选框的文字（右侧搜索行与左栏范围行共用，docs/聊天记录管理器方案.md §11.4）
+const wchar_t* const kWildcardCheckText = TR_NOOP(L"通配符");
+//复选框在文字宽度之外要占的宽度（像素）：勾选框左边距 6 + 勾选框 16 + 勾选框到文字 6
+//（DuiButton.cpp 的 kGlyphPadPx、kGlyphSizePx），再留 6 像素余量
+const int kWildcardCheckChromeW = 34;
+//「通配符」复选框的悬停说明（2026-10-07 起）：两个通配字符的含义、几个典型写法，以及不勾选时的行为。
+//规则与 HistoryWildcard.h 一致：仍是「包含」匹配，只忽略英文字母的大小写。多行文字，DuiToolTipMgr 按 '\n' 分行
+const wchar_t* const kWildcardCheckTip = TR_NOOP(
+    L"勾选后，关键字里的 * 和 ? 按通配符匹配：\n"
+    L"    *  匹配任意多个字符（可以是零个）\n"
+    L"    ?  匹配恰好一个字符\n"
+    L"示例：\n"
+    L"    会议*纪要    找到「会议纪要」「会议第二次纪要」\n"
+    L"    张?    找到「张三」「张伟」\n"
+    L"    202?年    找到「2025年」「2026年」\n"
+    L"    报告*.pdf    找到名字里有「报告」且后面有「.pdf」的文件\n"
+    L"仍按「包含」查找，不区分英文大小写；不勾选时 * 和 ? 按普通字符查找。");
+
+/**
+ *  造一个「通配符」复选框：透明底的 DuiButton 复选框，勾选框后面跟文字。用户点它时发
+ *  DUIN_VALUECHANGED（extra 为 1 勾选、0 取消），宿主据此切换关键字的解释方式。
+ *    ctrlId：控件编号（kIdHistoryWildcard 或 kIdMgrWildcard）。
+ *    checked：建出来时是否勾选；构建期设值不发通知。
+ *    outWidth：[出参] 按文字实际宽度算出的控件宽度（像素），调用方据此给 Hint().Fixed。
+ *  @return 复选框控件，调用方拿到所有权
+ */
+std::unique_ptr<DuiControl> MakeWildcardCheckbox(UINT ctrlId, bool checked, int& outWidth)
+{
+    std::unique_ptr<DuiButton> box(new DuiButton());
+    box->SetButtonType(DuiButton::StyleCheckbox);
+    //透明底：默认样式会在整个控件矩形上画一圈圆角底框（与多选模式行首复选框同一设置）
+    box->SetVariant(DuiButton::Variant::Ghost);
+    box->SetText(TR(kWildcardCheckText));
+    box->SetCtrlId(ctrlId);
+    box->SetCheck(checked, false);
+    outWidth = MeasureDefaultFontWidth(TR(kWildcardCheckText)) + kWildcardCheckChromeW;
+    //悬停说明通配符的用法与示例；控件析构时基类会自动取消注册
+    balloonwjui::DuiToolTipMgr::Inst().Register(box.get(), TR(kWildcardCheckTip));
+    return std::unique_ptr<DuiControl>(box.release());
+}
+
 /**
  *  消息记录窗的底部一行：[共 N 条 · 第 x/y 页][分页栏][跳至][页码框][页][导出]。
  *
  *  分页栏按里面按钮的实际总宽占位（Hint().Auto()），左侧信息占剩下的宽度。窗口窄到
  *  整行放不下时，按下面的顺序隐藏，宽度恢复时再按相反顺序显示（回归用例见
- *  HistoryWindowLayoutTests 的 V2L20–V2L25）：
+ *  HistoryWindowLayoutTests 的 V2L20–V2L25、HWL-C2）：
  *    一、左侧信息文字放不下完整内容时整段隐藏 —— 它与顶部的"共 N 条消息"、分页栏里高亮
  *        的当前页、跳页框里的页号重复，不显示也不丢信息；
- *    二、仍放不下时隐藏「首页」「末页」—— 分页栏里第 1 页与最后一页的页码格一直都在。
- *  页码格、前后翻页按钮、跳页框与导出按钮始终显示。
+ *    二、仍放不下时隐藏「首页」「末页」—— 分页栏里第 1 页与最后一页的页码格一直都在；
+ *    三、仍放不下时隐藏「跳至 _ 页」整组（2026-10-03 加入「清空聊天记录」按钮后与用户确认）——
+ *        分页栏里当前页附近的页码格与前后翻页按钮仍可翻页。
+ *  页码格、前后翻页按钮、「清空聊天记录」与导出按钮始终显示。
  *
  *  在 Layout 里决定显隐，是因为只有排版时才知道这一行实际能分到多宽；显隐改完紧接着
  *  按新的显隐状态排版，不会留下按旧状态排出的过时矩形（开发约定文档「UI 约定」第 5 条）。
@@ -285,11 +402,17 @@ void HistoryFooterBar::Layout(const RECT& rcAvail)
     DuiControl* info  = FindCtrlById(kIdHistoryFooterInfo);
     DuiControl* first = FindCtrlById(kIdHistoryPageFirst);
     DuiControl* last  = FindCtrlById(kIdHistoryPageLast);
+    DuiControl* jumpLabel = FindCtrlById(kIdHistoryPageJumpLabel);
+    DuiControl* jumpBox   = FindCtrlById(kIdHistoryPageJump);
+    DuiControl* jumpUnit  = FindCtrlById(kIdHistoryPageJumpUnit);
 
     //先全部恢复显示，再按这次的可用宽度逐级隐藏：窗口由窄变宽时，被隐藏过的控件才能回来
     ShowIfChanged(info, true);
     ShowIfChanged(first, true);
     ShowIfChanged(last, true);
+    ShowIfChanged(jumpLabel, true);
+    ShowIfChanged(jumpBox, true);
+    ShowIfChanged(jumpUnit, true);
 
     const int availW = rcAvail.right - rcAvail.left;
 
@@ -306,6 +429,14 @@ void HistoryFooterBar::Layout(const RECT& rcAvail)
     {
         ShowIfChanged(first, false);
         ShowIfChanged(last, false);
+    }
+
+    //三、还放不下：隐藏「跳至 _ 页」整组
+    if (GetDesiredSize().cx > availW)
+    {
+        ShowIfChanged(jumpLabel, false);
+        ShowIfChanged(jumpBox, false);
+        ShowIfChanged(jumpUnit, false);
     }
 
     DuiHBox::Layout(rcAvail);
@@ -329,6 +460,12 @@ bool RowIsImage(const HistoryRowView& row)
     return row.m_hasImageThumb || !row.m_thumbImagePath.IsEmpty();
 }
 
+// 本行是不是语音消息（昵称下方显示语音条）。用途同上。
+bool RowIsVoice(const HistoryRowView& row)
+{
+    return !RowIsImage(row) && row.m_isVoice;
+}
+
 // 本行是不是用聊天文件卡片显示的文件（聊天记录查看窗的文件行）。用途同上。
 bool RowIsChatFileCard(const HistoryRowView& row)
 {
@@ -345,6 +482,28 @@ bool RowIsFile(const HistoryRowView& row)
 bool RowIsMergedCard(const HistoryRowView& row)
 {
     return !RowIsImage(row) && !RowIsFile(row) && row.m_isMergedCard;
+}
+
+// 本行是不是代码片段（昵称下方显示代码卡片，docs/代码片段方案.md 第 3.4 节）。用途同上。
+bool RowIsCode(const HistoryRowView& row)
+{
+    return !RowIsImage(row) && !RowIsVoice(row) && !RowIsChatFileCard(row) && !RowIsFile(row)
+        && !RowIsMergedCard(row) && row.m_isCode;
+}
+
+// 本行是不是 Markdown 消息（昵称下方显示 Markdown 卡片，docs/Markdown消息方案.md 第 12 节）。用途同上。
+bool RowIsMarkdown(const HistoryRowView& row)
+{
+    return !RowIsImage(row) && !RowIsVoice(row) && !RowIsChatFileCard(row) && !RowIsFile(row)
+        && !RowIsMergedCard(row) && !RowIsCode(row) && row.m_isMarkdown;
+}
+
+// 本行是不是带图片的帖子卡片或补充卡片（正文下面再排一行缩略图，docs/帖子群方案.md 14.5）。帖子卡片走正文内容块
+// 那一支，所以先排除其余各种卡片。用途同上：BuildRow 与 MeasureRowHeight 共用。
+bool RowHasCardThumbs(const HistoryRowView& row)
+{
+    return !RowIsImage(row) && !RowIsVoice(row) && !RowIsChatFileCard(row) && !RowIsFile(row)
+        && !RowIsMergedCard(row) && !RowIsCode(row) && !RowIsMarkdown(row) && !row.m_cardThumbs.empty();
 }
 
 // 算出行内“内容列”能用多宽（像素）。
@@ -404,6 +563,11 @@ int MeasureRowHeight(const HistoryRowView& row, int contentWidth, bool& outNeeds
         ComputeHistoryImageSize(row.m_imageWidth, row.m_imageHeight, dispW, dispH);
         height = dispH;
     }
+    else if (RowIsVoice(row))
+    {
+        //语音行：内容块是一条固定高度的语音条。
+        height = balloonchatwnd::kVoiceStripH;
+    }
     else if (RowIsChatFileCard(row))
     {
         //聊天文件卡片：高度随状态变化（有进度条、有操作链接时更高），与聊天窗文件气泡一致。
@@ -419,6 +583,17 @@ int MeasureRowHeight(const HistoryRowView& row, int contentWidth, bool& outNeeds
         //聊天记录行：与文件卡片同一高度的卡片。
         height = kFileCardH;
     }
+    else if (RowIsCode(row))
+    {
+        //代码片段：与聊天窗相同的代码卡片，高度按内容列宽度排版得出（超过折叠行数时只算前面几行）
+        height = balloonchatwnd::ChatCodeCardControl::MeasureCard(std::wstring((LPCWSTR)row.m_fullText),
+                                                                 row.m_codeLang, contentWidth, row.m_codeNotes).cy;
+    }
+    else if (RowIsMarkdown(row))
+    {
+        //Markdown 消息：与聊天窗相同的卡片，高度随摘要的行数变化（最多三行）
+        height = balloonchatwnd::ChatMarkdownCardControl::MeasureCard(row.m_markdownCard.m_summary, contentWidth).cy;
+    }
     else
     {
         //内容块的测量与绘制共用同一份实现，故这里临时造一个来问尺寸 —— 它很轻（只存
@@ -429,6 +604,12 @@ int MeasureRowHeight(const HistoryRowView& row, int contentWidth, bool& outNeeds
 
         outNeedsExpand = probe.NeedsExpandLink(contentWidth);
         height = probe.MeasureHeight(contentWidth);
+    }
+    //帖子卡片的缩略图：正文下面再排一行，高度取显示出来的缩略图里最高的那张
+    const bool hasCardThumbs = RowHasCardThumbs(row);
+    if (hasCardThumbs)
+    {
+        height += HistoryCardThumbStripHeight(row);
     }
     if (!row.m_compact)
     {
@@ -446,6 +627,10 @@ int MeasureRowHeight(const HistoryRowView& row, int contentWidth, bool& outNeeds
         ++gaps;
     }
     if (outNeedsExpand)
+    {
+        ++gaps;
+    }
+    if (hasCardThumbs)
     {
         ++gaps;
     }
@@ -481,6 +666,42 @@ std::unique_ptr<DuiControl> BuildImagePreview(const HistoryRowView& row, int ind
         balloonwjui::DuiToolTipMgr::Inst().Register(thumb.get(), row.m_thumbTooltip);
     }
     return std::unique_ptr<DuiControl>(thumb.release());
+}
+
+// 造帖子卡片正文下面那一行缩略图（docs/帖子群方案.md 14.5）：最多 kHistoryCardMaxThumbs 张，各按原图宽高等比缩放、
+// 贴顶排列；最后一张按需写「+N」。每张的编号 = kIdHistoryCardThumbBase + 行下标 × kHistoryCardMaxThumbs + 第几张。
+//   row：  行数据（取各张的路径、状态、宽高与提示，以及「+N」的 N）。
+//   index：本行在当前页的下标。
+std::unique_ptr<DuiControl> BuildCardThumbStrip(const HistoryRowView& row, int index)
+{
+    std::unique_ptr<DuiHBox> strip(new DuiHBox());
+    strip->SetGap(kHistoryCardThumbGap);
+    const size_t count = (row.m_cardThumbs.size() < kHistoryCardMaxThumbs) ? row.m_cardThumbs.size()
+                                                                           : kHistoryCardMaxThumbs;
+    for (size_t k = 0; k < count; ++k)
+    {
+        const HistoryCardThumbView& view = row.m_cardThumbs[k];
+        std::unique_ptr<HistoryCardThumb> thumb(new HistoryCardThumb());
+        //一律可点：本机有原图时看图，没有时先下载
+        thumb->SetImage(std::wstring((LPCWSTR)view.m_path), view.m_state, true);
+        if (k + 1 == count)
+        {
+            thumb->SetExtraCount(row.m_cardThumbExtra);
+        }
+        thumb->SetCtrlId((UINT)(kIdHistoryCardThumbBase + (UINT)index * (UINT)kHistoryCardMaxThumbs + (UINT)k));
+        if (!view.m_tooltip.IsEmpty())
+        {
+            balloonwjui::DuiToolTipMgr::Inst().Register(thumb.get(), view.m_tooltip);
+        }
+        int thumbW = 0;
+        int thumbH = 0;
+        ComputeHistoryCardThumbSize(view.m_width, view.m_height, thumbW, thumbH);
+        strip->AddChild(std::unique_ptr<DuiControl>(thumb.release()),
+                        Hint().Fixed(thumbW, thumbH).AlignC(DuiLayout::AlignNear));
+    }
+    //余下的空间留白，缩略图靠左
+    strip->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
+    return std::unique_ptr<DuiControl>(strip.release());
 }
 
 // 造文件消息的卡片：[类型色块][文件名 / 大小]。
@@ -549,13 +770,13 @@ std::unique_ptr<DuiControl> BuildMergedCard(const HistoryRowView& row, int index
 
     //色块与文件卡片的类型色块同一尺寸、同一画法，里面写"记录"两个字
     std::unique_ptr<HistoryRowThumb> block(new HistoryRowThumb());
-    block->SetFile(kMergedCardBlockText);
+    block->SetFile(TR(kMergedCardBlockText));
     card->AddChild(std::unique_ptr<DuiControl>(block.release()),
                    Hint().Fixed(kFileCardBlockSize, kFileCardBlockSize).AlignC(DuiLayout::AlignNear));
 
     std::unique_ptr<DuiVBox> texts(new DuiVBox());
     std::unique_ptr<DuiLabel> title(new DuiLabel());
-    title->SetText(row.m_mergedTitle.IsEmpty() ? CString(kMergedCardDefaultTitle) : row.m_mergedTitle);
+    title->SetText(row.m_mergedTitle.IsEmpty() ? CString(TR(kMergedCardDefaultTitle)) : row.m_mergedTitle);
     title->SetCtrlId((UINT)(kIdHistoryCardBase + index));
     //ModeLink 才会悬停变手型、点击发 DUIN_CLICK；不打开浏览器，点击交给窗口处理
     title->SetMode(DuiLabel::ModeLink);
@@ -567,11 +788,83 @@ std::unique_ptr<DuiControl> BuildMergedCard(const HistoryRowView& row, int index
     texts->AddChild(std::unique_ptr<DuiControl>(title.release()), Hint().Fixed(kFileNameLineH));
 
     CString countText;
-    countText.Format(_T("聊天记录（共 %d 条）"), row.m_mergedCount);
+    countText.Format(TR(L"聊天记录（共 %d 条）"), row.m_mergedCount);
     texts->AddChild(MakeLabel(countText, kColorTime, DT_LEFT | DT_VCENTER | DT_SINGLELINE),
                     Hint().Fixed(kFileSizeLineH));
     card->AddChild(std::unique_ptr<DuiControl>(texts.release()), Hint().Weight(1));
     return std::unique_ptr<DuiControl>(card.release());
+}
+
+// 时间轴竖线的一段：竖向分隔线，画在所在格子的正中
+std::unique_ptr<DuiControl> MakeTimelineLine()
+{
+    std::unique_ptr<DuiSeparator> sep(new DuiSeparator());
+    sep->SetOrientation(DuiSeparator::Vertical);
+    sep->SetColor(kColorTimelineLine);
+    sep->SetThickness(kTimelineLineThick);
+    return std::unique_ptr<DuiControl>(sep.release());
+}
+
+// 时间轴的竖线节点列：上段竖线 + 节点「●」+ 下段竖线，三者首尾相接。
+//   dotTop：节点那一格离列顶的距离（像素），使节点与右侧名字那一行对齐；日期大节点传 -1 表示上下居中
+//   dotH：  节点那一格的高；pointSize：「●」的字号；color：节点颜色
+std::unique_ptr<DuiControl> BuildTimelineRail(int dotTop, int dotH, int pointSize, COLORREF color)
+{
+    std::unique_ptr<DuiVBox> rail(new DuiVBox());
+    rail->SetGap(0);
+    if (dotTop >= 0)
+    {
+        rail->AddChild(MakeTimelineLine(), Hint().Fixed(dotTop));
+    }
+    else
+    {
+        rail->AddChild(MakeTimelineLine(), Hint().Weight(1));
+    }
+    std::unique_ptr<DuiControl> dot = MakeLabel(kTimelineDotText, color, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DuiLabel* dotLabel = dynamic_cast<DuiLabel*>(dot.get());
+    if (dotLabel != NULL)
+    {
+        dotLabel->SetTextPointSize(pointSize, false);
+    }
+    rail->AddChild(std::move(dot), Hint().Fixed(dotH));
+    rail->AddChild(MakeTimelineLine(), Hint().Weight(1));
+    return std::unique_ptr<DuiControl>(rail.release());
+}
+
+// 时间轴样式一行最前面的时间列：时间靠右，与右侧名字那一行对齐
+std::unique_ptr<DuiControl> BuildTimelineTimeColumn(const CString& timeText)
+{
+    std::unique_ptr<DuiVBox> col(new DuiVBox());
+    col->SetGap(0);
+    col->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(kRowPadV));
+    col->AddChild(MakeLabel(timeText, kColorTime, DT_RIGHT | DT_VCENTER | DT_SINGLELINE), Hint().Fixed(kNameLineH));
+    col->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
+    return std::unique_ptr<DuiControl>(col.release());
+}
+
+// 时间轴样式的日期大节点那一行：空出时间列 + 大节点 + 日期（粗体）+ 灰色说明（星期几、当天条数）。
+// 与日期分组头一样不给 ctrlId，窗口按落点找行时会跳过它
+std::unique_ptr<DuiControl> BuildTimelineDayRow(const CString& label, const CString& detail)
+{
+    std::unique_ptr<DuiHBox> dayRow(new DuiHBox());
+    dayRow->SetPadding(kRowPadV, 0, kRowPadV, 0);
+    dayRow->SetGap(0);
+    dayRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(kTimelineTimeW));
+    dayRow->AddChild(BuildTimelineRail(-1, kTimelineDayDotH, kTimelineDayDotPt, kColorTimelineDay),
+                     Hint().Fixed(kTimelineRailW));
+    std::unique_ptr<DuiControl> dateLabel = MakeLabel(label, kColorName, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    DuiLabel* date = dynamic_cast<DuiLabel*>(dateLabel.get());
+    if (date != NULL)
+    {
+        date->SetTextPointSize(kTimelineDayTextPt, true);
+    }
+    //粗体比默认字体宽，按标题区会话名同一比例放宽
+    const int dateW = MeasureDefaultFontWidth(label) * kBoldWidthPercent / kPercentBase + kHeaderTitleSlackW;
+    dayRow->AddChild(std::move(dateLabel), Hint().Fixed(dateW));
+    dayRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(kTimelineDayGap));
+    dayRow->AddChild(MakeLabel(detail, kColorSubtitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS),
+                     Hint().Weight(1));
+    return std::unique_ptr<DuiControl>(dayRow.release());
 }
 
 std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
@@ -580,8 +873,30 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
 {
     std::unique_ptr<HistoryRow> line(new HistoryRow());
     line->SetCtrlId((UINT)(kIdHistoryRowBase + index));
-    line->SetPadding(8, 8, 8, 8);
-    line->SetGap(10);
+    //各列加进 host：普通样式就是行本身；时间轴样式是行里时间列、竖线列之后的内层容器，原来的上下内边距
+    //挪到它身上，行本身不留上下内边距，竖线才能贯穿整行、与上下两行连成一条
+    DuiLayout* host = line.get();
+    std::unique_ptr<DuiHBox> timelineBody;
+    if (row.m_timeline)
+    {
+        line->SetPadding(kRowPadV, 0, kRowPadV, 0);
+        line->SetGap(0);
+        line->AddChild(BuildTimelineTimeColumn(row.m_timeText), Hint().Fixed(kTimelineTimeW));
+        //消息节点与名字那一行的竖直中线对齐
+        const int dotTop = kRowPadV + (kNameLineH - kTimelineDotH) / 2;
+        line->AddChild(BuildTimelineRail(dotTop, kTimelineDotH, kTimelineDotPt,
+                                         row.m_timelineHit ? kColorTimelineHit : kColorTimelineDot),
+                       Hint().Fixed(kTimelineRailW));
+        timelineBody.reset(new DuiHBox());
+        timelineBody->SetPadding(0, kRowPadV, 0, kRowPadV);
+        timelineBody->SetGap(10);
+        host = timelineBody.get();
+    }
+    else
+    {
+        line->SetPadding(8, 8, 8, 8);
+        line->SetGap(10);
+    }
 
     //多选模式：行首一个复选框，贴在行顶部与头像对齐。构建期设值不发通知，避免伪触发选择变化
     if (row.m_selectMode)
@@ -594,7 +909,7 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
         box->SetText(_T(""));
         box->SetCtrlId((UINT)(kIdHistorySelectBase + index));
         box->SetCheck(row.m_selected, false);
-        line->AddChild(std::unique_ptr<DuiControl>(box.release()),
+        host->AddChild(std::unique_ptr<DuiControl>(box.release()),
                        Hint().Fixed(kSelectBoxW, kSelectBoxW).AlignC(DuiLayout::AlignNear));
     }
 
@@ -603,7 +918,7 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     //另起了一段。
     if (row.m_compact)
     {
-        line->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(kAvatarSize));
+        host->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(kAvatarSize));
     }
     else
     {
@@ -615,7 +930,7 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
         //宽高都固定并贴在行顶部，与昵称、时间那一行对齐。行是 DuiHBox，子控件在竖直
         //方向上默认撑满整行，只固定宽度的话，正文一长头像就被纵向拉成长条。
         //注意 fixedCross 只有在对齐方式不是 AlignFill 时才生效，两者必须一起设置。
-        line->AddChild(std::unique_ptr<DuiControl>(avatar.release()),
+        host->AddChild(std::unique_ptr<DuiControl>(avatar.release()),
                        Hint().Fixed(kAvatarSize, kAvatarSize).AlignC(DuiLayout::AlignNear));
     }
 
@@ -633,8 +948,12 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     nameLine->AddChild(MakeLabel(row.m_senderName, kColorName,
                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE),
                        Hint().Fixed(kNameWidth));
-    nameLine->AddChild(MakeLabel(row.m_timeText, kColorTime,
-                                 DT_LEFT | DT_VCENTER | DT_SINGLELINE), Hint().Fixed(kTimeWidth));
+    //时间轴样式的时间写在行首的时间列里，这里不再重复
+    if (!row.m_timeline)
+    {
+        nameLine->AddChild(MakeLabel(row.m_timeText, kColorTime,
+                                     DT_LEFT | DT_VCENTER | DT_SINGLELINE), Hint().Fixed(kTimeWidth));
+    }
 
     //已 Pin 的行在时间右边点一枚小图钉。行内那枚常驻的「取消」按钮在最右侧，
     //扫一列行时不容易看出"这条钉着"；标记贴着名字与时间，纵向扫下来一眼能挑出来。
@@ -666,6 +985,16 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
         mid->AddChild(BuildImagePreview(row, index),
                       Hint().Fixed(dispH, dispW).AlignC(DuiLayout::AlignNear));
     }
+    else if (RowIsVoice(row))
+    {
+        //语音行：与聊天窗语音气泡同款的语音条，单击播放 / 停止（本机没有文件时先下载）。宽高都固定并贴左
+        std::unique_ptr<balloonchatwnd::ChatVoiceStrip> strip(new balloonchatwnd::ChatVoiceStrip());
+        strip->SetVoiceMessage(row.m_voice, row.m_voiceShowDot);
+        strip->SetCtrlId((UINT)(kIdHistoryVoiceBase + index));
+        mid->AddChild(std::unique_ptr<DuiControl>(strip.release()),
+                      Hint().Fixed(balloonchatwnd::kVoiceStripH, balloonchatwnd::VoiceStripWidth(row.m_voice))
+                          .AlignC(DuiLayout::AlignNear));
+    }
     else if (RowIsChatFileCard(row))
     {
         //聊天文件卡片：与聊天窗文件气泡同样的卡片，可以直接下载、打开。宽高都固定并贴左，
@@ -688,6 +1017,30 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
         //合并转发的聊天记录：昵称下方显示一张"色块 + 标题 + 条数"的卡片，单击标题打开查看窗。
         mid->AddChild(BuildMergedCard(row, index), Hint().Fixed(kFileCardH));
     }
+    else if (RowIsCode(row))
+    {
+        //代码片段：与聊天窗相同的代码卡片，宽高按内容列宽度量出（与行高的计算相同）并贴左；点卡片打开代码查看窗
+        const std::wstring code((LPCWSTR)row.m_fullText);
+        const SIZE cardSize = balloonchatwnd::ChatCodeCardControl::MeasureCard(code, row.m_codeLang, contentWidth,
+                                                                               row.m_codeNotes);
+        std::unique_ptr<balloonchatwnd::ChatCodeCardControl> card(new balloonchatwnd::ChatCodeCardControl());
+        card->SetCode(code, row.m_codeLang, (row.m_msgid > 0) ? std::to_string(row.m_msgid) : std::string(),
+                      row.m_codeNotes);
+        card->SetCtrlId((UINT)(kIdHistoryCodeCardBase + index));
+        mid->AddChild(std::unique_ptr<DuiControl>(card.release()),
+                      Hint().Fixed(cardSize.cy, cardSize.cx).AlignC(DuiLayout::AlignNear));
+    }
+    else if (RowIsMarkdown(row))
+    {
+        //Markdown 消息：与聊天窗相同的卡片，宽高按内容列宽度量出（与行高的计算相同）并贴左；点卡片打开 Markdown 预览窗口
+        const SIZE cardSize = balloonchatwnd::ChatMarkdownCardControl::MeasureCard(row.m_markdownCard.m_summary,
+                                                                                   contentWidth);
+        std::unique_ptr<balloonchatwnd::ChatMarkdownCardControl> card(new balloonchatwnd::ChatMarkdownCardControl());
+        card->SetCard(row.m_markdownCard);
+        card->SetCtrlId((UINT)(kIdHistoryMarkdownCardBase + index));
+        mid->AddChild(std::unique_ptr<DuiControl>(card.release()),
+                      Hint().Fixed(cardSize.cy, cardSize.cx).AlignC(DuiLayout::AlignNear));
+    }
     else
     {
         //正文内容块：多行、把 /f["<id>"] 画成表情、搜索命中处铺一层淡黄底。
@@ -699,6 +1052,11 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
         content->SetExpanded(row.m_expanded);
         const int contentH = content->MeasureHeight(contentWidth);
         mid->AddChild(std::unique_ptr<DuiControl>(content.release()), Hint().Fixed(contentH));
+        //帖子卡片与补充卡片带图片时，正文下面排一行缩略图（docs/帖子群方案.md 14.5）
+        if (RowHasCardThumbs(row))
+        {
+            mid->AddChild(BuildCardThumbStrip(row, index), Hint().Fixed(HistoryCardThumbStripHeight(row)));
+        }
     }
 
     //「展开 / 收起」链接：只有正文真的超出折叠行数时才建 —— 内容本来就画得下却挂着
@@ -706,7 +1064,7 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     if (needsExpandLink)
     {
         std::unique_ptr<DuiLabel> expandLink(new DuiLabel());
-        expandLink->SetText(row.m_expanded ? _T("收起") : _T("展开"));
+        expandLink->SetText(row.m_expanded ? TR(L"收起") : TR(L"展开"));
         expandLink->SetCtrlId((UINT)(kIdHistoryExpandBase + index));
         //ModeLink 才会悬停变手型、点击发 DUIN_CLICK；ModeText 是纯绘制控件，点了没反应。
         expandLink->SetMode(DuiLabel::ModeLink);
@@ -719,12 +1077,16 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
                       Hint().Fixed(kExpandLinkH));
     }
 
-    line->AddChild(std::move(mid), Hint().Weight(1));
+    host->AddChild(std::move(mid), Hint().Weight(1));
 
     //不预留操作列（聊天记录查看窗）：不建 Pin / 定位两个按钮槽，正文列用满整行。
     //RowContentWidth 收到的是同一个值，测量宽度与实际宽度一致
     if (!reserveRowActions)
     {
+        if (timelineBody)
+        {
+            line->AddChild(std::unique_ptr<DuiControl>(timelineBody.release()), Hint().Weight(1));
+        }
         return std::unique_ptr<DuiControl>(line.release());
     }
 
@@ -733,7 +1095,7 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     //口径一致。点下去只发请求，界面等服务端推送回来再刷。
     std::unique_ptr<DuiButton> pin(new DuiButton());
     pin->SetButtonType(DuiButton::StylePushButton);
-    pin->SetText(row.m_pinned ? _T("取消") : _T("Pin"));
+    pin->SetText(row.m_pinned ? TR(L"取消") : _T("Pin"));
     pin->SetCtrlId((UINT)(kIdHistoryPinBase + index));
     pin->SetVariant(DuiButton::Variant::Default);
     pin->SetTextColor(kColorLocateText);
@@ -746,14 +1108,14 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     pinSlot->AddChild(std::unique_ptr<DuiControl>(pin.release()), Hint().Weight(1));
     //按钮槽的高度同样固定并贴在行顶部：按钮在槽内撑满，槽若随行高拉伸，悬停时显示
     //出来的按钮就是一个与整行等高的长条。
-    line->AddChild(std::unique_ptr<DuiControl>(pinSlot.release()),
+    host->AddChild(std::unique_ptr<DuiControl>(pinSlot.release()),
                    Hint().Fixed(kRowPinW, kRowActionH).AlignC(DuiLayout::AlignNear));
 
     //“定位”按钮：次操作风格（白底 + 1px 灰边 + 柔和灰字、字号略小），轻量不抢眼，
     //对齐设计稿的浅灰小药丸；不用 Outlined（那是品牌蓝边 + 蓝字，过于扎眼）。
     std::unique_ptr<DuiButton> locate(new DuiButton());
     locate->SetButtonType(DuiButton::StylePushButton);
-    locate->SetText(_T("定位"));
+    locate->SetText(TR(L"定位"));
     locate->SetCtrlId((UINT)(kIdHistoryLocateBase + index));
     locate->SetVariant(DuiButton::Variant::Default);
     locate->SetTextColor(kColorLocateText);
@@ -762,7 +1124,7 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     std::unique_ptr<DuiHBox> locateSlot(new DuiHBox());
     locateSlot->AddChild(std::unique_ptr<DuiControl>(locate.release()), Hint().Weight(1));
     //与 Pin 按钮槽同理，固定高度并贴在行顶部。
-    line->AddChild(std::unique_ptr<DuiControl>(locateSlot.release()),
+    host->AddChild(std::unique_ptr<DuiControl>(locateSlot.release()),
                    Hint().Fixed(kLocateW, kRowActionH).AlignC(DuiLayout::AlignNear));
 
     //两枚操作按钮改成"悬停才显示"：常驻的话一屏八行就是十六枚按钮，右侧糊成一道
@@ -777,6 +1139,11 @@ std::unique_ptr<DuiControl> BuildRow(const HistoryRowView& row, int index,
     }
     line->AddHoverOnlyControl(locateRaw);
 
+    //时间轴样式：内层容器排在时间列、竖线列之后，占满余下宽度
+    if (timelineBody)
+    {
+        line->AddChild(std::unique_ptr<DuiControl>(timelineBody.release()), Hint().Weight(1));
+    }
     return std::unique_ptr<DuiControl>(line.release());
 }
 
@@ -792,7 +1159,223 @@ std::unique_ptr<DuiControl> MakeSeparator()
     return std::unique_ptr<DuiControl>(sep.release());
 }
 
+/**
+ *  造时间范围下拉（全部时间 / 近 7 天 / 近 30 天 / 近 3 个月 / 近半年 / 近一年）。各项的<u>顺序必须与
+ *  HistoryTimeRange 的枚举值一一对应</u>（0 起）—— 窗口侧的 TimeRangeFromComboIndex / ComboIndexFromRange
+ *  就是照这个约定直接转换的，插项时两边要一起改。自定义起止不在这里，由「选日期」弹层设置。
+ *  聊天记录页与文件 / 图片页共用。
+ *    ctrlId：控件编号。selIndex：选中项下标，构建期设值不发通知。
+ *    outWidth：[出参] 按最宽的一项实测出的下拉宽度（像素）—— 写死像素在高 DPI 下会把「全部时间」截成
+ *              「全部时...」，理由见 MeasureDefaultFontWidth。
+ *  @return 下拉框，调用方拿到所有权
+ */
+std::unique_ptr<DuiControl> MakeTimeCombo(UINT ctrlId, int selIndex, int& outWidth)
+{
+    static const wchar_t* const kTimeComboItems[] =
+    {
+        TR_NOOP(L"全部时间"), TR_NOOP(L"近 7 天"), TR_NOOP(L"近 30 天"),
+        TR_NOOP(L"近 3 个月"), TR_NOOP(L"近半年"), TR_NOOP(L"近一年"),
+    };
+    const int kTimeComboItemCount = (int)(sizeof(kTimeComboItems) / sizeof(kTimeComboItems[0]));
+
+    std::unique_ptr<DuiComboBox> timeCombo(new DuiComboBox());
+    timeCombo->SetCtrlId(ctrlId);
+    outWidth = kTimeComboMinW;
+    for (int i = 0; i < kTimeComboItemCount; ++i)
+    {
+        const LPCTSTR item = TR(kTimeComboItems[i]);
+        timeCombo->AddString(item);
+        const int need = MeasureDefaultFontWidth(item) + kComboChromeW + kComboSlackW;
+        if (need > outWidth)
+        {
+            outWidth = need;
+        }
+    }
+    timeCombo->SetCurSel(selIndex, false);
+    return std::unique_ptr<DuiControl>(timeCombo.release());
+}
+
 } // anonymous namespace
+
+// ---- 公开给文件 / 图片页布局（HistoryLibraryLayout.cpp）复用的小工具，见 HistoryLayoutKit.h ----
+namespace layoutkit {
+
+COLORREF TitleColor()
+{
+    return kColorTitle;
+}
+
+COLORREF SubtitleColor()
+{
+    return kColorSubtitle;
+}
+
+COLORREF NameColor()
+{
+    return kColorName;
+}
+
+COLORREF TimeColor()
+{
+    return kColorTime;
+}
+
+COLORREF EmptyTitleColor()
+{
+    return kColorEmptyTitle;
+}
+
+std::unique_ptr<DuiControl> Label(LPCTSTR text, COLORREF color, DWORD dtAlign, UINT ctrlId)
+{
+    return MakeLabel(text, color, dtAlign, ctrlId);
+}
+
+std::unique_ptr<DuiControl> Button(LPCTSTR text, UINT ctrlId, DuiButton::Variant variant)
+{
+    return MakeButton(text, ctrlId, variant);
+}
+
+std::unique_ptr<DuiControl> Chip(LPCTSTR text, UINT ctrlId, bool active)
+{
+    return MakeChip(text, ctrlId, active);
+}
+
+std::unique_ptr<DuiControl> Separator()
+{
+    return MakeSeparator();
+}
+
+std::unique_ptr<DuiControl> WildcardCheckbox(UINT ctrlId, bool checked, int& outWidth)
+{
+    return MakeWildcardCheckbox(ctrlId, checked, outWidth);
+}
+
+std::unique_ptr<DuiControl> TimeCombo(UINT ctrlId, int selIndex, int& outWidth)
+{
+    return MakeTimeCombo(ctrlId, selIndex, outWidth);
+}
+
+int TextWidth(LPCTSTR text)
+{
+    return MeasureDefaultFontWidth(text);
+}
+
+int GrowWidth(LPCTSTR text, int designWidth, int padding)
+{
+    return GrowWidthToFitText(text, designWidth, padding);
+}
+
+int ChipPadWidth()
+{
+    return kGrowChipPadW;
+}
+
+int ComboChromeWidth()
+{
+    return kComboChromeW + kComboSlackW;
+}
+
+} // namespace layoutkit
+
+void ComputeHistoryCardThumbSize(int realW, int realH, int& outW, int& outH)
+{
+    //宽高缺失：取方框本身，占位与下载下来的图同样大
+    if (realW <= 0 || realH <= 0)
+    {
+        outW = kHistoryCardThumbPx;
+        outH = kHistoryCardThumbPx;
+        return;
+    }
+    //按长边缩进方框，小图不放大；四舍五入到整像素，至少 1 像素
+    const int longSide = (realW > realH) ? realW : realH;
+    const double scale = (longSide > kHistoryCardThumbPx) ? ((double)kHistoryCardThumbPx / (double)longSide) : 1.0;
+    const double kRoundHalf = 0.5;
+    outW = (int)(realW * scale + kRoundHalf);
+    outH = (int)(realH * scale + kRoundHalf);
+    if (outW < 1)
+    {
+        outW = 1;
+    }
+    if (outH < 1)
+    {
+        outH = 1;
+    }
+}
+
+std::vector<HistoryRowView> ExpandHistoryGridCells(const std::vector<HistoryRowView>& rows, size_t capacity,
+                                                   std::vector<HistoryGridCellRef>& refsOut)
+{
+    refsOut.clear();
+    std::vector<HistoryRowView> cells;
+    for (size_t i = 0; i < rows.size() && cells.size() < capacity; ++i)
+    {
+        const HistoryRowView& row = rows[i];
+        //图片消息：原样一格
+        if (row.m_cardThumbs.empty())
+        {
+            cells.push_back(row);
+            HistoryGridCellRef ref;
+            ref.m_row = (int)i;
+            refsOut.push_back(ref);
+            continue;
+        }
+        //帖子卡片：每张图片一格，格子上画那张图；分组头只跟着第一格
+        for (size_t k = 0; k < row.m_cardThumbs.size() && cells.size() < capacity; ++k)
+        {
+            const HistoryCardThumbView& thumb = row.m_cardThumbs[k];
+            HistoryRowView cell = row;
+            cell.m_cardThumbs.clear();
+            cell.m_cardThumbExtra = 0;
+            if (k > 0)
+            {
+                cell.m_groupLabel.Empty();
+            }
+            cell.m_hasImageThumb = true;
+            cell.m_thumbImagePath = thumb.m_path;
+            cell.m_thumbState = thumb.m_state;
+            cell.m_thumbClickable = true;
+            cell.m_thumbTooltip = thumb.m_tooltip;
+            cell.m_imageWidth = thumb.m_width;
+            cell.m_imageHeight = thumb.m_height;
+            cells.push_back(cell);
+            HistoryGridCellRef ref;
+            ref.m_row = (int)i;
+            ref.m_image = (int)k;
+            refsOut.push_back(ref);
+        }
+    }
+    return cells;
+}
+
+int HistoryCardThumbStripHeight(const HistoryRowView& row)
+{
+    const size_t count = (row.m_cardThumbs.size() < kHistoryCardMaxThumbs) ? row.m_cardThumbs.size()
+                                                                           : kHistoryCardMaxThumbs;
+    int tallest = 0;
+    for (size_t k = 0; k < count; ++k)
+    {
+        int w = 0;
+        int h = 0;
+        ComputeHistoryCardThumbSize(row.m_cardThumbs[k].m_width, row.m_cardThumbs[k].m_height, w, h);
+        if (h > tallest)
+        {
+            tallest = h;
+        }
+    }
+    return tallest;
+}
+
+bool ResolveHistoryCardThumbClick(UINT id, int& rowOut, int& thumbOut)
+{
+    if (id < (UINT)kIdHistoryCardThumbBase || id >= (UINT)kIdHistoryCardThumbBase + kIdHistoryCardThumbCapacity)
+    {
+        return false;
+    }
+    const UINT offset = id - (UINT)kIdHistoryCardThumbBase;
+    rowOut = (int)(offset / (UINT)kHistoryCardMaxThumbs);
+    thumbOut = (int)(offset % (UINT)kHistoryCardMaxThumbs);
+    return true;
+}
 
 void ComputeHistoryImageSize(int realW, int realH, int& outW, int& outH)
 {
@@ -930,10 +1513,10 @@ std::unique_ptr<DuiControl> BuildListContent(const std::vector<HistoryRowView>& 
         bar->SetPadding(0, 6, 0, 6);
         bar->SetGap(8);
         CString info;
-        info.Format(_T("本页有 %d 个文件还没有下载"), pendingDownloadCount);
+        info.Format(TR(L"本页有 %d 个文件还没有下载"), pendingDownloadCount);
         bar->AddChild(MakeLabel(info, kColorSubtitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE, kIdHistoryBatchInfo),
                       DuiLayout::Hint().Weight(1));
-        bar->AddChild(MakeButton(_T("全部下载"), kIdHistoryBatchDownload, DuiButton::Variant::Outlined),
+        bar->AddChild(MakeButton(TR(L"全部下载"), kIdHistoryBatchDownload, DuiButton::Variant::Outlined),
                       DuiLayout::Hint().Fixed(kBatchBtnW));
         listContent->AddChild(std::unique_ptr<DuiControl>(bar.release()), DuiLayout::Hint().Fixed(kBatchBarH));
     }
@@ -942,7 +1525,13 @@ std::unique_ptr<DuiControl> BuildListContent(const std::vector<HistoryRowView>& 
     {
         //日期分组头：不可点、不给 ctrlId —— 它不是一行消息，不该占行按钮的 id 段，
         //否则后面各行的"定位 / Pin"按钮下标就与 m_model.Records() 的下标对不上了。
-        if (!rows[i].m_groupLabel.IsEmpty())
+        //时间轴样式的分组头画成竖线上的日期大节点（docs/聊天记录管理器方案.md §11.7），同样不给 ctrlId
+        if (!rows[i].m_groupLabel.IsEmpty() && rows[i].m_timeline)
+        {
+            listContent->AddChild(BuildTimelineDayRow(rows[i].m_groupLabel, rows[i].m_groupDetail),
+                                  DuiLayout::Hint().Fixed(kTimelineDayH));
+        }
+        else if (!rows[i].m_groupLabel.IsEmpty())
         {
             listContent->AddChild(MakeLabel(rows[i].m_groupLabel, kColorSubtitle,
                                             DT_LEFT | DT_VCENTER | DT_SINGLELINE),
@@ -957,6 +1546,11 @@ std::unique_ptr<DuiControl> BuildListContent(const std::vector<HistoryRowView>& 
         {
             contentW -= kSelectColumnW;
         }
+        //时间轴样式的行首多了时间列与竖线列；行的上下内边距挪到了内层容器上，行高不变
+        if (rows[i].m_timeline)
+        {
+            contentW -= kTimelineLeadW;
+        }
         bool needsExpand = false;
         const int rowH = MeasureRowHeight(rows[i], contentW, needsExpand);
         listContent->AddChild(BuildRow(rows[i], (int)i, contentW, needsExpand, reserveRowActions),
@@ -967,7 +1561,7 @@ std::unique_ptr<DuiControl> BuildListContent(const std::vector<HistoryRowView>& 
 
 std::unique_ptr<DuiControl> BuildImageGridContent(const std::vector<HistoryRowView>& rows,
                                                   LPCTSTR emptyTitle, LPCTSTR emptySubtitle,
-                                                  int listWidth)
+                                                  int listWidth, UINT listCtrlId, UINT cellIdBase)
 {
     //空列表：与逐行列表的空状态完全一样
     if (rows.empty())
@@ -986,7 +1580,7 @@ std::unique_ptr<DuiControl> BuildImageGridContent(const std::vector<HistoryRowVi
     const int columns = GridColumnCount(listWidth, metrics);
 
     std::unique_ptr<DuiVBox> grid(new DuiVBox());
-    grid->SetCtrlId(kIdHistoryList);
+    grid->SetCtrlId(listCtrlId);
     grid->SetPadding(kListPadH, kGridPadV, kListPadH, kGridPadV);
     grid->SetGap(0);
 
@@ -1019,7 +1613,7 @@ std::unique_ptr<DuiControl> BuildImageGridContent(const std::vector<HistoryRowVi
         std::unique_ptr<HistoryRowThumb> thumb(new HistoryRowThumb());
         //网格里单击一律是"看大图"（本地没有时先下载），故恒为可点击
         thumb->SetImage(std::wstring((LPCWSTR)row.m_thumbImagePath), row.m_thumbState, true);
-        thumb->SetCtrlId((UINT)(kIdHistoryGridBase + i));
+        thumb->SetCtrlId((UINT)(cellIdBase + i));
         CString tip = row.m_senderName + _T(" · ") + row.m_timeText;
         if (!row.m_thumbTooltip.IsEmpty())
         {
@@ -1045,16 +1639,16 @@ std::unique_ptr<DuiControl> BuildMultiSelectBar()
     //内边距与底部分页栏一致，两者换来换去时按钮位置不跳
     bar->SetPadding(kPadH, 8, kPadH, 8);
     bar->SetGap(8);
-    bar->AddChild(MakeLabel(_T("已选 0 条"), kColorSubtitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+    bar->AddChild(MakeLabel(TR(L"已选 0 条"), kColorSubtitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE,
                             kIdHistorySelectInfo),
                   Hint().Weight(1));
-    bar->AddChild(MakeButton(_T("合并转发"), kIdHistorySelectMerge, DuiButton::Variant::Primary),
+    bar->AddChild(MakeButton(TR(L"合并转发"), kIdHistorySelectMerge, DuiButton::Variant::Primary),
                   Hint().Fixed(kSelectBtnW));
-    bar->AddChild(MakeButton(_T("逐条转发"), kIdHistorySelectEach, DuiButton::Variant::Outlined),
+    bar->AddChild(MakeButton(TR(L"逐条转发"), kIdHistorySelectEach, DuiButton::Variant::Outlined),
                   Hint().Fixed(kSelectBtnW));
-    bar->AddChild(MakeButton(_T("删除"), kIdHistorySelectDelete, DuiButton::Variant::Outlined),
+    bar->AddChild(MakeButton(TR(L"删除"), kIdHistorySelectDelete, DuiButton::Variant::Outlined),
                   Hint().Fixed(kSelectSmallBtnW));
-    bar->AddChild(MakeButton(_T("取消"), kIdHistorySelectCancel, DuiButton::Variant::Default),
+    bar->AddChild(MakeButton(TR(L"取消"), kIdHistorySelectCancel, DuiButton::Variant::Default),
                   Hint().Fixed(kSelectSmallBtnW));
     return std::unique_ptr<DuiControl>(bar.release());
 }
@@ -1068,7 +1662,7 @@ void PopulatePagerButtons(DuiControl* pager, int currentPage, int pageCount)
         return;
     }
     typedef DuiLayout::Hint Hint;
-    box->AddChild(MakeButton(_T("首页"), kIdHistoryPageFirst, DuiButton::Variant::Default),
+    box->AddChild(MakeButton(TR(L"首页"), kIdHistoryPageFirst, DuiButton::Variant::Default),
                   Hint().Fixed(kPagerBtnW));
     box->AddChild(MakeButton(_T("<"), kIdHistoryPagePrev, DuiButton::Variant::Default),
                   Hint().Fixed(kPagerCellW));
@@ -1099,7 +1693,7 @@ void PopulatePagerButtons(DuiControl* pager, int currentPage, int pageCount)
 
     box->AddChild(MakeButton(_T(">"), kIdHistoryPageNext, DuiButton::Variant::Default),
                   Hint().Fixed(kPagerCellW));
-    box->AddChild(MakeButton(_T("末页"), kIdHistoryPageLast, DuiButton::Variant::Default),
+    box->AddChild(MakeButton(TR(L"末页"), kIdHistoryPageLast, DuiButton::Variant::Default),
                   Hint().Fixed(kPagerBtnW));
 }
 
@@ -1107,43 +1701,73 @@ std::unique_ptr<DuiControl> BuildHistoryWindowBody(const HistoryViewData& data,
                                                    int listRightInsetPx)
 {
     std::unique_ptr<DuiVBox> root(new DuiVBox());
+    root->SetCtrlId(kIdHistoryBody);
     root->SetBgColor(kColorWhite);
     root->SetPadding(0);
     root->SetGap(0);
 
-    // 1. 标题区：仅“共 N 条消息”副行。窗口标题“消息记录 · <对话名>”已在标题栏显示，
-    //    客户区不再重复（避免与标题栏重复）。
+    // 1. 标题区一行：「»」（聊天记录管理器左栏折叠时才显示）+ 会话名 + “共 N 条消息”。
+    //    会话名与「»」的显隐、宽度由 ApplyHistoryHeaderTitle 设置。
     std::unique_ptr<DuiVBox> header(new DuiVBox());
     header->SetPadding(kPadH, 8, kPadH, 6);
     header->SetGap(0);
+    std::unique_ptr<DuiHBox> headerRow(new DuiHBox());
+    headerRow->SetCtrlId(kIdHistoryHeaderRow);
+    headerRow->SetGap(kHeaderRowGap);
+    headerRow->AddChild(MakeButton(kHistoryExpandLeftText, kIdHistoryExpandLeft, DuiButton::Variant::Ghost),
+                        Hint().Fixed(kExpandLeftW));
+    std::unique_ptr<DuiControl> title = MakeLabel(_T(""), kColorTitle,
+                                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                                                  kIdHistoryTitle);
+    DuiLabel* titleLabel = dynamic_cast<DuiLabel*>(title.get());
+    if (titleLabel != NULL)
+    {
+        titleLabel->SetTextPointSize(kHeaderTitlePt, true);
+    }
+    headerRow->AddChild(std::move(title), Hint().Fixed(0));
     CString sub;
-    sub.Format(_T("共 %d 条消息"), data.m_totalCount);
-    header->AddChild(MakeLabel(sub, kColorSubtitle,
-                               DT_LEFT | DT_VCENTER | DT_SINGLELINE, kIdHistorySubtitle),
-                     Hint().Fixed(kSubLineH));
+    sub.Format(TR(L"共 %d 条消息"), data.m_totalCount);
+    headerRow->AddChild(MakeLabel(sub, kColorSubtitle,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE, kIdHistorySubtitle),
+                        Hint().Weight(1));
+    header->AddChild(std::move(headerRow), Hint().Fixed(kSubLineH));
     root->AddChild(std::move(header), Hint().Fixed(kHeaderH));
     root->AddChild(MakeSeparator(), Hint().Fixed(1));
 
-    // 2. 搜索行：搜索框（左，撑满）+ 发送人下拉（右，固定）。
+    // 2. 搜索行：搜索框（左，撑满）+「通配符」复选框 + 发送人下拉（右，固定）。
     std::unique_ptr<DuiHBox> searchRow(new DuiHBox());
     searchRow->SetPadding(kPadH, 8, kPadH, 6);
     searchRow->SetGap(kSearchRowGap);
-    std::unique_ptr<DuiSearchBox> search(new DuiSearchBox());
+    //悬停时显示搜索语法说明（docs/聊天记录管理器方案.md §12.3）
+    std::unique_ptr<HistoryTipSearchBox> search(new HistoryTipSearchBox(HistorySearchSyntaxTip()));
     search->SetCtrlId(kIdHistorySearch);
-    search->SetPlaceholder(_T("搜索消息内容、文件名、@某人"));
+    search->SetPlaceholder(TR(L"搜索消息内容、文件名、@某人"));
     searchRow->AddChild(std::unique_ptr<DuiControl>(search.release()), Hint().Weight(1));
+    int wildcardW = 0;
+    std::unique_ptr<DuiControl> wildcard = MakeWildcardCheckbox(kIdHistoryWildcard, data.m_wildcard, wildcardW);
+    searchRow->AddChild(std::move(wildcard), Hint().Fixed(wildcardW));
     //这里只放「全部成员」一项，发过言的人由窗口查本地库后填入（见
     //CBalloonHistoryWindow::RefreshSenderCombo）——名字要经主面板解析，布局函数拿不到
     std::unique_ptr<DuiComboBox> senderCombo(new DuiComboBox());
     senderCombo->SetCtrlId(kIdHistorySenderCombo);
-    senderCombo->AddString(kHistorySenderAllText);
+    senderCombo->AddString(TR(kHistorySenderAllText));
     senderCombo->SetCurSel(0, false);   //构建期设值不发通知，避免伪触发刷新
-    int senderComboW = MeasureDefaultFontWidth(kHistorySenderAllText) + kComboChromeW + kComboSlackW;
+    int senderComboW = MeasureDefaultFontWidth(TR(kHistorySenderAllText)) + kComboChromeW + kComboSlackW;
     if (senderComboW < kSenderComboMinW)
     {
         senderComboW = kSenderComboMinW;
     }
     searchRow->AddChild(std::unique_ptr<DuiControl>(senderCombo.release()), Hint().Fixed(senderComboW));
+    //「列表 | 时间轴」切换（docs/聊天记录管理器方案.md §11.7）：两枚胶囊紧挨着排，选中的一枚是主色。
+    //筛选行在最小宽度下已经放不下更多控件（七枚类型胶囊、时间下拉与「选日期」合计超过可用宽度），
+    //故放在搜索行最右边，搜索框照样撑满余下的宽度
+    std::unique_ptr<DuiHBox> viewSeg(new DuiHBox());
+    viewSeg->SetGap(0);
+    const int viewListW = GrowWidthToFitText(TR(L"列表"), kViewChipW, kGrowChipPadW);
+    const int viewTimelineW = GrowWidthToFitText(TR(L"时间轴"), kViewChipW, kGrowChipPadW);
+    viewSeg->AddChild(MakeChip(TR(L"列表"), kIdHistoryViewList, !data.m_timeline), Hint().Fixed(viewListW));
+    viewSeg->AddChild(MakeChip(TR(L"时间轴"), kIdHistoryViewTimeline, data.m_timeline), Hint().Fixed(viewTimelineW));
+    searchRow->AddChild(std::unique_ptr<DuiControl>(viewSeg.release()), Hint().Fixed(viewListW + viewTimelineW));
     root->AddChild(std::move(searchRow), Hint().Fixed(kSearchRowH));
 
     // 3. 筛选行：类型胶囊（左，撑满）+ 时间区域（右）：时间下拉或日期区间标签二者显示其一，
@@ -1154,45 +1778,23 @@ std::unique_ptr<DuiControl> BuildHistoryWindowBody(const HistoryViewData& data,
     filterRow->SetGap(8);
     std::unique_ptr<DuiHBox> chips(new DuiHBox());
     chips->SetGap(8);
-    chips->AddChild(MakeChip(_T("全部"), kIdHistoryChipAll, data.m_activeChip == 0), Hint().Fixed(kChipW));
-    chips->AddChild(MakeChip(_T("文字"), kIdHistoryChipText, data.m_activeChip == 1), Hint().Fixed(kChipW));
-    chips->AddChild(MakeChip(_T("图片"), kIdHistoryChipImage, data.m_activeChip == 2), Hint().Fixed(kChipW));
-    chips->AddChild(MakeChip(_T("文件"), kIdHistoryChipFile, data.m_activeChip == 3), Hint().Fixed(kChipW));
-    chips->AddChild(MakeChip(_T("语音"), kIdHistoryChipVoice, data.m_activeChip == 4), Hint().Fixed(kChipW));
-    chips->AddChild(MakeChip(_T("链接"), kIdHistoryChipLink, data.m_activeChip == 5), Hint().Fixed(kChipW));
+    chips->AddChild(MakeChip(TR(L"全部"), kIdHistoryChipAll, data.m_activeChip == 0), Hint().Fixed(GrowWidthToFitText(TR(L"全部"), kChipW, kGrowChipPadW)));
+    chips->AddChild(MakeChip(TR(L"文字"), kIdHistoryChipText, data.m_activeChip == 1), Hint().Fixed(GrowWidthToFitText(TR(L"文字"), kChipW, kGrowChipPadW)));
+    chips->AddChild(MakeChip(TR(L"图片"), kIdHistoryChipImage, data.m_activeChip == 2), Hint().Fixed(GrowWidthToFitText(TR(L"图片"), kChipW, kGrowChipPadW)));
+    chips->AddChild(MakeChip(TR(L"文件"), kIdHistoryChipFile, data.m_activeChip == 3), Hint().Fixed(GrowWidthToFitText(TR(L"文件"), kChipW, kGrowChipPadW)));
+    chips->AddChild(MakeChip(TR(L"语音"), kIdHistoryChipVoice, data.m_activeChip == 4), Hint().Fixed(GrowWidthToFitText(TR(L"语音"), kChipW, kGrowChipPadW)));
+    chips->AddChild(MakeChip(TR(L"链接"), kIdHistoryChipLink, data.m_activeChip == 5), Hint().Fixed(GrowWidthToFitText(TR(L"链接"), kChipW, kGrowChipPadW)));
     //Pin 排在最后：它与前六枚不是一个维度（前六枚按内容类型分，它按"钉没钉住"分），
     //放末尾读起来最顺。胶囊单选，故选了 Pin 就是"本会话全部被钉的消息，不分类型"。
-    chips->AddChild(MakeChip(_T("Pin"), kIdHistoryChipPin, data.m_activeChip == 6), Hint().Fixed(kChipW));
+    chips->AddChild(MakeChip(TR(L"Pin"), kIdHistoryChipPin, data.m_activeChip == 6),
+                    Hint().Fixed(GrowWidthToFitText(TR(L"Pin"), kChipW, kGrowChipPadW)));
     filterRow->AddChild(std::move(chips), Hint().Weight(1));
 
-    //时间下拉。各项的<u>顺序必须与 HistoryTimeRange 的枚举值一一对应</u>（0 起）——
-    //窗口侧的 TimeRangeFromComboIndex / ComboIndexFromRange 就是照这个约定直接转换的，
-    //插项时两边要一起改。自定义起止不在这里，由「选日期」弹层的「只看这段时间」设置。
-    static const LPCTSTR kTimeComboItems[] =
-    {
-        _T("全部时间"), _T("近 7 天"), _T("近 30 天"),
-        _T("近 3 个月"), _T("近半年"), _T("近一年"),
-    };
-    const int kTimeComboItemCount = (int)(sizeof(kTimeComboItems) / sizeof(kTimeComboItems[0]));
-
-    std::unique_ptr<DuiComboBox> timeCombo(new DuiComboBox());
-    timeCombo->SetCtrlId(kIdHistoryTimeCombo);
-    //下拉宽度按最宽的一项实测 —— 写死像素在高 DPI 下会把“全部时间”截成“全部时...”，
-    //理由见 MeasureDefaultFontWidth。
-    int timeComboW = kTimeComboMinW;
-    for (int i = 0; i < kTimeComboItemCount; ++i)
-    {
-        timeCombo->AddString(kTimeComboItems[i]);
-        const int need = MeasureDefaultFontWidth(kTimeComboItems[i])
-                       + kComboChromeW + kComboSlackW;
-        if (need > timeComboW)
-        {
-            timeComboW = need;
-        }
-    }
-    timeCombo->SetCurSel(data.m_activeTimeIndex, false);   //构建期设值不发通知，避免伪触发刷新
-    filterRow->AddChild(std::unique_ptr<DuiControl>(timeCombo.release()),
-                        Hint().Fixed(timeComboW));
+    //时间下拉（各项顺序与 HistoryTimeRange 一一对应，见 MakeTimeCombo）。自定义起止不在这里，由「选日期」
+    //弹层的「只看这段时间」设置。构建期设值不发通知，避免伪触发刷新
+    int timeComboW = 0;
+    std::unique_ptr<DuiControl> timeCombo = MakeTimeCombo(kIdHistoryTimeCombo, data.m_activeTimeIndex, timeComboW);
+    filterRow->AddChild(std::move(timeCombo), Hint().Fixed(timeComboW));
 
     //日期区间标签：「只看这段时间」生效后替下时间下拉，左边是日期文字（点它重新打开弹层），
     //右边是关闭叉号。文字与宽度由 ApplyHistoryDateRangeChip 按当前筛选设置，这里先建成隐藏的
@@ -1209,40 +1811,87 @@ std::unique_ptr<DuiControl> BuildHistoryWindowBody(const HistoryViewData& data,
                         Hint().Fixed(kDatePickPadW + kDateRangeClearW));
 
     //「选日期」：宽度按文字实测，理由同时间下拉（写死像素在高 DPI 下会截字）
-    const int datePickW = MeasureDefaultFontWidth(kHistoryDatePickText) + kDatePickPadW;
-    filterRow->AddChild(MakeButton(kHistoryDatePickText, kIdHistoryDatePick, DuiButton::Variant::Outlined),
+    const int datePickW = MeasureDefaultFontWidth(TR(kHistoryDatePickText)) + kDatePickPadW;
+    filterRow->AddChild(MakeButton(TR(kHistoryDatePickText), kIdHistoryDatePick, DuiButton::Variant::Outlined),
                         Hint().Fixed(datePickW));
     root->AddChild(std::move(filterRow), Hint().Fixed(kFilterRowH));
 
+    // 3.5 命中条（时间轴模式且有关键字时显示，内容由 ApplyHistoryHitBar 填）：
+    //     左侧说明 +「第 x / N 处」+「▲ 上一处」「▼ 下一处」
+    //     只有 DuiVBox 能画底色，故外层是一个带底色的竖向容器，里面一行横排各控件
+    std::unique_ptr<DuiVBox> hitBar(new DuiVBox());
+    hitBar->SetCtrlId(kIdHistoryHitBar);
+    hitBar->SetBgColor(kColorHitBarBg);
+    hitBar->SetPadding(kPadH, kHitBarPadV, kPadH, kHitBarPadV);
+    hitBar->SetGap(0);
+    std::unique_ptr<DuiHBox> hitLine(new DuiHBox());
+    hitLine->SetGap(8);
+    hitLine->AddChild(MakeLabel(_T(""), kColorHitBarText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                                kIdHistoryHitInfo),
+                      Hint().Weight(1));
+    hitLine->AddChild(MakeLabel(_T(""), kColorHitBarText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, kIdHistoryHitPos),
+                      Hint().Fixed(kHitPosW));
+    hitLine->AddChild(MakeButton(TR(L"▲ 上一处"), kIdHistoryHitPrev, DuiButton::Variant::Default),
+                      Hint().Fixed(GrowWidthToFitText(TR(L"▲ 上一处"), kHitBtnW, kGrowChipPadW)));
+    hitLine->AddChild(MakeButton(TR(L"▼ 下一处"), kIdHistoryHitNext, DuiButton::Variant::Default),
+                      Hint().Fixed(GrowWidthToFitText(TR(L"▼ 下一处"), kHitBtnW, kGrowChipPadW)));
+    hitBar->AddChild(std::unique_ptr<DuiControl>(hitLine.release()), Hint().Weight(1));
+    hitBar->SetVisible(false);
+    root->AddChild(std::unique_ptr<DuiControl>(hitBar.release()), Hint().Fixed(kHitBarH));
+
     // 4. 列表：滚动视口包一个承载各行的 vbox（vbox 由 BuildListContent 造，
     //    窗口局部刷新时复用同一函数换上新列表）。
-    //    滚动视口用主面板与公告窗同款的 MainPanelScrollView，滚动条与聊天窗同一风格：
-    //    悬浮在内容上方的灰色圆角细条，滚动时淡入、停下后淡出，可拖动（开发约定文档「UI 约定」
-    //    第 1 条）。DuiScrollView 自带的滚动条宽度置 0，不再占列表宽度。淡入淡出由窗口的
-    //    WM_TIMER 推进（见 CBalloonHistoryWindow::OnTimerMsg）。
+    //    滚动视口用主面板与公告窗同款的 MainPanelScrollView，滚动条是 balloonui 统一的悬浮式细滑块：
+    //    浮在内容上方、不占列表宽度，滚动时淡入、停下后淡出，可拖动（开发约定文档「UI 约定」第 1 条）。
+    //    命中带宽度保持默认值，置 0 就没有滚动条了。
     std::unique_ptr<balloonmain::MainPanelScrollView> scroll(new balloonmain::MainPanelScrollView());
     scroll->SetCtrlId(kIdHistoryScroll);
     scroll->SetAutoContentHeight(true);
-    scroll->SetScrollBarWidth(0);
     //整窗构建时还不知道列表实际有多宽（窗口尚未布局），传 0 让 BuildListContent 用
     //兜底宽度。窗口在 InitUi / RefreshContent 里会用真实宽度重建一次列表。
     scroll->SetContent(BuildListContent(data.m_rows, data.m_emptyTitle,
                                         data.m_emptySubtitle, 0));
+    //列表与时间轴导航条排在同一行：导航条平时隐藏，时间轴模式下出现在列表右侧（ApplyHistoryTimelineMode）。
+    //导航条左边一条竖向分隔线，里面是自己的滚动视口，内容由窗口按导航数据填（BuildTimelineNavContent）
+    std::unique_ptr<DuiHBox> listHost(new DuiHBox());
+    listHost->SetCtrlId(kIdHistoryListHost);
+    listHost->SetGap(0);
+    listHost->AddChild(std::unique_ptr<DuiControl>(scroll.release()), Hint().Weight(1));
+    //导航条外层是带底色的竖向容器（只有 DuiVBox 能画底色），内容比视口矮时下面一截也是导航条的底色
+    std::unique_ptr<DuiVBox> nav(new DuiVBox());
+    nav->SetCtrlId(kIdHistoryNav);
+    nav->SetGap(0);
+    nav->SetBgColor(kColorNavBg);
+    std::unique_ptr<DuiHBox> navLineRow(new DuiHBox());
+    navLineRow->SetGap(0);
+    std::unique_ptr<DuiSeparator> navLine(new DuiSeparator());
+    navLine->SetOrientation(DuiSeparator::Vertical);
+    navLine->SetColor(kColorSepLine);
+    navLineRow->AddChild(std::unique_ptr<DuiControl>(navLine.release()), Hint().Fixed(1));
+    std::unique_ptr<balloonmain::MainPanelScrollView> navScroll(new balloonmain::MainPanelScrollView());
+    navScroll->SetCtrlId(kIdHistoryNavScroll);
+    navScroll->SetAutoContentHeight(true);
+    navScroll->SetContent(BuildTimelineNavContent(std::vector<HistoryTimelineYear>(), 0, std::set<int>()));
+    navLineRow->AddChild(std::unique_ptr<DuiControl>(navScroll.release()), Hint().Weight(1));
+    nav->AddChild(std::unique_ptr<DuiControl>(navLineRow.release()), Hint().Weight(1));
+    nav->SetVisible(data.m_timeline);
+    listHost->AddChild(std::unique_ptr<DuiControl>(nav.release()), Hint().Fixed(kHistoryNavW));
     //右侧给窗口缩放边框让出位置：窗口最外侧一条会被判为缩放边框，滚动条若贴着
     //窗口右缘，鼠标移到滑块上只会变成左右双向箭头、无法拖动。让出的宽度由窗口
     //按 DPI 算好传入（见头文件中本函数的说明）；负值按 0 处理，不把视口撑出客户区。
+    //导航条出现时它在最右边，故让出的宽度加在整行上
     const int rightInset = (listRightInsetPx > 0) ? listRightInsetPx : 0;
-    root->AddChild(std::unique_ptr<DuiControl>(scroll.release()),
+    root->AddChild(std::unique_ptr<DuiControl>(listHost.release()),
                    Hint().Weight(1).Margin(0, 0, rightInset, 0));
 
     root->AddChild(MakeSeparator(), Hint().Fixed(1));
 
-    // 5. 底部：左信息 + 中分页器 + 右导出。宽度不够时的取舍见 HistoryFooterBar。
+    // 5. 底部：左信息 + 中分页器 + 右侧「清空聊天记录」与导出。宽度不够时的取舍见 HistoryFooterBar。
     std::unique_ptr<DuiHBox> footer(new HistoryFooterBar());
     footer->SetPadding(kPadH, 8, kPadH, 8);
     footer->SetGap(8);
     CString info;
-    info.Format(_T("共 %d 条 · 第 %d/%d 页"), data.m_totalCount, data.m_currentPage, data.m_pageCount);
+    info.Format(TR(L"共 %d 条 · 第 %d/%d 页"), data.m_totalCount, data.m_currentPage, data.m_pageCount);
     footer->AddChild(MakeLabel(info, kColorSubtitle,
                                DT_LEFT | DT_VCENTER | DT_SINGLELINE, kIdHistoryFooterInfo),
                      Hint().Weight(1));
@@ -1258,9 +1907,9 @@ std::unique_ptr<DuiControl> BuildHistoryWindowBody(const HistoryViewData& data,
     //（比如 625 页里的第 300 页），故补一个直达入口。
     //用 balloonui 现成的 DuiSpinBox 而不是裸输入框：它自带范围夹取与 ▲▼ 步进，
     //越界不用自己校验。范围与当前值由窗口在每次刷新时同步（见 RefreshContent）。
-    footer->AddChild(MakeLabel(_T("跳至"), kColorSubtitle,
-                               DT_RIGHT | DT_VCENTER | DT_SINGLELINE),
-                     Hint().Fixed(kJumpLabelW));
+    footer->AddChild(MakeLabel(TR(L"跳至"), kColorSubtitle,
+                               DT_RIGHT | DT_VCENTER | DT_SINGLELINE, kIdHistoryPageJumpLabel),
+                     Hint().Fixed(GrowWidthToFitText(TR(L"跳至"), kJumpLabelW, kGrowLabelPadW)));
     std::unique_ptr<DuiSpinBox> jump(new DuiSpinBox());
     jump->SetCtrlId(kIdHistoryPageJump);
     jump->SetRange(1, (data.m_pageCount > 0) ? data.m_pageCount : 1);
@@ -1274,11 +1923,17 @@ std::unique_ptr<DuiControl> BuildHistoryWindowBody(const HistoryViewData& data,
     //FixedCross 把它的高度限住，否则会撑满整个底部行、比旁边的分页按钮高出一截。
     footer->AddChild(std::unique_ptr<DuiControl>(jump.release()),
                      Hint().Fixed(kJumpBoxW, kJumpBoxH));
-    footer->AddChild(MakeLabel(_T("页"), kColorSubtitle,
-                               DT_LEFT | DT_VCENTER | DT_SINGLELINE),
-                     Hint().Fixed(kJumpUnitW));
+    footer->AddChild(MakeLabel(TR(L"页"), kColorSubtitle,
+                               DT_LEFT | DT_VCENTER | DT_SINGLELINE, kIdHistoryPageJumpUnit),
+                     Hint().Fixed(GrowWidthToFitText(TR(L"页"), kJumpUnitW, kGrowLabelPadW)));
 
-    footer->AddChild(MakeButton(_T("↓ 导出"), kIdHistoryExport, DuiButton::Variant::Outlined),
+    //「清空聊天记录」放在「导出」左边：两个都是针对整个会话的操作（2026-10-03 用户选定的位置）
+    if (data.m_showClearConversation)
+    {
+        footer->AddChild(MakeButton(TR(L"清空聊天记录"), kIdHistoryClearConversation, DuiButton::Variant::Outlined),
+                         Hint().Fixed(kClearConvW));
+    }
+    footer->AddChild(MakeButton(TR(L"↓ 导出"), kIdHistoryExport, DuiButton::Variant::Outlined),
                      Hint().Fixed(kExportW));
     root->AddChild(std::move(footer), Hint().Fixed(kFooterH));
 
@@ -1289,8 +1944,44 @@ std::unique_ptr<DuiControl> BuildHistoryWindowBody(const HistoryViewData& data,
 
     //按当前是否有日期筛选，决定筛选行显示时间下拉还是日期区间标签
     ApplyHistoryDateRangeChip(root.get(), data.m_dateRangeLabel);
+    //标题区的会话名与「»」
+    ApplyHistoryHeaderTitle(root.get(), data.m_conversationName, data.m_showExpandLeft);
 
     return std::unique_ptr<DuiControl>(root.release());
+}
+
+void ApplyHistoryHeaderTitle(DuiControl* root, const CString& conversationName, bool showExpandLeft)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    DuiHBox* row = dynamic_cast<DuiHBox*>(root->FindCtrlById(kIdHistoryHeaderRow));
+    DuiLabel* title = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdHistoryTitle));
+    DuiControl* expand = root->FindCtrlById(kIdHistoryExpandLeft);
+    if (row == NULL || title == NULL || expand == NULL)
+    {
+        return;
+    }
+
+    title->SetText(conversationName);
+    //会话名用粗体画，默认字体量出的宽度偏窄，按比例放宽再留一点余量；过长的名字不超过上限，
+    //末尾以省略号截断，免得把「共 N 条消息」挤没
+    int titleW = 0;
+    if (!conversationName.IsEmpty())
+    {
+        titleW = MeasureDefaultFontWidth(conversationName) * kBoldWidthPercent / kPercentBase + kHeaderTitleSlackW;
+        if (titleW > kHeaderTitleMaxW)
+        {
+            titleW = kHeaderTitleMaxW;
+        }
+    }
+    row->SetHint(title, DuiLayout::Hint().Fixed(titleW));
+    title->SetVisible(!conversationName.IsEmpty());
+    expand->SetVisible(showExpandLeft);
+    //SetVisible 只置标志、不重排；矩形没变时 SetRect 也直接返回，故用 ForceLayout
+    row->ForceLayout(row->GetRect());
+    row->Invalidate();
 }
 
 void ApplyHistoryDateRangeChip(DuiControl* root, const std::wstring& label)
@@ -1323,9 +2014,10 @@ void ApplyHistoryDateRangeChip(DuiControl* root, const std::wstring& label)
     filterRow->ForceLayout(filterRow->GetRect());
 }
 
+// i18n-ignore-begin: 调试入口的模拟消息记录
 void FillMockHistory(HistoryViewData& data)
 {
-    data.m_title = _T("消息记录 · 苏沐辰");
+    data.m_title = L"消息记录 · 苏沐辰";
     data.m_totalCount = 27;
     data.m_currentPage = 1;
     data.m_pageCount = 3;
@@ -1346,13 +2038,13 @@ void FillMockHistory(HistoryViewData& data)
     };
     const MockRow rows[] =
     {
-        { _T("苏沐辰"), kOrange, _T("06-04 11:01"), _T("改了发你看下"),                 9001 },
-        { _T("苏沐辰"), kOrange, _T("06-04 10:01"), _T("[表情] 赞"),                    9000 },
-        { _T("林知夏"), kRed,    _T("06-04 09:01"), _T("左对齐更好，居中显得太弱了"),   8999 },
-        { _T("苏沐辰"), kOrange, _T("06-04 08:01"), _T("你觉得这个排版怎么样？"),       8998 },
-        { _T("苏沐辰"), kOrange, _T("06-04 07:01"), _T("[图片] 参考案例-banner"),       8997 },
-        { _T("林知夏"), kRed,    _T("06-04 06:01"), _T("收到，很有意思"),               8996 },
-        { _T("宋微之"), kGreen,  _T("06-04 05:01"), _T("[文件] 设计规范-v2.docx"),      8995 },
+        { L"苏沐辰", kOrange, _T("06-04 11:01"), L"改了发你看下",                 9001 },
+        { L"苏沐辰", kOrange, _T("06-04 10:01"), L"[表情] 赞",                    9000 },
+        { L"林知夏", kRed,    _T("06-04 09:01"), L"左对齐更好，居中显得太弱了",   8999 },
+        { L"苏沐辰", kOrange, _T("06-04 08:01"), L"你觉得这个排版怎么样？",       8998 },
+        { L"苏沐辰", kOrange, _T("06-04 07:01"), L"[图片] 参考案例-banner",       8997 },
+        { L"林知夏", kRed,    _T("06-04 06:01"), L"收到，很有意思",               8996 },
+        { L"宋微之", kGreen,  _T("06-04 05:01"), L"[文件] 设计规范-v2.docx",      8995 },
     };
     const int count = (int)(sizeof(rows) / sizeof(rows[0]));
     for (int i = 0; i < count; ++i)
@@ -1366,6 +2058,7 @@ void FillMockHistory(HistoryViewData& data)
         data.m_rows.push_back(v);
     }
 }
+// i18n-ignore-end
 
 namespace {
 
@@ -1412,15 +2105,15 @@ std::unique_ptr<DuiControl> MakeDatePopupDateRow(LPCTSTR caption, UINT yearId)
                   Hint().Fixed(kDatePopupFromToW));
     row->AddChild(MakeDatePopupSpin(yearId, kDatePopupYearMin, kDatePopupYearMax),
                   Hint().Fixed(kDatePopupYearSpinW));
-    row->AddChild(MakeLabel(_T("年"), kColorSubtitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE),
+    row->AddChild(MakeLabel(TR(L"年"), kColorSubtitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE),
                   Hint().Fixed(kDatePopupUnitW));
     row->AddChild(MakeDatePopupSpin(yearId + 1, kDatePopupMonthMin, kDatePopupMonthMax),
                   Hint().Fixed(kDatePopupMdSpinW));
-    row->AddChild(MakeLabel(_T("月"), kColorSubtitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE),
+    row->AddChild(MakeLabel(TR(L"月"), kColorSubtitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE),
                   Hint().Fixed(kDatePopupUnitW));
     row->AddChild(MakeDatePopupSpin(yearId + 2, kDatePopupDayMin, kDatePopupDayMax),
                   Hint().Fixed(kDatePopupMdSpinW));
-    row->AddChild(MakeLabel(_T("日"), kColorSubtitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE),
+    row->AddChild(MakeLabel(TR(L"日"), kColorSubtitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE),
                   Hint().Fixed(kDatePopupUnitW));
     return std::unique_ptr<DuiControl>(row.release());
 }
@@ -1433,16 +2126,16 @@ std::unique_ptr<DuiControl> BuildHistoryDatePopupContent()
     std::unique_ptr<DuiVBox> root(new DuiVBox());
     root->SetPadding(kDatePopupPadding);
     root->SetGap(kDatePopupRowGap);
-    root->AddChild(MakeDatePopupDateRow(_T("从"), kIdDatePopupFromYear), Hint().Fixed(kDatePopupRowH));
-    root->AddChild(MakeDatePopupDateRow(_T("到"), kIdDatePopupToYear), Hint().Fixed(kDatePopupRowH));
+    root->AddChild(MakeDatePopupDateRow(TR(L"从"), kIdDatePopupFromYear), Hint().Fixed(kDatePopupRowH));
+    root->AddChild(MakeDatePopupDateRow(TR(L"到"), kIdDatePopupToYear), Hint().Fixed(kDatePopupRowH));
 
     //按钮行靠右：左侧放一个撑满的空控件把两个按钮推到右边
     std::unique_ptr<DuiHBox> buttons(new DuiHBox());
     buttons->SetGap(kDatePopupGap * 2);
     buttons->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
-    buttons->AddChild(MakeButton(_T("跳到这一天"), kIdDatePopupJump, DuiButton::Variant::Outlined),
+    buttons->AddChild(MakeButton(TR(L"跳到这一天"), kIdDatePopupJump, DuiButton::Variant::Outlined),
                       Hint().Fixed(kDatePopupJumpBtnW));
-    buttons->AddChild(MakeButton(_T("只看这段时间"), kIdDatePopupFilter, DuiButton::Variant::Primary),
+    buttons->AddChild(MakeButton(TR(L"只看这段时间"), kIdDatePopupFilter, DuiButton::Variant::Primary),
                       Hint().Fixed(kDatePopupFilterBtnW));
     root->AddChild(std::move(buttons), Hint().Fixed(kDatePopupRowH));
     return std::unique_ptr<DuiControl>(root.release());
@@ -1466,6 +2159,634 @@ int HistoryDatePopupActionFromNotify(UINT code, UINT ctrlId)
         return kHistoryDatePopupJump;
     }
     return kHistoryDatePopupNone;
+}
+
+// =====================================================================
+// 聊天记录管理器的左栏
+// =====================================================================
+
+namespace {
+
+// 左栏底色：比右侧的白底略灰，两栏一眼分得开
+const COLORREF kColorMgrPaneBg = RGB(0xF7, 0xF7, 0xF8);
+const int kMgrPadH        = 10;   // 左栏各行的左右内边距（像素）
+const int kMgrPadTop      = 8;    // 左栏顶部内边距（像素）
+const int kMgrRowGap      = 6;    // 左栏各行之间、行内控件之间的间距（像素）
+const int kMgrSearchRowH  = 32;   // 搜索框那一行的高（像素）
+const int kMgrScopeRowH   = 28;   // 范围按钮那一行的高（像素）
+const int kMgrTypeRowH    = 28;   // 类型筛选那一行的高（像素）
+const int kMgrCollapseW   = 28;   //「«」按钮宽（像素）
+const int kMgrScopeClearW = 28;   // 范围「×」按钮宽（像素）
+const int kMgrTypeChipW   = 56;   // 类型筛选胶囊宽（像素，均为两个汉字）
+const int kMgrTreePadH    = 4;    // 两棵会话树的左右外边距（像素），与主面板会话列表的内边距相近
+const int kMgrEmptyH      = 60;   // 空提示所占的高（像素）
+const TCHAR* const kMgrCollapseText   = _T("«");   //「«」按钮的文字
+const TCHAR* const kMgrScopeClearText = _T("×");   // 范围「×」按钮的文字
+const int kMgrTabRowH     = 28;   // 左栏最上面标签行的高（像素）
+const int kMgrStorageRowH   = 38;   // 左栏最下面「本机存储占用」那一行的高（像素，含下内边距）
+const int kMgrStoragePadBot = 6;    // 那一行的下内边距（像素），按钮不贴着窗口底边
+//标签在文字宽度之外的左右留白合计（像素）。按文字定宽、靠左排；2026-10-06 加「链接」标签时由 16 减到 12，
+//最小左栏宽度下四个都放得下（docs/聊天记录管理器方案.md §12.2）
+const int kMgrTabPadW     = 12;
+//左栏标签的文字，下标与 HistoryManagerTab 的 0～3 一一对应。第一个由「聊天记录」改短为「聊天」（同上）
+const wchar_t* const kMgrTabTexts[] = { TR_NOOP(L"聊天"), TR_NOOP(L"文件"), TR_NOOP(L"图片"), TR_NOOP(L"链接") };
+const int kMgrTabCount = kHistoryManagerVisibleTabCount;
+
+//造一棵左栏用的会话树：行高、头像尺寸与圆形头像的设置与主面板会话列表相同
+std::unique_ptr<DuiControl> MakeManagerTree(UINT ctrlId)
+{
+    std::unique_ptr<balloonmain::MainPanelTreeView> tree(new balloonmain::MainPanelTreeView());
+    tree->SetCtrlId(ctrlId);
+    tree->SetRowHeight(kMgrRowHeight);
+    tree->SetIconSize(kMgrAvatarSize);
+    tree->SetIconCornerRadius(kMgrAvatarSize / 2);
+    tree->SetIconUsesAlpha(true);
+    return std::unique_ptr<DuiControl>(tree.release());
+}
+
+//造一段列表的标题（「会话」「聊天记录 · 仅搜索本机已保存的记录」），平时隐藏
+std::unique_ptr<DuiControl> MakeManagerSectionHeader(UINT ctrlId)
+{
+    std::unique_ptr<DuiControl> label = MakeLabel(_T(""), kColorSubtitle,
+                                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                                                  ctrlId);
+    label->SetVisible(false);
+    return label;
+}
+
+//在左右分栏的根容器上套用折叠或展开的参数（分隔条宽度、两侧最小宽度、分隔位置、左栏显隐），不重排
+void SetManagerSplitParams(balloonwjui::DuiSplitter* split, bool collapsed, int paneWidth)
+{
+    const int width = (paneWidth > 0) ? paneWidth : kMgrPaneDefaultW;
+    DuiControl* pane = split->GetPane(0);
+    if (collapsed)
+    {
+        split->SetBarThickness(kMgrSplitBarCollapsedW);
+        split->SetMinSizes(0, kMgrBodyMinW);
+        split->SetSplitPx(0);
+    }
+    else
+    {
+        split->SetBarThickness(kMgrSplitBarW);
+        split->SetMinSizes(kMgrPaneMinW, kMgrBodyMinW);
+        split->SetSplitPx(width);
+    }
+    if (pane != NULL)
+    {
+        pane->SetVisible(!collapsed);
+    }
+}
+
+} // anonymous namespace
+
+std::unique_ptr<DuiControl> BuildHistoryManagerPane(int typeFilter, size_t scopeCount, bool wildcard, int tab)
+{
+    std::unique_ptr<DuiVBox> pane(new DuiVBox());
+    pane->SetCtrlId(kIdMgrPane);
+    pane->SetBgColor(kColorMgrPaneBg);
+    pane->SetPadding(0, kMgrPadTop, 0, 0);
+    pane->SetGap(kMgrRowGap);
+
+    // 0. 标签：聊天 / 文件 / 图片 / 链接（docs/聊天记录管理器方案.md §11.5、§12.2），按文字定宽、靠左排，右边留空
+    std::unique_ptr<DuiHBox> tabRow(new DuiHBox());
+    tabRow->SetCtrlId(kIdMgrTabRow);
+    tabRow->SetPadding(kMgrPadH, 0, kMgrPadH, 0);
+    tabRow->SetGap(kMgrRowGap);
+    for (int i = 0; i < kMgrTabCount; ++i)
+    {
+        const LPCTSTR text = TR(kMgrTabTexts[i]);
+        tabRow->AddChild(MakeChip(text, (UINT)(kIdMgrTabChat + i), false),
+                         Hint().Fixed(MeasureDefaultFontWidth(text) + kMgrTabPadW));
+    }
+    tabRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
+    pane->AddChild(std::move(tabRow), Hint().Fixed(kMgrTabRowH));
+
+    // 1. 搜索框 +「«」
+    std::unique_ptr<DuiHBox> searchRow(new DuiHBox());
+    searchRow->SetPadding(kMgrPadH, 0, kMgrPadH, 0);
+    searchRow->SetGap(kMgrRowGap);
+    //悬停时显示搜索语法说明；文件 / 图片 / 链接页只按名字找会话，不显示（见 ApplyHistoryManagerTab）
+    std::unique_ptr<HistoryTipSearchBox> search(new HistoryTipSearchBox(HistorySearchSyntaxTip()));
+    search->SetCtrlId(kIdMgrSearch);
+    search->SetPlaceholder(TR(L"搜索会话或聊天内容"));
+    searchRow->AddChild(std::unique_ptr<DuiControl>(search.release()), Hint().Weight(1));
+    searchRow->AddChild(MakeButton(kMgrCollapseText, kIdMgrCollapse, DuiButton::Variant::Ghost),
+                        Hint().Fixed(kMgrCollapseW));
+    pane->AddChild(std::move(searchRow), Hint().Fixed(kMgrSearchRowH));
+
+    // 2. 范围按钮 +「×」+「通配符」复选框（复选框放在这一行，不额外占一行）
+    std::unique_ptr<DuiHBox> scopeRow(new DuiHBox());
+    scopeRow->SetCtrlId(kIdMgrScopeRow);
+    scopeRow->SetPadding(kMgrPadH, 0, kMgrPadH, 0);
+    scopeRow->SetGap(kMgrRowGap);
+    std::unique_ptr<DuiControl> scopeBtn = MakeButton(_T(""), kIdMgrScope, DuiButton::Variant::Default);
+    DuiButton* scopeButton = dynamic_cast<DuiButton*>(scopeBtn.get());
+    if (scopeButton != NULL)
+    {
+        //左栏取最小宽度、界面字体又按系统缩放放大时，「范围：全部会话」放不下（控件宽度是不随缩放变化的固定像素）：
+        //以省略号收尾，不让文字两头被裁掉（2026-10-06 实机核对时 125% 缩放下发现）
+        scopeButton->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
+    scopeRow->AddChild(std::move(scopeBtn), Hint().Weight(1));
+    scopeRow->AddChild(MakeButton(kMgrScopeClearText, kIdMgrScopeClear, DuiButton::Variant::Ghost),
+                       Hint().Fixed(kMgrScopeClearW));
+    int wildcardW = 0;
+    std::unique_ptr<DuiControl> wildcardBox = MakeWildcardCheckbox(kIdMgrWildcard, wildcard, wildcardW);
+    scopeRow->AddChild(std::move(wildcardBox), Hint().Fixed(wildcardW));
+    pane->AddChild(std::move(scopeRow), Hint().Fixed(kMgrScopeRowH));
+
+    // 3. 类型筛选：全部 / 单聊 / 群聊，靠左排，右边留空
+    std::unique_ptr<DuiHBox> typeRow(new DuiHBox());
+    typeRow->SetPadding(kMgrPadH, 0, kMgrPadH, 0);
+    typeRow->SetGap(kMgrRowGap);
+    //左栏较窄，「单聊 / 群聊」用带上下文的 TRC，译文可取比别处更短的写法（多语言第 4 期）
+    typeRow->AddChild(MakeChip(TR(L"全部"), kIdMgrTypeAll, false),
+                      Hint().Fixed(GrowWidthToFitText(TR(L"全部"), kMgrTypeChipW, kGrowChipPadW)));
+    typeRow->AddChild(MakeChip(TRC(L"聊天记录管理器左栏胶囊", L"单聊"), kIdMgrTypeSingle, false),
+                      Hint().Fixed(GrowWidthToFitText(TRC(L"聊天记录管理器左栏胶囊", L"单聊"), kMgrTypeChipW, kGrowChipPadW)));
+    typeRow->AddChild(MakeChip(TRC(L"聊天记录管理器左栏胶囊", L"群聊"), kIdMgrTypeGroup, false),
+                      Hint().Fixed(GrowWidthToFitText(TRC(L"聊天记录管理器左栏胶囊", L"群聊"), kMgrTypeChipW, kGrowChipPadW)));
+    typeRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
+    pane->AddChild(std::move(typeRow), Hint().Fixed(kMgrTypeRowH));
+    pane->AddChild(MakeSeparator(), Hint().Fixed(1));
+
+    // 4. 列表：滚动视口里依次是「会话」标题、会话树、「聊天记录」标题、命中树、空提示。
+    //    滚动视口与右侧消息列表同款（悬浮式、自动隐藏的细滚动条），内容高度按内容 vbox 的期望高度
+    std::unique_ptr<balloonmain::MainPanelScrollView> scroll(new balloonmain::MainPanelScrollView());
+    scroll->SetCtrlId(kIdMgrScroll);
+    scroll->SetAutoContentHeight(true);
+    std::unique_ptr<DuiVBox> box(new DuiVBox());
+    box->SetCtrlId(kIdMgrListBox);
+    box->SetPadding(0, kMgrListPadV / 2, 0, kMgrListPadV / 2);
+    box->SetGap(0);
+    box->AddChild(MakeManagerSectionHeader(kIdMgrConvHeader),
+                  Hint().Fixed(kMgrSectionHeaderH).Margin(kMgrPadH, 0, kMgrPadH, 0));
+    box->AddChild(MakeManagerTree(kIdMgrConvTree), Hint().Fixed(0).Margin(kMgrTreePadH, 0, kMgrTreePadH, 0));
+    box->AddChild(MakeManagerSectionHeader(kIdMgrHitHeader),
+                  Hint().Fixed(kMgrSectionHeaderH).Margin(kMgrPadH, 0, kMgrPadH, 0));
+    std::unique_ptr<DuiControl> hitTree = MakeManagerTree(kIdMgrHitTree);
+    hitTree->SetVisible(false);
+    box->AddChild(std::move(hitTree), Hint().Fixed(0).Margin(kMgrTreePadH, 0, kMgrTreePadH, 0));
+    std::unique_ptr<DuiControl> empty = MakeLabel(_T(""), kColorSubtitle,
+                                                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                                                  kIdMgrEmpty);
+    empty->SetVisible(false);
+    box->AddChild(std::move(empty), Hint().Fixed(kMgrEmptyH).Margin(kMgrPadH, 0, kMgrPadH, 0));
+    scroll->SetContent(std::unique_ptr<DuiControl>(box.release()));
+    pane->AddChild(std::unique_ptr<DuiControl>(scroll.release()), Hint().Weight(1));
+
+    // 5. 最下面一行：「本机存储占用」入口（docs/聊天记录管理器方案.md §12.6），各标签都显示
+    pane->AddChild(MakeSeparator(), Hint().Fixed(1));
+    std::unique_ptr<DuiHBox> storageRow(new DuiHBox());
+    storageRow->SetCtrlId(kIdMgrStorageRow);
+    storageRow->SetPadding(kMgrPadH, 0, kMgrPadH, kMgrStoragePadBot);
+    //文字居中：选中时按钮是蓝底，靠左排的文字会贴着底色的左边缘（2026-10-06 实机核对时发现）
+    std::unique_ptr<DuiControl> storageBtn = MakeButton(TR(L"本机存储占用"), kIdMgrStorage, DuiButton::Variant::Ghost);
+    DuiButton* storageButton = dynamic_cast<DuiButton*>(storageBtn.get());
+    if (storageButton != NULL)
+    {
+        storageButton->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
+    storageRow->AddChild(std::move(storageBtn), Hint().Weight(1));
+    pane->AddChild(std::unique_ptr<DuiControl>(storageRow.release()), Hint().Fixed(kMgrStorageRowH));
+
+    ApplyHistoryManagerTypeChips(pane.get(), typeFilter);
+    ApplyHistoryManagerScope(pane.get(), scopeCount);
+    ApplyHistoryManagerTab(pane.get(), tab);
+    return std::unique_ptr<DuiControl>(pane.release());
+}
+
+std::unique_ptr<DuiControl> BuildHistoryManagerRoot(std::unique_ptr<DuiControl> pane,
+                                                    std::unique_ptr<DuiControl> body,
+                                                    std::unique_ptr<DuiControl> library,
+                                                    int paneWidth, bool collapsed)
+{
+    if (!library)
+    {
+        return BuildHistoryManagerRoot(std::move(pane), std::move(body), paneWidth, collapsed);
+    }
+    //右侧容器：聊天记录页与文件 / 图片页上下叠放、只显示其一；隐藏的那一页不参与排版
+    std::unique_ptr<DuiVBox> host(new DuiVBox());
+    host->SetCtrlId(kIdMgrRightHost);
+    host->SetPadding(0);
+    host->SetGap(0);
+    DuiControl* libExpand = library->FindCtrlById(kIdLibExpandLeft);
+    if (libExpand != NULL)
+    {
+        libExpand->SetVisible(collapsed);
+    }
+    library->SetVisible(false);
+    host->AddChild(std::move(body), Hint().Weight(1));
+    host->AddChild(std::move(library), Hint().Weight(1));
+    return BuildHistoryManagerRoot(std::move(pane), std::unique_ptr<DuiControl>(host.release()), paneWidth, collapsed);
+}
+
+void ApplyHistoryManagerTab(DuiControl* root, int tab)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    if (tab < kHistoryManagerTabChat || tab > kHistoryManagerTabMentions)
+    {
+        tab = kHistoryManagerTabChat;
+    }
+    //与我有关没有自己的标签，「聊天」标签显示为选中
+    const int chipTab = (tab == kHistoryManagerTabMentions) ? kHistoryManagerTabChat : tab;
+    for (int i = 0; i < kMgrTabCount; ++i)
+    {
+        DuiButton* chip = dynamic_cast<DuiButton*>(root->FindCtrlById((UINT)(kIdMgrTabChat + i)));
+        if (chip != NULL)
+        {
+            chip->SetVariant((i == chipTab) ? DuiButton::Variant::Primary : DuiButton::Variant::Default);
+            chip->Invalidate();
+        }
+    }
+
+    //文件、图片、链接三页：范围行（跨会话搜内容的范围与通配符）不适用，隐藏；搜索框只按名字找会话。
+    //与我有关时左栏与「聊天」标签相同
+    const bool chatList = (chipTab == kHistoryManagerTabChat);
+    const bool chat = (tab == kHistoryManagerTabChat);
+    DuiControl* scopeRow = root->FindCtrlById(kIdMgrScopeRow);
+    if (scopeRow != NULL)
+    {
+        scopeRow->SetVisible(chatList);
+    }
+    DuiSearchBox* search = dynamic_cast<DuiSearchBox*>(root->FindCtrlById(kIdMgrSearch));
+    if (search != NULL)
+    {
+        search->SetPlaceholder(chatList ? TR(L"搜索会话或聊天内容") : TR(L"搜索会话"));
+    }
+    HistoryTipSearchBox* tipSearch = dynamic_cast<HistoryTipSearchBox*>(search);
+    if (tipSearch != NULL)
+    {
+        tipSearch->SetTipText(chatList ? HistorySearchSyntaxTip() : _T(""));
+    }
+    DuiControl* pane = (root->GetCtrlId() == (UINT)kIdMgrPane) ? root : root->FindCtrlById(kIdMgrPane);
+    if (pane != NULL)
+    {
+        pane->ForceLayout(pane->GetRect());
+        pane->Invalidate();
+    }
+
+    //左栏最下面的「本机存储占用」入口恢复为普通外观（切标签就离开了存储页）
+    DuiButton* storageEntry = dynamic_cast<DuiButton*>(root->FindCtrlById(kIdMgrStorage));
+    if (storageEntry != NULL)
+    {
+        storageEntry->SetVariant(DuiButton::Variant::Ghost);
+        storageEntry->Invalidate();
+    }
+
+    //右侧容器：显示对应的那一页，存储页（有的话）隐藏
+    DuiControl* host = root->FindCtrlById(kIdMgrRightHost);
+    if (host != NULL)
+    {
+        DuiControl* body = host->FindCtrlById(kIdHistoryBody);
+        DuiControl* library = host->FindCtrlById(kIdLibBody);
+        DuiControl* storage = host->FindCtrlById(kIdStorBody);
+        if (storage != NULL)
+        {
+            storage->SetVisible(false);
+        }
+        if (body != NULL && library != NULL)
+        {
+            body->SetVisible(chat);
+            library->SetVisible(!chat);
+            host->ForceLayout(host->GetRect());
+            host->Invalidate();
+        }
+    }
+}
+
+void ApplyHistoryManagerStorage(DuiControl* root, bool active, int tab)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    if (!active)
+    {
+        ApplyHistoryManagerTab(root, tab);
+        return;
+    }
+    DuiControl* host = root->FindCtrlById(kIdMgrRightHost);
+    DuiControl* storage = (host != NULL) ? host->FindCtrlById(kIdStorBody) : NULL;
+    if (storage == NULL)
+    {
+        return;
+    }
+    DuiControl* body = host->FindCtrlById(kIdHistoryBody);
+    DuiControl* library = host->FindCtrlById(kIdLibBody);
+    if (body != NULL)
+    {
+        body->SetVisible(false);
+    }
+    if (library != NULL)
+    {
+        library->SetVisible(false);
+    }
+    storage->SetVisible(true);
+    host->ForceLayout(host->GetRect());
+    host->Invalidate();
+    DuiButton* storageEntry = dynamic_cast<DuiButton*>(root->FindCtrlById(kIdMgrStorage));
+    if (storageEntry != NULL)
+    {
+        storageEntry->SetVariant(DuiButton::Variant::Primary);
+        storageEntry->Invalidate();
+    }
+}
+
+std::unique_ptr<DuiControl> BuildHistoryManagerRoot(std::unique_ptr<DuiControl> pane,
+                                                    std::unique_ptr<DuiControl> body,
+                                                    int paneWidth, bool collapsed)
+{
+    std::unique_ptr<balloonwjui::DuiSplitter> split(new balloonwjui::DuiSplitter());
+    split->SetCtrlId(kIdMgrSplitter);
+    split->SetOrientation(balloonwjui::DuiSplitter::Vertical);
+    split->SetPane(0, std::move(pane));
+    split->SetPane(1, std::move(body));
+    SetManagerSplitParams(split.get(), collapsed, paneWidth);
+    //右侧标题区的「»」跟随折叠状态；会话名由窗口切换会话时设置
+    DuiControl* bodyRoot = split->GetPane(1);
+    if (bodyRoot != NULL)
+    {
+        DuiControl* expand = bodyRoot->FindCtrlById(kIdHistoryExpandLeft);
+        if (expand != NULL)
+        {
+            expand->SetVisible(collapsed);
+        }
+    }
+    return std::unique_ptr<DuiControl>(split.release());
+}
+
+void ApplyHistoryManagerCollapsed(DuiControl* root, bool collapsed, int paneWidth,
+                                  const CString& conversationName)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiSplitter* split = dynamic_cast<balloonwjui::DuiSplitter*>(root);
+    if (split == NULL)
+    {
+        split = dynamic_cast<balloonwjui::DuiSplitter*>(root->FindCtrlById(kIdMgrSplitter));
+    }
+    if (split == NULL)
+    {
+        return;
+    }
+    SetManagerSplitParams(split, collapsed, paneWidth);
+    ApplyHistoryHeaderTitle(split->GetPane(1), conversationName, collapsed);
+    //文件 / 图片页的标题区也有一个「»」，跟着折叠状态显隐并重排那一行
+    DuiControl* right = split->GetPane(1);
+    DuiControl* libExpand = (right != NULL) ? right->FindCtrlById(kIdLibExpandLeft) : NULL;
+    DuiControl* libHeader = (right != NULL) ? right->FindCtrlById(kIdLibHeaderRow) : NULL;
+    if (libExpand != NULL && libHeader != NULL)
+    {
+        libExpand->SetVisible(collapsed);
+        libHeader->ForceLayout(libHeader->GetRect());
+    }
+    //本机存储占用页（窗口加进右侧容器之后才有）同样有一个「»」
+    DuiControl* storExpand = (right != NULL) ? right->FindCtrlById(kIdStorExpandLeft) : NULL;
+    DuiControl* storHeader = (right != NULL) ? right->FindCtrlById(kIdStorHeaderRow) : NULL;
+    if (storExpand != NULL && storHeader != NULL)
+    {
+        storExpand->SetVisible(collapsed);
+        storHeader->ForceLayout(storHeader->GetRect());
+    }
+    //左栏宽度变了，两侧都要按新宽度重新排（右侧整套界面的宽度跟着变）。SetSplitPx 已按新位置
+    //给两侧 SetRect，但矩形没变的子容器不会往下排，显隐刚变的左栏要强制重排一次
+    DuiControl* pane = split->GetPane(0);
+    if (pane != NULL && pane->IsVisible())
+    {
+        pane->ForceLayout(pane->GetRect());
+    }
+    split->Invalidate();
+}
+
+void ApplyHistoryManagerTypeChips(DuiControl* root, int typeFilter)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    const int kChipCount = 3;
+    //下标与 ManagerTypeFilter 的取值一一对应
+    const UINT kChipIds[kChipCount] = { kIdMgrTypeAll, kIdMgrTypeSingle, kIdMgrTypeGroup };
+    for (int i = 0; i < kChipCount; ++i)
+    {
+        DuiButton* chip = dynamic_cast<DuiButton*>(root->FindCtrlById(kChipIds[i]));
+        if (chip != NULL)
+        {
+            chip->SetVariant((i == typeFilter) ? DuiButton::Variant::Primary : DuiButton::Variant::Default);
+            chip->Invalidate();
+        }
+    }
+}
+
+void ApplyHistoryManagerScope(DuiControl* root, size_t scopeCount)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    DuiButton* scope = dynamic_cast<DuiButton*>(root->FindCtrlById(kIdMgrScope));
+    DuiControl* clear = root->FindCtrlById(kIdMgrScopeClear);
+    DuiControl* row = root->FindCtrlById(kIdMgrScopeRow);
+    if (scope == NULL || clear == NULL || row == NULL)
+    {
+        return;
+    }
+    const std::wstring text = BuildManagerScopeButtonText(scopeCount);
+    scope->SetText(text.c_str());
+    clear->SetVisible(scopeCount > 0);
+    //「×」显隐变化后不重排的话，范围按钮仍停在旧宽度上（开发约定文档 UI 约定第 5 条）
+    row->ForceLayout(row->GetRect());
+    row->Invalidate();
+}
+
+void ApplyHistoryManagerListView(DuiControl* root, const HistoryManagerListView& view)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    DuiVBox* box = dynamic_cast<DuiVBox*>(root->FindCtrlById(kIdMgrListBox));
+    DuiLabel* convHeader = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdMgrConvHeader));
+    DuiControl* convTree = root->FindCtrlById(kIdMgrConvTree);
+    DuiLabel* hitHeader = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdMgrHitHeader));
+    DuiControl* hitTree = root->FindCtrlById(kIdMgrHitTree);
+    DuiLabel* empty = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdMgrEmpty));
+    DuiControl* scroll = root->FindCtrlById(kIdMgrScroll);
+    if (box == NULL || convHeader == NULL || convTree == NULL || hitHeader == NULL
+        || hitTree == NULL || empty == NULL || scroll == NULL)
+    {
+        return;
+    }
+
+    const int convRows = (view.m_convRows > 0) ? view.m_convRows : 0;
+    const int hitRows = (view.m_searching && view.m_hitRows > 0) ? view.m_hitRows : 0;
+
+    convHeader->SetText(TR(L"会话"));
+    convHeader->SetVisible(view.m_searching && convRows > 0);
+    convTree->SetVisible(convRows > 0);
+    box->SetHint(convTree, DuiLayout::Hint().Fixed(convRows * kMgrRowHeight)
+                                            .Margin(kMgrTreePadH, 0, kMgrTreePadH, 0));
+
+    hitHeader->SetText(view.m_hitHeader);
+    hitHeader->SetVisible(hitRows > 0);
+    hitTree->SetVisible(hitRows > 0);
+    box->SetHint(hitTree, DuiLayout::Hint().Fixed(hitRows * kMgrRowHeight)
+                                           .Margin(kMgrTreePadH, 0, kMgrTreePadH, 0));
+
+    empty->SetText(view.m_emptyText);
+    empty->SetVisible(convRows == 0 && hitRows == 0 && !view.m_emptyText.IsEmpty());
+
+    //显隐与高度都变了：滚动视口重新询问内容高度，再把内容 vbox 按新高度排一遍
+    scroll->ForceLayout(scroll->GetRect());
+    box->ForceLayout(box->GetRect());
+    scroll->Invalidate();
+}
+
+// =====================================================================
+// 聊天记录管理器的搜索范围弹层的内容
+// =====================================================================
+
+namespace {
+
+const int kScopePopupPad       = 10;   // 弹层四周内边距（像素）
+const int kScopePopupGap       = 8;    // 各行之间的间距（像素）
+const int kScopePopupSearchH   = 30;   // 搜索框高（像素）
+const int kScopePopupFooterH   = 30;   // 底部一行高（像素）
+const int kScopePopupAllW      = 80;   //「全部会话」按钮宽（像素，四个汉字）
+const int kScopePopupOkW       = 64;   //「确定」按钮宽（像素）
+const int kScopePopupCheckW    = 22;   // 复选框一列的宽（像素）
+const int kScopePopupRowGap    = 8;    // 行内复选框、头像、名字之间的间距（像素）
+const int kScopePopupAvatarCorner = 6; // 头像圆角半径（像素）
+
+//范围弹层的复选框：子类化 DuiButton，只为点击时不抢走搜索框的焦点、也不画虚线焦点框
+//（做法与转发目标选择窗的 ForwardPickCheckbox 相同）
+class ScopePickCheckbox : public DuiButton
+{
+public:
+    bool OnSetFocus() override
+    {
+        return false;
+    }
+};
+
+} // anonymous namespace
+
+std::unique_ptr<DuiControl> BuildHistoryScopePopupContent()
+{
+    std::unique_ptr<DuiVBox> root(new DuiVBox());
+    root->SetBgColor(kColorWhite);
+    root->SetPadding(kScopePopupPad);
+    root->SetGap(kScopePopupGap);
+
+    std::unique_ptr<DuiSearchBox> search(new DuiSearchBox());
+    search->SetCtrlId(kIdScopePopupSearch);
+    search->SetPlaceholder(TR(L"搜索会话"));
+    root->AddChild(std::unique_ptr<DuiControl>(search.release()), Hint().Fixed(kScopePopupSearchH));
+
+    //列表内容由弹层按会话填入（BuildHistoryScopePopupRow）；滚动条用 DuiScrollView 内置的自动隐藏
+    std::unique_ptr<DuiScrollView> scroll(new DuiScrollView());
+    scroll->SetCtrlId(kIdScopePopupScroll);
+    scroll->SetAutoContentHeight(true);
+    // 滚动条用 balloonui 统一的悬浮式细滑块与默认命中带宽（2026-10-04 起不再单独设宽）
+    scroll->SetContent(std::unique_ptr<DuiControl>(new DuiVBox()));
+    root->AddChild(std::unique_ptr<DuiControl>(scroll.release()), Hint().Weight(1));
+
+    std::unique_ptr<DuiHBox> footer(new DuiHBox());
+    footer->SetGap(kScopePopupGap);
+    footer->AddChild(MakeLabel(_T(""), kColorSubtitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                               kIdScopePopupInfo),
+                     Hint().Weight(1));
+    footer->AddChild(MakeButton(TR(L"全部会话"), kIdScopePopupAll, DuiButton::Variant::Default),
+                     Hint().Fixed(kScopePopupAllW));
+    footer->AddChild(MakeButton(TR(L"确定"), kIdScopePopupOk, DuiButton::Variant::Primary),
+                     Hint().Fixed(kScopePopupOkW));
+    root->AddChild(std::move(footer), Hint().Fixed(kScopePopupFooterH));
+    return std::unique_ptr<DuiControl>(root.release());
+}
+
+std::unique_ptr<DuiControl> BuildHistoryScopePopupRow(UINT checkId, bool checked, const CString& name,
+                                                      HBITMAP avatar, int64_t cid)
+{
+    std::unique_ptr<DuiHBox> row(new DuiHBox());
+    row->SetGap(kScopePopupRowGap);
+
+    std::unique_ptr<DuiButton> box(new ScopePickCheckbox());
+    box->SetButtonType(DuiButton::StyleCheckbox);
+    //Ghost 变体：复选框只画小勾选框，不铺整格的浅色底（与转发目标选择窗相同）
+    box->SetVariant(DuiButton::Variant::Ghost);
+    box->SetText(_T(""));
+    box->SetCtrlId(checkId);
+    box->SetCheck(checked, false);
+    row->AddChild(std::unique_ptr<DuiControl>(box.release()), Hint().Fixed(kScopePopupCheckW));
+
+    std::unique_ptr<DuiAvatar> av(new DuiAvatar());
+    av->SetShape(DuiAvatar::ShapeRoundRect);
+    av->SetCornerRadius(kScopePopupAvatarCorner);
+    av->SetFallbackBgColor(balloonmain::AvatarColorForUser(cid));
+    av->SetName(balloonmain::AvatarFallbackGlyph(name));
+    if (avatar != NULL)
+    {
+        av->SetBitmap(avatar);
+    }
+    //头像固定为正方形并在行内垂直居中：只给主轴尺寸时交叉轴会被拉伸成长条
+    row->AddChild(std::unique_ptr<DuiControl>(av.release()),
+                  Hint().Fixed(kHistoryScopePopupAvatarSize, kHistoryScopePopupAvatarSize)
+                        .AlignC(DuiLayout::AlignCenter));
+
+    row->AddChild(MakeLabel(name, kColorName, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS),
+                  Hint().Weight(1));
+    return std::unique_ptr<DuiControl>(row.release());
+}
+
+balloonchatwnd::ChatVoiceStrip* FindHistoryVoiceStrip(DuiControl* root, long long msgid)
+{
+    if (root == NULL || msgid == 0)
+    {
+        return NULL;
+    }
+    //语音条按「基址 + 行下标」编号，只有语音行才有；一页最多 kHistoryPageSize 行，逐个编号比对 msgid。
+    //记录窗播放时约每 100 毫秒按 msgid 找一次语音条，故只查一页的行数，不查整个编号段
+    for (UINT i = 0; i < (UINT)kHistoryPageSize; ++i)
+    {
+        balloonchatwnd::ChatVoiceStrip* strip =
+            dynamic_cast<balloonchatwnd::ChatVoiceStrip*>(root->FindCtrlById((UINT)kIdHistoryVoiceBase + i));
+        if (strip != NULL && strip->VoiceMessage().msgid == msgid)
+        {
+            return strip;
+        }
+    }
+    return NULL;
+}
+
+bool MarkHistoryVoicePlayed(DuiControl* root, int viewCtype, int64_t viewCid,
+                            int ctype, int64_t cid, long long msgid)
+{
+    //记录窗只显示一个会话；别的会话里的同号消息不会出现在当前页
+    if (viewCtype != ctype || viewCid != cid)
+    {
+        return false;
+    }
+    balloonchatwnd::ChatVoiceStrip* strip = FindHistoryVoiceStrip(root, msgid);
+    if (strip == NULL)
+    {
+        return false;
+    }
+    const balloonchatwnd::ChatMessage& m = strip->VoiceMessage();
+    if (m.fromMe || m.voicePlayed)
+    {
+        return false;
+    }
+    balloonchatwnd::ChatMessage played = m;
+    played.voicePlayed = true;
+    //记录窗的语音条都按已听状态画红点（开关为 true）；改为已听后不再画红点
+    strip->SetVoiceMessage(played, true);
+    return true;
 }
 
 } // namespace balloonhistory

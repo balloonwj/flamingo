@@ -40,6 +40,8 @@ extern CAppModule _Module;
 #include "MainPanelListItem.h"
 #include "MainPanelMockData.h"
 #include "PresenceBadge.h"          // DrawPresenceBadge（头像右下角的状态徽标）
+#include "AvatarGlyph.h"            // DrawCenteredGlyphGdi：头像字居中
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonmain {
 
@@ -96,31 +98,34 @@ const int kRightTextFallbackW = 70;
 const int kRightTextTop       = 8;
 const int kRightTextHeight    = 16;
 
-// ---- 悬停态「定位」小按钮 ----------------------------------------------
+// ---- 悬停态小按钮（定位 / 打开文件 / 打开所在文件夹）--------------------
 //
-// 只在打开了 SetLocateButtonVisible 的行上出现（目前是搜索结果里的联系人行），
-// 且仅当鼠标悬停于该行时才绘制；其余时候完全不占位。
+// 只在配了按钮的行上出现（搜索结果里的联系人行、本机有文件的聊天文件行），且仅当鼠标
+// 悬停于该行（或该行被键盘选中）时才绘制；其余时候完全不占位。
 
 // 图标绘制方框的边长（逻辑像素）。取 18 与行内其它次要元素（未读角标 16）量级相当：
 // 再大会与 36 见方的头像抢视觉重量，再小则难以点中。
-const int kLocateIconSize    = 18;
+const int kActionIconSize    = 18;
 // 图标绘制方框的右边界与行右内距 kRowRightPad 之间的间距（逻辑像素）。0 表示图标
 // 右边界正好落在行右内距那条线上，与未读角标、右侧文字的右对齐口径一致。
-const int kLocateIconRightGap = 0;
+const int kActionIconRightGap = 0;
 // 鼠标落在图标上时，垫在图标下方的圆底相对图标方框每边外扩的距离（逻辑像素）。
 // 外扩 4 后圆底直径 26，与常见工具栏图标按钮的触发区尺寸相当。
-const int kLocateHotPad      = 4;
+const int kActionHotPad      = 4;
+// 相邻两个按钮图标方框之间的间距（逻辑像素）。要大于两倍 kActionHotPad，两个按钮的
+// 浅色圆底才不会连在一起。
+const int kActionIconGap     = 10;
 // 图标常态描边色（中灰）。刻意弱于名称文字色 kNameColor，避免抢走主行的注意力。
-const COLORREF kLocateIconColor    = RGB(0x8C, 0x8C, 0x8C);
+const COLORREF kActionIconColor    = RGB(0x8C, 0x8C, 0x8C);
 // 鼠标正落在图标上时的描边色（深灰）。与常态之间拉开明显的明度差，表示"这里可以点"。
-const COLORREF kLocateIconHotColor = RGB(0x40, 0x40, 0x40);
+const COLORREF kActionIconHotColor = RGB(0x40, 0x40, 0x40);
 // 鼠标正落在图标上时垫在图标下方的浅色圆底。比搜索结果行的悬停底色
 // （SearchDropdown 里的 RGB(0xE9,0xEC,0xF1)）再深一档，才能在已经变色的行底上看出来。
-const Gdiplus::Color kLocateHotFill(255, 0xD6, 0xDB, 0xE3);
+const Gdiplus::Color kActionHotFill(255, 0xD6, 0xDB, 0xE3);
 // 图标描边宽度，以 viewBox 24 为基准（与 MainPanelIcons 里其它线性图标同口径）。
-const Gdiplus::REAL kLocateStrokeWidth = 2.0f;
+const Gdiplus::REAL kActionStrokeWidth = 2.0f;
 // 图标的 viewBox 基准边长（design icons.jsx 的图标统一用 0 0 24 24）。
-const Gdiplus::REAL kLocateViewBox     = 24.0f;
+const Gdiplus::REAL kActionViewBox     = 24.0f;
 
 // ---- 地图定位针在 viewBox 24 里的几何 ----
 // 针头圆心。x 取正中；y 取 9.5 而非 12 —— 针身要向下伸出一段尖角，圆心上移后
@@ -157,9 +162,9 @@ void DrawLocatePin(Gdiplus::Graphics& g,
 
     Gdiplus::GraphicsState st = g.Save();
     g.TranslateTransform(x, y);
-    g.ScaleTransform(size / kLocateViewBox, size / kLocateViewBox);
+    g.ScaleTransform(size / kActionViewBox, size / kActionViewBox);
 
-    Gdiplus::Pen pen(color, kLocateStrokeWidth);
+    Gdiplus::Pen pen(color, kActionStrokeWidth);
     pen.SetStartCap(Gdiplus::LineCapRound);
     pen.SetEndCap(Gdiplus::LineCapRound);
     pen.SetLineJoin(Gdiplus::LineJoinRound);
@@ -184,6 +189,101 @@ void DrawLocatePin(Gdiplus::Graphics& g,
         g.FillEllipse(&brush, kPinHeadCx - kPinHoleR, kPinHeadCy - kPinHoleR,
                       kPinHoleR * 2.0f, kPinHoleR * 2.0f);
     }
+
+    g.Restore(st);
+}
+
+// ---- 「打开文件」图标在 viewBox 24 里的几何：左下方框 + 指向右上角的箭头 ----
+// 方框左、下边的位置与方框右、上边的位置。方框右上角留空给箭头穿出。
+const Gdiplus::REAL kOpenBoxLeft   = 4.0f;
+const Gdiplus::REAL kOpenBoxBottom = 20.0f;
+const Gdiplus::REAL kOpenBoxRight  = 18.0f;
+const Gdiplus::REAL kOpenBoxTop    = 6.0f;
+// 方框上边、右边各画到哪里为止（留出右上角的缺口）。
+const Gdiplus::REAL kOpenBoxTopEnd   = 11.0f;
+const Gdiplus::REAL kOpenBoxRightEnd = 13.0f;
+// 箭头：从方框中部指向右上角，箭头两翼的长度。
+const Gdiplus::REAL kOpenArrowFromX = 10.0f;
+const Gdiplus::REAL kOpenArrowFromY = 14.0f;
+const Gdiplus::REAL kOpenArrowTip   = 20.0f;   // 箭头尖端的 x（y 取 24 - 20 = 4）
+const Gdiplus::REAL kOpenArrowWing  = 6.0f;
+
+// ---- 「打开所在文件夹」图标在 viewBox 24 里的几何：文件夹轮廓（左上带页签）----
+const Gdiplus::REAL kFolderLeft    = 3.0f;
+const Gdiplus::REAL kFolderRight   = 21.0f;
+const Gdiplus::REAL kFolderTop     = 5.0f;    // 页签顶边
+const Gdiplus::REAL kFolderBodyTop = 8.0f;    // 主体顶边
+const Gdiplus::REAL kFolderBottom  = 19.0f;
+const Gdiplus::REAL kFolderTabEnd  = 9.0f;    // 页签顶边的右端
+const Gdiplus::REAL kFolderTabFoot = 11.0f;   // 页签斜边落到主体顶边的位置
+
+// 在 (x, y) 起、边长 size 的方形区域内描边绘制「打开文件」图标（方框 + 指向右上角的箭头）。
+// 画法与 DrawLocatePin 同口径。
+void DrawOpenFileIcon(Gdiplus::Graphics& g,
+                      Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL size,
+                      const Gdiplus::Color& color)
+{
+    if (size <= 0.0f)
+    {
+        return;
+    }
+    Gdiplus::GraphicsState st = g.Save();
+    g.TranslateTransform(x, y);
+    g.ScaleTransform(size / kActionViewBox, size / kActionViewBox);
+
+    Gdiplus::Pen pen(color, kActionStrokeWidth);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+
+    //方框：从上边的缺口处开始，逆时针经左上、左下、右下，停在右边的缺口处。
+    {
+        Gdiplus::GraphicsPath box;
+        box.AddLine(kOpenBoxTopEnd, kOpenBoxTop, kOpenBoxLeft, kOpenBoxTop);
+        box.AddLine(kOpenBoxLeft, kOpenBoxTop, kOpenBoxLeft, kOpenBoxBottom);
+        box.AddLine(kOpenBoxLeft, kOpenBoxBottom, kOpenBoxRight, kOpenBoxBottom);
+        box.AddLine(kOpenBoxRight, kOpenBoxBottom, kOpenBoxRight, kOpenBoxRightEnd);
+        g.DrawPath(&pen, &box);
+    }
+
+    //箭头：杆从方框中部斜向右上角，尖端处两翼分别向左、向下。
+    const Gdiplus::REAL tipX = kOpenArrowTip;
+    const Gdiplus::REAL tipY = kActionViewBox - kOpenArrowTip;
+    g.DrawLine(&pen, kOpenArrowFromX, kOpenArrowFromY, tipX, tipY);
+    g.DrawLine(&pen, tipX - kOpenArrowWing, tipY, tipX, tipY);
+    g.DrawLine(&pen, tipX, tipY, tipX, tipY + kOpenArrowWing);
+
+    g.Restore(st);
+}
+
+// 在 (x, y) 起、边长 size 的方形区域内描边绘制「打开所在文件夹」图标（左上带页签的文件夹）。
+// 画法与 DrawLocatePin 同口径。
+void DrawFolderIcon(Gdiplus::Graphics& g,
+                    Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL size,
+                    const Gdiplus::Color& color)
+{
+    if (size <= 0.0f)
+    {
+        return;
+    }
+    Gdiplus::GraphicsState st = g.Save();
+    g.TranslateTransform(x, y);
+    g.ScaleTransform(size / kActionViewBox, size / kActionViewBox);
+
+    Gdiplus::Pen pen(color, kActionStrokeWidth);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+
+    //一笔画出整个轮廓：左下 → 左上（页签顶）→ 页签右端 → 斜落到主体顶边 → 右上 → 右下 → 闭合。
+    Gdiplus::GraphicsPath folder;
+    folder.AddLine(kFolderLeft, kFolderBottom, kFolderLeft, kFolderTop);
+    folder.AddLine(kFolderLeft, kFolderTop, kFolderTabEnd, kFolderTop);
+    folder.AddLine(kFolderTabEnd, kFolderTop, kFolderTabFoot, kFolderBodyTop);
+    folder.AddLine(kFolderTabFoot, kFolderBodyTop, kFolderRight, kFolderBodyTop);
+    folder.AddLine(kFolderRight, kFolderBodyTop, kFolderRight, kFolderBottom);
+    folder.CloseFigure();
+    g.DrawPath(&pen, &folder);
 
     g.Restore(st);
 }
@@ -218,7 +318,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -249,7 +349,7 @@ int MeasureGdiTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;
@@ -260,6 +360,57 @@ int MeasureGdiTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
     ::SelectObject(hdc, hOldFont);
     ::DeleteObject(hFont);
     return sz.cx;
+}
+
+// 命中高亮黄底相对所在文字行上下各缩进的距离（逻辑像素），让上下相邻的两行黄底不连成一片。
+const int kHighlightInsetY = 1;
+
+// 在一行文字的指定子串下方画搜索命中黄底：用与 DrawGdiText 完全相同的字体测量子串的
+// 左偏移与宽度，保证黄底与随后画上去的文字对齐。名称与副行共用这一份实现。
+//   text：整行文字；hiStart / hiLen：高亮的字符区间（越界会被裁剪，非法时什么都不画）；
+//   pixelHeight：该行文字的字号；lineRc：该行文字的绘制矩形，黄底不越过它的右界。
+void DrawSubstringHighlight(HDC hdc, const CString& text, int hiStart, int hiLen,
+                            int pixelHeight, const RECT& lineRc)
+{
+    const int textLen = text.GetLength();
+    if (hiStart < 0 || hiLen <= 0 || hiStart >= textLen)
+    {
+        return;
+    }
+    if (hiStart + hiLen > textLen)
+    {
+        hiLen = textLen - hiStart;
+    }
+
+    HFONT hMeasure = ::CreateFontW(
+        -pixelHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
+    if (hMeasure == NULL)
+    {
+        return;
+    }
+    HFONT hOld = (HFONT)::SelectObject(hdc, hMeasure);
+    SIZE szPre = { 0, 0 };
+    SIZE szHi  = { 0, 0 };
+    ::GetTextExtentPoint32W(hdc, (LPCWSTR)text, hiStart, &szPre);
+    ::GetTextExtentPoint32W(hdc, ((LPCWSTR)text) + hiStart, hiLen, &szHi);
+    ::SelectObject(hdc, hOld);
+    ::DeleteObject(hMeasure);
+
+    const int hiLeft  = lineRc.left + szPre.cx;
+    int       hiRight = hiLeft + szHi.cx;
+    if (hiRight > lineRc.right)
+    {
+        hiRight = lineRc.right;   // 不越过文字区右界（与省略号区一致）
+    }
+    if (hiRight > hiLeft)
+    {
+        RECT hl = { hiLeft, lineRc.top + kHighlightInsetY, hiRight, lineRc.bottom - kHighlightInsetY };
+        HBRUSH hb = ::CreateSolidBrush(kHighlightFill);
+        ::FillRect(hdc, &hl, hb);
+        ::DeleteObject(hb);
+    }
 }
 
 // 按底色明度选头像文字色：浅底用深字、深底用白字（服务号头像底色偏浅）。
@@ -277,13 +428,15 @@ MainPanelListItem::MainPanelListItem()
     , m_avatarBitmap(NULL)
     , m_nameHiStart(-1)
     , m_nameHiLen(0)
+    , m_subHiStart(-1)
+    , m_subHiLen(0)
+    , m_keySelected(false)
     , m_showStatus(false)
     , m_status(kMockOffline)
     , m_badgeCount(0)
     , m_hoverFill(RGB(0xF4, 0xF3, 0xF0))   // design --hover 浅灰（默认，与主面板列表一致）
-    , m_showLocate(false)                  // 默认不提供「定位」小按钮
-    , m_locateHot(false)
-    , m_locatePressed(false)
+    , m_hotAction(-1)                      // 默认没有悬停按钮（m_hoverActions 为空）
+    , m_pressedAction(-1)
 {
 }
 
@@ -338,6 +491,30 @@ void MainPanelListItem::SetNameHighlight(int start, int len)
     Invalidate();
 }
 
+void MainPanelListItem::SetKeySelected(bool on)
+{
+    if (m_keySelected != on)
+    {
+        m_keySelected = on;
+        Invalidate();
+    }
+}
+
+void MainPanelListItem::SetSubHighlight(int start, int len)
+{
+    if (len <= 0 || start < 0)
+    {
+        m_subHiStart = -1;
+        m_subHiLen   = 0;
+    }
+    else
+    {
+        m_subHiStart = start;
+        m_subHiLen   = len;
+    }
+    Invalidate();
+}
+
 void MainPanelListItem::SetSubText(LPCTSTR sub)
 {
     m_subText = (sub != NULL) ? sub : _T("");
@@ -371,43 +548,80 @@ void MainPanelListItem::SetHoverFill(COLORREF c)
 
 void MainPanelListItem::SetLocateButtonVisible(bool show)
 {
-    if (m_showLocate == show)
+    std::vector<int> actions;
+    if (show)
+    {
+        actions.push_back(kHoverActionLocate);
+    }
+    SetHoverActions(actions);
+}
+
+void MainPanelListItem::SetHoverActions(const std::vector<int>& actions)
+{
+    std::vector<int> valid;
+    for (size_t i = 0; i < actions.size(); ++i)
+    {
+        if (actions[i] == kHoverActionLocate || actions[i] == kHoverActionOpenFile
+            || actions[i] == kHoverActionOpenFolder)
+        {
+            valid.push_back(actions[i]);
+        }
+    }
+    if (valid == m_hoverActions)
     {
         return;
     }
-    m_showLocate = show;
-    if (!m_showLocate)
-    {
-        //关掉按钮时一并复位命中态与按下态，免得下次再打开时残留上一轮的状态。
-        m_locateHot = false;
-        m_locatePressed = false;
-    }
+    m_hoverActions = valid;
+    //换了一组按钮：命中态与按下态都对应旧的下标，一并复位。
+    m_hotAction = -1;
+    m_pressedAction = -1;
     Invalidate();
 }
 
-RECT MainPanelListItem::LocateIconRect() const
+RECT MainPanelListItem::HoverActionRect(size_t index) const
 {
     RECT rc = { 0, 0, 0, 0 };
 
     const int h = m_rcItem.bottom - m_rcItem.top;
-    if (h <= 0)
+    if (h <= 0 || index >= m_hoverActions.size())
     {
-        return rc;   //尚未布局（或行高为 0），没有可用矩形
+        return rc;   //尚未布局（或行高为 0），或下标越界
     }
 
-    rc.right  = m_rcItem.right - kRowRightPad - kLocateIconRightGap;
-    rc.left   = rc.right - kLocateIconSize;
-    rc.top    = m_rcItem.top + (h - kLocateIconSize) / 2;   //垂直居中
-    rc.bottom = rc.top + kLocateIconSize;
+    //最右一个按钮贴着行右内距，往左依次排开。
+    const size_t fromRight = m_hoverActions.size() - 1 - index;
+    rc.right  = m_rcItem.right - kRowRightPad - kActionIconRightGap
+              - (int)fromRight * (kActionIconSize + kActionIconGap);
+    rc.left   = rc.right - kActionIconSize;
+    rc.top    = m_rcItem.top + (h - kActionIconSize) / 2;   //垂直居中
+    rc.bottom = rc.top + kActionIconSize;
     return rc;
+}
+
+int MainPanelListItem::HitTestHoverAction(POINT pt) const
+{
+    for (size_t i = 0; i < m_hoverActions.size(); ++i)
+    {
+        RECT rc = HoverActionRect(i);
+        if (rc.right > rc.left && ::PtInRect(&rc, pt))
+        {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+bool MainPanelListItem::HoverActionsShown() const
+{
+    return !m_hoverActions.empty() && (IsHover() || m_keySelected);
 }
 
 bool MainPanelListItem::OnMouseEnter()
 {
     bool r = balloonwjui::DuiButton::OnMouseEnter();   // 基类置 m_bHover=true 并通知父
-    // 刚进入本行时先按"鼠标不在图标上"起步 —— 紧随其后的 OnMouseMove 会立刻把真实
+    // 刚进入本行时先按"鼠标不在按钮上"起步 —— 紧随其后的 OnMouseMove 会立刻把真实
     // 落点算出来，不会停在错误状态上。
-    m_locateHot = false;
+    m_hotAction = -1;
     Invalidate();                                      // 基类不重绘，这里补一次让 hover 底色立刻显示
     return r;
 }
@@ -415,12 +629,12 @@ bool MainPanelListItem::OnMouseEnter()
 bool MainPanelListItem::OnMouseLeave()
 {
     bool r = balloonwjui::DuiButton::OnMouseLeave();   // 基类置 m_bHover=false 并通知父
-    // 鼠标已离开本行，图标随 hover 底色一起消失，命中态必须跟着复位；否则下次
+    // 鼠标已离开本行，按钮随 hover 底色一起消失，命中态必须跟着复位；否则下次
     // 移进来时会先闪一帧加深色的图标。
-    m_locateHot = false;
+    m_hotAction = -1;
     // 按下态一并复位：按住左键拖出本行时不会有松开事件传到这里，不复位的话它会
-    // 一直留着，让下一次真正的点击被误判成定位。
-    m_locatePressed = false;
+    // 一直留着，让下一次真正的点击被误判成点了按钮。
+    m_pressedAction = -1;
     Invalidate();                                      // 补一次让 hover 底色立刻消失
     return r;
 }
@@ -429,20 +643,12 @@ bool MainPanelListItem::OnMouseMove(POINT pt, UINT mkFlags)
 {
     bool r = balloonwjui::DuiButton::OnMouseMove(pt, mkFlags);
 
-    // 只在"鼠标是否落在定位图标上"这个状态发生翻转时才重绘。鼠标在行内移动是高频
-    // 事件，每次都 Invalidate 会让整张下拉不停刷新。
-    bool hot = false;
-    if (m_showLocate)
+    // 只在"鼠标落在哪个按钮上"发生变化时才重绘。鼠标在行内移动是高频事件，每次都
+    // Invalidate 会让整张下拉不停刷新。
+    const int hot = HitTestHoverAction(pt);
+    if (hot != m_hotAction)
     {
-        RECT rcIcon = LocateIconRect();
-        if (rcIcon.right > rcIcon.left)
-        {
-            hot = (::PtInRect(&rcIcon, pt) != FALSE);
-        }
-    }
-    if (hot != m_locateHot)
-    {
-        m_locateHot = hot;
+        m_hotAction = hot;
         Invalidate();
     }
 
@@ -451,48 +657,52 @@ bool MainPanelListItem::OnMouseMove(POINT pt, UINT mkFlags)
 
 bool MainPanelListItem::OnLButtonDown(POINT pt, UINT mkFlags)
 {
-    // 记下这一次按下的落点在不在「定位」图标内。只判松开点是不够的：在行的空白处
-    // 按下、拖到图标上再松开，本该算一次普通的行点击（打开会话），只判松开点会把
-    // 它当成定位。
-    m_locatePressed = false;
-    if (m_showLocate)
-    {
-        RECT rcIcon = LocateIconRect();
-        if (rcIcon.right > rcIcon.left && ::PtInRect(&rcIcon, pt))
-        {
-            m_locatePressed = true;
-        }
-    }
+    // 记下这一次按下的落点在哪个按钮上。只判松开点是不够的：在行的空白处按下、拖到
+    // 按钮上再松开，本该算一次普通的行点击（打开会话），只判松开点会把它当成点了按钮。
+    m_pressedAction = HitTestHoverAction(pt);
 
     return balloonwjui::DuiButton::OnLButtonDown(pt, mkFlags);
 }
 
 bool MainPanelListItem::OnLButtonUp(POINT pt, UINT mkFlags)
 {
-    // 按下与松开的落点都在「定位」图标内：本次点击只表示"去通讯录里定位这个人"，
-    // 绝不能再走基类那条 DUIN_CLICK 通路 —— 否则宿主会既定位又打开会话。
+    // 按下与松开的落点都在同一个按钮上：本次点击只表示该按钮的动作（定位、打开文件、
+    // 打开所在文件夹），绝不能再走基类那条 DUIN_CLICK 通路 —— 否则宿主会既执行按钮的
+    // 动作又打开这一行。
     //
     // 拦截手法是把基类调用改派到一个<u>落在本行之外</u>的坐标上：DuiButton::OnLButtonUp
     // 只有在"按下时在按钮内、松开时也在按钮内"两个条件同时成立时才发 DUIN_CLICK
     // （见 DuiButton.h 的行为约定），松开点在外就走它自己的取消路径。这样按下态、
     // 鼠标捕获、重绘等收尾工作仍由基类完成，本类不必去碰基类的私有成员，也就无需
     // 改动 balloonui 库。
-    const bool pressedOnIcon = m_locatePressed;
-    m_locatePressed = false;   // 一次点击用完即复位，不跨事件保留
+    const int pressed = m_pressedAction;
+    m_pressedAction = -1;   // 一次点击用完即复位，不跨事件保留
 
-    if (m_showLocate && pressedOnIcon)
+    if (pressed >= 0 && pressed == HitTestHoverAction(pt))
     {
-        RECT rcIcon = LocateIconRect();
-        if (rcIcon.right > rcIcon.left && ::PtInRect(&rcIcon, pt))
-        {
-            POINT ptOutside;
-            ptOutside.x = m_rcItem.left - 1;
-            ptOutside.y = m_rcItem.top - 1;
-            balloonwjui::DuiButton::OnLButtonUp(ptOutside, mkFlags);
+        POINT ptOutside;
+        ptOutside.x = m_rcItem.left - 1;
+        ptOutside.y = m_rcItem.top - 1;
+        balloonwjui::DuiButton::OnLButtonUp(ptOutside, mkFlags);
 
-            NotifyParent(DUIN_LISTITEM_LOCATE);
-            return true;
+        UINT code = DUIN_LISTITEM_LOCATE;
+        switch (m_hoverActions[(size_t)pressed])
+        {
+        //「打开文件」按钮
+        case kHoverActionOpenFile:
+            code = DUIN_LISTITEM_OPEN_FILE;
+            break;
+        //「打开所在文件夹」按钮
+        case kHoverActionOpenFolder:
+            code = DUIN_LISTITEM_OPEN_FOLDER;
+            break;
+        //「定位」按钮（SetHoverActions 只收下三种取值，不会有别的）
+        default:
+            code = DUIN_LISTITEM_LOCATE;
+            break;
         }
+        NotifyParent(code);
+        return true;
     }
 
     return balloonwjui::DuiButton::OnLButtonUp(pt, mkFlags);
@@ -519,8 +729,9 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
         // 悬停底（行内缩 3px，留出圆角呼吸位）。底色取 m_hoverFill（可经
-        // SetHoverFill 调整，默认 design --hover 浅灰）。
-        if (IsHover())
+        // SetHoverFill 调整，默认 design --hover 浅灰）。被键盘选中的行（搜索下拉里用上下
+        // 方向键移到的那一行）画同样的底色，鼠标与键盘两种选中看起来一致。
+        if (IsHover() || m_keySelected)
         {
             Gdiplus::GraphicsPath hover;
             AddRoundRect(hover, (Gdiplus::REAL)(x + 3), (Gdiplus::REAL)(y + 1),
@@ -541,7 +752,8 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
             Gdiplus::SolidBrush ab(Gdiplus::Color(255,
                 GetRValue(m_avatarColor), GetGValue(m_avatarColor),
                 GetBValue(m_avatarColor)));
-            g.FillPath(&ab, &avatar);
+            // 按像素格对齐地填充，与头像字、照片头像对齐（见 AvatarGlyph.h）
+            FillAvatarBackground(g, ab, avatar);
         }
 
         // 头像状态点（离线不画）。
@@ -600,9 +812,8 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     if (m_avatarBitmap == NULL && !m_avatarText.IsEmpty())
     {
         RECT avRc = { avX, avY, avX + kAvatarSize, avY + kAvatarSize };
-        DrawGdiText(hdc, (LPCWSTR)m_avatarText, avRc, 16, true,
-                    AvatarTextColor(m_avatarColor),
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        // 按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低（emoji 等取不到字形度量时内部退回原画法）
+        DrawCenteredGlyphGdi(hdc, (LPCWSTR)m_avatarText, avRc, 16, true, AvatarTextColor(m_avatarColor));
     }
 
     // 名称 + 副行（整体垂直居中）。
@@ -610,10 +821,14 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const int  blockH = hasSub ? 33 : 18;
     const int  blockTop = y + (h - blockH) / 2;
 
+    // 悬停按钮显示时，第一行右侧的时间文字让位给按钮，不画。
+    const bool actionsShown = HoverActionsShown();
+    const bool drawRightText = !m_rightText.IsEmpty() && !actionsShown;
+
     // 第一行右侧文字（时间 / 群成员数）先量宽 —— 它与名称同处第一行，名称的右界要
     // 为它让位，否则长名称会一直画到它底下、两段字叠在一起。
     int rightTextW = 0;
-    if (!m_rightText.IsEmpty())
+    if (drawRightText)
     {
         rightTextW = MeasureGdiTextWidth(hdc, (LPCWSTR)m_rightText, kRightPx, false);
         if (rightTextW <= 0)
@@ -628,6 +843,16 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     if (m_badgeCount > 0)
     {
         textRight = x + w - kRowRightPad - (int)kBadgeDiameter - kBadgeTextGap;
+    }
+    // 悬停按钮显示时，名称与副行都让到最左一个按钮的左边（再留出浅色圆底的外扩）。
+    if (actionsShown)
+    {
+        const RECT rcFirst = HoverActionRect(0);
+        const int limit = rcFirst.left - kActionHotPad - kNameRightGap;
+        if (rcFirst.right > rcFirst.left && limit < textRight)
+        {
+            textRight = limit;
+        }
     }
 
     // 名称还要再为右侧文字让位。副行（第二行）不受影响 —— 它在右侧文字的下一行，
@@ -644,46 +869,8 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 
     RECT nameRc = { textLeft, blockTop, nameRight, blockTop + 18 };
 
-    // 搜索命中高亮：在名称对应子串处画黄底（用与名称完全相同的字体测量子串
-    // 的左偏移与宽度，保证高亮框与文字对齐），再照常画名称文字盖在其上。
-    if (m_nameHiStart >= 0 && m_nameHiLen > 0 && m_nameHiStart < m_name.GetLength())
-    {
-        int hiStart = m_nameHiStart;
-        int hiLen   = m_nameHiLen;
-        if (hiStart + hiLen > m_name.GetLength())
-        {
-            hiLen = m_name.GetLength() - hiStart;
-        }
-
-        HFONT hMeasure = ::CreateFontW(
-            -kNamePx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-        if (hMeasure != NULL)
-        {
-            HFONT hOld = (HFONT)::SelectObject(hdc, hMeasure);
-            SIZE szPre = { 0, 0 };
-            SIZE szHi  = { 0, 0 };
-            ::GetTextExtentPoint32W(hdc, (LPCWSTR)m_name, hiStart, &szPre);
-            ::GetTextExtentPoint32W(hdc, ((LPCWSTR)m_name) + hiStart, hiLen, &szHi);
-            ::SelectObject(hdc, hOld);
-            ::DeleteObject(hMeasure);
-
-            int hiLeft  = textLeft + szPre.cx;
-            int hiRight = hiLeft + szHi.cx;
-            if (hiRight > nameRight)
-            {
-                hiRight = nameRight;   // 不越过名称区右界（与省略号区一致）
-            }
-            if (hiRight > hiLeft)
-            {
-                RECT hl = { hiLeft, blockTop + 1, hiRight, blockTop + 17 };
-                HBRUSH hb = ::CreateSolidBrush(kHighlightFill);
-                ::FillRect(hdc, &hl, hb);
-                ::DeleteObject(hb);
-            }
-        }
-    }
+    // 搜索命中高亮：先在名称对应子串处画黄底，再照常画名称文字盖在其上。
+    DrawSubstringHighlight(hdc, m_name, m_nameHiStart, m_nameHiLen, kNamePx, nameRc);
 
     // 名称用常规字重（非半粗）—— 半粗 + 深色会显得过黑过重。
     DrawGdiText(hdc, (LPCWSTR)m_name, nameRc, kNamePx, false, kNameColor,
@@ -692,6 +879,8 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     if (hasSub)
     {
         RECT subRc = { textLeft, blockTop + 17, textRight, blockTop + 33 };
+        // 副行同样可以有命中高亮（搜索下拉「消息」标签里命中的那句话）。
+        DrawSubstringHighlight(hdc, m_subText, m_subHiStart, m_subHiLen, kSubPx, subRc);
         DrawGdiText(hdc, (LPCWSTR)m_subText, subRc, kSubPx, false, kSubColor,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
@@ -699,7 +888,7 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     // 第一行右侧文字（会话行的时间 / 群行的成员数）。两行的行里与名称同高 —— 名称在上、
     // 副行在下时，右侧文字要和名称处在同一条水平线上才不显得飘在两行中间的缝里；单行的
     // 行没有第二行作参照，沿用贴着行右上角的老位置。
-    if (!m_rightText.IsEmpty())
+    if (drawRightText)
     {
         RECT rightRc;
         rightRc.right = x + w - kRowRightPad;
@@ -730,37 +919,57 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
     }
 
-    // ---- 悬停态「定位」小按钮 ----
+    // ---- 悬停态小按钮 ----
     //
-    // 画在最后，浮在行内其它元素之上。只有本行打开了该按钮、且鼠标此刻正悬停在本行
-    // 内时才画：其余时候完全不绘制、也不占位（名称与副行的右界不因它而收缩 —— 打开
-    // 该按钮的搜索结果联系人行既没有未读角标也没有右侧文字，行右侧本就是空白）。
-    if (m_showLocate && IsHover())
+    // 画在最后，浮在行内其它元素之上。只有本行配了按钮、且鼠标此刻正悬停在本行内（或本行
+    // 被键盘选中）时才画：其余时候完全不绘制、也不占位。
+    if (actionsShown)
     {
-        RECT rcIcon = LocateIconRect();
-        if (rcIcon.right > rcIcon.left)
+        Gdiplus::Graphics gi(hdc);
+        gi.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        for (size_t i = 0; i < m_hoverActions.size(); ++i)
         {
-            Gdiplus::Graphics gi(hdc);
-            gi.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            RECT rcIcon = HoverActionRect(i);
+            if (rcIcon.right <= rcIcon.left)
+            {
+                continue;
+            }
+            const bool hot = (m_hotAction == (int)i);
 
             // 鼠标正落在图标上：先垫一层浅色圆底作为可点击反馈。
-            if (m_locateHot)
+            if (hot)
             {
-                const Gdiplus::REAL hotR = (Gdiplus::REAL)kLocateIconSize / 2.0f
-                                           + (Gdiplus::REAL)kLocateHotPad;
+                const Gdiplus::REAL hotR = (Gdiplus::REAL)kActionIconSize / 2.0f
+                                           + (Gdiplus::REAL)kActionHotPad;
                 const Gdiplus::REAL hotCx = (Gdiplus::REAL)(rcIcon.left + rcIcon.right) / 2.0f;
                 const Gdiplus::REAL hotCy = (Gdiplus::REAL)(rcIcon.top + rcIcon.bottom) / 2.0f;
-                Gdiplus::SolidBrush hotBrush(kLocateHotFill);
+                Gdiplus::SolidBrush hotBrush(kActionHotFill);
                 gi.FillEllipse(&hotBrush, hotCx - hotR, hotCy - hotR,
                                hotR * 2.0f, hotR * 2.0f);
             }
 
             // 图标本体。鼠标落在它上面时画深一档，与浅色圆底一起构成"这里可以点"的提示。
-            const COLORREF pinColor = m_locateHot ? kLocateIconHotColor : kLocateIconColor;
-            Gdiplus::Color pinArgb(255, GetRValue(pinColor), GetGValue(pinColor),
-                                   GetBValue(pinColor));
-            DrawLocatePin(gi, (Gdiplus::REAL)rcIcon.left, (Gdiplus::REAL)rcIcon.top,
-                          (Gdiplus::REAL)kLocateIconSize, pinArgb);
+            const COLORREF iconColor = hot ? kActionIconHotColor : kActionIconColor;
+            Gdiplus::Color iconArgb(255, GetRValue(iconColor), GetGValue(iconColor),
+                                    GetBValue(iconColor));
+            const Gdiplus::REAL ix = (Gdiplus::REAL)rcIcon.left;
+            const Gdiplus::REAL iy = (Gdiplus::REAL)rcIcon.top;
+            const Gdiplus::REAL isz = (Gdiplus::REAL)kActionIconSize;
+            switch (m_hoverActions[i])
+            {
+            //「打开文件」：方框 + 右上箭头
+            case kHoverActionOpenFile:
+                DrawOpenFileIcon(gi, ix, iy, isz, iconArgb);
+                break;
+            //「打开所在文件夹」：文件夹轮廓
+            case kHoverActionOpenFolder:
+                DrawFolderIcon(gi, ix, iy, isz, iconArgb);
+                break;
+            //「定位」：地图定位针
+            default:
+                DrawLocatePin(gi, ix, iy, isz, iconArgb);
+                break;
+            }
         }
     }
 }

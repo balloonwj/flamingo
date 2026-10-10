@@ -37,8 +37,12 @@
 #include "../../net/MessageProtocolClient.h"  // net::MergedRecord
 #include "HistoryWindowLayout.h"              // balloonhistory::HistoryRowView
 #include "MergedRecordRows.h"                 // balloonhistory::MergedFileStateTable
+#include "../../Feature/Voice/VoiceHub.h"       // balloonvoice::IVoicePlayListener（语音条播放，第 4 期）
+#include "../BalloonChatWnd/ChatMessageList.h"  // WM_CHAT_VOICE_ACTION（消息映射里要用）
+#include "../BalloonMain/TitleBarIcon.h"   // ProgramWindowIcons：任务栏与 Alt+Tab 的程序图标
 
 namespace balloonwjui { class DuiScrollView; }
+namespace balloonchatwnd { class ChatVoiceStrip; }
 
 //列表重建请求：窗口尺寸变化时投递，在事件解栈之后按客户区新宽度重建列表。不在 WM_SIZE
 //里直接重建，是因为 DuiFrameWindow 自己的排版也在处理这条消息，此时重建会与它交错
@@ -48,7 +52,8 @@ namespace balloonwjui { class DuiScrollView; }
  *  合并转发的聊天记录查看窗。继承 balloonwjui::DuiFrameWindow，由它提供无边框自绘窗体
  *  与标题栏。一个实例显示一份记录；记录里嵌套的记录由另一个实例显示。
  */
-class CMergedRecordWindow : public balloonwjui::DuiFrameWindow
+class CMergedRecordWindow : public balloonwjui::DuiFrameWindow,
+                            public balloonvoice::IVoicePlayListener
 {
 public:
     CMergedRecordWindow();
@@ -98,6 +103,30 @@ public:
     void OnFileDownloadProgress(int64_t msgid, int64_t received, int64_t total);
 
     /**
+     *  一段语音下载有了结果（主面板收到 FMG_MSG_V2_VOICE_DOWNLOAD_RESULT 后按 md5 转给每个查看窗，语音消息第 4c 步）。
+     *  本窗口发起过这一段时把它移出「下载中」；无论是否本窗口发起都重建列表，语音条的本机文件状态重新判断。
+     *  @param md5 语音文件内容 MD5
+     *  @param ok  是否下载成功
+     */
+    void OnVoiceDownloadFinished(const std::string& md5, bool ok);
+
+    // 以下为 balloonvoice::IVoicePlayListener 的实现（语音消息第 4c 步）
+    /**
+     *  播放进度：更新这条语音的语音条喇叭帧。
+     *  @param key      正在播的语音
+     *  @param playedMs 已播放的毫秒数
+     *  @param totalMs  总毫秒数
+     */
+    virtual void OnVoicePlayProgress(const balloonvoice::VoicePlayKey& key, int64_t playedMs,
+                                     int64_t totalMs) override;
+    /**
+     *  播放结束：语音条退出播放中。查看窗不自动连播。
+     *  @param key    结束的语音
+     *  @param reason 取值见 balloonvoice::VoicePlayEnd
+     */
+    virtual void OnVoicePlayEnded(const balloonvoice::VoicePlayKey& key, int reason) override;
+
+    /**
      *  取本窗口当前显示的记录（只读）。窗口未打开时为空记录。
      *  @return 记录的引用，生命周期同本对象
      */
@@ -108,6 +137,12 @@ public:
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         //文件行卡片上的操作链接被点（下载 / 打开 / 另存为 / 取消 / 重新下载）
         MESSAGE_HANDLER(WM_CHAT_FILE_ACTION, OnChatFileAction)
+        //语音条上点了一下（ChatVoiceStrip 投递）：播放、停止或下载
+        MESSAGE_HANDLER(WM_CHAT_VOICE_ACTION, OnChatVoiceActionMsg)
+        //代码片段卡片请求打开代码查看窗
+        MESSAGE_HANDLER(WM_CHAT_OPEN_CODE_VIEWER, OnChatOpenCodeViewer)
+        //Markdown 卡片请求打开 Markdown 预览窗口
+        MESSAGE_HANDLER(WM_CHAT_OPEN_MARKDOWN_PREVIEW, OnChatOpenMarkdownPreview)
         //尺寸变化只旁听、不消费：DuiFrameWindow 照常排版，本窗口另投一条重建请求
         MESSAGE_HANDLER(WM_SIZE, OnSizeMsg)
         MESSAGE_HANDLER(WM_MERGED_VIEWER_REBUILD, OnRebuildMsg)
@@ -203,7 +238,32 @@ private:
     //恒置 bHandled=FALSE。
     LRESULT OnDestroyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
+    /**
+     *  WM_CHAT_VOICE_ACTION 处理（语音消息第 4c 步）：语音条上点了一下。lParam 为堆上的
+     *  balloonchatwnd::VoiceActionRequest*，处理后 delete。按 DecideVoiceClick 播放、停止、提示正在下载或下载。
+     */
+    LRESULT OnChatVoiceActionMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_CODE_VIEWER 处理（docs/代码片段方案.md 第 3.4 节）：代码片段行的卡片上点了正文或「查看全部」。
+     *  lParam 为堆上的 balloonchatwnd::CodeViewerOpenRequest*，打开（或调到前台）代码查看窗后 delete。
+     */
+    LRESULT OnChatOpenCodeViewer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_MARKDOWN_PREVIEW 处理（docs/Markdown消息方案.md 第 12 节）：Markdown 消息行的卡片被点了。
+     *  lParam 为堆上的 balloonchatwnd::MarkdownPreviewOpenRequest*，打开（或激活）预览窗口后释放。
+     */
+    LRESULT OnChatOpenMarkdownPreview(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
 private:
+    /**
+     *  在当前列表里找某条语音的语音条控件。
+     *  @param msgid 语音子消息的 msgid
+     *  @return 语音条控件（借用，属于列表）；没有这条时为 NULL
+     */
+    balloonchatwnd::ChatVoiceStrip* FindVoiceStrip(long long msgid);
+
     net::MergedRecord            m_record;         //当前显示的记录（Open 时解析得到）
     std::map<int64_t, CString>   m_fallbackNames;  //子消息缺 fromname 时的回退名字表
     balloonwjui::DuiScrollView*  m_pScroll;        //列表滚动视口（所有权在控件树，本类只引用）
@@ -229,4 +289,10 @@ private:
     std::vector<std::unique_ptr<CMergedRecordWindow> > m_ownedNested;
     //标题栏左侧图标位图。DuiFrameWindow::SetIcon 只借用不释放，故本类持有、析构时 DeleteObject
     HBITMAP                      m_hTitleIcon;
+    //任务栏与 Alt+Tab 的程序图标（2026-10-07，UI 约定第 10 条：没有所有者、会出现在任务栏的窗口另设任务栏图标）；本对象持有，析构时释放
+    balloonmain::ProgramWindowIcons m_taskIcons;
+    //语音（第 4c 步）：本窗口发起、还在下载的语音 md5。重建列表时据此把语音条画成「下载中」；下载结果到达时移除
+    std::set<std::string>        m_downloadingVoices;
+    //本窗口正在播放的语音子消息 msgid；0 表示没有在播放。重建列表后据此画播放中
+    int64_t                      m_playingVoiceMsgid;
 };

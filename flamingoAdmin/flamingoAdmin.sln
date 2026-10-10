@@ -6,11 +6,20 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "flamingoAdmin", "flamingoAdmin.vcxproj", "{82CB1BFF-40B8-48DC-B083-1B2D88B68CD3}"
 	ProjectSection(ProjectDependencies) = postProject
 		{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60} = {E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8} = {6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "balloonui_static", "..\third-party\balloonui\balloonui\balloonui_static.vcxproj", "{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "flamingoAdminTests", "Tests\flamingoAdminTests.vcxproj", "{EC99AC2C-4BF0-4BB8-8B6B-8EE93C9F2034}"
+	ProjectSection(ProjectDependencies) = postProject
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8} = {6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FlamingoLink", "FlamingoLink\FlamingoLink.vcxproj", "{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60} = {E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -44,6 +53,14 @@ Global
 		{EC99AC2C-4BF0-4BB8-8B6B-8EE93C9F2034}.Debug|Win32.Build.0 = Debug|Win32
 		{EC99AC2C-4BF0-4BB8-8B6B-8EE93C9F2034}.Release|Win32.ActiveCfg = Release|Win32
 		{EC99AC2C-4BF0-4BB8-8B6B-8EE93C9F2034}.Release|Win32.Build.0 = Release|Win32
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Debug|x64.ActiveCfg = Debug|x64
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Debug|x64.Build.0 = Debug|x64
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Release|x64.ActiveCfg = Release|x64
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Release|x64.Build.0 = Release|x64
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Debug|Win32.Build.0 = Debug|Win32
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Release|Win32.ActiveCfg = Release|Win32
+		{6F1D3A52-8C47-4E2B-9B1E-3D5C7A20F4B8}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

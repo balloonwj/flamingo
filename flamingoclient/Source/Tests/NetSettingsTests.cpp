@@ -19,6 +19,7 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonNetSettings/NetSettingsLayout.h"
+#include "LayoutFitCheck.h"                 // layoutfit::MeasureAt：按设计尺寸排得下的检查
 #include "../UI/BalloonNetSettings/NetSettingsModel.h"
 #include "../UI/BalloonNetSettings/NetServerCard.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
@@ -163,3 +164,53 @@ TEST_CASE("N9 NetSettingsModel.Select 越界被忽略", "[netsettings][model]")
     model.Select(-1);    // 越界 —— 应被忽略
     CHECK(model.Selected() == kNetServerFile);
 }
+
+// N10：内容区按设计尺寸排版后要完整容下底部两个按钮（按钮没有被压扁、下方留白不变），
+// 端口输入框也不能压到按钮行。kNetWindowHeight 是标题栏以下的内容高度。
+TEST_CASE("N10 网络设置窗内容区按设计尺寸排版后排得下表单与底部按钮", "[netsettings][layoutfit]")
+{
+    const int contentH = kNetWindowHeight;
+    const UINT btns[] = { (UINT)kIdBtnTest, (UINT)kIdBtnSave };
+    for (size_t i = 0; i < sizeof(btns) / sizeof(btns[0]); ++i)
+    {
+        INFO("button id = " << btns[i]);
+        std::unique_ptr<DuiControl> root = BuildNetSettingsBody();
+        REQUIRE(root != nullptr);
+        const layoutfit::FitResult r = layoutfit::MeasureAt(root.get(), btns[i], kNetWindowWidth, contentH);
+        REQUIRE(r.m_found);
+        INFO("button bottom = " << r.m_bottom << ", content height = " << contentH
+             << ", height = " << r.m_height << ", roomy height = " << r.m_roomyHeight
+             << ", bottom gap = " << r.m_bottomGap << ", roomy bottom gap = " << r.m_roomyBottomGap);
+        CHECK(r.m_bottom <= contentH);
+        CHECK(r.m_height == r.m_roomyHeight);
+        CHECK(r.m_bottomGap == r.m_roomyBottomGap);
+    }
+
+    // 底部按钮固定贴底，空间不够时被挤压的是中间的表单区（weight=1），按钮本身不越界。
+    // 故再查表单区最下面的端口输入框：它与按钮之间至少隔着表单区的下内边距与按钮行的
+    // 上内边距（内嵌 XML 里分别是 7 与 10）。2026-10-02 实机截图发现两者重叠。
+    const int kFormPaddingBottom   = 7;
+    const int kFooterPaddingTop    = 10;
+    std::unique_ptr<DuiControl> root = BuildNetSettingsBody();
+    REQUIRE(root != nullptr);
+    const RECT laidOut = { 0, 0, kNetWindowWidth, contentH };
+    root->ForceLayout(laidOut);
+    DuiControl* card = root->FindCtrlById((UINT)kIdCardFile);
+    DuiControl* host = root->FindCtrlById((UINT)kIdEditHost);
+    DuiControl* port = root->FindCtrlById((UINT)kIdEditPort);
+    DuiControl* save = root->FindCtrlById((UINT)kIdBtnSave);
+    REQUIRE(card != nullptr);
+    REQUIRE(host != nullptr);
+    REQUIRE(port != nullptr);
+    REQUIRE(save != nullptr);
+    const RECT rcCard = card->GetRect();
+    const RECT rcHost = host->GetRect();
+    const RECT rcPort = port->GetRect();
+    const RECT rcSave = save->GetRect();
+    INFO("file card = [" << rcCard.top << ", " << rcCard.bottom << "), host edit = ["
+         << rcHost.top << ", " << rcHost.bottom << "), port edit = [" << rcPort.top << ", "
+         << rcPort.bottom << "), save button = [" << rcSave.top << ", " << rcSave.bottom
+         << "), content height = " << contentH);
+    CHECK(rcPort.bottom + kFormPaddingBottom + kFooterPaddingTop <= rcSave.top);
+}
+

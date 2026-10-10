@@ -52,6 +52,9 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/I18n/I18nXml.h"   // TranslateXml：翻译内嵌 XML 里的界面文字
+#include "../../Common/I18n/I18nLayout.h"   // GrowFixedWidthToText：译文较长时加宽固定宽度的胶囊与按钮
 
 namespace balloonprofile {
 
@@ -133,7 +136,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -161,7 +164,7 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
         bold ? FW_SEMIBOLD : FW_NORMAL,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return 0;
@@ -772,10 +775,12 @@ std::unique_ptr<DuiControl> CreateProfileCustomControl(const DuiXmlBuilder::Node
         // 性别下拉框 —— DuiComboBox 不支持原生 XML，故在工厂里建。
         std::unique_ptr<DuiComboBox> combo(new DuiComboBox());
         combo->SetEditable(false);          // 只读下拉（不可手输入）
-        combo->AddString(_T("女"));
-        combo->AddString(_T("男"));
-        combo->AddString(_T("保密"));
-        combo->SetCurSel(0, false);         // 默认选中"女"，不发通知
+        // 选项按性别规范值的顺序添加、显示当前界面语言的译文；窗口按序号与模型里的规范值对应
+        for (int i = 0; i < kProfileGenderCount; ++i)
+        {
+            combo->AddString(ProfileGenderText(ProfileGenderValueAt(i)));
+        }
+        combo->SetCurSel(0, false);         // 默认选中第一项（"女"），不发通知
         combo->SetItemHeight(24);           // 下拉项行高
         return std::unique_ptr<DuiControl>(combo.release());
     }
@@ -808,9 +813,9 @@ const char* const kProfileViewXml = u8R"xml(
     <hbox fixedHeight="72" gap="14">
       <profile-avatar id="900" letter="L" fixedWidth="70" fixedHeight="70"/>
       <vbox weight="1" gap="0">
-        <profile-text text="林知夏" size="17" color="26,26,26" bold="true" fixedHeight="24"/>
+        <profile-text id="901" text="" size="17" color="26,26,26" bold="true" fixedHeight="24"/>
         <hbox fixedHeight="4"/>
-        <profile-text text="账号 88234561" size="12" color="107,107,107" fixedHeight="16"/>
+        <profile-text id="902" text="" size="12" color="107,107,107" fixedHeight="16"/>
         <hbox fixedHeight="6"/>
         <hbox fixedHeight="22" gap="6">
           <profile-pill id="910" status="online"    selected="true"  fixedWidth="58"/>
@@ -825,12 +830,12 @@ const char* const kProfileViewXml = u8R"xml(
     <vbox padding="0,10,0,10" gap="0">
       <hbox fixedHeight="46" gap="16">
         <profile-text text="昵称" size="13" color="26,26,26" fixedWidth="120"/>
-        <profile-text id="920" text="林知夏" size="13" color="26,26,26" align="right" weight="1"/>
+        <profile-text id="920" text="" size="13" color="26,26,26" align="right" weight="1"/>
       </hbox>
       <profile-sep fixedHeight="1"/>
       <hbox fixedHeight="46" gap="16">
         <profile-text text="个性签名" size="13" color="26,26,26" fixedWidth="120"/>
-        <profile-text id="921" text="想做一件让自己骄傲的事" size="13" color="107,107,107" align="right" weight="1"/>
+        <profile-text id="921" text="" size="13" color="107,107,107" align="right" weight="1"/>
       </hbox>
       <profile-sep fixedHeight="1"/>
       <hbox fixedHeight="46" gap="16">
@@ -845,7 +850,7 @@ const char* const kProfileViewXml = u8R"xml(
       <profile-sep fixedHeight="1"/>
       <hbox fixedHeight="46" gap="16">
         <profile-text text="所在地" size="13" color="26,26,26" fixedWidth="120"/>
-        <profile-text id="924" text="上海" size="13" color="26,26,26" align="right" weight="1"/>
+        <profile-text id="924" text="" size="13" color="26,26,26" align="right" weight="1"/>
       </hbox>
       <profile-sep fixedHeight="1"/>
       <hbox fixedHeight="46" gap="16">
@@ -870,9 +875,9 @@ const char* const kProfileEditXml = u8R"xml(
     <hbox fixedHeight="72" gap="14">
       <profile-avatar id="900" letter="L" fixedWidth="70" fixedHeight="70"/>
       <vbox weight="1" gap="0">
-        <profile-text text="林知夏" size="17" color="26,26,26" bold="true" fixedHeight="24"/>
+        <profile-text id="901" text="" size="17" color="26,26,26" bold="true" fixedHeight="24"/>
         <hbox fixedHeight="4"/>
-        <profile-text text="账号 88234561" size="12" color="107,107,107" fixedHeight="16"/>
+        <profile-text id="902" text="" size="12" color="107,107,107" fixedHeight="16"/>
         <hbox fixedHeight="6"/>
         <hbox fixedHeight="22" gap="6">
           <profile-pill id="910" status="online"    selected="true"  fixedWidth="58"/>
@@ -960,7 +965,43 @@ const char* const kProfileEditXml = u8R"xml(
 std::unique_ptr<DuiControl> BuildProfileBody(bool editMode)
 {
     const char* xml = editMode ? kProfileEditXml : kProfileViewXml;
-    return DuiXmlBuilder::FromString(xml, &CreateProfileCustomControl);
+    // 内嵌 XML 里的界面文字先经 TranslateXml 换成当前语言的译文；FromString 在调用内解析完毕，临时串的生命周期足够
+    std::unique_ptr<DuiControl> root = DuiXmlBuilder::FromString(i18n::TranslateXml(xml).c_str(),
+                                                                 &CreateProfileCustomControl);
+    if (!root)
+    {
+        return root;
+    }
+
+    // 状态胶囊与底部按钮按译文宽度只增不减地加宽（多语言第 4 期，简体中文不变）。
+    // 胶囊：文字 11 像素，选中时半粗体（按半粗体量，宽度不随选中状态变化）；
+    // 文字之外是左右内边距各 8、圆点 6、圆点与文字间距 4（ProfileStatusPill::OnPaint）
+    const int kPillTextPx = 11;
+    const int kPillExtraPx = 8 + 6 + 4 + 8;
+    const UINT kPillIds[kProfileStatusCount] = { kIdPillOnline, kIdPillAway, kIdPillBusy };
+    for (int status = 0; status < kProfileStatusCount; ++status)
+    {
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kPillIds[status]), ProfileStatusText(status),
+                                   kPillTextPx, true, kPillExtraPx);
+    }
+
+    // 底部按钮：文字 14 像素半粗体，左右各留 12 像素；「编辑资料」另有 13 像素铅笔图标与 6 像素间距
+    // （ProfileActionButton::OnPaint）
+    const int kBtnTextPx = 14;
+    const int kBtnPadPx = 24;
+    const int kBtnPencilPx = 13 + 6;
+    if (editMode)
+    {
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kIdBtnCancel), TR(L"取消"), kBtnTextPx, true, kBtnPadPx);
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kIdBtnSave), TR(L"保存"), kBtnTextPx, true, kBtnPadPx);
+    }
+    else
+    {
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kIdBtnClose), TR(L"关闭"), kBtnTextPx, true, kBtnPadPx);
+        i18n::GrowFixedWidthToText(root->FindCtrlById(kIdBtnEdit), TR(L"编辑资料"), kBtnTextPx, true,
+                                   kBtnPadPx + kBtnPencilPx);
+    }
+    return root;
 }
 
 void SetProfileViewText(DuiControl* root, UINT ctrlId, LPCTSTR text)

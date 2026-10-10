@@ -79,6 +79,14 @@ void BuildMergedRecordRows(const net::MergedRecord& record,
  *  @param localPath 本地已有的完整文件路径；空串表示本地没有。由调用方按登记表与下载缓存查好
  *  @return 本地有文件时为「已完成」（带本地路径），否则为「未下载」
  */
+/**
+ *  按当前账号的语音缓存目录补上一个语音行的本机文件状态（语音消息第 4c 步）：本机有大小相符的文件时为就绪并带上
+ *  路径，没有时标为需要下载。非语音行不改。BuildMergedRecordRows 不知道缓存目录，由查看窗逐行补。
+ *  @param row      [入参 / 出参] 一行
+ *  @param voiceDir 当前账号的 ChatVoice 目录（以反斜杠结尾）；空串时一律按本机没有处理
+ */
+void ResolveVoiceRowLocalState(HistoryRowView& row, const std::wstring& voiceDir);
+
 balloonchatwnd::ChatMessage BuildMergedFileCard(const net::MessageNotify& sub,
                                                 const std::wstring& localPath);
 

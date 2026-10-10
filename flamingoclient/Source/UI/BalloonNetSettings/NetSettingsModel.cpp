@@ -26,6 +26,7 @@
 #include <atltypes.h>
 
 #include "NetSettingsModel.h"
+#include "../../Common/I18n/I18n.h"      // TR / TRF / TR_NOOP：界面文字的多语言查找
 
 namespace balloonnetsettings {
 
@@ -47,12 +48,12 @@ const int kDefaultPort[kNetServerCount] =
     20001,   // 文件服务器
 };
 
-// 三组服务器的中文显示名。
+// 三组服务器的显示名（静态表只用 TR_NOOP 标记，取用处再调 TR）。
 const TCHAR* const kDisplayName[kNetServerCount] =
 {
-    _T("聊天服务器"),
-    _T("图片服务器"),
-    _T("文件服务器"),
+    TR_NOOP(L"聊天服务器"),
+    TR_NOOP(L"图片服务器"),
+    TR_NOOP(L"文件服务器"),
 };
 
 } // anonymous namespace
@@ -124,9 +125,9 @@ const TCHAR* NetServerDisplayName(int kind)
 {
     if (kind >= 0 && kind < kNetServerCount)
     {
-        return kDisplayName[kind];
+        return TR(kDisplayName[kind]);
     }
-    return kDisplayName[kNetServerChat];
+    return TR(kDisplayName[kNetServerChat]);
 }
 
 } // namespace balloonnetsettings

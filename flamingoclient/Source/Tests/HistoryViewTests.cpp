@@ -40,9 +40,12 @@ TEST_CASE("V2V1 PreviewFromContent 各类型预览正确")
     CHECK(PreviewFromContent(::message_type_emoji, "{}") == "[表情]");
     CHECK(PreviewFromContent(::message_type_shake, "{}") == "[抖一抖]");
 
-    //尚未单独渲染的类型（如名片）：通用占位兜底
-    CHECK(PreviewFromContent(::message_type_card, "{}") == "[消息]");
-    CHECK(PreviewFromContent(::message_type_system, "{}") == "[消息]");
+    //名片、位置、投票、待办：多语言第 5 期起与会话列表 digestForMsgType 一致，给出类型文字
+    CHECK(PreviewFromContent(::message_type_card, "{}") == "[名片]");
+    //尚未单独渲染的类型（如短视频）：通用占位兜底
+    CHECK(PreviewFromContent(::message_type_video, "{}") == "[消息]");
+    //系统提示另有分支（2026-10-03 起）：没有正文时写「[系统消息]」，见 V2V-SYS1
+    CHECK(PreviewFromContent(::message_type_system, "{}") == "[系统消息]");
 }
 
 TEST_CASE("V2V2 TimeRangeFromComboIndex 各档映射正确，下拉框里不再有自定义")
@@ -552,8 +555,9 @@ TEST_CASE("V2Q-FULLTEXT2 非文本类型与 PreviewFromContent 逐一相等")
     CHECK(FullTextFromContent(::message_type_voice, "{}") == "[语音]");
     CHECK(FullTextFromContent(::message_type_emoji, "{}") == "[表情]");
     CHECK(FullTextFromContent(::message_type_shake, "{}") == "[抖一抖]");
-    CHECK(FullTextFromContent(::message_type_card, "{}") == "[消息]");
-    CHECK(FullTextFromContent(::message_type_system, "{}") == "[消息]");
+    CHECK(FullTextFromContent(::message_type_card, "{}") == "[名片]");
+    CHECK(FullTextFromContent(::message_type_video, "{}") == "[消息]");
+    CHECK(FullTextFromContent(::message_type_system, "{}") == "[系统消息]");
 }
 
 TEST_CASE("V2Q-FULLTEXT3 空串 / 非法 JSON / 缺 text 字段一律退化为空串")
@@ -817,4 +821,17 @@ TEST_CASE("V2V-FOLDER7 BuildFolderRowText 缺哪一段就少哪一段、不留�
         const std::string line = BuildFolderRowText(brief);
         CHECK(line == u8"[文件夹] 资料 · " + FormatFileSize(1024));
     }
+}
+
+// ---- 群系统提示在消息记录窗里的显示（2026-10-03 起）：发送人写「系统消息」、灰色头像、正文是提示文字 ----
+
+TEST_CASE("V2V-SYS1 PreviewFromContent 系统提示取正文，没有正文时写「[系统消息]」", "[history][systemtip]")
+{
+    CHECK(PreviewFromContent(::message_type_system, u8"{\"text\":\"「张勇」参与了接龙「周五团建报名」\"}")
+          == std::string(u8"「张勇」参与了接龙「周五团建报名」"));
+    CHECK(FullTextFromContent(::message_type_system, u8"{\"text\":\"「张勇」参与了接龙「周五团建报名」\"}")
+          == std::string(u8"「张勇」参与了接龙「周五团建报名」"));
+    //修复之前落库的旧行 content 是空对象：不再写成通用的「[消息]」
+    CHECK(PreviewFromContent(::message_type_system, "{}") == std::string(u8"[系统消息]"));
+    CHECK(PreviewFromContent(::message_type_system, "{\"text\":\"\"}") == std::string(u8"[系统消息]"));
 }

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 平台超级管理员第 1 章：超管的登录、导航差异、平台总览仪表板，以及按企业操作各功能页面。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>平台总览 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="p01">
+<article class="doc">
+  <h1>平台总览</h1>
+  <p class="lead">平台超级管理员负责整个 FlamingoIM 平台：开通和审核入驻企业、发布面向所有企业的公告、发布客户端新版本。本章介绍超管登录后看到的界面与企业管理员有什么不同，以及平台总览仪表板。</p>
+  <ul class="facts">
+    <li>适用：平台超级管理员</li>
+    <li>需要：平台超级管理员账户（演示账号为李正阳 li@flamingo.com）</li>
+  </ul>
+
+  <h2 id="login">登录与导航</h2>
+  <p>平台超级管理员使用的是同一个管理控制台程序，登录方法、网络设置与企业管理员完全相同，见<a href="../admin/01-login-dashboard.html">「登录与仪表板」</a>。登录后顶栏右侧显示「李正阳 · 平台超管」。</p>
+  <p>与企业管理员相比，左侧导航有以下不同：</p>
+  <table>
+    <tr><th>导航项</th><th>说明</th><th>详见</th></tr>
+    <tr><td>企业管理</td><td>取代企业管理员的「本企业」，列出平台上的全部企业，可以新增、审核、停用、删除企业</td><td><a href="02-enterprises.html">企业管理</a></td></tr>
+    <tr><td>公告中心</td><td>超管独有，向企业、部门或个人发布平台公告</td><td><a href="03-announcements.html">平台公告</a></td></tr>
+    <tr><td>客户端版本</td><td>超管独有，发布 PC 客户端升级包</td><td><a href="04-client-versions.html">客户端版本与自动升级</a></td></tr>
+  </table>
+  <p>其余的审计日志、敏感词、文件共享、企业问答、机器人和平台设置与企业管理员相同，用法见第二部分各章。</p>
+
+  <h2 id="dashboard">平台总览仪表板</h2>
+  <p>超管登录后默认打开的仪表板标题是 <span class="ui">平台总览</span>，显示整个平台的运行状态：</p>
+  <figure class="shot">
+    <img src="../img/sa_dashboard.png" width="880" alt="平台总览仪表板">
+    <figcaption>平台超级管理员李正阳看到的平台总览</figcaption>
+  </figure>
+  <ul>
+    <li><b>企业总数</b>：平台上的企业数量，下方显示其中活跃和待审核的数量，例如「4 活跃 · 0 待审核」。有企业待审核时，请到<a href="02-enterprises.html">企业管理</a>中处理。</li>
+    <li><b>总用户</b>：全平台的员工总数。</li>
+    <li><b>今日审计</b>：今天全平台产生的审计事件数，以及其中的告警数。</li>
+    <li><b>近 14 天消息量</b>：全平台最近 14 天每天的消息条数。</li>
+    <li><b>活跃企业</b>：列出活跃企业的名称、行业 · 地区和人数。</li>
+    <li><b>最新公告</b>：最近发布的平台公告。</li>
+    <li><b>近期审计</b>：全平台最近的管理操作，包括各企业管理员和超管自己的操作。</li>
+  </ul>
+  <p>活跃企业、最新公告和近期审计右上角的 <span class="ui">查看全部 →</span> 分别跳到企业管理、公告中心和审计日志页面。</p>
+
+  <h2 id="per-enterprise">按企业操作的页面</h2>
+  <p>超管管理着多家企业，所以敏感词、企业问答、机器人这类按企业区分的页面，要先在页面右上角的 <span class="ui">企业</span> 下拉框里选择一家企业，才能查看和修改该企业的数据：</p>
+  <figure class="shot">
+    <img src="../img/sa_sensitive.png" width="880" alt="超管的敏感词页面">
+    <figcaption>超管打开敏感词页面时，右上角多出「企业」下拉框，需要先选择企业</figcaption>
+  </figure>
+  <ul>
+    <li><b>敏感词、企业问答、机器人</b>：必须先选企业，没有选择时页面提示先选择企业。选好之后的操作与企业管理员完全相同，见<a href="../admin/06-sensitive-words.html">「敏感词」</a>、<a href="../admin/08-enterprise-qa.html">「企业问答」</a>和<a href="../admin/09-enterprise-bots.html">「企业机器人」</a>。</li>
+    <li><b>文件共享</b>：企业下拉框里多一项「全部企业」，可以一次查看所有企业的共享与审计，详情里的「所属企业」显示共享属于哪家企业，见<a href="../admin/07-file-share.html">「文件共享管理」</a>。</li>
+    <li><b>组织架构、服务号、在线用户、功能开关</b>：在企业管理中打开某家企业的详情后操作，见<a href="02-enterprises.html#detail">「企业详情」</a>。</li>
+  </ul>
+
+  <h2 id="audit">审计日志</h2>
+  <p>超管的审计日志能看到全部企业的管理操作，以及超管自己的操作，例如发布公告、新建并发布客户端版本。筛选、查看详情和导出的方法与企业管理员相同，见<a href="../admin/10-audit-settings.html">「审计日志与平台设置」</a>。</p>
+  <figure class="shot">
+    <img src="../img/sa_audit.png" width="880" alt="超管的审计日志">
+    <figcaption>超管的审计日志，既有超管李正阳发布公告、发布客户端版本的记录，也有企业管理员王怡然的操作</figcaption>
+  </figure>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

@@ -24,17 +24,17 @@ static bool parseJsonText(const std::string& text, Json::Value& root)
 
 TEST_CASE("CV1 解析成功应答（含会话字段与 lastmsg）")
 {
-    // pinned / mute 写成 true / false —— 这是服务端<u>真实</u>的报文形态：
-    // ConversationBrief 的这两个字段类型就是 bool（chatserversrc/MessageProtocol.h），
-    // 序列化出来即 JSON 布尔值。本用例原先喂的是整数 1 / 0，与线上报文对不上，
-    // 结果客户端把 bool 读成 0 的 bug（置顶重登后丢失）一直没被测出来。
+    // pinned 写成 true / false、notifymode 写成整数 —— 这是服务端<u>真实</u>的报文形态：
+    // ConversationBrief 的 pinned 是 bool、notifymode 是 int（chatserversrc/MessageProtocol.h）。
+    // 本用例原先给 pinned 喂的是整数 1 / 0，与线上报文对不上，结果客户端把 bool 读成 0 的
+    // bug（置顶重登后丢失）一直没被测出来。
     std::string body =
         "{\"code\":0,\"msg\":\"ok\",\"synctime\":1716268800000,"
         "\"conversations\":["
-        "{\"ctype\":1,\"cid\":\"5001\",\"unread\":3,\"pinned\":true,\"mute\":false,"
+        "{\"ctype\":1,\"cid\":\"5001\",\"unread\":3,\"pinned\":true,\"notifymode\":0,"
         "\"lastmsgid\":\"20050\",\"lastmsg\":{\"from\":\"5001\",\"msgtype\":1,"
         "\"digest\":\"hello\",\"timestamp\":1716268800001}},"
-        "{\"ctype\":1,\"cid\":\"5002\",\"unread\":0,\"pinned\":false,\"mute\":true,"
+        "{\"ctype\":1,\"cid\":\"5002\",\"unread\":0,\"pinned\":false,\"notifymode\":1,"
         "\"lastmsgid\":\"20040\",\"lastmsg\":{\"from\":\"8\",\"msgtype\":2,"
         "\"digest\":\"[\xE5\x9B\xBE\xE7\x89\x87]\",\"timestamp\":1716268700000}}"
         "]}";
@@ -48,7 +48,7 @@ TEST_CASE("CV1 解析成功应答（含会话字段与 lastmsg）")
     CHECK(out.m_items[0].m_cid == 5001);
     CHECK(out.m_items[0].m_unread == 3);
     CHECK(out.m_items[0].m_pinned == 1);
-    CHECK(out.m_items[0].m_mute == 0);
+    CHECK(out.m_items[0].m_notifyMode == notify_mode_allow);
     CHECK(out.m_items[0].m_lastmsgid == 20050);
     CHECK(out.m_items[0].m_lastFrom == 5001);
     CHECK(out.m_items[0].m_lastMsgType == 1);
@@ -57,27 +57,27 @@ TEST_CASE("CV1 解析成功应答（含会话字段与 lastmsg）")
 
     CHECK(out.m_items[1].m_cid == 5002);
     CHECK(out.m_items[1].m_pinned == 0);
-    CHECK(out.m_items[1].m_mute == 1);
+    CHECK(out.m_items[1].m_notifyMode == notify_mode_silent);
     CHECK(out.m_items[1].m_lastMsgType == 2);
 }
 
-TEST_CASE("CV1b 置顶 / 免打扰同时兼容整数 1/0 写法")
+TEST_CASE("CV1b 置顶兼容整数 1/0 写法")
 {
     // 服务端当前发的是 bool（见 CV1），但解析必须同时容忍整数写法：一是别的端
     // （Android / 将来的 web）可能写 1/0，二是服务端字段类型若改回 int 也不该再断。
     std::string body =
         "{\"code\":0,\"synctime\":0,\"conversations\":["
-        "{\"ctype\":2,\"cid\":\"7001\",\"unread\":0,\"pinned\":1,\"mute\":0,"
+        "{\"ctype\":2,\"cid\":\"7001\",\"unread\":0,\"pinned\":1,\"notifymode\":0,"
         "\"lastmsgid\":\"1\",\"lastmsg\":{\"from\":\"8\",\"msgtype\":1,\"digest\":\"x\",\"timestamp\":0}}"
         "]}";
     ConversationsResult out;
     REQUIRE(ConversationsProtocolClient::parseSyncConversationsResponse(body, out));
     REQUIRE(out.m_items.size() == 1);
     CHECK(out.m_items[0].m_pinned == 1);
-    CHECK(out.m_items[0].m_mute == 0);
+    CHECK(out.m_items[0].m_notifyMode == notify_mode_allow);
 }
 
-TEST_CASE("CV1c 缺失或类型异常的置顶 / 免打扰按未开启处理")
+TEST_CASE("CV1c 缺失或类型异常的置顶按未开启处理，提醒模式按允许提醒处理")
 {
     // 字段缺失、或写成字符串这类不认识的类型，一律取 0 —— 宁可当作没置顶，
     // 也不要因为解析异常把一条普通会话顶到列表最前面。
@@ -85,16 +85,16 @@ TEST_CASE("CV1c 缺失或类型异常的置顶 / 免打扰按未开启处理")
         "{\"code\":0,\"synctime\":0,\"conversations\":["
         "{\"ctype\":1,\"cid\":\"5003\",\"unread\":0,"
         "\"lastmsgid\":\"1\",\"lastmsg\":{\"from\":\"8\",\"msgtype\":1,\"digest\":\"x\",\"timestamp\":0}},"
-        "{\"ctype\":1,\"cid\":\"5004\",\"unread\":0,\"pinned\":\"yes\",\"mute\":\"no\","
+        "{\"ctype\":1,\"cid\":\"5004\",\"unread\":0,\"pinned\":\"yes\",\"notifymode\":\"1\","
         "\"lastmsgid\":\"2\",\"lastmsg\":{\"from\":\"8\",\"msgtype\":1,\"digest\":\"x\",\"timestamp\":0}}"
         "]}";
     ConversationsResult out;
     REQUIRE(ConversationsProtocolClient::parseSyncConversationsResponse(body, out));
     REQUIRE(out.m_items.size() == 2);
     CHECK(out.m_items[0].m_pinned == 0);
-    CHECK(out.m_items[0].m_mute == 0);
+    CHECK(out.m_items[0].m_notifyMode == notify_mode_allow);
     CHECK(out.m_items[1].m_pinned == 0);
-    CHECK(out.m_items[1].m_mute == 0);
+    CHECK(out.m_items[1].m_notifyMode == notify_mode_allow);
 }
 
 TEST_CASE("CV2 大整数 cid/msgid 不丢精度")
@@ -190,43 +190,45 @@ TEST_CASE("CV6 computeTotalUnread 求和未读消息总数")
 
 TEST_CASE("CV7 buildSetConversationRequest 只写本次要改的字段")
 {
-    //仅改免打扰：含 ctype/cid/mute，不含 pinned。
-    Json::Value onlyMute;
+    //仅改提醒模式：含 ctype/cid/notifymode，不含 pinned；任何情况下都不再写老的 mute。
+    Json::Value onlyMode;
     REQUIRE(parseJsonText(
         ConversationsProtocolClient::buildSetConversationRequest(
-            2, 700001, /*hasPinned*/false, false, /*hasMute*/true, true),
-        onlyMute));
-    CHECK(onlyMute["ctype"].isInt());
-    CHECK(onlyMute["ctype"].asInt() == 2);
+            2, 700001, /*hasPinned*/false, false, /*hasNotifyMode*/true, notify_mode_msgbox),
+        onlyMode));
+    CHECK(onlyMode["ctype"].isInt());
+    CHECK(onlyMode["ctype"].asInt() == 2);
     //cid 以字符串编码（防大整数精度丢失）。
-    CHECK(onlyMute["cid"].isString());
-    CHECK(onlyMute["cid"].asString() == "700001");
-    //mute 为 bool true。
-    REQUIRE(onlyMute["mute"].isBool());
-    CHECK(onlyMute["mute"].asBool() == true);
+    CHECK(onlyMode["cid"].isString());
+    CHECK(onlyMode["cid"].asString() == "700001");
+    //notifymode 为整数（服务端按 isInt 取值）。
+    REQUIRE(onlyMode["notifymode"].isInt());
+    CHECK(onlyMode["notifymode"].asInt() == notify_mode_msgbox);
     //未要改置顶 → 不出现 pinned 字段。
-    CHECK_FALSE(onlyMute.isMember("pinned"));
+    CHECK_FALSE(onlyMode.isMember("pinned"));
+    CHECK_FALSE(onlyMode.isMember("mute"));
 
-    //仅改置顶：含 pinned，不含 mute。
+    //仅改置顶：含 pinned，不含 notifymode。
     Json::Value onlyPin;
     REQUIRE(parseJsonText(
         ConversationsProtocolClient::buildSetConversationRequest(
-            2, 700001, /*hasPinned*/true, false, /*hasMute*/false, false),
+            2, 700001, /*hasPinned*/true, false, /*hasNotifyMode*/false, notify_mode_allow),
         onlyPin));
     REQUIRE(onlyPin["pinned"].isBool());
     CHECK(onlyPin["pinned"].asBool() == false);
+    CHECK_FALSE(onlyPin.isMember("notifymode"));
     CHECK_FALSE(onlyPin.isMember("mute"));
 
-    //两者都改：pinned 与 mute 同在。
+    //两者都改：pinned 与 notifymode 同在；设回允许提醒（0）也要照写，不能当成"没改"省掉。
     Json::Value both;
     REQUIRE(parseJsonText(
         ConversationsProtocolClient::buildSetConversationRequest(
-            1, 5001, /*hasPinned*/true, true, /*hasMute*/true, false),
+            1, 5001, /*hasPinned*/true, true, /*hasNotifyMode*/true, notify_mode_allow),
         both));
     REQUIRE(both["pinned"].isBool());
-    REQUIRE(both["mute"].isBool());
+    REQUIRE(both["notifymode"].isInt());
     CHECK(both["pinned"].asBool() == true);
-    CHECK(both["mute"].asBool() == false);
+    CHECK(both["notifymode"].asInt() == notify_mode_allow);
     CHECK(both["cid"].asString() == "5001");
     CHECK(both["ctype"].asInt() == 1);
 }
@@ -236,12 +238,12 @@ TEST_CASE("CV8 buildSetConversationRequest 大 cid 不丢精度")
     Json::Value root;
     REQUIRE(parseJsonText(
         ConversationsProtocolClient::buildSetConversationRequest(
-            2, 9007199254740993LL, false, false, true, true),
+            2, 9007199254740993LL, false, false, true, notify_mode_silent),
         root));
     CHECK(root["cid"].asString() == "9007199254740993");
 }
 
-TEST_CASE("CV9 buildDeleteConversationRequest 只写 deleted，不碰置顶 / 免打扰")
+TEST_CASE("CV9 buildDeleteConversationRequest 只写 deleted，不碰置顶 / 提醒模式")
 {
     Json::Value root;
     REQUIRE(parseJsonText(
@@ -255,9 +257,9 @@ TEST_CASE("CV9 buildDeleteConversationRequest 只写 deleted，不碰置顶 / �
     //写成数字 1 会被当成"本次不改删除标记"整条忽略，删除就静默失效了。
     REQUIRE(root["deleted"].isBool());
     CHECK(root["deleted"].asBool() == true);
-    //删除会话不应顺带改置顶 / 免打扰——这两个字段不出现，服务端才会保持原值。
+    //删除会话不应顺带改置顶 / 提醒模式——这两个字段不出现，服务端才会保持原值。
     CHECK_FALSE(root.isMember("pinned"));
-    CHECK_FALSE(root.isMember("mute"));
+    CHECK_FALSE(root.isMember("notifymode"));
 }
 
 TEST_CASE("CV10 buildDeleteConversationRequest 大 cid 不丢精度")
@@ -272,37 +274,97 @@ TEST_CASE("CV10 buildDeleteConversationRequest 大 cid 不丢精度")
     CHECK(root["cid"].asString() == "9007199254740993");
 }
 
+TEST_CASE("CV11 最后一条已撤回：解析出撤回标志，未带该字段的会话按未撤回处理", "[recall]")
+{
+    //第一条是服务端对已撤回的最后一条下发的形态：recalled 为 bool，digest 是中性提示；
+    //第二条不带 recalled，与老服务端以及没撤回的会话一致；第三条写成整数 1，按 jsonToFlag 同样认作撤回
+    std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"synctime\":1,"
+        "\"conversations\":["
+        "{\"ctype\":2,\"cid\":\"268435463\",\"unread\":0,\"lastmsgid\":\"30\","
+        "\"lastmsg\":{\"from\":\"100127\",\"msgtype\":1,"
+        "\"digest\":\"\xE6\x92\xA4\xE5\x9B\x9E\xE4\xBA\x86\xE4\xB8\x80\xE6\x9D\xA1\xE6\xB6\x88\xE6\x81\xAF\","
+        "\"timestamp\":1716268800001,\"recalled\":true}},"
+        "{\"ctype\":1,\"cid\":\"5002\",\"unread\":0,\"lastmsgid\":\"29\","
+        "\"lastmsg\":{\"from\":\"5002\",\"msgtype\":1,\"digest\":\"hello\",\"timestamp\":1716268700000}},"
+        "{\"ctype\":1,\"cid\":\"5003\",\"unread\":0,\"lastmsgid\":\"28\","
+        "\"lastmsg\":{\"from\":\"5003\",\"msgtype\":1,\"digest\":\"x\",\"timestamp\":1716268600000,"
+        "\"recalled\":1}}"
+        "]}";
+    ConversationsResult out;
+    REQUIRE(ConversationsProtocolClient::parseSyncConversationsResponse(body, out));
+    REQUIRE(out.m_items.size() == 3);
+
+    CHECK(out.m_items[0].m_lastRecalled);
+    //发送方照常解析出来，主面板据它判断撤回者是不是本人
+    CHECK(out.m_items[0].m_lastFrom == 100127);
+    CHECK(out.m_items[0].m_digest == "\xE6\x92\xA4\xE5\x9B\x9E\xE4\xBA\x86\xE4\xB8\x80\xE6\x9D\xA1\xE6\xB6\x88\xE6\x81\xAF");
+
+    CHECK_FALSE(out.m_items[1].m_lastRecalled);
+    CHECK(out.m_items[1].m_digest == "hello");
+
+    CHECK(out.m_items[2].m_lastRecalled);
+
+    //默认构造的会话不带撤回标志：本端新建的会话（BumpConversation）依赖这一点
+    ConversationItem fresh;
+    CHECK_FALSE(fresh.m_lastRecalled);
+}
+
+TEST_CASE("CV12 最后一条已撤回：解析出撤回者，缺字段时为 0", "[recall]")
+{
+    std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"synctime\":1,"
+        "\"conversations\":["
+        "{\"ctype\":2,\"cid\":\"268435463\",\"unread\":0,\"lastmsgid\":\"30\","
+        "\"lastmsg\":{\"from\":\"5001\",\"msgtype\":1,\"digest\":\"d\",\"timestamp\":1,"
+        "\"recalled\":true,\"recalledby\":\"5003\"}},"
+        "{\"ctype\":2,\"cid\":\"268435464\",\"unread\":0,\"lastmsgid\":\"31\","
+        "\"lastmsg\":{\"from\":\"5001\",\"msgtype\":1,\"digest\":\"d\",\"timestamp\":2,"
+        "\"recalled\":true}}"
+        "]}";
+    ConversationsResult out;
+    REQUIRE(ConversationsProtocolClient::parseSyncConversationsResponse(body, out));
+    REQUIRE(out.m_items.size() == 2);
+    CHECK(out.m_items[0].m_lastRecalledBy == 5003);
+    CHECK(out.m_items[0].m_lastFrom == 5001);
+    CHECK(out.m_items[1].m_lastRecalled);
+    CHECK(out.m_items[1].m_lastRecalledBy == 0);
+
+    ConversationItem fresh;
+    CHECK(fresh.m_lastRecalledBy == 0);
+}
+
 // =====================================================================
 // CC. parseConversationChangedNotify —— 会话属性多端同步推送(1514)
 // =====================================================================
 
-TEST_CASE("CC1 解析服务端推送：bool 形态的 pinned / mute / deleted")
+TEST_CASE("CC1 解析服务端推送：bool 形态的 pinned / deleted 与整数 notifymode")
 {
     //服务端 MessageProtocol::buildConversationChangedNotify 写的就是这个形状：
-    //ctype 整数、cid 字符串、三个开关是 JSON bool。
+    //ctype 整数、cid 字符串、两个开关是 JSON bool、notifymode 是整数。
     const std::string body =
-        "{\"ctype\":2,\"cid\":\"700001\",\"pinned\":true,\"mute\":false,\"deleted\":false}";
+        "{\"ctype\":2,\"cid\":\"700001\",\"pinned\":true,\"notifymode\":3,\"deleted\":false}";
 
     ConversationChangedNotify n;
     REQUIRE(ConversationsProtocolClient::parseConversationChangedNotify(body, n));
     CHECK(n.m_ctype == 2);
     CHECK(n.m_cid == 700001);
     CHECK(n.m_pinned == 1);
-    CHECK(n.m_mute == 0);
+    CHECK(n.m_notifyMode == notify_mode_block);
     CHECK(n.m_deleted == 0);
 }
 
-TEST_CASE("CC2 删除推送三个开关都解析正确")
+TEST_CASE("CC2 删除推送的各字段都解析正确")
 {
     const std::string body =
-        "{\"ctype\":1,\"cid\":\"5001\",\"pinned\":false,\"mute\":true,\"deleted\":true}";
+        "{\"ctype\":1,\"cid\":\"5001\",\"pinned\":false,\"notifymode\":4,\"deleted\":true}";
 
     ConversationChangedNotify n;
     REQUIRE(ConversationsProtocolClient::parseConversationChangedNotify(body, n));
     CHECK(n.m_ctype == 1);
     CHECK(n.m_cid == 5001);
     CHECK(n.m_pinned == 0);
-    CHECK(n.m_mute == 1);
+    CHECK(n.m_notifyMode == notify_mode_starred);
     CHECK(n.m_deleted == 1);
 }
 
@@ -311,19 +373,19 @@ TEST_CASE("CC3 开关写成整数 0/1 也能解析")
     //防御性兼容：哪天服务端把 bool 改成 0/1，本端不该静默失效（那会表现为
     //"另一端删了会话，这一端毫无反应"，极难排查）。
     const std::string body =
-        "{\"ctype\":1,\"cid\":\"5001\",\"pinned\":1,\"mute\":0,\"deleted\":1}";
+        "{\"ctype\":1,\"cid\":\"5001\",\"pinned\":1,\"notifymode\":0,\"deleted\":1}";
 
     ConversationChangedNotify n;
     REQUIRE(ConversationsProtocolClient::parseConversationChangedNotify(body, n));
     CHECK(n.m_pinned == 1);
-    CHECK(n.m_mute == 0);
+    CHECK(n.m_notifyMode == notify_mode_allow);
     CHECK(n.m_deleted == 1);
 }
 
 TEST_CASE("CC4 大 cid 用字符串编码不丢精度")
 {
     const std::string body =
-        "{\"ctype\":2,\"cid\":\"9007199254740993\",\"pinned\":false,\"mute\":false,\"deleted\":true}";
+        "{\"ctype\":2,\"cid\":\"9007199254740993\",\"pinned\":false,\"notifymode\":0,\"deleted\":true}";
 
     ConversationChangedNotify n;
     REQUIRE(ConversationsProtocolClient::parseConversationChangedNotify(body, n));
@@ -332,7 +394,7 @@ TEST_CASE("CC4 大 cid 用字符串编码不丢精度")
 
 TEST_CASE("CC5 缺字段按默认值兜底，ctype 缺失按单聊处理")
 {
-    //只给 cid：其余按"未置顶、未免打扰、未删除、单聊"处理，不至于把一条推送
+    //只给 cid：其余按"未置顶、允许提醒、未删除、单聊"处理，不至于把一条推送
     //误读成删除指令。
     ConversationChangedNotify n;
     REQUIRE(ConversationsProtocolClient::parseConversationChangedNotify(
@@ -340,7 +402,7 @@ TEST_CASE("CC5 缺字段按默认值兜底，ctype 缺失按单聊处理")
     CHECK(n.m_ctype == 1);
     CHECK(n.m_cid == 5001);
     CHECK(n.m_pinned == 0);
-    CHECK(n.m_mute == 0);
+    CHECK(n.m_notifyMode == notify_mode_allow);
     CHECK(n.m_deleted == 0);
 }
 

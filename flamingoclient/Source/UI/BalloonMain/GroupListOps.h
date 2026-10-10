@@ -56,4 +56,14 @@ bool SetUserGroupPinned(std::vector<net::UserGroupItem>& groups, int64_t groupId
  */
 bool IsUserGroupPinned(const std::vector<net::UserGroupItem>& groups, int64_t groupId);
 
+/**
+ *  把群资料应答里的人数同步进群列表（2026-10-08：「群聊」页的人数取自登录时拉的群列表，别人进出群后
+ *  主面板补拉群资料，再经本函数改掉列表里的旧值）。
+ *    groups：     本人加入的群列表，就地修改。
+ *    groupId：    目标群ID。
+ *    memberCount：群资料应答里的人数；小于 0 视为无效，不改动。
+ *  返回：人数确实改变返回 true；群不在列表里、人数无效或本就相同返回 false，调用方据此决定要不要重填群 Tab。
+ */
+bool SetUserGroupMemberCount(std::vector<net::UserGroupItem>& groups, int64_t groupId, int memberCount);
+
 } // namespace balloonmain

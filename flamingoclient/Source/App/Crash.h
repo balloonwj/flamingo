@@ -35,3 +35,13 @@
  *  HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Flamingo.exe。
  */
 void ConfigureCrashDumpEnvironment();
+
+#include <string>
+
+/**
+ *  取转储目录的绝对路径（<exe 目录>\Users\dump，不带结尾的反斜杠），目录不存在时先创建。
+ *  供界面线程无响应检测（HangWatchdog.h）把转储写到与崩溃转储相同的目录（bugs.md BUG-120）。
+ *  调用时机：g_szHomePath 就绪之后。
+ *  @return 目录可用时返回路径；创建失败返回空串
+ */
+std::wstring PrepareCrashDumpDirectory();

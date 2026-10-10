@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 平台超级管理员第 3 章：公告中心的公告列表、新建与定时发布、重新推送、置顶、撤回与删除。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>平台公告 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="p03">
+<article class="doc">
+  <h1>平台公告</h1>
+  <p class="lead">平台公告是平台超级管理员向企业、部门或个人发布的全局通知，例如系统升级、安全提醒。员工在客户端右下角收到「新公告」提示，也可以随时在公告中心查看。本章介绍如何新建、定时发布和管理平台公告。</p>
+  <ul class="facts">
+    <li>适用：平台超级管理员</li>
+    <li>位置：左侧导航「公告中心」</li>
+  </ul>
+
+  <h2 id="list">公告列表与详情</h2>
+  <p>点左侧导航的 <span class="ui">公告中心</span>，进入「平台公告」页面。左侧是公告列表，右侧是选中公告的详情：</p>
+  <figure class="shot">
+    <img src="../img/sa_announce.png" width="880" alt="平台公告页面">
+    <figcaption>平台公告页面。截图右下角露出的是同一台电脑上客户端弹出的「新公告」提示窗</figcaption>
+  </figure>
+  <ul>
+    <li><b>右上角</b>：<span class="ui">导出</span> 把公告列表保存为 CSV 文件；<span class="ui">新建公告</span> 见下一节。</li>
+    <li><b>筛选</b>：<span class="ui">全部</span>、<span class="ui">置顶</span>、<span class="ui">重要</span>（严重等级为「提醒」或「警告」的公告）、<span class="ui">定时</span>（设置了定时发送的公告）。</li>
+    <li><b>列表</b>：每条公告显示时间（左侧圆点颜色表示严重等级）、标题、正文摘要、受众和已读人数；定时发送的公告带「定时」标记。</li>
+    <li><b>详情</b>：顶部显示严重等级、<span class="ui">已置顶</span> 或 <span class="ui">定时发送</span> 标记，下面是标题、发送者、受众和正文；底部的 <span class="ui">送达 · 已读</span> 显示阅读进度。定时发送且尚未发出的公告，底部改为显示计划在何时推送给多少名用户。</li>
+  </ul>
+  <h3>详情底部的按钮</h3>
+  <table>
+    <tr><th>按钮</th><th>作用</th></tr>
+    <tr><td>编辑</td><td>修改这条公告</td></tr>
+    <tr><td>复制公告</td><td>用这条公告的内容新建一条公告，适合发布格式相近的通知</td></tr>
+    <tr><td>重新推送</td><td>确认后，把公告重新推送给受众里当前在线、还没读过它的成员。只有已发布的公告可以重新推送</td></tr>
+    <tr><td>置顶 / 取消置顶</td><td>切换公告的置顶状态</td></tr>
+    <tr><td>撤回</td><td>只对已发布的公告显示。撤回后所有用户的客户端将不再显示它，操作不可撤销</td></tr>
+    <tr><td>删除公告</td><td>永久删除这条公告，不可恢复</td></tr>
+  </table>
+
+  <h2 id="new">新建公告</h2>
+  <p>点右上角的 <span class="ui">新建公告</span>（在企业详情页点「发布公告」也会打开同一个对话框）：</p>
+  <figure class="shot">
+    <img src="../img/sa_announce_new.png" width="880" alt="新建公告对话框">
+    <figcaption>新建公告「10 月 16 日晚间系统升级通知」，严重等级选「提醒」，受众为全部企业</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>填写 <span class="ui">标题</span>（必填）。</li>
+    <li>填写 <span class="ui">正文</span>（必填），换行会原样保留。</li>
+    <li>选择 <span class="ui">严重等级</span>：<span class="ui">普通</span>、<span class="ui">提醒</span> 或 <span class="ui">警告</span>。员工在客户端看到的公告会带上对应的等级标记。</li>
+    <li>选择 <span class="ui">受众</span>：<span class="ui">全部企业</span>、<span class="ui">指定企业</span>、<span class="ui">指定部门</span>、<span class="ui">指定员工</span> 或 <span class="ui">平台内部</span>。选择「指定企业」「指定部门」「指定员工」时，下方会出现 <span class="ui">投放目标</span> 列表，勾选具体对象，右侧显示已选几项。</li>
+    <li>需要突出显示时勾选 <span class="ui">置顶（客户端首次打开时优先展示）</span>。</li>
+    <li>选择 <span class="ui">发送时间</span>：<span class="ui">立即发送</span>，或 <span class="ui">定时发送</span> 并按 <code>YYYY-MM-DD HH:MM</code> 的格式填写发送时间。</li>
+    <li>立即发送时点 <span class="ui">立即发布</span>，公告立即推送；定时发送时按钮变为 <span class="ui">计划发送</span>，到时间后自动推送。</li>
+  </ol>
+
+  <h2 id="client">员工这边会看到什么</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/c_announce_popup.png" width="360" alt="客户端的新公告提示窗"><figcaption>员工客户端右下角弹出的「新公告」提示窗</figcaption></figure>
+    <div style="flex:1 1 260px">
+      <p>公告发布后，受众范围内在线的员工会在客户端右下角看到「新公告」提示窗：左上角注明「平台公告」，右上角是严重等级标记（截图中为「提醒」），下面是标题和正文。</p>
+      <p>员工点 <span class="ui">知道了</span> 关闭提示窗，点 <span class="ui">查看全部</span> 打开客户端的公告中心并定位到这条公告。员工一侧的详细说明见客户端<a href="../client/27-announcements.html">「公告与通知」</a>。</p>
+      <p>公告详情底部的阅读进度会随着员工阅读而增加；对还没读过的在线员工，可以用 <span class="ui">重新推送</span> 再提醒一次。</p>
+    </div>
+  </div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

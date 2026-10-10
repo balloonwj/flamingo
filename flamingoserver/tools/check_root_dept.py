@@ -5,8 +5,8 @@
 
 组织架构树要求每个企业有且只有一个代表公司本身的根部门，员工可以直接挂在它下面。
 这条约束一部分由服务端代码保证（建企业时连带建根部门、根部门不允许删除或移动、
-新增员工未指定部门时落到根部门），另一部分由存量数据迁移脚本
-migrations/v3_add_enterprise_root_dept.py 保证。本脚本把这些约束逐条查一遍，
+新增员工未指定部门时落到根部门），另一部分要求库里已有的数据本身满足（早年的库
+曾由迁移脚本补齐，该脚本已于 2026-10-09 删除）。本脚本把这些约束逐条查一遍，
 任何一条不满足就打印明细并以非 0 退出码结束。
 
 逐条校验：
@@ -71,7 +71,7 @@ def load_db_config():
 
 DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME = load_db_config()
 
-# 部门状态与成员状态取值，与 table.sql 中各表的 f_status 注释一致。
+# 部门状态与成员状态取值，与 table_mysql.sql 中各表的 f_status 注释一致。
 DEPT_STATUS_NORMAL = 0      # 部门正常在用
 MEMBER_STATUS_ACTIVE = 0    # 成员在职
 
@@ -213,7 +213,7 @@ def survey_before_migration(cur, has_usertype_column):
     if not orphan_failures:
         print("  （无）")
 
-    print("\n现状调查结束。执行 migrations/v3_add_enterprise_root_dept.py 完成迁移后，"
+    print("\n现状调查结束。按上面列出的问题手工修正数据后，"
           "再跑一次本脚本即可转入正式校验。")
 
 

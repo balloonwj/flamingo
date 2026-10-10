@@ -11,6 +11,7 @@
 #include "../base/AsyncLog.h"
 #include "../net/EventLoop.h"
 #include "FileManager.h"
+#include "UploadPartPolicy.h"
 
 #ifndef WIN32
 #include <string.h>
@@ -134,6 +135,9 @@ int main(int argc, char* argv[])
     CAsyncLog::init(logFileFullPath.c_str());
 
     Singleton<FileManager>::Instance().init(filecachedir.c_str());
+    //上传分片登记表由各 I/O 线程并发访问，而 Singleton::Instance() 的首次构造不加锁，
+    //故在网络线程启动之前先构造好（见 UploadPartPolicy.h）
+    Singleton<fileserver::UploadPartRegistry>::Instance();
 
     //客户端升级包与聊天文件分目录存放：升级包由运维手工放入 updatecachedir，
     //文件名是人起的，靠 UpdatePackageIndex 按内容MD5 反查。

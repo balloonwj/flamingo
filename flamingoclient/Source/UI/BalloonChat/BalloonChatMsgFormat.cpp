@@ -20,6 +20,7 @@
 #include <ctime>
 
 #include "BalloonChatMsgFormat.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonchat {
 
@@ -320,7 +321,7 @@ CString BodyToDigest(const CString& body)
     {
         if (segs[i].m_bFace)
         {
-            digest += _T("[表情]");
+            digest += TR(L"[表情]");
         }
         else
         {
@@ -334,19 +335,19 @@ CString BuildRecallTipText(bool bIsSelf, const CString& operatorName)
 {
     if (bIsSelf)
     {
-        return _T("你撤回了一条消息");
+        return TR(L"你撤回了一条消息");
     }
 
     //拿不到撤回者昵称时退化成"对方"：昵称可能因联系人缓存尚未拉到而为空，
     //此时也要给出一句完整的话，不能拼出"撤回了一条消息"这种缺主语的句子。
     if (operatorName.IsEmpty())
     {
-        return _T("对方撤回了一条消息");
+        return TR(L"对方撤回了一条消息");
     }
 
     CString tip;
     tip = operatorName;
-    tip += _T("撤回了一条消息");
+    tip += TR(L"撤回了一条消息");
     return tip;
 }
 
@@ -354,11 +355,11 @@ CString BuildDeleteMessagesConfirmText(size_t count)
 {
     if (count <= 1)
     {
-        return _T("删除后，本机和你的其他设备都不再显示这条消息，对方不受影响。\n确定要删除吗？");
+        return TR(L"删除后，本机和你的其他设备都不再显示这条消息，对方不受影响。\n确定要删除吗？");
     }
 
     CString text;
-    text.Format(_T("删除后，本机和你的其他设备都不再显示这 %u 条消息，对方不受影响。\n确定要删除吗？"),
+    text.Format(TR(L"删除后，本机和你的其他设备都不再显示这 %u 条消息，对方不受影响。\n确定要删除吗？"),
                 (unsigned int)count);
     return text;
 }

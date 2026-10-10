@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 23 章：备忘与提醒——备忘窗口、新建与修改备忘、到点提醒（右下角弹窗、全屏动画、错过的提醒）、把聊天消息存为备忘。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>备忘与提醒 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c23">
+<article class="doc">
+  <h1>备忘与提醒</h1>
+  <p class="lead">备忘是带提醒的个人日程：写下要做的事和时间，到点时客户端用右下角弹窗或全屏动画提醒你，也可以设置每天、每周等重复提醒。本章介绍个人备忘的用法；群主和管理员给群成员设置的群备忘见<a href="13-group-chat.html#memo">「群聊 → 备忘页签」</a>。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>提醒需要客户端处于登录状态</li>
+  </ul>
+
+  <h2 id="window">打开备忘窗口</h2>
+  <p>在主面板的系统菜单里点 <span class="ui">备忘与提醒</span>，打开备忘窗口。</p>
+  <figure class="shot center">
+    <img src="../img/p_memo_window.png" width="760" alt="备忘与提醒窗口">
+    <figcaption>备忘窗口：左侧是月历，右侧是选中那天的备忘</figcaption>
+  </figure>
+  <ul>
+    <li><b>左侧月历</b>：用顶部的年份、月份下拉框或两侧的 ‹ › 翻月，点 <span class="ui">今天</span> 回到今天。今天和选中的日期以蓝色高亮，有备忘的日期下方带一个小圆点。</li>
+    <li><b>右侧列表</b>：顶部显示选中的日期（如「10月9日 星期五 · 今天」）和「共 N 条」，下面是当天的备忘卡片；没有备忘时显示「这一天还没有备忘」。</li>
+    <li>右下角的 <span class="ui">＋ 添加备忘</span> 用来新建备忘。</li>
+  </ul>
+
+  <h2 id="new">新建备忘</h2>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/p_memo_new.png" width="480" alt="新建备忘窗口"><figcaption>新建备忘窗口</figcaption></figure>
+    <div style="flex:1 1 300px">
+      <ol class="steps">
+        <li>在月历上点选日期，再点 <span class="ui">＋ 添加备忘</span>，打开「新建备忘」窗口。</li>
+        <li>填写 <span class="ui">标题</span>，最多 50 个字。</li>
+        <li>设置 <span class="ui">时间</span>：年、月、日、时、分，可以直接输入，也可以用旁边的上下箭头调整。</li>
+        <li>设置 <span class="ui">提醒</span>、<span class="ui">重复</span>、<span class="ui">结束</span> 和 <span class="ui">方式</span>，各项含义见下表。</li>
+        <li>按需填写 <span class="ui">备注（选填）</span>，最多 200 个字。</li>
+        <li>点 <span class="ui">保存</span>。</li>
+      </ol>
+    </div>
+  </div>
+  <table>
+    <tr><th>设置项</th><th>可选值与说明</th></tr>
+    <tr><td>提醒</td><td><b>到点提醒</b>；提前 <b>5 分钟</b>、<b>10 分钟</b>、<b>15 分钟</b>、<b>30 分钟</b>；提前 <b>1 小时</b>、<b>2 小时</b>；提前 <b>1 天</b></td></tr>
+    <tr><td>重复</td><td><b>不重复</b>、<b>每天</b>、<b>每个工作日</b>（周一到周五）、<b>每周</b>（选择星期几，可以多选）、<b>每月</b>、<b>每年</b>。每月重复时取开始那天的日期，某个月没有这一天（如 31 号）时在当月最后一天提醒；每年的 2 月 29 日在平年改为 2 月 28 日</td></tr>
+    <tr><td>结束</td><td><b>永不结束</b>，或 <b>提醒 N 次</b> 后结束（1～999 次）。选「不重复」时只提醒 1 次</td></tr>
+    <tr><td>方式</td><td><b>右下角弹窗</b> 或 <b>全屏动画</b>。点右侧的 <span class="ui">预览效果</span> 可以按当前填写的内容先看一遍全屏动画</td></tr>
+  </table>
+  <figure class="shot center">
+    <img src="../img/p_memo_window_item.png" width="760" alt="保存后的备忘卡片">
+    <figcaption>保存后，右侧出现这条备忘的卡片，显示标题、备注、时间、重复规则和提醒设置</figcaption>
+  </figure>
+
+  <h2 id="edit">修改与删除备忘</h2>
+  <p>鼠标停在一张备忘卡片上时，卡片上会出现 <span class="ui">修改</span> 和 <span class="ui">删除</span> 两个按钮。也可以双击卡片打开修改窗口，或在卡片上点右键选择「修改」「删除」。修改窗口的左下角同样有 <span class="ui">删除</span>。删除前会弹出确认框。</p>
+  <div class="callout note"><b>群备忘只能查看</b>群主或管理员设置的、提醒你的群备忘也会出现在你的月历和卡片列表里，卡片上带有所属群名与创建人。在这个窗口里群备忘只能查看（菜单里是「查看」，没有「删除」），修改和删除要在群聊窗口的「备忘」页签里进行。</div>
+
+  <h2 id="remind">到点提醒</h2>
+  <h3>右下角弹窗</h3>
+  <div class="shot-row">
+    <figure class="shot"><img src="../img/p_memo_reminder.png" width="440" alt="备忘提醒弹窗"><figcaption>屏幕右下角的「备忘提醒」</figcaption></figure>
+    <div style="flex:1 1 280px">
+      <p>到了提醒时间，屏幕右下角弹出「备忘提醒」，显示标题、时间和备注。弹窗会一直留着，直到你处理它：</p>
+      <ul>
+        <li><span class="ui">知道了</span>：关闭这条提醒。</li>
+        <li><span class="ui">10 分钟后再提醒</span>：10 分钟后再弹一次。</li>
+      </ul>
+      <p>同时有多条提醒时，它们会合并在同一个弹窗里逐条列出。</p>
+    </div>
+  </div>
+  <h3>全屏动画</h3>
+  <figure class="shot">
+    <img src="../img/p_memo_fullscreen.png" width="880" alt="全屏动画提醒">
+    <figcaption>全屏动画的预览效果：屏幕变暗，中间显示标题和时间，顶部小字是「备忘提醒（预览）」</figcaption>
+  </figure>
+  <p>方式选为「全屏动画」时，到点后主面板所在的显示器会逐渐变暗，屏幕中间显示大号标题和时间：</p>
+  <ul>
+    <li><span class="ui">知道了</span>：关闭提醒。按 <kbd>Esc</kbd> 键等同于「知道了」。</li>
+    <li><span class="ui">稍后提醒（10 分钟）</span>：10 分钟后再提醒。</li>
+    <li>60 秒内没有任何操作时，全屏画面会收起，改为右下角弹窗继续提醒。</li>
+  </ul>
+  <p>编辑窗口里的「预览效果」播放的就是这个画面，只是顶部的小字写着「备忘提醒（预览）」；预览时点任何按钮都只是关闭画面，不会登记稍后提醒。</p>
+  <h3>错过的提醒</h3>
+  <p>提醒时间到了而客户端没有打开、没有登录或者电脑在休眠时，提醒不会丢失：下次登录或电脑唤醒后，客户端会把这些提醒合并成一个右下角弹窗，标题为「你有 N 条错过的提醒」，点 <span class="ui">全部知道了</span> 一次关闭。只补最近 24 小时内的提醒，每条备忘只补最近的一次。</p>
+  <div class="callout warn"><b>「稍后提醒」不跨越重启</b>「10 分钟后再提醒」和「稍后提醒（10 分钟）」只在本次运行中有效，退出客户端后不会保留。</div>
+
+  <h2 id="from-chat">把聊天消息存为备忘</h2>
+  <p>在单聊窗口里的文字消息上点右键，选 <span class="ui">添加到备忘</span>，会打开新建备忘窗口，并预先填好标题和备注：标题是消息的第一行，备注的第一行写明消息来自谁、什么时间，后面是消息全文。设好提醒时间后点 <span class="ui">保存</span> 才会真正创建。</p>
+  <p>在群聊里，这一项分为 <span class="ui">添加到我的备忘</span> 和 <span class="ui">添加到群备忘</span>，后者只有群主和管理员能看到，用法见<a href="13-group-chat.html#memo">「群聊 → 备忘页签」</a>。</p>
+  <div class="callout note"><b>哪些消息可以添加</b>普通文字（包括表情和 @）、Markdown 文档、代码片段和带引用的回复都可以；图片、文件、语音、大表情以及各类卡片消息不能添加。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

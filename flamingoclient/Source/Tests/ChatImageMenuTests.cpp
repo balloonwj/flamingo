@@ -94,30 +94,31 @@ TEST_CASE("CIM2 文字消息不出现图片两项")
     CHECK_FALSE(HasItem(model, kChatMsgMenuSaveImageAs));
     CHECK_FALSE(HasItem(model, kChatMsgMenuResendImage));
 
-    //文字消息的完整骨架：复制 / 引用回复 / 转发 / — / 删除 / — / 多选
+    //文字消息的完整骨架：复制 / — / 引用回复 / 转发 / — / 多选 / — / 删除
     const std::vector<int> expect = {
-        kChatMsgMenuCopy, kChatMsgMenuReply, kChatMsgMenuForward, 0,
-        kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuCopy, 0, kChatMsgMenuReply, kChatMsgMenuForward, 0,
+        kChatMsgMenuMultiSelect, 0, kChatMsgMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 }
 
-TEST_CASE("CIM3 图片就绪时两项紧跟在「复制」之后，其余顺序不变")
+TEST_CASE("CIM3 图片就绪时「图片另存为」紧跟「复制」，「再次发送」排在「转发」之后")
 {
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned, kCanForward);
 
+    //2026-10-03 起按「取用内容 / 再发出去 / 标记与选择 / 撤回与删除」分四组
     const std::vector<int> expect = {
-        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuResendImage,
-        kChatMsgMenuReply, kChatMsgMenuForward, 0,
-        kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, 0,
+        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuResendImage, 0,
+        kChatMsgMenuMultiSelect, 0,
+        kChatMsgMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
-    //位置关系单独钉一遍：紧挨着「复制」，且在「引用回复」之前。
+    //位置关系单独钉一遍
     CHECK(IndexOf(model, kChatMsgMenuSaveImageAs) == IndexOf(model, kChatMsgMenuCopy) + 1);
-    CHECK(IndexOf(model, kChatMsgMenuResendImage) == IndexOf(model, kChatMsgMenuSaveImageAs) + 1);
-    CHECK(IndexOf(model, kChatMsgMenuResendImage) < IndexOf(model, kChatMsgMenuReply));
+    CHECK(IndexOf(model, kChatMsgMenuResendImage) == IndexOf(model, kChatMsgMenuForward) + 1);
 }
 
 TEST_CASE("CIM4 图片未就绪时两项不出现")
@@ -164,9 +165,10 @@ TEST_CASE("CIM7 自己发的图在撤回时限内：撤回与图片两项同时�
         BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCanRecall, kCannotPin, kNotPinned, kCanForward);
 
     const std::vector<int> expect = {
-        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuResendImage,
-        kChatMsgMenuReply, kChatMsgMenuForward, 0,
-        kChatMsgMenuRecall, kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, 0,
+        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuResendImage, 0,
+        kChatMsgMenuMultiSelect, 0,
+        kChatMsgMenuRecall, kChatMsgMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 }
@@ -247,30 +249,18 @@ static const wchar_t* LabelOf(const std::vector<ChatMessageMenuEntry>& model,
     return L"";
 }
 
-TEST_CASE("CIM-PIN1 可 Pin 时那一项出现在「转发」之后、第一条分隔线之前")
+TEST_CASE("CIM-PIN1 可 Pin 时那一项与「多选」同组、排在「多选」之前")
 {
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
                                   kCannotRecall, kCanPin, kNotPinned, kCanForward);
 
-    //文字消息带 Pin 的完整骨架：复制 / 引用回复 / 转发 / Pin / — / 删除 / — / 多选
+    //文字消息带 Pin 的完整骨架：复制 / — / 引用回复 / 转发 / — / Pin / 多选 / — / 删除
     const std::vector<int> expect = {
-        kChatMsgMenuCopy, kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuPin, 0,
-        kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuCopy, 0, kChatMsgMenuReply, kChatMsgMenuForward, 0,
+        kChatMsgMenuPin, kChatMsgMenuMultiSelect, 0, kChatMsgMenuDelete
     };
-    REQUIRE(model.size() == expect.size());
-    for (std::size_t i = 0; i < expect.size(); ++i)
-    {
-        if (expect[i] == 0)
-        {
-            CHECK(model[i].isSeparator);
-        }
-        else
-        {
-            CHECK_FALSE(model[i].isSeparator);
-            CHECK((int)model[i].id == expect[i]);
-        }
-    }
+    CHECK(IdsOf(model) == expect);
 }
 
 TEST_CASE("CIM-PIN2 文案随当前是否已钉住取反")
@@ -305,30 +295,18 @@ TEST_CASE("CIM-PIN3 不可 Pin 时整项不出现，而不是置灰")
 
 TEST_CASE("CIM-PIN4 Pin 与撤回、图片两项互不干扰")
 {
-    //图片行 + 可撤回 + 可 Pin：图片两项在「复制」之后，Pin 在「转发」之后，
-    //撤回在第一条分隔线之后，四者各就各位
+    //图片行 + 可撤回 + 可 Pin：四组各就各位
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath,
                                   kCanRecall, kCanPin, kPinned, kCanForward);
 
     const std::vector<int> expect = {
-        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuResendImage,
-        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuPin, 0,
-        kChatMsgMenuRecall, kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, 0,
+        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuResendImage, 0,
+        kChatMsgMenuPin, kChatMsgMenuMultiSelect, 0,
+        kChatMsgMenuRecall, kChatMsgMenuDelete
     };
-    REQUIRE(model.size() == expect.size());
-    for (std::size_t i = 0; i < expect.size(); ++i)
-    {
-        if (expect[i] == 0)
-        {
-            CHECK(model[i].isSeparator);
-        }
-        else
-        {
-            CHECK_FALSE(model[i].isSeparator);
-            CHECK((int)model[i].id == expect[i]);
-        }
-    }
+    CHECK(IdsOf(model) == expect);
 }
 
 TEST_CASE("CIM-PIN5 Pin 项的存在与否不影响撤回项的判定")
@@ -357,16 +335,20 @@ TEST_CASE("FWD-C6a 不能转发时「转发」整项不出现，其余各项不�
     CHECK_FALSE(HasItem(model, kChatMsgMenuForward));
 
     const std::vector<int> expect = {
-        kChatMsgMenuCopy, kChatMsgMenuReply, 0,
-        kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuCopy, 0, kChatMsgMenuReply, 0,
+        kChatMsgMenuMultiSelect, 0, kChatMsgMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
-    //文件夹行：即便传入可以转发，也只有「复制」「删除」「多选」三项
+    //文件夹行：即便传入可以转发，也只有「复制」「多选」「删除」三项，删除在最后
     const std::vector<ChatMessageMenuEntry> folder =
         BuildChatMessageMenuModel(kChatMenuKindFolder, kChatImageStateReady, kHasPath,
                                   kCannotRecall, kCanPin, kNotPinned, kCanForward);
     CHECK_FALSE(HasItem(folder, kChatMsgMenuForward));
+    const std::vector<int> folderExpect = {
+        kChatMsgMenuCopy, 0, kChatMsgMenuMultiSelect, 0, kChatMsgMenuDelete
+    };
+    CHECK(IdsOf(folder) == folderExpect);
 }
 
 TEST_CASE("FWD-C6b 能否转发的判定与转发所用的 msgid", "[forward]")
@@ -402,9 +384,97 @@ TEST_CASE("FWD-C6c 合并卡片的菜单不提供「复制」，其余各项照�
         BuildChatMessageMenuModel(kChatMenuKindMerged, kChatImageStateReady, kNoPath,
                                   kCanRecall, kCanPin, kNotPinned, kCanForward);
     CHECK_FALSE(HasItem(model, kChatMsgMenuCopy));
+    //第一组整组为空：菜单从「引用回复」开始，开头不出现分隔线
     const std::vector<int> expect = {
-        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuPin, 0,
-        kChatMsgMenuRecall, kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+        kChatMsgMenuReply, kChatMsgMenuForward, 0,
+        kChatMsgMenuPin, kChatMsgMenuMultiSelect, 0,
+        kChatMsgMenuRecall, kChatMsgMenuDelete
     };
     CHECK(IdsOf(model) == expect);
+}
+
+TEST_CASE("CIM-G1 发送失败的行：复制、重新编辑、多选、删除，删除在最后", "[sendfail]")
+{
+    const std::vector<ChatMessageMenuEntry> model =
+        BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kNoPath, kCannotRecall, kCannotPin,
+                                  kNotPinned, kCannotForward, true, true);
+    const std::vector<int> expect = {
+        kChatMsgMenuCopy, kChatMsgMenuReedit, 0,
+        kChatMsgMenuMultiSelect, 0,
+        kChatMsgMenuDelete
+    };
+    CHECK(IdsOf(model) == expect);
+}
+
+TEST_CASE("CIM-OCR1 图片已就绪且识别模块可用时「图片文字识别」紧跟「图片另存为」", "[ocrhost]")
+{
+    //docs/图片文字识别方案.md 第 10.2 节「CIM 新增」
+    const std::vector<ChatMessageMenuEntry> model =
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned,
+                                  kCanForward, false, false, true);
+    const std::vector<int> expect = {
+        kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuOcr, 0,
+        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuResendImage, 0,
+        kChatMsgMenuMultiSelect, 0,
+        kChatMsgMenuDelete
+    };
+    CHECK(IdsOf(model) == expect);
+    CHECK(IndexOf(model, kChatMsgMenuOcr) == IndexOf(model, kChatMsgMenuSaveImageAs) + 1);
+}
+
+TEST_CASE("CIM-OCR2 识别模块不可用、图片未就绪或没有本地文件时「图片文字识别」不出现", "[ocrhost]")
+{
+    //识别模块不可用（DLL 不存在、加载失败或预加载未完成）：默认参数即为不可用
+    const std::vector<ChatMessageMenuEntry> noModule =
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned,
+                                  kCanForward);
+    CHECK_FALSE(HasItem(noModule, kChatMsgMenuOcr));
+    CHECK(HasItem(noModule, kChatMsgMenuSaveImageAs));
+
+    //图片未就绪
+    const int notReady[] = { kChatImageStateUploading, kChatImageStateFailed,
+                             kChatImageStateDownloading, kChatImageStateDownloadFailed };
+    for (std::size_t i = 0; i < sizeof(notReady) / sizeof(notReady[0]); ++i)
+    {
+        const std::vector<ChatMessageMenuEntry> model =
+            BuildChatMessageMenuModel(kMsgImage, notReady[i], kHasPath, kCannotRecall, kCannotPin, kNotPinned,
+                                      kCanForward, false, false, true);
+        CHECK_FALSE(HasItem(model, kChatMsgMenuOcr));
+    }
+
+    //没有本地文件
+    const std::vector<ChatMessageMenuEntry> noPath =
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kNoPath, kCannotRecall, kCannotPin, kNotPinned,
+                                  kCanForward, false, false, true);
+    CHECK_FALSE(HasItem(noPath, kChatMsgMenuOcr));
+
+    //不是图片行（文字、文件）：识别模块可用也不出现
+    const std::vector<ChatMessageMenuEntry> text =
+        BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned,
+                                  kCanForward, false, false, true);
+    CHECK_FALSE(HasItem(text, kChatMsgMenuOcr));
+    const std::vector<ChatMessageMenuEntry> file =
+        BuildChatMessageMenuModel(kMsgFile, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned,
+                                  kCanForward, false, false, true);
+    CHECK_FALSE(HasItem(file, kChatMsgMenuOcr));
+}
+
+TEST_CASE("CIM-OCR3 「图片文字识别」的 id 与其它菜单项互不相同", "[ocrhost]")
+{
+    const std::vector<ChatMessageMenuEntry> model =
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCanRecall, kCanPin, kNotPinned,
+                                  kCanForward, false, false, true);
+    std::vector<int> ids;
+    for (std::size_t i = 0; i < model.size(); ++i)
+    {
+        if (!model[i].isSeparator)
+        {
+            ids.push_back((int)model[i].id);
+        }
+    }
+    const std::size_t before = ids.size();
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    CHECK(ids.size() == before);
+    CHECK(HasItem(model, kChatMsgMenuOcr));
 }

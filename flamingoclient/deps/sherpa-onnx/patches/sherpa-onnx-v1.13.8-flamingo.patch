@@ -1,0 +1,340 @@
+diff --git a/sherpa-onnx/c-api/c-api.cc b/sherpa-onnx/c-api/c-api.cc
+index 8ab11a1..f57e33e 100644
+--- a/sherpa-onnx/c-api/c-api.cc
++++ b/sherpa-onnx/c-api/c-api.cc
+@@ -20,6 +20,7 @@
+ 
+ #include "sherpa-onnx/csrc/audio-tagging.h"
+ #include "sherpa-onnx/csrc/circular-buffer.h"
++#include "sherpa-onnx/csrc/memory-file-registry.h"  // Flamingo patch
+ #include "sherpa-onnx/csrc/display.h"
+ #include "sherpa-onnx/csrc/file-utils.h"
+ #include "sherpa-onnx/csrc/keyword-spotter.h"
+@@ -217,8 +218,21 @@ const SherpaOnnxOnlineRecognizer *SherpaOnnxCreateOnlineRecognizer(
+ 
+   SherpaOnnxOnlineRecognizer *recognizer = new SherpaOnnxOnlineRecognizer;
+ 
+-  recognizer->impl =
+-      std::make_unique<sherpa_onnx::OnlineRecognizer>(recognizer_config);
++  // Flamingo patch: an exception thrown while loading the model (for example
++  // corrupt model data) must not cross this extern "C" function, otherwise
++  // the whole host process is terminated.
++  try {
++    recognizer->impl =
++        std::make_unique<sherpa_onnx::OnlineRecognizer>(recognizer_config);
++  } catch (const std::exception &e) {
++    SHERPA_ONNX_LOGE("Failed to create the online recognizer: %s", e.what());
++    delete recognizer;
++    return nullptr;
++  } catch (...) {
++    SHERPA_ONNX_LOGE("Failed to create the online recognizer");
++    delete recognizer;
++    return nullptr;
++  }
+ 
+   return recognizer;
+ }
+@@ -232,9 +246,15 @@ void SherpaOnnxDestroyOnlineRecognizer(
+ const SherpaOnnxOnlineStream *SherpaOnnxCreateOnlineStream(
+     const SherpaOnnxOnlineRecognizer *recognizer) {
+   if (!recognizer) return nullptr;
+-  SherpaOnnxOnlineStream *stream =
+-      new SherpaOnnxOnlineStream(recognizer->impl->CreateStream());
+-  return stream;
++  // Flamingo patch: see SherpaOnnxCreateOnlineRecognizer
++  try {
++    SherpaOnnxOnlineStream *stream =
++        new SherpaOnnxOnlineStream(recognizer->impl->CreateStream());
++    return stream;
++  } catch (...) {
++    SHERPA_ONNX_LOGE("Failed to create an online stream");
++    return nullptr;
++  }
+ }
+ 
+ const SherpaOnnxOnlineStream *SherpaOnnxCreateOnlineStreamWithHotwords(
+@@ -267,7 +287,12 @@ int32_t SherpaOnnxIsOnlineStreamReady(
+ void SherpaOnnxDecodeOnlineStream(const SherpaOnnxOnlineRecognizer *recognizer,
+                                   const SherpaOnnxOnlineStream *stream) {
+   if (!recognizer || !stream) return;
+-  recognizer->impl->DecodeStream(stream->impl.get());
++  // Flamingo patch: see SherpaOnnxCreateOnlineRecognizer
++  try {
++    recognizer->impl->DecodeStream(stream->impl.get());
++  } catch (...) {
++    SHERPA_ONNX_LOGE("Failed to decode an online stream");
++  }
+ }
+ 
+ void SherpaOnnxDecodeMultipleOnlineStreams(
+@@ -3740,3 +3765,13 @@ void SherpaOfflineDiacritizationFreeText(const char *text) {
+   if (!text) return;
+   delete[] text;
+ }
++
++// Flamingo patch, see c-api.h
++void SherpaOnnxRegisterMemoryFile(const char *name, const void *data,
++                                  int64_t size) {
++  sherpa_onnx::RegisterMemoryFile(name, data, static_cast<size_t>(size));
++}
++
++void SherpaOnnxUnregisterMemoryFile(const char *name) {
++  sherpa_onnx::UnregisterMemoryFile(name);
++}
+diff --git a/sherpa-onnx/c-api/c-api.h b/sherpa-onnx/c-api/c-api.h
+index 5fe0813..70c798e 100644
+--- a/sherpa-onnx/c-api/c-api.h
++++ b/sherpa-onnx/c-api/c-api.h
+@@ -130,6 +130,15 @@ extern "C" {
+  */
+ SHERPA_ONNX_API const char *SherpaOnnxGetVersionStr();
+ 
++// Flamingo patch: register / unregister a named block of memory that model
++// loaders treat as a file (only the streaming zipformer2 transducer model
++// honours it for its encoder / decoder / joiner). The memory is not copied
++// and must stay valid while any recognizer created from it is alive.
++SHERPA_ONNX_API void SherpaOnnxRegisterMemoryFile(const char *name,
++                                                  const void *data,
++                                                  int64_t size);
++SHERPA_ONNX_API void SherpaOnnxUnregisterMemoryFile(const char *name);
++
+ /**
+  * @brief Return the Git SHA1 used to build the library.
+  *
+diff --git a/sherpa-onnx/csrc/CMakeLists.txt b/sherpa-onnx/csrc/CMakeLists.txt
+index bd2d97e..1df4e85 100755
+--- a/sherpa-onnx/csrc/CMakeLists.txt
++++ b/sherpa-onnx/csrc/CMakeLists.txt
+@@ -19,6 +19,7 @@ set(sources
+   endpoint.cc
+   features.cc
+   file-utils.cc
++  memory-file-registry.cc
+   fst-utils.cc
+   homophone-replacer.cc
+   hypothesis.cc
+diff --git a/sherpa-onnx/csrc/file-utils.cc b/sherpa-onnx/csrc/file-utils.cc
+index 5958de6..18ac56b 100644
+--- a/sherpa-onnx/csrc/file-utils.cc
++++ b/sherpa-onnx/csrc/file-utils.cc
+@@ -18,6 +18,7 @@
+ #endif
+ 
+ #include "sherpa-onnx/csrc/macros.h"
++#include "sherpa-onnx/csrc/memory-file-registry.h"  // Flamingo patch
+ #include "sherpa-onnx/csrc/text-utils.h"
+ 
+ namespace sherpa_onnx {
+@@ -41,6 +42,13 @@ std::ofstream OpenOutputFile(const std::string &filename,
+ }
+ 
+ bool FileExists(const std::string &filename) {
++  {  // Flamingo patch: names registered as memory files count as existing
++    const void *data = nullptr;
++    size_t size = 0;
++    if (LookupMemoryFile(filename, &data, &size)) {
++      return true;
++    }
++  }
+ #ifdef _WIN32
+   DWORD attributes = GetFileAttributesW(ToWideString(filename).c_str());
+   return attributes != INVALID_FILE_ATTRIBUTES &&
+diff --git a/sherpa-onnx/csrc/memory-file-registry.cc b/sherpa-onnx/csrc/memory-file-registry.cc
+new file mode 100644
+index 0000000..57276e2
+--- /dev/null
++++ b/sherpa-onnx/csrc/memory-file-registry.cc
+@@ -0,0 +1,58 @@
++// sherpa-onnx/csrc/memory-file-registry.cc
++//
++// Flamingo patch, see memory-file-registry.h.
++
++#include "sherpa-onnx/csrc/memory-file-registry.h"
++
++#include <map>
++#include <mutex>  // NOLINT
++#include <utility>
++
++namespace sherpa_onnx {
++
++namespace {
++
++struct MemoryFile {
++  const void *data;
++  size_t size;
++};
++
++std::mutex &RegistryMutex() {
++  static std::mutex m;
++  return m;
++}
++
++std::map<std::string, MemoryFile> &Registry() {
++  static std::map<std::string, MemoryFile> r;
++  return r;
++}
++
++}  // namespace
++
++void RegisterMemoryFile(const std::string &name, const void *data,
++                        size_t size) {
++  std::lock_guard<std::mutex> lock(RegistryMutex());
++  MemoryFile f;
++  f.data = data;
++  f.size = size;
++  Registry()[name] = f;
++}
++
++void UnregisterMemoryFile(const std::string &name) {
++  std::lock_guard<std::mutex> lock(RegistryMutex());
++  Registry().erase(name);
++}
++
++bool LookupMemoryFile(const std::string &name, const void **data,
++                      size_t *size) {
++  std::lock_guard<std::mutex> lock(RegistryMutex());
++  auto it = Registry().find(name);
++  if (it == Registry().end()) {
++    return false;
++  }
++  *data = it->second.data;
++  *size = it->second.size;
++  return true;
++}
++
++}  // namespace sherpa_onnx
+diff --git a/sherpa-onnx/csrc/memory-file-registry.h b/sherpa-onnx/csrc/memory-file-registry.h
+new file mode 100644
+index 0000000..2472980
+--- /dev/null
++++ b/sherpa-onnx/csrc/memory-file-registry.h
+@@ -0,0 +1,31 @@
++// sherpa-onnx/csrc/memory-file-registry.h
++//
++// Flamingo patch: lets a caller register a named block of memory that the
++// model loaders treat as a file. Used to load models stored as resources
++// inside a DLL without writing them to disk.
++
++#ifndef SHERPA_ONNX_CSRC_MEMORY_FILE_REGISTRY_H_
++#define SHERPA_ONNX_CSRC_MEMORY_FILE_REGISTRY_H_
++
++#include <cstddef>
++#include <string>
++
++namespace sherpa_onnx {
++
++// Registers `data` (of `size` bytes) under `name`. The memory is not copied
++// and must stay valid until UnregisterMemoryFile(name) is called and every
++// recognizer created from it has been destroyed. Registering an existing name
++// replaces the previous entry.
++void RegisterMemoryFile(const std::string &name, const void *data,
++                        size_t size);
++
++// Removes the entry registered under `name`, if any.
++void UnregisterMemoryFile(const std::string &name);
++
++// Returns true and fills `data` / `size` if `name` is registered.
++bool LookupMemoryFile(const std::string &name, const void **data,
++                      size_t *size);
++
++}  // namespace sherpa_onnx
++
++#endif  // SHERPA_ONNX_CSRC_MEMORY_FILE_REGISTRY_H_
+diff --git a/sherpa-onnx/csrc/online-recognizer-impl.cc b/sherpa-onnx/csrc/online-recognizer-impl.cc
+index 918ad5d..367b018 100644
+--- a/sherpa-onnx/csrc/online-recognizer-impl.cc
++++ b/sherpa-onnx/csrc/online-recognizer-impl.cc
+@@ -23,6 +23,7 @@
+ #include "kaldifst/csrc/kaldi-fst-io.h"
+ #include "sherpa-onnx/csrc/fst-utils.h"
+ #include "sherpa-onnx/csrc/macros.h"
++#include "sherpa-onnx/csrc/memory-file-registry.h"  // Flamingo patch
+ #include "sherpa-onnx/csrc/online-recognizer-ctc-impl.h"
+ #include "sherpa-onnx/csrc/online-recognizer-paraformer-impl.h"
+ #include "sherpa-onnx/csrc/online-recognizer-transducer-impl.h"
+@@ -111,9 +112,19 @@ std::unique_ptr<OnlineRecognizerImpl> OnlineRecognizerImpl::Create(
+     sess_opts.SetIntraOpNumThreads(1);
+     sess_opts.SetInterOpNumThreads(1);
+ 
+-    auto sess = std::make_unique<Ort::Session>(
+-        env, SHERPA_ONNX_TO_ORT_PATH(config.model_config.transducer.decoder),
+-        sess_opts);
++    // Flamingo patch: the decoder may be a registered memory file
++    std::unique_ptr<Ort::Session> sess;
++    const void *decoder_data = nullptr;
++    size_t decoder_size = 0;
++    if (LookupMemoryFile(config.model_config.transducer.decoder,
++                         &decoder_data, &decoder_size)) {
++      sess = std::make_unique<Ort::Session>(env, decoder_data, decoder_size,
++                                            sess_opts);
++    } else {
++      sess = std::make_unique<Ort::Session>(
++          env, SHERPA_ONNX_TO_ORT_PATH(config.model_config.transducer.decoder),
++          sess_opts);
++    }
+ 
+     if (IsNeMoParakeetUnifiedStreaming(*sess)) {
+       return std::make_unique<
+diff --git a/sherpa-onnx/csrc/online-zipformer2-transducer-model.cc b/sherpa-onnx/csrc/online-zipformer2-transducer-model.cc
+index d1b1aa9..503dcf8 100644
+--- a/sherpa-onnx/csrc/online-zipformer2-transducer-model.cc
++++ b/sherpa-onnx/csrc/online-zipformer2-transducer-model.cc
+@@ -27,6 +27,7 @@
+ #include "sherpa-onnx/csrc/cat.h"
+ #include "sherpa-onnx/csrc/file-utils.h"
+ #include "sherpa-onnx/csrc/macros.h"
++#include "sherpa-onnx/csrc/memory-file-registry.h"  // Flamingo patch
+ #include "sherpa-onnx/csrc/online-transducer-decoder.h"
+ #include "sherpa-onnx/csrc/onnx-utils.h"
+ #include "sherpa-onnx/csrc/session.h"
+@@ -43,17 +44,41 @@ OnlineZipformer2TransducerModel::OnlineZipformer2TransducerModel(
+       joiner_sess_opts_(GetSessionOptions(config, "joiner")),
+       config_(config),
+       allocator_{} {
+-  encoder_sess_ = std::make_unique<Ort::Session>(
+-      env_, SHERPA_ONNX_TO_ORT_PATH(config.transducer.encoder), encoder_sess_opts_);
+-  InitEncoder(nullptr, 0);
++  {  // Flamingo patch: load from a registered memory file if there is one
++    const void *data = nullptr;
++    size_t size = 0;
++    if (LookupMemoryFile(config.transducer.encoder, &data, &size)) {
++      InitEncoder(const_cast<void *>(data), size);
++    } else {
++      encoder_sess_ = std::make_unique<Ort::Session>(
++          env_, SHERPA_ONNX_TO_ORT_PATH(config.transducer.encoder), encoder_sess_opts_);
++      InitEncoder(nullptr, 0);
++    }
++  }
+ 
+-  decoder_sess_ = std::make_unique<Ort::Session>(
+-      env_, SHERPA_ONNX_TO_ORT_PATH(config.transducer.decoder), decoder_sess_opts_);
+-  InitDecoder(nullptr, 0);
++  {  // Flamingo patch: load from a registered memory file if there is one
++    const void *data = nullptr;
++    size_t size = 0;
++    if (LookupMemoryFile(config.transducer.decoder, &data, &size)) {
++      InitDecoder(const_cast<void *>(data), size);
++    } else {
++      decoder_sess_ = std::make_unique<Ort::Session>(
++          env_, SHERPA_ONNX_TO_ORT_PATH(config.transducer.decoder), decoder_sess_opts_);
++      InitDecoder(nullptr, 0);
++    }
++  }
+ 
+-  joiner_sess_ = std::make_unique<Ort::Session>(
+-      env_, SHERPA_ONNX_TO_ORT_PATH(config.transducer.joiner), joiner_sess_opts_);
+-  InitJoiner(nullptr, 0);
++  {  // Flamingo patch: load from a registered memory file if there is one
++    const void *data = nullptr;
++    size_t size = 0;
++    if (LookupMemoryFile(config.transducer.joiner, &data, &size)) {
++      InitJoiner(const_cast<void *>(data), size);
++    } else {
++      joiner_sess_ = std::make_unique<Ort::Session>(
++          env_, SHERPA_ONNX_TO_ORT_PATH(config.transducer.joiner), joiner_sess_opts_);
++      InitJoiner(nullptr, 0);
++    }
++  }
+ }
+ 
+ template <typename Manager>

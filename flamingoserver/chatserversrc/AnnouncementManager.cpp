@@ -94,7 +94,7 @@ static std::string BuildAudienceMatchSql(const char* annAlias,
               " AND t.f_target_id = " + enterpriseIdExpr + "))";
 
     //受众为「指定部门」：该用户<u>在职</u>归属的部门里有一个落在投放目标中。
-    //当前只匹配精确部门、不向下级部门递归，理由见 docs/消息盒子接入方案.md 第 9 节。
+    //当前只匹配精确部门、不向下级部门递归，理由见 docs/公告中心接入方案.md 第 9 节。
     clause += " OR (" + a + ".f_audience_type = " + std::to_string(ANN_AUDIENCE_DEPARTMENT) +
               " AND EXISTS (SELECT 1 FROM t_announcement_target t, t_department_member m"
               " WHERE t.f_announcement_id = " + a + ".f_announcement_id"
@@ -230,7 +230,7 @@ int32_t AnnouncementManager::computeAudienceTotal(IDatabase* pConn, int32_t audi
     case ANN_AUDIENCE_ALL_ENT:
         //全部企业：全体IM自然人用户。
         snprintf(sql, sizeof(sql),
-            "SELECT COUNT(*) FROM t_user WHERE f_user_id < %d", ANN_USER_ID_MAX);
+            "SELECT COUNT(*) FROM t_user WHERE f_user_id < %d AND f_usertype = 0", ANN_USER_ID_MAX);
         return queryCount(pConn, sql);
 
     case ANN_AUDIENCE_ENTERPRISE:
@@ -238,7 +238,7 @@ int32_t AnnouncementManager::computeAudienceTotal(IDatabase* pConn, int32_t audi
         if (idList.empty())
             return 0;
         snprintf(sql, sizeof(sql),
-            "SELECT COUNT(*) FROM t_user WHERE f_user_id < %d AND f_enterprise_id IN (%s)",
+            "SELECT COUNT(*) FROM t_user WHERE f_user_id < %d AND f_usertype = 0 AND f_enterprise_id IN (%s)",
             ANN_USER_ID_MAX, idList.c_str());
         return queryCount(pConn, sql);
 
@@ -784,7 +784,7 @@ void AnnouncementManager::getAnnouncementsForUser(int32_t userid, int64_t sinceI
         "AND a.f_audience_type <> " + std::to_string(ANN_AUDIENCE_PLATFORM) + " "
         "AND a.f_announcement_id > " + std::to_string(sinceId) + " "
         "AND " + BuildAudienceMatchSql("a", useridExpr, enterpriseIdExpr) + " "
-        //与消息盒子列表的展示顺序一致：置顶的排最前，其余按发布时间由新到旧。
+        //与公告中心列表的展示顺序一致：置顶的排最前，其余按发布时间由新到旧。
         "ORDER BY a.f_pinned DESC, a.f_sent_time DESC "
         "LIMIT " + std::to_string(fetchLimit);
 
@@ -867,6 +867,59 @@ void AnnouncementManager::filterAudienceAmong(int64_t announcementId,
                                               const std::vector<int32_t>& candidates,
                                               std::vector<int32_t>& outHitUserIds)
 {
+    filterAudienceImpl(announcementId, candidates, false, outHitUserIds);
+}
+
+void AnnouncementManager::filterUnreadAudienceAmong(int64_t announcementId,
+                                                    const std::vector<int32_t>& candidates,
+                                                    std::vector<int32_t>& outHitUserIds)
+{
+    filterAudienceImpl(announcementId, candidates, true, outHitUserIds);
+}
+
+int32_t AnnouncementManager::checkRepushable(int64_t announcementId)
+{
+    if (announcementId <= 0)
+        return error_code_unknown;
+
+    std::unique_ptr<IDatabase> pConn(createDbConnection());
+    if (!pConn)
+        return error_code_unknown;
+
+    char sql[ANN_SQL_BUF_LEN] = { 0 };
+    snprintf(sql, sizeof(sql),
+        "SELECT f_status FROM t_announcement WHERE f_announcement_id = %lld",
+        (long long)announcementId);
+    QueryResult* pResult = pConn->query(sql);
+    if (pResult == NULL)
+        return error_code_unknown;
+    int32_t status = -1;
+    Field* pRow = pResult->fetch();
+    if (pRow != NULL)
+        status = pRow[0].getInt32();
+    pResult->endQuery();
+    delete pResult;
+
+    if (status < 0)
+    {
+        LOGE("checkRepushable: announcement not exist, announcementid: %lld",
+             (long long)announcementId);
+        return error_code_unknown;
+    }
+    if (status != ANN_STATUS_PUBLISHED)
+    {
+        LOGI("checkRepushable: not published, announcementid: %lld, status: %d",
+             (long long)announcementId, status);
+        return error_code_announcement_notpublished;
+    }
+    return error_code_ok;
+}
+
+void AnnouncementManager::filterAudienceImpl(int64_t announcementId,
+                                             const std::vector<int32_t>& candidates,
+                                             bool unreadOnly,
+                                             std::vector<int32_t>& outHitUserIds)
+{
     outHitUserIds.clear();
 
     if (announcementId <= 0 || candidates.empty())
@@ -893,7 +946,16 @@ void AnnouncementManager::filterAudienceAmong(int64_t announcementId,
         //与 getAnnouncementsForUser 一样，平台内部公告在最内层就被挡掉。
         "AND a.f_audience_type <> " + std::to_string(ANN_AUDIENCE_PLATFORM) + " "
         "AND u.f_user_id IN (" + idList + ") "
+        //机器人与服务号账号不是公告受众（docs/机器人方案.md §3.2）
+        "AND u.f_usertype = 0 "
         "AND " + BuildAudienceMatchSql("a", "u.f_user_id", "u.f_enterprise_id");
+    if (unreadOnly)
+    {
+        //重新推送只推给还没读过的人：排除已有已读回执的用户。
+        sql += " AND NOT EXISTS (SELECT 1 FROM t_announcement_read r"
+               " WHERE r.f_announcement_id = a.f_announcement_id"
+               " AND r.f_user_id = u.f_user_id)";
+    }
 
     QueryResult* pResult = pConn->query(sql.c_str());
     if (pResult == NULL)

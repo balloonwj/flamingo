@@ -61,4 +61,13 @@ bool BuildMergedCardPreview(const std::string& contentJson, MergedCardPreview& o
  */
 void ApplyMergedCard(ChatMessage& msg, const std::string& contentJson);
 
+/**
+ *  合并记录里一条在线直传文件子消息的说明文字（2026-10-05 起）：「[文件] 文件名（在线直传的文件，服务器未保存，
+ *  无法转发）」。在线直传的文件服务器上没有副本，合并转发时文件本身不随记录发出，记录里只留这行文字；
+ *  卡片的预览行与查看窗的那一行都用它。
+ *  @param fileNameUtf8 文件名（UTF-8）；为空时省去文件名
+ *  @return 已翻译的说明文字
+ */
+CString MergedDirectFilePlaceholder(const std::string& fileNameUtf8);
+
 } // namespace balloonchatwnd

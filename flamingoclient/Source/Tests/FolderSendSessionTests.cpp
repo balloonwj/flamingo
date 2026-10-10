@@ -4,7 +4,7 @@
  *  FolderSendSession 里能脱离网络与磁盘验证的是三块，本文件覆盖的就是它们：
  *    - 待传文件队列的分派（FolderSendFileQueue）：单条通道顺序取完、多条通道并发取时
  *      不重不漏、取空之后全部通道都能正常结束；
- *    - 续传起点的应用（FolderSendFileQueue::ApplyResumePoints）：已完整落盘的文件被跳过、
+ *    - 续传起点的应用（FolderSendFileQueue::ApplyResumePoints）：已完整落盘的文件被跳过（0 字节文件除外）、
  *      半成品从给定偏移续、全新文件从 0 开始，以及各种非法回执一律被拒；
  *    - 流控窗口的推进（FolderSendFlowWindow）：在途分片不超过 4 片、收到回执才继续、
  *      对方回退位点时能正确回退重发、越界位点被判非法。
@@ -251,7 +251,7 @@ TEST_CASE("FSS6 续传起点：全部文件都已完成时队列直接取空")
     CHECK_FALSE(queue.TakeNext(task));
 }
 
-TEST_CASE("FSS7 续传起点：0 字节文件被视作已完成，不占用通道")
+TEST_CASE("FSS7 续传起点：0 字节文件照样要发（走 begin / end），不被当作已完成跳过")
 {
     std::vector<FolderRelayFileEntry> files;
     FolderRelayFileEntry empty;
@@ -271,14 +271,31 @@ TEST_CASE("FSS7 续传起点：0 字节文件被视作已完成，不占用通�
     ack.m_totalfiles = 2;
     REQUIRE(queue.ApplyResumePoints(ack));
 
-    //0 字节文件的起传偏移 0 已经等于它的长度，故被当作已完成跳过
-    CHECK(queue.SkippedCount() == 1);
-    CHECK(queue.PendingCount() == 1);
+    //0 字节文件的起传偏移 0 虽然等于它的长度，也不算已完成：接收端要靠它的 begin / end 才会建出文件并计为完成，
+    //跳过它会让接收端一直等下去（2026-10-04 修正，原先的预期是跳过）
+    CHECK(queue.SkippedCount() == 0);
+    CHECK(queue.PendingCount() == 2);
 
     FolderSendFileTask task;
     REQUIRE(queue.TakeNext(task));
+    CHECK(task.m_index == 0);
+    CHECK(task.m_size == 0);
+    REQUIRE(queue.TakeNext(task));
     CHECK(task.m_index == 1);
     CHECK_FALSE(queue.TakeNext(task));
+
+    //续传回执里给 0 字节文件的位点（0，即它的长度）：照样要发
+    FolderSendFileQueue again;
+    again.Reset(files);
+    FolderRelayManifestAck resumed;
+    resumed.m_totalfiles = 2;
+    FolderRelayResumePoint point;
+    point.m_index = 0;
+    point.m_offset = 0;
+    resumed.m_points.push_back(point);
+    REQUIRE(again.ApplyResumePoints(resumed));
+    CHECK(again.SkippedCount() == 0);
+    CHECK(again.PendingCount() == 2);
 }
 
 TEST_CASE("FSS8 续传起点：非法回执一律被拒")

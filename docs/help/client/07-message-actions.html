@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 客户端第 7 章：消息右键菜单、撤回、引用回复、Pin、删除、多选、转发与合并转发。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>消息的更多操作 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="c07">
+<article class="doc">
+  <h1>消息的更多操作</h1>
+  <p class="lead">在聊天窗口里右键一条消息，可以复制、引用回复、转发、Pin、撤回或删除它，也可以一次选中多条消息合并转发给别人。本章逐一介绍这些操作，单聊和群聊的用法相同。</p>
+  <ul class="facts">
+    <li>适用：全体员工</li>
+    <li>单聊、群聊通用</li>
+    <li>撤回：只能撤回自己 2 分钟内发出的消息</li>
+  </ul>
+
+  <h2 id="menu">消息的右键菜单</h2>
+  <p>在消息气泡上点鼠标右键，会弹出这条消息可用的操作。菜单项随消息的类型和发送者而变化，用不了的项不会出现。</p>
+  <figure class="shot center"><img src="../img/d_msg_menu_peer.png" width="760" alt="对方消息的右键菜单"><figcaption>对方发来的文字消息</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_msg_menu_mine.png" width="760" alt="自己较早消息的右键菜单"><figcaption>自己发出、已超过 2 分钟的消息：没有「撤回」</figcaption></figure>
+  <table>
+    <tr><th>菜单项</th><th>作用</th></tr>
+    <tr><td>复制</td><td>把消息内容复制到剪贴板</td></tr>
+    <tr><td>添加到备忘</td><td>以这条文字为内容新建一条个人备忘。群聊里分成 <span class="ui">添加到我的备忘</span> 和 <span class="ui">添加到群备忘</span>，后者只有群主和管理员能看到。备忘的用法见<a href="23-memo.html">「备忘与提醒」</a></td></tr>
+    <tr><td>引用回复</td><td>引用这条消息进行回复，见下文<a href="#quote">「引用回复」</a></td></tr>
+    <tr><td>转发</td><td>把这条消息发给其他人或群，见下文<a href="#forward">「转发」</a></td></tr>
+    <tr><td>Pin / 取消 Pin</td><td>把消息钉在会话顶部，见下文<a href="#pin">「Pin」</a></td></tr>
+    <tr><td>多选</td><td>进入多选状态，一次处理多条消息，见下文<a href="#multiselect">「多选」</a></td></tr>
+    <tr><td>撤回</td><td>只对自己 2 分钟内发出的消息出现，见下文<a href="#recall">「撤回」</a></td></tr>
+    <tr><td>删除</td><td>从你的聊天记录里删除这条消息，见下文<a href="#delete">「删除」</a></td></tr>
+  </table>
+
+  <h3>图片、链接与代码卡片的额外菜单项</h3>
+  <figure class="shot center"><img src="../img/d_msg_menu_image.png" width="767" alt="图片消息的右键菜单"><figcaption>图片消息多出「图片另存为」「图片文字识别」「再次发送」</figcaption></figure>
+  <ul>
+    <li><b>图片消息</b>：<span class="ui">图片另存为</span> 把图片保存到你指定的位置；<span class="ui">图片文字识别</span> 识别图中的文字（见<a href="09-screenshot.html#ocr">图片文字识别</a>）；<span class="ui">再次发送</span> 把这张图作为一条新消息再发到当前会话。</li>
+    <li><b>在链接上右键</b>：菜单最前面多出 <span class="ui">在浏览器中打开</span> 和 <span class="ui">复制链接地址</span>。</li>
+    <li><b>代码卡片</b>：<span class="ui">复制</span> 换成 <span class="ui">复制代码</span>，并多出 <span class="ui">在窗口中查看</span>、<span class="ui">另存为…</span>、<span class="ui">添加批注…</span>，见<a href="11-code.html">「代码片段」</a>。</li>
+    <li><b>Markdown 卡片</b>：<span class="ui">复制</span> 换成 <span class="ui">复制 Markdown 源文本</span>，并多出 <span class="ui">在窗口中查看</span>，见<a href="12-markdown.html">「Markdown 文档」</a>。</li>
+  </ul>
+  <div class="callout tip"><b>发送失败的消息可以重新编辑</b>如果一条文字消息没有发出（例如被服务器拒收），右键它会出现 <span class="ui">重新编辑</span>，点击后原文回到输入框，修改后再发送即可。</div>
+
+  <h2 id="recall">撤回</h2>
+  <p>发错了消息，可以在发出后 2 分钟内撤回。超过 2 分钟后，右键菜单里就不再有 <span class="ui">撤回</span>。</p>
+  <ol class="steps">
+    <li>在自己刚发出的消息上点右键，选 <span class="ui">撤回</span>。</li>
+    <li>这条消息在双方的聊天窗口里都变成一行灰色提示，你这边显示「你撤回了一条消息」。</li>
+    <li>撤回的是文字消息时，提示后面会跟着一个 <span class="ui">编辑</span> 链接。点它，原文会放回输入框，改好后重新发送。<span class="ui">编辑</span> 链接在撤回后 5 分钟内有效。</li>
+  </ol>
+  <figure class="shot center"><img src="../img/d_msg_menu_recall.png" width="771" alt="刚发出的消息菜单里有撤回"><figcaption>刚发出的消息，菜单里有「撤回」</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_recalled.png" width="760" alt="撤回后的提示与编辑链接"><figcaption>撤回后显示「你撤回了一条消息」和「编辑」</figcaption></figure>
+
+  <h2 id="quote">引用回复</h2>
+  <p>在群聊或一段较长的对话里，引用回复能让对方清楚你回复的是哪一句。</p>
+  <ol class="steps">
+    <li>在要回复的消息上点右键，选 <span class="ui">引用回复</span>。</li>
+    <li>输入框上方出现引用条，显示被引用的人和内容。不想引用了，点引用条右侧的 ⊗ 取消。</li>
+    <li>输入你的回复并发送。发出的气泡上方会带着被引用的内容，点它可以跳到原消息。</li>
+  </ol>
+  <figure class="shot center"><img src="../img/d_quote_input.png" width="760" alt="输入框上方的引用条"><figcaption>输入框上方的引用条</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_quote_sent.png" width="760" alt="带引用的消息"><figcaption>发出的消息上方显示被引用的内容</figcaption></figure>
+
+  <h2 id="pin">Pin</h2>
+  <p>重要的消息可以 Pin（钉住），方便以后快速找到。Pin 在会话内共享，单聊双方都能看到。</p>
+  <ol class="steps">
+    <li>在消息上点右键，选 <span class="ui">Pin</span>。消息旁边会出现一个图钉标记。</li>
+    <li>聊天窗口头部下方出现一条「已 Pin N 条 ›」，点它会打开消息记录窗口并直接切到 Pin 分类，列出本会话所有被 Pin 的消息（见<a href="24-history.html">「聊天记录管理」</a>）。</li>
+    <li>不再需要时，在这条消息上右键选 <span class="ui">取消 Pin</span>。</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/d_pinned.png" width="760" alt="被 Pin 的消息与已 Pin 提示条">
+    <figcaption>被 Pin 的消息旁带图钉，头部下方显示「已 Pin 1 条 ›」</figcaption>
+  </figure>
+  <div class="callout note"><b>群聊里取消 Pin</b>群里的 Pin 只有当初 Pin 这条消息的人以及群主、管理员可以取消。</div>
+
+  <h2 id="delete">删除</h2>
+  <p>右键消息选 <span class="ui">删除</span>，这条消息会从你的聊天记录里消失，你登录的其他设备上也会一并删除。删除只影响你自己，对方的聊天记录里仍然保留这条消息；如果想让对方也看不到，请在 2 分钟内使用 <a href="#recall">撤回</a>。</p>
+
+  <h2 id="multiselect">多选</h2>
+  <p>需要一次转发或删除多条消息时，使用多选：</p>
+  <ol class="steps">
+    <li>在任意一条消息上右键，选 <span class="ui">多选</span>。刚才右键的那条会被勾选，左侧显示一个打勾的圆圈。</li>
+    <li>点其他消息把它们也勾上，再点一次取消勾选。</li>
+    <li>在窗口底部的操作栏里选择要做的事：<span class="ui">取消</span> 退出多选；<span class="ui">逐条转发 N</span> 把选中的消息一条一条转发出去；<span class="ui">合并转发 N</span> 把它们打包成一条「聊天记录」转发；<span class="ui">删除 N</span> 一次删除。按钮上的 N 是能执行该操作的消息条数。</li>
+  </ol>
+  <figure class="shot center">
+    <img src="../img/d_multiselect.png" width="760" alt="多选状态与底部操作栏">
+    <figcaption>选中了 4 条消息，底部显示「取消」「逐条转发 4」「合并转发 4」「删除 4」</figcaption>
+  </figure>
+
+  <h2 id="forward">转发</h2>
+  <p>右键一条消息选 <span class="ui">转发</span>，或在多选后点 <span class="ui">逐条转发</span> / <span class="ui">合并转发</span>，都会打开「转发」窗口：</p>
+  <figure class="shot center"><img src="../img/d_forward_dlg.png" width="738" alt="转发窗口"><figcaption>转发窗口：左侧挑选对象，右侧是已选对象和转发内容</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_forward_dlg_sel.png" width="738" alt="选中周思源后的转发窗口"><figcaption>勾选周思源后，右侧「发送给」列出了她</figcaption></figure>
+  <ol class="steps">
+    <li>在左侧的 <span class="ui">最近会话</span>、<span class="ui">联系人</span>、<span class="ui">群组</span> 三个页签里勾选要发给的人或群，也可以在上方的搜索框里输入名字查找。</li>
+    <li>右侧 <span class="ui">发送给</span> 列出已选的对象，点某一项右侧的 ✕ 可以去掉它。一次最多选 9 个，左下角显示「已选 N 个（最多 9 个）」。</li>
+    <li>确认右下方 <span class="ui">转发内容</span> 无误后，点 <span class="ui">发送</span>。</li>
+  </ol>
+  <div class="callout warn"><b>这些消息不能转发</b>文件夹、接龙、文件共享、屏幕共享和入群邀请这几类消息不能转发，它们的右键菜单里没有 <span class="ui">转发</span>；多选时如果混有这类消息，转发窗口会提示跳过了几条。其中接龙可以随合并转发进入聊天记录。在线直传的文件服务器上没有保存：逐条转发时，本机还留着这个文件就改为以离线文件重新发送，本机已经没有时无法转发；合并转发时文件本身不会随记录发出。帖子群不能作为转发对象。</div>
+
+  <h3 id="merged">合并转发与「聊天记录」卡片</h3>
+  <p>合并转发会把选中的多条消息打包成一张「聊天记录」卡片发出去。下面的例子里，罗俊辉把与赵卓轩的 4 条消息合并转发给了周思源，图中是周思源看到的样子：</p>
+  <figure class="shot center"><img src="../img/d_merged_card_c.png" width="760" alt="收到的聊天记录卡片"><figcaption>周思源收到的卡片：「罗俊辉和赵卓轩的聊天记录」与前几条摘要</figcaption></figure>
+  <figure class="shot center"><img src="../img/d_merged_viewer.png" width="618" alt="聊天记录查看窗"><figcaption>点卡片打开的查看窗，图片可以点击下载查看</figcaption></figure>
+  <p>卡片上显示标题「XX和XX的聊天记录」、前几条消息的摘要，以及底部的「聊天记录（共 N 条）」。点卡片会打开查看窗，按时间列出每条消息的发送者、时间和内容，其中的图片可以点击下载查看。</p>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

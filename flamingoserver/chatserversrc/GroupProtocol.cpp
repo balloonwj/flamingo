@@ -3,6 +3,7 @@
  *  balloonwj@qq.com   2026-05-21
  */
 #include "GroupProtocol.h"
+#include <limits>
 #include <set>
 #include "../jsoncpp1.9.0/json.h"
 
@@ -47,15 +48,15 @@ static void fillGroupValue(Json::Value& jo, const GroupRecord& g)
     jo["muteall"]      = g.muteall;
     jo["membercount"]  = g.membercount;
 
-    //以下七项为群管理功能新增的群设置。老客户端不认识这些字段、直接忽略，
-    //故加在这里不影响它们。
+    //以下六项为群管理功能新增的群设置。老客户端不认识这些字段、直接忽略，
+    //故加在这里不影响它们。（原先还有一项群敏感词过滤开关 sensitiveon，随群级
+    //敏感词于 2026-10-02 删除，老客户端读不到时按默认值 0 处理）
     jo["intro"]         = g.intro;
     jo["atallscope"]    = g.atallscope;
     jo["newseehistory"] = g.newseehistory;
     jo["memberinvite"]  = g.memberinvite;
     jo["welcomeon"]     = g.welcomeon;
     jo["welcometext"]   = g.welcometext;
-    jo["sensitiveon"]   = g.sensitiveon;
 
     //以下三项为群公告功能新增，是"最新一条已发布公告"的冗余快照。加在这里的收益
     //是：客户端拿到群资料的同时就有了最新公告的标题与时间，群聊窗头部那行
@@ -64,6 +65,12 @@ static void fillGroupValue(Json::Value& jo, const GroupRecord& g)
     jo["announceid"]    = std::to_string(g.announceid);
     jo["announcetitle"] = g.announcetitle;
     jo["announcetime"]  = static_cast<Json::Int64>(g.announcetime);
+
+    //入群必读公告ID（docs/群公告接入方案.md §14），0 表示没有；老客户端不认识，照常忽略
+    jo["mustreadid"]    = std::to_string(g.mustreadid);
+
+    //群类型（docs/帖子群方案.md 6.3）：0 普通群、1 帖子群。老客户端不认识，会把帖子群当普通群列出
+    jo["grouptype"]     = g.grouptype;
 }
 
 bool GroupProtocol::parseCreateGroupRequest(const std::string& json, CreateGroupRequest& req)
@@ -77,6 +84,16 @@ bool GroupProtocol::parseCreateGroupRequest(const std::string& json, CreateGroup
     if (!root["groupname"].isString())
         return false;
     req.name = root["groupname"].asString();
+
+    //群类型可缺省（老客户端不带），缺省为普通群；不认识的取值按报文非法处理（docs/帖子群方案.md 6.3）
+    if (root.isMember("grouptype"))
+    {
+        if (!root["grouptype"].isInt())
+            return false;
+        req.grouptype = root["grouptype"].asInt();
+        if (req.grouptype != group_type_normal && req.grouptype != group_type_thread)
+            return false;
+    }
 
     //初始成员列表可缺省（允许建一个只有群主的群）
     const Json::Value& arr = root["memberids"];
@@ -237,7 +254,8 @@ bool GroupProtocol::parseUpdateGroupInfoRequest(const std::string& json, UpdateG
         req.muteall     = root["muteall"].asInt();
     }
 
-    //---- 以下七项为群管理功能新增，同样是可选字段 ----
+    //---- 以下六项为群管理功能新增，同样是可选字段 ----
+    //老客户端可能仍带着已删除的群敏感词开关 sensitiveon，这里不再识别，按未知字段忽略
     if (root["intro"].isString())
     {
         req.has_intro = true;
@@ -268,12 +286,25 @@ bool GroupProtocol::parseUpdateGroupInfoRequest(const std::string& json, UpdateG
         req.has_welcometext = true;
         req.welcometext     = root["welcometext"].asString();
     }
-    if (root["sensitiveon"].isInt())
-    {
-        req.has_sensitiveon = true;
-        req.sensitiveon     = root["sensitiveon"].asInt();
-    }
     return true;
+}
+
+//本次提交了该字段、值与当前值不同、且不为空串时，把新值追加到 out
+static void appendIfChanged(bool submitted, const std::string& newValue, const std::string& currentValue,
+                            std::vector<std::string>& out)
+{
+    if (submitted && !newValue.empty() && newValue != currentValue)
+        out.push_back(newValue);
+}
+
+void GroupProtocol::collectChangedGroupInfoTexts(const UpdateGroupInfoRequest& req, const GroupRecord& current,
+                                                 std::vector<std::string>& out)
+{
+    //群名为空串表示恢复自动群名，appendIfChanged 对空串不追加，这里无需单独判断
+    appendIfChanged(req.has_name, req.name, current.name, out);
+    appendIfChanged(req.has_intro, req.intro, current.intro, out);
+    appendIfChanged(req.has_welcometext, req.welcometext, current.welcometext, out);
+    appendIfChanged(req.has_announcement, req.announcement, current.announcement, out);
 }
 
 std::string GroupProtocol::buildCreateGroupResponse(int code, const std::string& msg, int64_t groupid)
@@ -324,6 +355,8 @@ std::string GroupProtocol::buildGroupMembersResponse(int code, const std::string
         //表示永久禁言；客户端据它显示"剩余 N 分钟"或"永久"。
         jo["muteuntil"]  = static_cast<Json::Int64>(m.muteuntil);
         jo["mutereason"] = m.mutereason;
+        //入群必读待确认（docs/群公告接入方案.md §14）：1 表示还没确认，群主、管理员的界面据此加标记
+        jo["mustread"]   = m.mustread;
         arr.append(jo);
     }
     root["members"] = arr;
@@ -374,65 +407,6 @@ std::string GroupProtocol::buildGroupMemberChangedNotify(int64_t groupid, int ch
     for (size_t i = 0; i < userids.size(); ++i)
         arr.append(std::to_string(userids[i]));
     root["userids"] = arr;
-    return writeCompact(root);
-}
-
-bool GroupProtocol::parseSensitiveWordOpRequest(const std::string& json,
-                                                SensitiveWordOpRequest& req)
-{
-    Json::Value root;
-    if (!parseObject(json, root))
-        return false;
-
-    req.groupid = getStringId(root, "groupid");
-    if (req.groupid <= 0)
-        return false;
-
-    if (!root["operation"].isInt())
-        return false;
-    req.operation = root["operation"].asInt();
-
-    //按操作类型校验各自必需的字段：新增要有非空的词，删除要有正的词条ID。
-    //不认识的 operation 一律拒绝 —— 与其猜用户想干什么，不如让它失败得明显。
-    if (req.operation == sensitive_word_add)
-    {
-        if (!root["word"].isString())
-            return false;
-        req.word = root["word"].asString();
-        if (req.word.empty())
-            return false;
-        return true;
-    }
-
-    if (req.operation == sensitive_word_delete)
-    {
-        req.id = getStringId(root, "id");
-        return req.id > 0;
-    }
-
-    return false;
-}
-
-std::string GroupProtocol::buildSensitiveWordsResponse(int code, const std::string& msg,
-                                                       int64_t groupid,
-                                                       const std::vector<GroupSensitiveWordRecord>& words)
-{
-    Json::Value root;
-    root["code"]    = code;
-    root["msg"]     = msg;
-    root["groupid"] = std::to_string(groupid);
-
-    Json::Value arr(Json::arrayValue);
-    for (size_t i = 0; i < words.size(); ++i)
-    {
-        const GroupSensitiveWordRecord& w = words[i];
-        Json::Value jo;
-        jo["id"]        = std::to_string(w.id);
-        jo["word"]      = w.word;
-        jo["timestamp"] = static_cast<Json::Int64>(w.createtime);
-        arr.append(jo);
-    }
-    root["words"] = arr;
     return writeCompact(root);
 }
 
@@ -608,7 +582,9 @@ std::string GroupProtocol::buildPublishAnnouncementResponse(int code, const std:
 }
 
 std::string GroupProtocol::buildAnnouncementNotify(const GroupAnnouncementRecord& item,
-                                                   int changetype)
+                                                   int changetype,
+                                                   int64_t cardMsgId,
+                                                   const std::string& cardContent)
 {
     Json::Value root;
     root["changetype"] = changetype;
@@ -617,14 +593,54 @@ std::string GroupProtocol::buildAnnouncementNotify(const GroupAnnouncementRecord
     Json::Value jo;
     fillAnnouncementValue(jo, item);
     root["announcement"] = jo;
+
+    //公告卡片（2026-10-05 起）：删除推送带上卡片的 msgid 与改写后的 content。老客户端不认识这两个字段，行为不变
+    if (cardMsgId > 0)
+        root["cardmsgid"] = std::to_string(cardMsgId);
+    Json::Value card;
+    if (!cardContent.empty() && parseObject(cardContent, card))
+        root["card"] = card;
     return writeCompact(root);
 }
 
-std::string GroupProtocol::buildMemberLeaveTip(const std::string& nickname)
+std::string GroupProtocol::announcementCardClientMsgId(int64_t groupid, int64_t announcementId)
 {
-    if (nickname.empty())
-        return u8"有成员退出了群聊";
-    return u8"「" + nickname + u8"」退出了群聊";
+    return std::string(kAnnouncementCardClientMsgIdPrefix) + std::to_string(groupid) + "-"
+           + std::to_string(announcementId);
+}
+
+std::string GroupProtocol::buildAnnouncementCardContent(const GroupAnnouncementRecord& item, bool republish)
+{
+    Json::Value root;
+    root["announcementid"] = std::to_string(item.id);
+    root["groupid"]        = std::to_string(item.groupid);
+    root["title"]          = item.title;
+    //正文放全文：客户端点开卡片时详情窗直接取它，不必再向服务端请求
+    root["body"]           = item.content;
+    root["severity"]       = item.severity;
+    root["publisherid"]    = std::to_string(item.publisher);
+    root["publisher"]      = item.publishername;
+    root["publishtime"]    = static_cast<Json::Int64>(item.publishtime);
+    root["republish"]      = republish;
+    //老客户端不认识本类型时取 text 画成文字气泡（客户端 MessageProtocolClient 解析 content.text 的分支）
+    root["text"]           = std::string(u8"[群公告] ") + item.title;
+    return writeCompact(root);
+}
+
+bool GroupProtocol::buildDeletedAnnouncementCardContent(const std::string& cardContent, std::string& out)
+{
+    Json::Value root;
+    if (!parseObject(cardContent, root))
+        return false;
+
+    //去掉正文：公告的删除语义是彻底消失（docs/群公告接入方案.md §11.1），正文不能继续留在聊天记录里。
+    //标题、优先级、发布人与时间保留，卡片据此显示「该公告已被删除」
+    root.removeMember("body");
+    root["deleted"] = true;
+    const std::string title = root["title"].isString() ? root["title"].asString() : std::string();
+    root["text"] = std::string(u8"[群公告已删除] ") + title;
+    out = writeCompact(root);
+    return true;
 }
 
 std::string GroupProtocol::buildOwnerTransferTip(const std::string& fromNickname,
@@ -637,6 +653,218 @@ std::string GroupProtocol::buildOwnerTransferTip(const std::string& fromNickname
     if (!fromNickname.empty())
         return u8"「" + fromNickname + u8"」已转让群主";
     return u8"群主已变更";
+}
+
+std::string GroupProtocol::buildWelcomeTip(const std::vector<std::string>& names, const std::string& welcome)
+{
+    //把新成员的昵称拼在欢迎语前面，形如"张三、李四 欢迎加入本群"；空昵称跳过，不让它污染这句话
+    std::string joined;
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        if (names[i].empty())
+            continue;
+        if (!joined.empty())
+            joined += u8"、";
+        joined += names[i];
+    }
+    if (joined.empty())
+        return welcome;
+    return joined + u8" " + welcome;
+}
+
+//构造群系统提示的完整 content：{ text, tipkind, tipargs }（多语言第 5 期）。tipargs 恒为对象，可能为空对象
+static std::string buildTipContent(const std::string& text, const char* tipkind, const Json::Value& tipargs)
+{
+    Json::Value root;
+    root["text"]    = text;
+    root["tipkind"] = tipkind;
+    root["tipargs"] = tipargs;
+    return writeCompact(root);
+}
+
+//参数非空时才写进 tipargs：取不到昵称等情况下客户端按缺省写法生成，与中文 text 的规则一致
+static void setTipArg(Json::Value& args, const char* key, const std::string& value)
+{
+    if (!value.empty())
+        args[key] = value;
+}
+
+std::string GroupProtocol::buildOwnerTransferTipContent(const std::string& fromNickname,
+                                                        const std::string& toNickname)
+{
+    Json::Value args(Json::objectValue);
+    setTipArg(args, "from", fromNickname);
+    setTipArg(args, "to", toNickname);
+    return buildTipContent(buildOwnerTransferTip(fromNickname, toNickname), kSystemTipOwnerTransfer, args);
+}
+
+std::string GroupProtocol::buildMuteAllTip(int muteall, const std::string& operatorNickname)
+{
+    if (muteall != 0)
+    {
+        if (operatorNickname.empty())
+            return u8"已开启仅通知模式，仅群主和管理员可以发言";
+        return u8"「" + operatorNickname + u8"」开启了仅通知模式，仅群主和管理员可以发言";
+    }
+    if (operatorNickname.empty())
+        return u8"已关闭仅通知模式";
+    return u8"「" + operatorNickname + u8"」关闭了仅通知模式";
+}
+
+std::string GroupProtocol::buildMuteAllTipContent(int muteall, const std::string& operatorNickname, int64_t operatorId)
+{
+    Json::Value args(Json::objectValue);
+    setTipArg(args, "operator", operatorNickname);
+    if (operatorId > 0)
+        args["operatorid"] = std::to_string(operatorId);
+    return buildTipContent(buildMuteAllTip(muteall, operatorNickname),
+                           (muteall != 0) ? kSystemTipMuteAllOn : kSystemTipMuteAllOff, args);
+}
+
+std::string GroupProtocol::buildWelcomeTipContent(const std::vector<std::string>& names,
+                                                  const std::string& welcome)
+{
+    Json::Value args(Json::objectValue);
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        if (!names[i].empty())
+            arr.append(names[i]);
+    }
+    args["names"]   = arr;
+    args["welcome"] = welcome;
+    return buildTipContent(buildWelcomeTip(names, welcome), kSystemTipGroupWelcome, args);
+}
+
+std::string GroupProtocol::buildMemberJoinTip(int64_t inviterId, const std::string& inviterNickname,
+                                              const std::vector<JoinTipMember>& members)
+{
+    if (members.empty())
+        return std::string();
+
+    //名字只从前 kMemberJoinTipMaxNames 位里取，昵称为空的跳过；人数按全部新成员计
+    std::string joined;
+    size_t listed = 0;
+    for (size_t i = 0; i < members.size() && i < kMemberJoinTipMaxNames; ++i)
+    {
+        if (members[i].m_nickname.empty())
+            continue;
+        if (!joined.empty())
+            joined += u8"、";
+        joined += u8"「" + members[i].m_nickname + u8"」";
+        ++listed;
+    }
+
+    //新成员这一段：一个名字都列不出时只写人数；列出的少于实际人数时补「等 N 人」
+    const std::string total = std::to_string(members.size());
+    std::string who;
+    if (listed == 0)
+        who = total + u8" 位新成员";
+    else if (listed < members.size())
+        who = joined + u8"等 " + total + u8" 人";
+    else
+        who = joined;
+
+    if (inviterId == 0)
+        return who + u8"加入了群聊";
+
+    //邀请人昵称取不到时退而用"有人"，与发布群公告的提示一致。新成员这一段以数字开头时，
+    //「邀请」与数字之间留一个空格，与「等 N 人」里数字两侧留空格的写法一致
+    const std::string inviter = inviterNickname.empty() ? std::string(u8"有人") : inviterNickname;
+    const std::string gap = (listed == 0) ? std::string(" ") : std::string();
+    return u8"「" + inviter + u8"」邀请" + gap + who + u8"加入了群聊";
+}
+
+std::string GroupProtocol::buildMemberJoinTipContent(int64_t inviterId, const std::string& inviterNickname,
+                                                     const std::vector<JoinTipMember>& members)
+{
+    Json::Value args(Json::objectValue);
+    if (inviterId != 0)
+    {
+        args["inviterid"] = std::to_string(inviterId);
+        if (!inviterNickname.empty())
+            args["inviter"] = inviterNickname;
+    }
+
+    //members 带全部新成员的 userid；nickname 只给前 kMemberJoinTipMaxNames 位中非空的，与正文列出的名单一致
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+        Json::Value jo(Json::objectValue);
+        jo["userid"] = std::to_string(members[i].m_userid);
+        if (i < kMemberJoinTipMaxNames && !members[i].m_nickname.empty())
+            jo["nickname"] = members[i].m_nickname;
+        arr.append(jo);
+    }
+    args["members"] = arr;
+    return buildTipContent(buildMemberJoinTip(inviterId, inviterNickname, members), kSystemTipMemberJoin, args);
+}
+
+bool GroupProtocol::isMemberJoinTipFor(const std::string& storedContent, int64_t userid)
+{
+    if (userid <= 0)
+        return false;
+    Json::Value root;
+    if (!parseObject(storedContent, root))
+        return false;
+    //入库的 f_content 是 { content: {...}, mentions, mentionall } 的包装；没有包装时 root 本身就是 content
+    const Json::Value& content = root["content"].isObject() ? root["content"] : root;
+    if (!content["tipkind"].isString() || content["tipkind"].asString() != kSystemTipMemberJoin)
+        return false;
+    const Json::Value& members = content["tipargs"]["members"];
+    if (!members.isArray())
+        return false;
+    for (Json::ArrayIndex i = 0; i < members.size(); ++i)
+    {
+        if (members[i].isObject() && getStringId(members[i], "userid") == userid)
+            return true;
+    }
+    return false;
+}
+
+int64_t GroupProtocol::joinTipInviterForRequest(int source, int64_t recommender)
+{
+    if (recommender <= 0)
+        return 0;
+    //好友邀请与扫码 / 链接两种来源的推荐人都是把人带进群的那个人；本人搜索后申请的没有邀请人
+    if (source == group_join_source_friend || source == group_join_source_qrcode)
+        return recommender;
+    return 0;
+}
+
+GroupHistoryBound GroupProtocol::computeHistoryBound(int role, int newseehistory, int64_t jointime,
+                                                     int64_t historyfrom)
+{
+    GroupHistoryBound bound;
+    //群主与管理员不受限：两个下界都保持 0
+    if (role >= group_role_admin)
+        return bound;
+
+    if (newseehistory == 0)
+        bound.m_minCreateTime = jointime;
+    bound.m_minMsgId = historyfrom;
+    return bound;
+}
+
+bool GroupProtocol::canMentionAll(int atallscope, int role)
+{
+    //群主与管理员不受群设置限制
+    if (role >= group_role_admin)
+        return true;
+    //普通成员：群设为「仅群主和管理员」时不可；其余取值（目前只有「所有人」）都可以
+    return atallscope != group_at_all_owner_admin;
+}
+
+std::string GroupProtocol::buildInviteToGroupResponse(int code, const std::string& msg, int added, int invited,
+                                                      int pending)
+{
+    Json::Value root;
+    root["code"]    = code;
+    root["msg"]     = msg;
+    root["added"]   = added;
+    root["invited"] = invited;
+    root["pending"] = pending;
+    return writeCompact(root);
 }
 
 bool GroupProtocol::isMuteExpired(int muted, int64_t muteUntil, int64_t nowMs)
@@ -679,6 +907,19 @@ bool GroupProtocol::parseGroupMembersOpRequest(const std::string& json, GroupMem
     }
     if (req.userids.empty())
         return false;
+
+    //historylimit 只有邀请用到，可缺省；带了就必须是整数且在 [-1, kInviteHistoryLimitMax] 之内
+    //（docs/邀请入群方案.md §4.2），否则整条请求判为非法，免得把一个看不懂的值当成「全部」悄悄放过
+    if (root.isMember("historylimit"))
+    {
+        const Json::Value& v = root["historylimit"];
+        if (!v.isInt())
+            return false;
+        const int limit = v.asInt();
+        if (limit < kInviteHistoryLimitAll || limit > kInviteHistoryLimitMax)
+            return false;
+        req.historylimit = limit;
+    }
     return true;
 }
 
@@ -736,6 +977,18 @@ std::string GroupProtocol::buildJoinGroupRequestNotify(const GroupJoinRequestRec
     //来源与推荐人（群管理功能新增），供审批界面显示"来源：好友邀请（张三）"
     root["source"]         = item.source;
     root["recommender"]    = std::to_string(item.recommender);
+    return writeCompact(root);
+}
+
+std::string GroupProtocol::buildJoinRequestHandledNotify(int64_t groupid, int64_t requestid, int status,
+                                                         int64_t handler, const std::string& handlerName)
+{
+    Json::Value root;
+    root["groupid"]     = std::to_string(groupid);
+    root["requestid"]   = std::to_string(requestid);
+    root["status"]      = status;
+    root["handler"]     = std::to_string(handler);
+    root["handlername"] = handlerName;
     return writeCompact(root);
 }
 
@@ -845,4 +1098,101 @@ bool GroupProtocol::parseTransferOwnerRequest(const std::string& json,
 
     userid = getStringId(root, "userid");
     return userid > 0;
+}
+
+bool GroupProtocol::parseSetGroupFollowRequest(const std::string& json, GroupFollowList& out)
+{
+    out = GroupFollowList();
+
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    out.groupid = getStringId(root, "groupid");
+    if (out.groupid <= 0)
+        return false;
+
+    //targets 必须出现且为数组；清空名单时传空数组，不能省略这个字段
+    const Json::Value& arr = root["targets"];
+    if (!arr.isArray())
+        return false;
+
+    std::set<int32_t> seen;
+    for (Json::ArrayIndex i = 0; i < arr.size(); ++i)
+    {
+        int64_t id = 0;
+        if (arr[i].isString())
+            id = static_cast<int64_t>(atoll(arr[i].asString().c_str()));
+        else if (arr[i].isInt())
+            id = arr[i].asInt();
+
+        //userid 是 int32 范围的正数；非法元素整单拒绝，不悄悄丢掉
+        if (id <= 0 || id > std::numeric_limits<int32_t>::max())
+            return false;
+
+        const int32_t userid = static_cast<int32_t>(id);
+        if (seen.insert(userid).second)
+            out.targets.push_back(userid);
+    }
+    return true;
+}
+
+std::string GroupProtocol::buildGroupFollowChangedNotify(const GroupFollowList& list)
+{
+    Json::Value root;
+    root["groupid"] = std::to_string(list.groupid);
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < list.targets.size(); ++i)
+        arr.append(std::to_string(list.targets[i]));
+    root["targets"] = arr;
+    return writeCompact(root);
+}
+
+bool GroupProtocol::parseSetMustReadRequest(const std::string& json, int64_t& groupid, int64_t& announcementId)
+{
+    groupid = 0;
+    announcementId = 0;
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    groupid = getStringId(root, "groupid");
+    if (groupid <= 0)
+        return false;
+
+    //公告ID 按字符串写；也接受整数。缺省或 0 表示取消
+    if (root["announcementid"].isString())
+        announcementId = static_cast<int64_t>(atoll(root["announcementid"].asString().c_str()));
+    else if (root["announcementid"].isIntegral())
+        announcementId = root["announcementid"].asInt64();
+    return announcementId >= 0;
+}
+
+std::string GroupProtocol::buildGetMustReadResponse(int code, const std::string& msg, int64_t groupid,
+                                                    int64_t mustreadid, bool pending,
+                                                    const GroupAnnouncementRecord* item)
+{
+    Json::Value root;
+    root["code"]       = code;
+    root["msg"]        = msg;
+    root["groupid"]    = std::to_string(groupid);
+    root["mustreadid"] = std::to_string(mustreadid);
+    root["pending"]    = pending;
+    if (item != NULL)
+    {
+        Json::Value jo;
+        fillAnnouncementValue(jo, *item);
+        root["announcement"] = jo;
+    }
+    return writeCompact(root);
+}
+
+std::string GroupProtocol::buildMustReadCardContent(const GroupAnnouncementRecord& item)
+{
+    Json::Value root;
+    if (!parseObject(buildAnnouncementCardContent(item, false), root))
+        return std::string();
+    //客户端据它把卡片标成「入群必读」，点开时按本人是否待确认显示「我已阅读」
+    root["mustread"] = true;
+    return writeCompact(root);
 }

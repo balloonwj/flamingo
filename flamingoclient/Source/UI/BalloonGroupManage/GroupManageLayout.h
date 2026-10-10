@@ -14,6 +14,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>   // CollectPageTexts 的出参
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace balloonwjui { class DuiVBox; }
@@ -34,16 +35,21 @@ enum GmPageId
     kPagePerms     = 1005,   // 群权限
     kPageDanger    = 1006,   // 危险区域
 
-    // 敏感词库管理。这是从群权限页「管理词库」按钮进入的<u>二级</u>界面，
-    // 不出现在左侧导航里 —— 它属于"消息敏感词过滤"这一项的细节，放进导航
-    // 会让六项主功能变成七项、层级也不对。页内左上角有返回群权限的入口。
-    kPageSensitive = 1007,
+    // 1007 曾是群权限页「管理词库」进入的二级界面（群敏感词库）。群级敏感词已于
+    // 2026-10-02 删除、改为企业级词库（docs/敏感词方案.md），该页与 id 一并作废、不再复用。
 
     // 群公告。对照 design/群管理7.png —— 它在左侧导航里<u>自成一个分组</u>
     //（「群公告」组，夹在「成员」组与「设置」组之间），页内是「发布新公告」
     // 表单加「历史公告」列表。仅群主 / 管理员可见；普通成员在群聊窗右侧边栏
     // 的「公告」Tab 里看。
-    kPageAnnouncement = 1008
+    kPageAnnouncement = 1008,
+
+    // 加群链接（docs/邀请入群方案.md §12）：本群仍可用的链接列表，可逐条作废。在「成员」组里，
+    // 仅群主 / 管理员可见
+    kPageLinks = 1009,
+    // 群机器人（docs/机器人方案.md §14.9）：本群的机器人列表与「添加与管理机器人」按钮（打开 FlamingoBot.dll 的群机器人
+    // 管理窗）。在「设置」组里「群权限」之后；只对群主、且企业打开机器人与插件已加载时可见（IsBotsPageVisible）
+    kPageBots = 1010
 };
 
 // =====================================================================
@@ -58,7 +64,7 @@ enum GmEditId
     //优先级的记录后，编辑入口统一收到「群公告」页（kPageAnnouncement），基本信息页
     //只留一行只读摘要，故该 id 作废、不再复用，避免与旧版本的界面语义混淆。
     kIdEditIntro        = 2004,   // 基本信息页：群简介
-    kIdEditSensitiveNew = 2005,    // 管理词库页：新增敏感词输入框
+    //2005 曾是管理词库页的新增敏感词输入框，随群级敏感词删除而作废、不再复用。
     kIdEditAnnounceTitle = 2006,   // 群公告页：新公告标题（单行，必填）
     kIdEditAnnounceBody  = 2007    // 群公告页：新公告正文（多行）
 };
@@ -71,7 +77,9 @@ enum GmCtrlId
     kIdBtnInvite        = 2101,   // 成员管理：邀请成员
     kIdBtnApproveAll    = 2111,   // 加群审批：批量同意
     kIdBtnRejectAll     = 2112,   // 加群审批：批量拒绝
-    kIdSwitchMuteAll    = 2121,   // 禁言管理：全员禁言
+    kIdSwitchMuteAll    = 2121,   // 禁言管理：「仅通知模式」开关（原称全员禁言，协议字段仍是 muteall，docs/群管理接入方案.md §14）
+    kIdNotifyOnlyTitle  = 2123,   // 禁言管理：「仅通知模式」一行的标题（挂悬停提示）
+    kIdNotifyOnlyDesc   = 2124,   // 禁言管理：「仅通知模式」一行的灰色说明（挂悬停提示）
     kIdBtnAddMute       = 2122,   // 禁言管理：添加禁言成员
     kIdBtnCopyGroupNo   = 2131,   // 基本信息：复制群号
     kIdBtnChangeAvatar  = 2132,   // 基本信息：更换头像
@@ -82,11 +90,12 @@ enum GmCtrlId
     kIdSwitchHistory    = 2143,   // 群权限：新成员查看历史消息
     kIdSwitchInvite     = 2144,   // 群权限：成员邀请好友加群
     kIdSwitchWelcome    = 2145,   // 群权限：入群欢迎语
-    kIdSwitchSensitive  = 2146,   // 群权限：消息敏感词过滤
-    kIdBtnSensitiveDict = 2147,   // 群权限：管理词库
+    //2146、2147 曾是群权限页的「消息敏感词过滤」开关与「管理词库」按钮，随群级敏感词
+    //删除而作废、不再复用。
     kIdBtnTransfer      = 2161,   // 危险区域：转让群主
     kIdBtnRemoveAll     = 2162,   // 危险区域：移除全部成员
     kIdBtnDismiss       = 2163,   // 危险区域：解散群聊
+    kIdBtnBotsManage    = 2171,   // 群机器人：「添加与管理机器人」，打开群机器人管理窗
 
     // 加群申请 / 禁言 列表里逐条按钮的 id 基址（实际 id = 基址 + 行号）。
     kIdApprovalAcceptBase = 2200,   // 申请卡「同意」
@@ -102,14 +111,8 @@ enum GmCtrlId
     kIdMemberCardBase     = 2400,
     kIdMemberCardMax      = 2899,
 
-    // ---- 管理词库页 ----
-    kIdBtnSensitiveBack   = 2900,   // 返回群权限
-    kIdBtnSensitiveAdd    = 2901,   // 添加敏感词
-
-    // 逐条词的「删除」按钮 id 基址（实际 id = 基址 + 该词在 m_sensitiveWords
-    // 里的下标）。单群词库按 200 条封顶，故独占 2910~3109。
-    kIdSensitiveDelBase   = 2910,
-    kIdSensitiveDelMax    = 3109,
+    // 2900~3109 曾是管理词库页的「返回」「添加」按钮与逐条词的「删除」按钮，随群级
+    // 敏感词删除而作废、不再复用。
 
     // ---- 群公告页 ----
     kIdChipSeverityNormal    = 3110,   // 优先级 chip：通知
@@ -153,7 +156,25 @@ enum GmCtrlId
 
     // 成员管理页：搜索关键词一个成员也没命中时显示的「没有找到匹配的成员」提示行。
     // 纯展示，给 id 是为了单元测试能判断它是否出现。
-    kIdMemberSearchEmpty     = 3185
+    kIdMemberSearchEmpty     = 3185,
+
+    // 群机器人页：本群还没有机器人时的提示「本群还没有机器人」
+    kIdBotsEmpty             = 3186,
+
+    // 群公告页历史公告的「设为入群必读 / 取消入群必读」按钮 id 基址（实际 id = 基址 + 本页下标，
+    // docs/群公告接入方案.md §14）。一页至多 kAnnouncePageSize（8）条，留 10 个
+    kIdAnnounceMustReadBase  = 3190,
+    kIdAnnounceMustReadMax   = 3199,
+
+    // 加群链接页逐条「作废」按钮的 id 基址（实际 id = 基址 + 该条在 model.m_links 里的下标）。
+    // 本页最多显示 100 条（kGroupLinkRowMax）
+    kIdLinkRevokeBase        = 3200,
+    kIdLinkRevokeMax         = 3299,
+
+    // 群机器人页每个机器人一行的 id 基址（实际 id = 基址 + 该行在 model.m_botRows 里的下标），点了同样打开群机器人管理窗。
+    // 本页最多显示 60 行
+    kIdBotRowBase            = 3300,
+    kIdBotRowMax             = 3359
 };
 
 // =====================================================================
@@ -170,6 +191,12 @@ std::unique_ptr<balloonwjui::DuiControl> BuildHeader(const GroupManageModel& mod
 //   model：数据来源（读取各计数徽章数值）。
 //   返回：导航栏控件。
 std::unique_ptr<balloonwjui::DuiControl> BuildNav(const GroupManageModel& model);
+
+// 量出导航栏把每一项文字都完整显示出来所需的宽度（当前 DPI 下的像素），含导航栏左右内边距。
+// 多语言第 4 期：非简体中文界面下窗口按它与设计宽度取较大值，译文较长时导航栏只增不减。
+//   nav：BuildNav 返回的导航栏，可为空（返回 0）。所有权不转移。
+// @return 所需宽度（像素）。只量不改，无副作用。
+int MeasureNavRequiredWidth(const balloonwjui::DuiControl* nav);
 
 // 构建某一页的内容（放进窗口右侧滚动视口）。
 //   pageId：页面 id，取值见 GmPageId；越界返回空白页。
@@ -217,5 +244,18 @@ SIZE ComputeMinClientSize(int dpi);
 //   workArea：可用的屏幕工作区（像素），调用方须已扣掉窗口非客户区占用的部分。
 //   返回：客户区宽高（像素）。纯函数，无副作用。
 SIZE ComputeInitialClientSize(int dpi, const RECT& workArea);
+
+// 加群申请卡片上验证消息那一行显示的文字（2026-10-08 用户确认）：有内容时加中文引号；为空或只有空白
+// （半角 / 全角空格、制表符、换行）时为「未填写验证消息」，不再显示一对空引号。
+//   message：    申请人填写的验证消息。
+//   placeholder：[出参] 可为 NULL；返回占位文字时置 true，否则置 false（卡片据此改用更浅的灰色）。
+//   返回：这一行的文字。纯函数，无副作用。
+CString RequestMessageLineText(const CString& message, bool* placeholder);
+
+// 收集一棵页面控件树里全部文本控件（本文件内部的 GmText）的文字，按深度优先顺序追加。
+// 各页的文字都由 GmText 绘制、不经 balloonui 的标签控件，单元测试据此核对页面上实际显示的文字。
+//   root：起点控件（借用，可为 NULL）。
+//   out： [出参] 文字列表，只追加、不清空。
+void CollectPageTexts(const balloonwjui::DuiControl* root, std::vector<CString>& out);
 
 } // namespace balloongroupmanage

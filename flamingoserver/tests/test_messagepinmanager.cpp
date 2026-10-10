@@ -45,7 +45,7 @@ static void resetPinDb()
 {
     removePinDbFiles();
 
-    //CSqliteManager::init 会把空文件建成完整结构（建表 + 补列 + 建索引与触发器）
+    //CSqliteManager::init 会把空文件建成完整结构（建表 + 建索引与触发器）
     REQUIRE(Singleton<CSqliteManager>::Instance().init(PIN_DB_PATH));
 
     //DbFactory 按 CDbConfig 造连接；MySQL 那四个参数在 SQLite 模式下不参与连接

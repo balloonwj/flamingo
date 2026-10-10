@@ -481,6 +481,196 @@ void ImageTransfer::EnqueueAvatarDownload(const std::string& fileid,
     LOG_INFO("ImageTransfer enqueue avatar download, fileid=%s.", fileid.c_str());
 }
 
+void ImageTransfer::EnqueuePlainUpload(uint32_t requestId, const std::wstring& localPath, HWND notifyWnd,
+                                       UINT notifyMsg)
+{
+    Task task;
+    task.m_kind        = task_plain_upload;
+    task.m_localpath   = localPath;
+    task.m_selfAccount = CurrentUserAccount();
+    task.m_requestId   = requestId;
+    task.m_notifyWnd   = notifyWnd;
+    task.m_notifyMsg   = notifyMsg;
+    {
+        std::lock_guard<std::mutex> guard(m_queueMtx);
+        m_queue.push_back(task);
+    }
+    m_queueCv.notify_one();
+    LOG_INFO("ImageTransfer enqueue plain upload, request=%u.", requestId);
+}
+
+void ImageTransfer::EnqueuePlainDownload(uint32_t requestId, const std::string& fileid, const std::string& md5,
+                                         HWND notifyWnd, UINT notifyMsg)
+{
+    Task task;
+    task.m_kind        = task_plain_download;
+    task.m_fileid      = fileid;
+    task.m_expectMd5   = md5;
+    task.m_selfAccount = CurrentUserAccount();
+    task.m_requestId   = requestId;
+    task.m_notifyWnd   = notifyWnd;
+    task.m_notifyMsg   = notifyMsg;
+    //缓存里已有（按内容 MD5 命名）：直接投递成功，不下载
+    if (!md5.empty())
+    {
+        std::wstring cached = buildImageCachePath(task.m_selfAccount, md5);
+        if (!cached.empty() && ::GetFileAttributesW(cached.c_str()) != INVALID_FILE_ATTRIBUTES)
+        {
+            PlainTransferResult* r = new PlainTransferResult();
+            r->m_requestId = requestId;
+            r->m_ok = true;
+            r->m_fileid = fileid;
+            r->m_md5 = md5;
+            r->m_localpath = cached;
+            PostPlainResult(task, r);
+            return;
+        }
+    }
+    {
+        std::lock_guard<std::mutex> guard(m_queueMtx);
+        m_queue.push_back(task);
+    }
+    m_queueCv.notify_one();
+    LOG_INFO("ImageTransfer enqueue plain download, request=%u, fileid=%s.", requestId, fileid.c_str());
+}
+
+void ImageTransfer::PostPlainResult(const Task& task, PlainTransferResult* result)
+{
+    if (task.m_notifyWnd != NULL && ::IsWindow(task.m_notifyWnd)
+        && ::PostMessage(task.m_notifyWnd, task.m_notifyMsg, 0, (LPARAM)result))
+        return;
+    delete result;
+}
+
+void ImageTransfer::ProcessPlainUpload(const Task& task)
+{
+    //与 ProcessSend 的上传部分相同（scene=聊天图片），区别是成功后不发消息，而是把结果投递给指定窗口
+    PlainTransferResult* r = new PlainTransferResult();
+    r->m_requestId = task.m_requestId;
+    std::string bytes;
+    if (task.m_selfAccount.empty() || !readWholeFile(task.m_localpath, bytes))
+    {
+        LOG_ERROR("ImageTransfer(plain): read file failed, request=%u.", task.m_requestId);
+        r->m_errcode = error_code_upload_fail;
+        PostPlainResult(task, r);
+        return;
+    }
+    const int64_t size = static_cast<int64_t>(bytes.size());
+    if (size <= 0 || size > kMaxImageBytes)
+    {
+        r->m_errcode = error_code_file_too_large;
+        PostPlainResult(task, r);
+        return;
+    }
+    const std::string md5 = computeMd5Lower(bytes);
+    int width = 0;
+    int height = 0;
+    if (!readImageSize(task.m_localpath, width, height))
+    {
+        LOG_ERROR("ImageTransfer(plain): not a decodable image, request=%u.", task.m_requestId);
+        r->m_errcode = error_code_upload_fail;
+        PostPlainResult(task, r);
+        return;
+    }
+    const std::string ext = extractExtLower(task.m_localpath);
+    uint32_t seq = CIUSocket::GetInstance().RequestUpload(file_scene_image_msg, md5, size, "", ext);
+    RequestUploadResult ru;
+    if (!WaitUploadSignal(seq, ru, kUploadSignalTimeoutSec) || ru.m_code != error_code_ok)
+    {
+        LOG_ERROR("ImageTransfer(plain): request-upload failed, code=%d, request=%u.", ru.m_code, task.m_requestId);
+        r->m_errcode = (ru.m_code != error_code_ok) ? ru.m_code : error_code_upload_fail;
+        PostPlainResult(task, r);
+        return;
+    }
+    if (!ru.m_exists)
+    {
+        if (CIUSocket::GetInstance().IsImgServerClosed() && !CIUSocket::GetInstance().ConnectToImgServer(5))
+        {
+            LOG_ERROR("ImageTransfer(plain): connect imgserver failed, request=%u.", task.m_requestId);
+            r->m_errcode = error_code_upload_fail;
+            PostPlainResult(task, r);
+            return;
+        }
+        ImgSocketUploadTransport transport(ru.m_uploadtoken, this);
+        UploadDriveResult dr = ImageUploadDriver::run(bytes.data(), size, ru.m_chunksize, transport, NULL);
+        CIUSocket::GetInstance().CloseImgServerConnection();
+        if (!dr.m_ok)
+        {
+            LOG_ERROR("ImageTransfer(plain): upload bytes failed, errcode=%d, request=%u.", dr.m_errcode,
+                      task.m_requestId);
+            r->m_errcode = dr.m_errcode;
+            PostPlainResult(task, r);
+            return;
+        }
+    }
+    //写进 ChatImage 缓存：本人刚发的图在帖子里立即可见，不必再下载一遍；写入失败不影响上传结果
+    std::wstring cachePath = buildImageCachePath(task.m_selfAccount, md5);
+    if (cachePath.empty() || !StoreImageToCache(cachePath, bytes))
+        cachePath.clear();
+    r->m_ok = true;
+    r->m_fileid = ru.m_fileid;
+    r->m_md5 = md5;
+    r->m_width = width;
+    r->m_height = height;
+    r->m_size = size;
+    r->m_localpath = cachePath;
+    LOG_INFO("ImageTransfer(plain): uploaded, fileid=%s, %dx%d, size=%lld, request=%u.", ru.m_fileid.c_str(), width,
+             height, (long long)size, task.m_requestId);
+    PostPlainResult(task, r);
+}
+
+void ImageTransfer::ProcessPlainDownload(const Task& task)
+{
+    PlainTransferResult* r = new PlainTransferResult();
+    r->m_requestId = task.m_requestId;
+    r->m_fileid = task.m_fileid;
+    uint32_t seq = CIUSocket::GetInstance().RequestDownload(task.m_fileid);
+    RequestDownloadResult rd;
+    if (!WaitDownloadSignal(seq, rd, kUploadSignalTimeoutSec) || rd.m_code != error_code_ok)
+    {
+        LOG_ERROR("ImageTransfer(plain): request-download failed, code=%d, request=%u.", rd.m_code, task.m_requestId);
+        r->m_errcode = (rd.m_code != error_code_ok) ? rd.m_code : error_code_server_internal;
+        PostPlainResult(task, r);
+        return;
+    }
+    if (CIUSocket::GetInstance().IsImgServerClosed() && !CIUSocket::GetInstance().ConnectToImgServer(5))
+    {
+        r->m_errcode = error_code_server_internal;
+        PostPlainResult(task, r);
+        return;
+    }
+    ImgSocketDownloadTransport transport(rd.m_downloadtoken, this);
+    std::string bytes;
+    DownloadDriveResult dr = ImageDownloadDriver::run(transport, bytes, NULL);
+    CIUSocket::GetInstance().CloseImgServerConnection();
+    if (!dr.m_ok)
+    {
+        r->m_errcode = dr.m_errcode;
+        PostPlainResult(task, r);
+        return;
+    }
+    const std::string actual = computeMd5Lower(bytes);
+    if (!task.m_expectMd5.empty() && actual != task.m_expectMd5)
+    {
+        LOG_ERROR("ImageTransfer(plain): md5 mismatch, request=%u.", task.m_requestId);
+        r->m_errcode = error_code_md5_mismatch;
+        PostPlainResult(task, r);
+        return;
+    }
+    std::wstring cachePath = buildImageCachePath(task.m_selfAccount, actual);
+    if (cachePath.empty() || !StoreImageToCache(cachePath, bytes))
+    {
+        r->m_errcode = error_code_server_internal;
+        PostPlainResult(task, r);
+        return;
+    }
+    r->m_ok = true;
+    r->m_md5 = actual;
+    r->m_size = static_cast<int64_t>(bytes.size());
+    r->m_localpath = cachePath;
+    PostPlainResult(task, r);
+}
+
 void ImageTransfer::WorkerProc()
 {
     while (true)
@@ -501,6 +691,10 @@ void ImageTransfer::WorkerProc()
             ProcessAvatarUpload(task);
         else if (task.m_kind == task_avatar_download)
             ProcessAvatarDownload(task);
+        else if (task.m_kind == task_plain_upload)
+            ProcessPlainUpload(task);
+        else if (task.m_kind == task_plain_download)
+            ProcessPlainDownload(task);
         else
             ProcessSend(task);
     }

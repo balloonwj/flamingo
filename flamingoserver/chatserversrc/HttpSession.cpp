@@ -24,11 +24,25 @@
 #include "ClientVersionManager.h"
 #include "UpdatePackageScanner.h"
 #include "EnterpriseManager.h"
+#include "AccountName.h"   //NormalizeAccountPrefix：企业账号前缀的校验
 #include "DepartmentManager.h"
 #include "DepartmentMsg.h"
 #include "EmployeeManager.h"
 #include "AnnouncementManager.h"
 #include "ServiceAccountManager.h"
+#include "SensitiveWordManager.h"
+#include "SensitiveAdminProtocol.h"
+#include "GroupQaManager.h"          //企业问答的存取（头文件不含 Protocol.h）
+#include "QaAdminProtocol.h"         //企业问答管理接口的纯逻辑
+#include "FileShareAdminService.h"   //文件共享的管理后台接口（头文件不含 Protocol.h）
+#include "FeatureSwitchManager.h"    //改设置后管理员操作日志的说明文字（头文件只依赖标准库）
+#include "CloudRecordService.h"      //读设置时附带云端录像的已用空间（第 27 期 27g）
+#include "AdminLinkServer.h"         //login.do 应答里的 linkport / linkpubkey（头文件不含 Protocol.h）
+#include "BotManager.h"              //机器人的存取（头文件不含 Protocol.h）
+#include "BotRules.h"                //机器人的校验与 JSON 编解码
+#include "BotEngine.h"               //Webhook 与「试一试」
+#include "HttpRequestParse.h"        //GET 目标的解析
+#include <exception>
 
 //被踢下线原因，与 Protocol.h 的 enum kickout_reason 逐条同值。本文件属 AdminApiCodes.h 世界、
 //引不进 Protocol.h（两者的 msg_type / error_code 枚举冲突），而这些值要作为参数交给
@@ -39,6 +53,7 @@
 #define ADMIN_KICKOUT_REASON_ENTERPRISE_DELETED   7
 #define ADMIN_KICKOUT_REASON_ACCOUNT_DELETED      8
 #define ADMIN_KICKOUT_REASON_KICKED_BY_ADMIN      9
+#define ADMIN_KICKOUT_REASON_PASSWORD_RESET       10   //管理员重置了员工密码（kickout_reason_password_reset_by_admin）
 
 //HTTP 头部最大长度，超过仍未出现 \r\n\r\n 视为非法请求。
 #define MAX_HTTP_HEADER_LENGTH   8192
@@ -113,16 +128,14 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
     std::string param;
     if (method == "GET")
     {
-        //GET：参数位于 url 的 ?p= 之后（既有 register.do 等接口）。
-        std::vector<std::string> part;
-        StringUtil::split(target, part, "?");
-        if (part.size() < 2)
+        //GET：参数位于 url 的 ?p= 之后（既有 register.do 等接口）。查询串不合规时直接断开，
+        //不再对它 substr（原先查询串不足两个字符时抛出异常、整个进程退出）
+        if (!httpparse::ParseGetTarget(target, url, param))
         {
+            LOGW("http bad get target from %s", conn->peerAddress().toIpPort().c_str());
             conn->forceClose();
             return;
         }
-        url = part[0];
-        param = part[1].substr(2);   //去掉前导的 "p="
     }
     else if (method == "POST")
     {
@@ -161,9 +174,18 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
         return;
     }
 
-    if (!process(conn, url, param))
+    //处理过程中抛出的任何异常都不能逸出 I/O 线程，否则整个 chatserver 退出
+    try
     {
-        LOGE("handle http request error, url: %s, from: %s", url.c_str(), conn->peerAddress().toIpPort().c_str());
+        if (!process(conn, url, param))
+        {
+            LOGE("handle http request error, url: %s, from: %s", url.c_str(), conn->peerAddress().toIpPort().c_str());
+        }
+    }
+    catch (const std::exception& e)
+    {
+        LOGE("handle http request exception: %s, url: %s, from: %s", e.what(), url.c_str(),
+             conn->peerAddress().toIpPort().c_str());
     }
 
     //短连接，处理完关闭连接
@@ -187,6 +209,13 @@ bool HttpSession::process(const std::shared_ptr<TcpConnection>& conn, const std:
     //admin 控制台接口统一以 /admin/ 开头，单独分发。
     if (url.compare(0, 7, "/admin/") == 0)
         return processAdminRequest(conn, url, param);
+
+    //外部系统经 Webhook 推送机器人消息（docs/机器人方案.md 6.3），凭机器人的 Webhook 令牌、不需要管理员 token
+    if (url == "/bot/webhook.do")
+    {
+        onBotWebhook(param, conn);
+        return true;
+    }
 
     if (url == "/register.do")
     {
@@ -299,6 +328,8 @@ bool HttpSession::processAdminRequest(const std::shared_ptr<TcpConnection>& conn
         onAdminAnnouncementDelete(body, conn);
     else if (url == "/admin/announcement/recall.do")
         onAdminAnnouncementRecall(body, conn);
+    else if (url == "/admin/announcement/repush.do")
+        onAdminAnnouncementRepush(body, conn);
     else if (url == "/admin/announcement/setpinned.do")
         onAdminAnnouncementSetPinned(body, conn);
     else if (url == "/admin/audit/list.do")
@@ -331,6 +362,64 @@ bool HttpSession::processAdminRequest(const std::shared_ptr<TcpConnection>& conn
         onAdminClientVersionUpdate(body, conn);
     else if (url == "/admin/clientversion/setenabled.do")
         onAdminClientVersionSetEnabled(body, conn);
+    else if (url == "/admin/sensitive/list.do")
+        onAdminSensitiveList(body, conn);
+    else if (url == "/admin/sensitive/add.do")
+        onAdminSensitiveAdd(body, conn);
+    else if (url == "/admin/sensitive/update.do")
+        onAdminSensitiveUpdate(body, conn);
+    else if (url == "/admin/sensitive/delete.do")
+        onAdminSensitiveDelete(body, conn);
+    else if (url == "/admin/sensitive/import.do")
+        onAdminSensitiveImport(body, conn);
+    else if (url == "/admin/sensitive/export.do")
+        onAdminSensitiveExport(body, conn);
+    else if (url == "/admin/sensitive/setenabled.do")
+        onAdminSensitiveSetEnabled(body, conn);
+    else if (url == "/admin/sensitive/hits.do")
+        onAdminSensitiveHits(body, conn);
+    else if (url == "/admin/qa/list.do")
+        onAdminQaList(body, conn);
+    else if (url == "/admin/qa/add.do")
+        onAdminQaAdd(body, conn);
+    else if (url == "/admin/qa/update.do")
+        onAdminQaUpdate(body, conn);
+    else if (url == "/admin/qa/delete.do")
+        onAdminQaDelete(body, conn);
+    else if (url == "/admin/qa/groups.do")
+        onAdminQaGroups(body, conn);
+    else if (url == "/admin/bot/list.do")
+        onAdminBotList(body, conn);
+    else if (url == "/admin/bot/detail.do")
+        onAdminBotDetail(body, conn);
+    else if (url == "/admin/bot/save.do")
+        onAdminBotSave(body, conn);
+    else if (url == "/admin/bot/delete.do")
+        onAdminBotDelete(body, conn);
+    else if (url == "/admin/bot/setstatus.do")
+        onAdminBotSetStatus(body, conn);
+    else if (url == "/admin/bot/groups.do")
+        onAdminBotGroups(body, conn);
+    else if (url == "/admin/bot/try.do")
+        onAdminBotTry(body, conn);
+    else if (url == "/admin/bot/resettoken.do")
+        onAdminBotResetToken(body, conn);
+    else if (url == "/admin/bot/domains.do")
+        onAdminBotDomains(body, conn);
+    else if (url == "/admin/bot/setdomains.do")
+        onAdminBotSetDomains(body, conn);
+    else if (url == "/admin/setting/get.do")
+        onAdminSettingGet(body, conn);
+    else if (url == "/admin/setting/set.do")
+        onAdminSettingSet(body, conn);
+    else if (url == "/admin/fileshare/list.do")
+        onAdminFileShareList(body, conn);
+    else if (url == "/admin/fileshare/members.do")
+        onAdminFileShareMembers(body, conn);
+    else if (url == "/admin/fileshare/cancel.do")
+        onAdminFileShareCancel(body, conn);
+    else if (url == "/admin/fileshare/audit.do")
+        onAdminFileShareAudit(body, conn);
     else
         sendAdminResult(conn, error_code_unknown, "admin endpoint not implemented yet");
 
@@ -432,8 +521,17 @@ void HttpSession::onAdminLogin(const std::string& body, const std::shared_ptr<Tc
     a["email"] = admin.email;
     a["enterpriseid"] = static_cast<Json::Int64>(admin.enterpriseid);
     resp["admin"] = a;
+
+    //管理控制台长连接（FlamingoLink.dll，docs/FlamingoLink方案.md 5.5）：管理端口与服务端身份公钥。
+    //端口为 0 表示服务器未开启管理端口；公钥为空表示未开启协议加密，控制台据此跳过握手
+    int linkPort = 0;
+    std::string linkPubkey;
+    Singleton<AdminLinkServer>::Instance().getLoginLinkInfo(linkPort, linkPubkey);
+    resp["linkport"] = linkPort;
+    resp["linkpubkey"] = linkPubkey;
+
     sendJsonResponse(conn, DumpJson(resp));
-    LOGI("admin login ok, email: %s, adminid: %lld", email.c_str(), (long long)admin.adminid);
+    LOGI("admin login ok, email: %s, adminid: %lld, linkport: %d", email.c_str(), (long long)admin.adminid, linkPort);
 }
 
 void HttpSession::onAdminLogout(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -683,6 +781,8 @@ static Json::Value EnterpriseToJson(const EnterpriseInfo& e)
     je["rootdeptid"]        = static_cast<Json::Int64>(e.rootDeptId);
     je["members"]           = e.memberCount;
     je["depts"]             = e.deptCount;
+    //新建账号的前缀（大写）；空串表示没设、按默认的 EMP 生成（2026-10-06）
+    je["accountprefix"]     = e.accountPrefix;
     return je;
 }
 
@@ -708,14 +808,20 @@ void HttpSession::onAdminEnterpriseList(const std::string& body, const std::shar
         return;
     }
 
-    std::string keyword = JStr(root, "keyword");
-    int32_t status = static_cast<int32_t>(JInt(root, "status", -1));
+    //关键字与状态之外的三项筛选（行业、套餐、开通起止日期）均为可选，不带即不限。
+    EnterpriseListFilter filter;
+    filter.keyword  = JStr(root, "keyword");
+    filter.status   = static_cast<int32_t>(JInt(root, "status", -1));
+    filter.industry = JStr(root, "industry");
+    filter.plan     = static_cast<int32_t>(JInt(root, "plan", -1));
+    filter.openFrom = JStr(root, "openfrom");
+    filter.openTo   = JStr(root, "opento");
     int32_t page = static_cast<int32_t>(JInt(root, "page", 1));
     int32_t pageSize = static_cast<int32_t>(JInt(root, "pagesize", 20));
 
     int32_t total = 0;
     std::vector<EnterpriseInfo> list;
-    Singleton<EnterpriseManager>::Instance().listEnterprises(keyword, status, page, pageSize, total, list);
+    Singleton<EnterpriseManager>::Instance().listEnterprises(filter, page, pageSize, total, list);
 
     Json::Value resp;
     resp["code"] = 0;
@@ -742,14 +848,13 @@ void HttpSession::onAdminEnterpriseDetail(const std::string& body, const std::sh
         sendAdminResult(conn, error_code_notlogin, "not login or token expired");
         return;
     }
-    if (admin.enterpriseid != 0)
-    {
-        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
-        return;
-    }
+    //企业管理员只能读本企业：请求里的 enterpriseid 一律改写为其所属企业（与敏感词接口的
+    //做法一致），控制台据此直接打开本企业详情；平台超管按请求里的 enterpriseid 读。
+    const int64_t enterpriseId = (admin.enterpriseid != 0) ? admin.enterpriseid
+                                                           : JInt(root, "enterpriseid", 0);
 
     EnterpriseInfo info;
-    if (!Singleton<EnterpriseManager>::Instance().getEnterprise(JInt(root, "enterpriseid", 0), info))
+    if (!Singleton<EnterpriseManager>::Instance().getEnterprise(enterpriseId, info))
     {
         sendAdminResult(conn, error_code_unknown, "enterprise not found");
         return;
@@ -846,7 +951,22 @@ void HttpSession::onAdminEnterpriseUpdate(const std::string& body, const std::sh
     req.region    = JStr(root, "region");
     req.plan      = static_cast<int32_t>(JInt(root, "plan", 0));
 
+    //账号前缀（2026-10-06）带了才改：老版本控制台不带这个字段，不能因此把已设的前缀清空。
+    //先校验再改别的字段，前缀不合格时整个请求不生效
+    const bool hasPrefix = root.isMember("accountprefix") && root["accountprefix"].isString();
+    const std::string rawPrefix = hasPrefix ? root["accountprefix"].asString() : std::string();
+    std::string normalizedPrefix;
+    if (hasPrefix && !NormalizeAccountPrefix(rawPrefix, normalizedPrefix))
+    {
+        LOGE("onAdminEnterpriseUpdate: invalid account prefix '%s', enterpriseid: %lld",
+             rawPrefix.c_str(), (long long)req.enterpriseId);
+        sendAdminResult(conn, error_code_account_prefix_invalid, "invalid account prefix");
+        return;
+    }
+
     int32_t code = Singleton<EnterpriseManager>::Instance().updateEnterprise(req);
+    if (code == error_code_ok && hasPrefix)
+        code = Singleton<EnterpriseManager>::Instance().setAccountPrefix(req.enterpriseId, rawPrefix);
     if (code == error_code_ok)
     {
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
@@ -861,6 +981,8 @@ void HttpSession::onAdminEnterpriseUpdate(const std::string& body, const std::sh
     const char* failMsg = "update enterprise failed";
     if (code == error_code_enterprise_nameexist)
         failMsg = "enterprise name already exists";
+    else if (code == error_code_account_prefix_invalid)
+        failMsg = "invalid account prefix";
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : failMsg);
 }
 
@@ -927,10 +1049,16 @@ void HttpSession::onAdminEnterpriseExport(const std::string& body, const std::sh
         return;
     }
 
-    std::string keyword = JStr(root, "keyword");
-    int32_t status = static_cast<int32_t>(JInt(root, "status", -1));
+    //导出与列表使用同一组筛选条件，界面上筛完再导出得到的就是看到的那些企业。
+    EnterpriseListFilter filter;
+    filter.keyword  = JStr(root, "keyword");
+    filter.status   = static_cast<int32_t>(JInt(root, "status", -1));
+    filter.industry = JStr(root, "industry");
+    filter.plan     = static_cast<int32_t>(JInt(root, "plan", -1));
+    filter.openFrom = JStr(root, "openfrom");
+    filter.openTo   = JStr(root, "opento");
     std::string csv;
-    Singleton<EnterpriseManager>::Instance().exportEnterprisesCsv(keyword, status, csv);
+    Singleton<EnterpriseManager>::Instance().exportEnterprisesCsv(filter, csv);
 
     //CSV 应答，Content-Type 用 text/csv。
     std::string response;
@@ -974,6 +1102,8 @@ void HttpSession::onAdminEnterpriseDelete(const std::string& body, const std::sh
              (long long)entId, kicked);
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), entId, "enterprise.delete", "-", 2, u8"硬删除企业");
+        //企业的全部机器人数据一并删除（docs/机器人方案.md §5.5）
+        Singleton<BotManager>::Instance().onEnterpriseDeleted(entId);
     }
     else
     {
@@ -1628,6 +1758,8 @@ void HttpSession::onAdminUserCreate(const std::string& body, const std::shared_p
     req.email        = JStr(root, "email");
     req.phone        = JStr(root, "phone");
     req.joinDate     = JStr(root, "joindate");
+    //性别可选，不带时按「保密」（0）建；取值合法性由 EmployeeManager::createEmployee 校验
+    req.gender       = static_cast<int32_t>(JInt(root, "gender", 0));
 
     //未指定部门时落到该企业的公司根部门，语义即"直接挂在公司下"。
     //这里必须给出确定的挂载部门：历史实现在 deptid 为 0 时会静默跳过下面的入部门
@@ -1736,6 +1868,9 @@ void HttpSession::onAdminUserUpdate(const std::string& body, const std::shared_p
     req.phone       = JStr(root, "phone");
     req.email       = JStr(root, "email");
     req.signature   = JStr(root, "signature");
+    //性别可选：带了就改（合法性由 EmployeeManager::updateEmployee 校验），没带（老版本控制台）保持原值
+    req.gender      = root.isMember("gender") ? static_cast<int32_t>(JInt(root, "gender", 0))
+                                              : EMPLOYEE_GENDER_KEEP;
 
     int32_t code = empMgr.updateEmployee(req);
     if (code == error_code_ok)
@@ -1831,6 +1966,8 @@ void HttpSession::onAdminUserDelete(const std::string& body, const std::shared_p
         KickUserSessions(userId, 0, ADMIN_KICKOUT_REASON_ACCOUNT_DELETED);
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), empEnt, "user.delete", "-", 2, u8"删除员工");
+        //该员工的个人机器人（含自动回复）一并软删除
+        Singleton<BotManager>::Instance().onUserDeleted(userId, Timestamp::now().microSecondsSinceEpoch() / 1000);
         //成员已移出企业，通知该企业在线 IM 客户端刷新通讯录
         Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
             empEnt, dept::org_change_member, 0);
@@ -2078,6 +2215,12 @@ void HttpSession::onAdminUserResetPassword(const std::string& body, const std::s
         return;
     }
 
+    //旧密码已失效：踢掉该员工全部在线设备，客户端提示密码已被管理员重置、须用新密码重新登录
+    //（2026-10-07 起，与短信找回密码 ChatSession::onResetPassword 一致；此前已登录的设备会继续可用）
+    int32_t kicked = KickUserSessions(userId, 0, ADMIN_KICKOUT_REASON_PASSWORD_RESET);
+    LOGI("admin reset password, userid: %lld, adminid: %lld, kicked sessions: %d",
+         (long long)userId, (long long)admin.adminid, kicked);
+
     Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
         conn->peerAddress().toIpPort(), empEnt, "user.resetpassword", "-", 2, u8"重置员工密码");
 
@@ -2085,6 +2228,7 @@ void HttpSession::onAdminUserResetPassword(const std::string& body, const std::s
     resp["code"] = 0;
     resp["msg"] = "ok";
     resp["newpassword"] = newPwd;
+    resp["kicked"] = kicked;   //因密码重置而下线的会话数
     sendJsonResponse(conn, DumpJson(resp));
 }
 
@@ -2454,7 +2598,7 @@ void HttpSession::onAdminAnnouncementSend(const std::string& body, const std::sh
             conn->peerAddress().toIpPort(), 0, "announcement.send",
             scheduled ? "scheduled" : "now", 1, u8"发布公告");
 
-        //立即发布：把新公告推给在线受众，他们的「消息盒子」即时亮起角标。
+        //立即发布：把新公告推给在线受众，他们的「公告中心」即时亮起角标。
         //定时发布这里<u>不</u>推 —— 此刻公告仍是草稿状态，要等后台调度器到点把它转为
         //已发布时才推（见 main.cpp 里注册的定时公告调度器）。
         if (!scheduled)
@@ -2524,6 +2668,52 @@ void HttpSession::onAdminAnnouncementRecall(const std::string& body, const std::
             conn->peerAddress().toIpPort(), 0, "announcement.recall", "-", 1, u8"撤回公告");
     }
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : "recall announcement failed");
+}
+
+void HttpSession::onAdminAnnouncementRepush(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    //公告中心只对平台超管开放，与发布、撤回一致。
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    int64_t annId = JInt(root, "announcementid", 0);
+    //在线名单与 v2 推送报文都在 ChatServer 一侧，由它筛人并推送；这里只回结果与写审计。
+    int32_t pushed = 0;
+    int32_t code = Singleton<ChatServer>::Instance().repushAnnouncement(annId, pushed);
+    if (code != error_code_ok)
+    {
+        LOGI("admin repush announcement rejected, announcementid: %lld, code: %d",
+             (long long)annId, code);
+        sendAdminResult(conn, code, code == error_code_announcement_notpublished
+                                        ? "announcement not published" : "repush announcement failed");
+        return;
+    }
+
+    const std::string detail = std::string(u8"重新推送公告，推送给 ") + std::to_string(pushed)
+                             + u8" 名在线未读成员";
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), 0, "announcement.repush", std::to_string(annId), 0, detail);
+
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["pushed"] = pushed;
+    sendJsonResponse(conn, DumpJson(resp));
 }
 
 void HttpSession::onAdminAnnouncementSetPinned(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2821,6 +3011,12 @@ void HttpSession::onAdminServiceSave(const std::string& body, const std::shared_
     req.description      = JStr(root, "description");
     req.avatarColor      = JStr(root, "avatarcolor");
     req.allowUnsubscribe = JBool(root, "allowunsubscribe") ? 1 : 0;
+    if (!isValidServiceKind(req.kind))
+    {
+        LOGE("save service failed: invalid kind %d, adminid: %lld", req.kind, (long long)admin.adminid);
+        sendAdminResult(conn, error_code_unknown, "invalid kind");
+        return;
+    }
 
     ServiceAccountManager& svcMgr = Singleton<ServiceAccountManager>::Instance();
     if (req.serviceId == 0)
@@ -3311,9 +3507,13 @@ void HttpSession::onAdminClientVersionUpdate(const std::string& body,
         return;
     }
 
+    //forced 字段可选：带了就按它改「强制升级」，没带（老版本控制台）就保持原值。
+    const int32_t forced = root.isMember("forced")
+                               ? (JBool(root, "forced") ? 1 : 0)
+                               : CLIENT_VERSION_FORCED_KEEP;
     int errorCode = 0;
     if (!Singleton<ClientVersionManager>::Instance().updateVersion(
-            id, JStr(root, "minversion"), JStr(root, "releasenote"), errorCode))
+            id, JStr(root, "minversion"), JStr(root, "releasenote"), forced, errorCode))
     {
         LOGE("update client version failed, id: %lld, manager errorcode: %d",
              (long long)id, errorCode);
@@ -3381,3 +3581,1249 @@ void HttpSession::onAdminClientVersionSetEnabled(const std::string& body,
     sendAdminResult(conn, 0, "ok");
 }
 
+
+// ====================================================================
+// admin 控制台接口处理器（敏感词模块，/admin/sensitive/*.do）
+// ====================================================================
+//
+//八个接口共用一条流水线：解析请求体 → 校验令牌 → 确定企业（企业管理员一律是本企业，平台超级
+//管理员须在请求里用 enterpriseid 指定）→ 调 SensitiveWordManager → 写审计 → 回包。其中不碰网络
+//与数据库的部分（结果码换算、企业范围、数组解析、应答拼装）在 SensitiveAdminProtocol 里，那里有
+//单元测试。方案见 docs/敏感词方案.md 第 6.7 节。
+
+//敏感词模块审计记录的严重程度：普通写操作为 1，删除为 2，与其它模块同一口径。
+static const int kSensitiveAuditWriteSeverity  = 1;
+static const int kSensitiveAuditDeleteSeverity = 2;
+
+//解析请求体、校验令牌并确定本次操作的企业。
+//  body：        请求体
+//  root：        [出参] 解析出的 JSON
+//  admin：       [出参] 令牌对应的管理员
+//  enterpriseId：[出参] 本次操作的企业ID
+//  failMsg：     [出参] 失败时回给管理端的描述
+//@return error_code_ok 表示可以继续；否则为回给管理端的错误码
+static int32_t PrepareSensitiveRequest(const std::string& body, Json::Value& root, AdminInfo& admin,
+                                       int64_t& enterpriseId, const char*& failMsg)
+{
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        failMsg = "invalid request body";
+        return error_code_unknown;
+    }
+    if (!AdminCheckToken(root, admin))
+    {
+        failMsg = "not login or token expired";
+        return error_code_notlogin;
+    }
+    if (!sensitiveadmin::ResolveEnterprise(admin.enterpriseid, JInt(root, "enterpriseid", 0), enterpriseId))
+    {
+        failMsg = "enterpriseid required";
+        return error_code_unknown;
+    }
+    return error_code_ok;
+}
+
+//当前时间，Unix 毫秒。
+static int64_t SensitiveNowMs()
+{
+    return Timestamp::now().microSecondsSinceEpoch() / 1000;
+}
+
+void HttpSession::onAdminSensitiveList(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    SensitiveWordManager& mgr = Singleton<SensitiveWordManager>::Instance();
+    //先读总开关：企业不存在时它会失败，顺便拦下平台超管填错的企业ID
+    bool enabled = false;
+    if (!mgr.getEnabled(enterpriseId, enabled))
+    {
+        sendAdminResult(conn, error_code_unknown, "enterprise not found");
+        return;
+    }
+
+    SensitiveWordQuery query;
+    query.m_enterpriseId = enterpriseId;
+    query.m_keyword = JStr(root, "keyword");
+    query.m_category = static_cast<int>(JInt(root, "category", 0));
+    query.m_page = static_cast<int>(JInt(root, "page", 1));
+    query.m_pageSize = static_cast<int>(JInt(root, "pagesize", chatserver::SENSITIVE_DEFAULT_PAGE_SIZE));
+    std::vector<SensitiveWordRecord> words;
+    int total = 0;
+    int wordCount = 0;
+    if (!mgr.listWords(query, words, total) || !mgr.countWords(enterpriseId, wordCount))
+    {
+        sendAdminResult(conn, error_code_unknown, "list sensitive words failed");
+        return;
+    }
+
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["total"] = total;
+    resp["enabled"] = enabled ? 1 : 0;
+    resp["wordcount"] = wordCount;
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < words.size(); ++i)
+        arr.append(sensitiveadmin::WordToJson(words[i]));
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminSensitiveAdd(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    int64_t newId = 0;
+    const int op = Singleton<SensitiveWordManager>::Instance().addWord(
+        enterpriseId, JStr(root, "word"),
+        static_cast<int>(JInt(root, "category", chatserver::sensitive_category_other)),
+        JStr(root, "remark"), admin.adminid, admin.name, SensitiveNowMs(), &newId);
+    const int32_t code = sensitiveadmin::ToAdminCode(op);
+    if (code != error_code_ok)
+    {
+        sendAdminResult(conn, code, "add sensitive word failed");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), enterpriseId, "sensitive.add",
+        std::to_string(static_cast<long long>(newId)), kSensitiveAuditWriteSeverity, u8"添加敏感词");
+
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["id"] = static_cast<Json::Int64>(newId);
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminSensitiveUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    const int64_t id = JInt(root, "id", 0);
+    const int op = Singleton<SensitiveWordManager>::Instance().updateWord(
+        enterpriseId, id, JStr(root, "word"),
+        static_cast<int>(JInt(root, "category", chatserver::sensitive_category_other)),
+        JStr(root, "remark"), SensitiveNowMs());
+    const int32_t code = sensitiveadmin::ToAdminCode(op);
+    if (code != error_code_ok)
+    {
+        sendAdminResult(conn, code, "update sensitive word failed");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), enterpriseId, "sensitive.update",
+        std::to_string(static_cast<long long>(id)), kSensitiveAuditWriteSeverity, u8"修改敏感词");
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onAdminSensitiveDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    std::vector<int64_t> ids;
+    if (!sensitiveadmin::ParseIds(root["ids"], static_cast<size_t>(chatserver::SENSITIVE_DELETE_MAX_IDS), ids))
+    {
+        sendAdminResult(conn, error_code_unknown, "ids must be a non-empty array of at most 500 ids");
+        return;
+    }
+
+    int deleted = 0;
+    if (!Singleton<SensitiveWordManager>::Instance().deleteWords(enterpriseId, ids, deleted))
+    {
+        sendAdminResult(conn, error_code_unknown, "delete sensitive words failed");
+        return;
+    }
+
+    if (deleted > 0)
+    {
+        Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+            conn->peerAddress().toIpPort(), enterpriseId, "sensitive.delete",
+            std::to_string(deleted), kSensitiveAuditDeleteSeverity, u8"删除敏感词");
+    }
+
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["deleted"] = deleted;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminSensitiveImport(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    std::vector<std::string> lines;
+    if (!sensitiveadmin::ParseLines(root["lines"], static_cast<size_t>(chatserver::SENSITIVE_IMPORT_MAX_LINES), lines))
+    {
+        sendAdminResult(conn, error_code_unknown, "lines must be a non-empty array of at most 1000 strings");
+        return;
+    }
+
+    int added = 0;
+    std::vector<SensitiveImportSkip> skipped;
+    if (!Singleton<SensitiveWordManager>::Instance().importWords(
+            enterpriseId, lines,
+            static_cast<int>(JInt(root, "category", chatserver::sensitive_category_other)),
+            admin.adminid, admin.name, SensitiveNowMs(), added, skipped))
+    {
+        sendAdminResult(conn, error_code_unknown, "import sensitive words failed");
+        return;
+    }
+
+    if (added > 0)
+    {
+        const std::string detail = std::string(u8"导入敏感词：成功 ") + std::to_string(added)
+                                 + u8" 条，跳过 " + std::to_string(skipped.size()) + u8" 条";
+        Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+            conn->peerAddress().toIpPort(), enterpriseId, "sensitive.import",
+            std::to_string(added), kSensitiveAuditWriteSeverity, detail);
+    }
+    sendJsonResponse(conn, DumpJson(sensitiveadmin::ImportResultToJson(added, skipped)));
+}
+
+void HttpSession::onAdminSensitiveExport(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    std::string text;
+    if (!Singleton<SensitiveWordManager>::Instance().exportWords(enterpriseId, text))
+    {
+        sendAdminResult(conn, error_code_unknown, "export sensitive words failed");
+        return;
+    }
+
+    //纯文本应答，每行一条：词条<Tab>分类名<Tab>备注，可原样再导入
+    std::string response;
+    makeupResponse(text, response, "text/plain;charset=utf-8");
+    conn->send(response);
+}
+
+void HttpSession::onAdminSensitiveSetEnabled(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    //enabled 接受布尔或整数（非 0 为启用）；缺字段时拒绝，免得误把开关关掉
+    bool enabled = false;
+    if (root["enabled"].isBool())
+        enabled = root["enabled"].asBool();
+    else if (root["enabled"].isIntegral())
+        enabled = (root["enabled"].asInt64() != 0);
+    else
+    {
+        sendAdminResult(conn, error_code_unknown, "enabled required");
+        return;
+    }
+
+    if (!Singleton<SensitiveWordManager>::Instance().setEnabled(enterpriseId, enabled))
+    {
+        sendAdminResult(conn, error_code_unknown, "enterprise not found");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), enterpriseId, "sensitive.setenabled",
+        enabled ? "1" : "0", kSensitiveAuditWriteSeverity,
+        enabled ? u8"启用敏感词过滤" : u8"暂停敏感词过滤");
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onAdminSensitiveHits(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+
+    SensitiveHitQuery query;
+    query.m_enterpriseId = enterpriseId;
+    query.m_beginTime = JInt(root, "begintime", 0);
+    query.m_endTime = JInt(root, "endtime", 0);
+    query.m_keyword = JStr(root, "keyword");
+    query.m_source = static_cast<int>(JInt(root, "source", 0));
+    query.m_category = static_cast<int>(JInt(root, "category", 0));
+    query.m_page = static_cast<int>(JInt(root, "page", 1));
+    query.m_pageSize = static_cast<int>(JInt(root, "pagesize", chatserver::SENSITIVE_DEFAULT_PAGE_SIZE));
+    std::vector<SensitiveHitRecord> hits;
+    int total = 0;
+    if (!Singleton<SensitiveWordManager>::Instance().listHits(query, hits, total))
+    {
+        sendAdminResult(conn, error_code_unknown, "list sensitive hits failed");
+        return;
+    }
+
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["total"] = total;
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < hits.size(); ++i)
+        arr.append(sensitiveadmin::HitToJson(hits[i]));
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+//==================== 文件共享（docs/文件共享方案.md 6.5，第 3 期第 3 步）====================
+
+//写管理员操作日志的级别：改功能设置为警告（影响整个企业），强制取消共享为危险
+static const int kFileShareAuditSettingSeverity = 1;
+static const int kFileShareAuditCancelSeverity  = 2;
+
+//把文件共享业务层的结果码换成管理端错误码与诊断信息
+static void FileShareAdminResultToCode(int rc, int32_t& code, const char*& msg)
+{
+    switch (rc)
+    {
+    //成功
+    case fileshareadmin::file_share_admin_ok:
+        code = error_code_ok;
+        msg = "ok";
+        break;
+    //请求参数不对
+    case fileshareadmin::file_share_admin_bad_request:
+        code = error_code_feature_setting_invalid;
+        msg = "invalid parameter";
+        break;
+    //共享不存在
+    case fileshareadmin::file_share_admin_not_found:
+        code = error_code_fileshare_notexist;
+        msg = "share not exist";
+        break;
+    //共享已经取消过
+    case fileshareadmin::file_share_admin_canceled:
+        code = error_code_fileshare_canceled;
+        msg = "share already canceled";
+        break;
+    //不在企业管理员的范围内
+    case fileshareadmin::file_share_admin_denied:
+        code = error_code_fileshare_denied;
+        msg = "share belongs to another enterprise";
+        break;
+    //数据库失败与不认识的取值
+    default:
+        code = error_code_unknown;
+        msg = "database error";
+        break;
+    }
+}
+
+//解析请求、校验令牌：失败时已回包，返回 false
+bool HttpSession::prepareFileShareRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn,
+                                          Json::Value& root, AdminInfo& admin)
+{
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return false;
+    }
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return false;
+    }
+    return true;
+}
+
+//业务结果回包：成功时把应答主体并上 code 与 msg，失败时只回 code 与 msg
+void HttpSession::sendFileShareResult(const std::shared_ptr<TcpConnection>& conn, int rc, Json::Value& out)
+{
+    int32_t code = error_code_ok;
+    const char* msg = "";
+    FileShareAdminResultToCode(rc, code, msg);
+    if (code != error_code_ok)
+    {
+        sendAdminResult(conn, code, msg);
+        return;
+    }
+    if (!out.isObject())
+        out = Json::Value(Json::objectValue);
+    out["code"] = error_code_ok;
+    out["msg"] = "ok";
+    sendJsonResponse(conn, DumpJson(out));
+}
+
+//确定读写设置作用的企业：企业管理员为本企业，平台管理员须指定、且企业必须存在。失败时已回包
+bool HttpSession::resolveSettingEnterprise(const std::shared_ptr<TcpConnection>& conn, const Json::Value& root,
+                                           const AdminInfo& admin, int64_t& enterpriseId)
+{
+    //与 fileshareadmin::ResolveTargetEnterprise 同一规则；这里多一步核对企业存在（平台管理员可能填错）
+    enterpriseId = (admin.enterpriseid != 0) ? admin.enterpriseid : JInt(root, "enterpriseid", 0);
+    if (enterpriseId <= 0)
+    {
+        sendAdminResult(conn, error_code_unknown, "enterpriseid required");
+        return false;
+    }
+    EnterpriseInfo info;
+    if (!Singleton<EnterpriseManager>::Instance().getEnterprise(enterpriseId, info))
+    {
+        sendAdminResult(conn, error_code_unknown, "enterprise not found");
+        return false;
+    }
+    return true;
+}
+
+void HttpSession::onAdminSettingGet(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    if (!prepareFileShareRequest(body, conn, root, admin))
+        return;
+    int64_t enterpriseId = 0;
+    if (!resolveSettingEnterprise(conn, root, admin, enterpriseId))
+        return;
+    Json::Value out;
+    const int rc = fileshareadmin::GetSettings(enterpriseId, out);
+    if (rc == fileshareadmin::file_share_admin_ok)
+    {
+        out["enterpriseid"] = static_cast<Json::Int64>(enterpriseId);
+        //云端录像的已用空间，管理后台与配额一起显示；云端录制没有初始化或查库失败时不带这一项
+        CloudRecordService* cloud = CloudRecordService::instance();
+        int64_t usedBytes = 0;
+        if (cloud != NULL && cloud->enterpriseUsedBytes(enterpriseId, usedBytes))
+            out["cloudrecordusedbytes"] = static_cast<Json::Int64>(usedBytes);
+    }
+    sendFileShareResult(conn, rc, out);
+}
+
+void HttpSession::onAdminSettingSet(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    if (!prepareFileShareRequest(body, conn, root, admin))
+        return;
+    int64_t enterpriseId = 0;
+    if (!resolveSettingEnterprise(conn, root, admin, enterpriseId))
+        return;
+    const std::string key = JStr(root, "key");
+    //value 允许写成数字或字符串
+    std::string value = JStr(root, "value");
+    if (value.empty() && root.isMember("value") && root["value"].isIntegral())
+        value = std::to_string(root["value"].asInt64());
+
+    bool before = false;
+    bool after = false;
+    const int64_t nowMs = Timestamp::now().microSecondsSinceEpoch() / 1000;
+    const int rc = fileshareadmin::SetSetting(enterpriseId, key, value, admin.adminid, nowMs, before, after);
+    if (rc == fileshareadmin::file_share_admin_ok)
+    {
+        Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+            enterpriseId, "setting.set", key + "=" + value, kFileShareAuditSettingSeverity,
+            FeatureSwitchManager::describeSettingWrite(key, value, after));
+        LOGI("admin setting set, admin: %lld, enterpriseid: %lld, %s=%s, enabled: %d -> %d", (long long)admin.adminid,
+             (long long)enterpriseId, key.c_str(), value.c_str(), before ? 1 : 0, after ? 1 : 0);
+    }
+    Json::Value out(Json::objectValue);
+    out["enterpriseid"] = static_cast<Json::Int64>(enterpriseId);
+    out["enabled"] = after ? 1 : 0;
+    sendFileShareResult(conn, rc, out);
+}
+
+void HttpSession::onAdminFileShareList(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    if (!prepareFileShareRequest(body, conn, root, admin))
+        return;
+    Json::Value out;
+    sendFileShareResult(conn, fileshareadmin::ListShares(root, admin.enterpriseid, out), out);
+}
+
+void HttpSession::onAdminFileShareMembers(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    if (!prepareFileShareRequest(body, conn, root, admin))
+        return;
+    Json::Value out;
+    const int rc = fileshareadmin::GetMembers(JInt(root, "shareid", 0), admin.enterpriseid, out);
+    sendFileShareResult(conn, rc, out);
+}
+
+void HttpSession::onAdminFileShareCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    if (!prepareFileShareRequest(body, conn, root, admin))
+        return;
+    const int64_t shareId = JInt(root, "shareid", 0);
+    std::string shareName;
+    int64_t shareEnterpriseId = 0;
+    const int64_t nowMs = Timestamp::now().microSecondsSinceEpoch() / 1000;
+    const int rc = fileshareadmin::CancelShare(shareId, admin.enterpriseid, admin.adminid, nowMs, shareName, shareEnterpriseId);
+    if (rc == fileshareadmin::file_share_admin_ok)
+    {
+        Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+            shareEnterpriseId, "fileshare.cancel", std::to_string(shareId) + " " + shareName, kFileShareAuditCancelSeverity,
+            u8"强制取消文件共享");
+    }
+    Json::Value out(Json::objectValue);
+    sendFileShareResult(conn, rc, out);
+}
+
+void HttpSession::onAdminFileShareAudit(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    if (!prepareFileShareRequest(body, conn, root, admin))
+        return;
+    Json::Value out;
+    sendFileShareResult(conn, fileshareadmin::QueryAudits(root, admin.enterpriseid, out), out);
+}
+
+// ====================================================================
+// admin 控制台接口处理器（企业问答，/admin/qa/*.do）
+// ====================================================================
+//
+//五个接口与敏感词模块共用 PrepareSensitiveRequest（解析请求体、校验令牌、确定企业，与模块无关）。
+//「本企业的群」按群主所属企业认定（t_group 没有企业列），见 docs/群问答方案.md §1。
+
+//企业问答审计记录的严重程度：与敏感词模块同一口径
+static const int kQaAuditWriteSeverity  = 1;
+static const int kQaAuditDeleteSeverity = 2;
+
+//本企业的全部群：(群ID, 群名)，按群ID升序
+static void ListEnterpriseGroups(int64_t enterpriseId, std::vector<std::pair<int64_t, std::string> >& out)
+{
+    out.clear();
+    std::vector<std::pair<int64_t, std::pair<std::string, int64_t> > > all;
+    if (!Singleton<GroupQaManager>::Instance().listAllGroups(all))
+        return;
+    DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+    for (size_t i = 0; i < all.size(); ++i)
+    {
+        if (deptMgr.getUserEnterpriseId(all[i].second.second) == enterpriseId)
+            out.push_back(std::make_pair(all[i].first, all[i].second.first));
+    }
+}
+
+//本企业全部群的 ID 集合
+static std::set<int64_t> EnterpriseGroupIds(int64_t enterpriseId)
+{
+    std::vector<std::pair<int64_t, std::string> > groups;
+    ListEnterpriseGroups(enterpriseId, groups);
+    std::set<int64_t> ids;
+    for (size_t i = 0; i < groups.size(); ++i)
+        ids.insert(groups[i].first);
+    return ids;
+}
+
+void HttpSession::onAdminQaList(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    std::vector<EnterpriseQaRecord> items;
+    if (!Singleton<GroupQaManager>::Instance().listEnterpriseQa(enterpriseId, items))
+    {
+        sendAdminResult(conn, error_code_unknown, "list qa failed");
+        return;
+    }
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < items.size(); ++i)
+        arr.append(qaadmin::QaToJson(items[i]));
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+    LOGI("admin qa list ok, admin: %lld, enterprise: %lld, count: %u",
+         (long long)admin.adminid, (long long)enterpriseId, static_cast<unsigned>(items.size()));
+}
+
+void HttpSession::onAdminQaAdd(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    EnterpriseQaRecord rec;
+    if (!qaadmin::ParseQaFields(root, rec))
+    {
+        sendAdminResult(conn, error_code_qa_invalid, "invalid qa fields");
+        return;
+    }
+    const int32_t check = qaadmin::CheckQa(rec, EnterpriseGroupIds(enterpriseId));
+    if (check != error_code_ok)
+    {
+        sendAdminResult(conn, check, "qa rejected");
+        return;
+    }
+    GroupQaManager& mgr = Singleton<GroupQaManager>::Instance();
+    if (mgr.countEnterpriseQa(enterpriseId) >= kEnterpriseQaPerEnterpriseMax)
+    {
+        sendAdminResult(conn, error_code_qa_full, "qa limit reached");
+        return;
+    }
+    rec.enterpriseid = enterpriseId;
+    rec.creatorid = admin.adminid;
+    rec.creatorname = admin.name;
+    int64_t newId = 0;
+    if (!mgr.addEnterpriseQa(rec, SensitiveNowMs(), newId))
+    {
+        sendAdminResult(conn, error_code_unknown, "add qa failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "qa.add", std::to_string(static_cast<long long>(newId)), kQaAuditWriteSeverity, u8"添加企业问答");
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["id"] = std::to_string(static_cast<long long>(newId));
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminQaUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    EnterpriseQaRecord rec;
+    if (!qaadmin::ParseQaFields(root, rec))
+    {
+        sendAdminResult(conn, error_code_qa_invalid, "invalid qa fields");
+        return;
+    }
+    const int64_t id = static_cast<int64_t>(atoll(JStr(root, "id").c_str()));
+    GroupQaManager& mgr = Singleton<GroupQaManager>::Instance();
+    EnterpriseQaRecord exist;
+    if (id <= 0 || !mgr.getEnterpriseQa(id, exist) || exist.enterpriseid != enterpriseId)
+    {
+        sendAdminResult(conn, error_code_qa_notexist, "qa not exist");
+        return;
+    }
+    const int32_t check = qaadmin::CheckQa(rec, EnterpriseGroupIds(enterpriseId));
+    if (check != error_code_ok)
+    {
+        sendAdminResult(conn, check, "qa rejected");
+        return;
+    }
+    rec.id = id;
+    rec.enterpriseid = enterpriseId;
+    rec.creatorid = admin.adminid;
+    rec.creatorname = admin.name;
+    if (!mgr.updateEnterpriseQa(rec, SensitiveNowMs()))
+    {
+        sendAdminResult(conn, error_code_unknown, "update qa failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "qa.update", std::to_string(static_cast<long long>(id)), kQaAuditWriteSeverity, u8"修改企业问答");
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onAdminQaDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    const int64_t id = static_cast<int64_t>(atoll(JStr(root, "id").c_str()));
+    GroupQaManager& mgr = Singleton<GroupQaManager>::Instance();
+    EnterpriseQaRecord exist;
+    if (id <= 0 || !mgr.getEnterpriseQa(id, exist) || exist.enterpriseid != enterpriseId)
+    {
+        sendAdminResult(conn, error_code_qa_notexist, "qa not exist");
+        return;
+    }
+    if (!mgr.deleteEnterpriseQa(enterpriseId, id))
+    {
+        sendAdminResult(conn, error_code_unknown, "delete qa failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "qa.delete", std::to_string(static_cast<long long>(id)), kQaAuditDeleteSeverity, u8"删除企业问答");
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onAdminQaGroups(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    std::vector<std::pair<int64_t, std::string> > groups;
+    ListEnterpriseGroups(enterpriseId, groups);
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < groups.size(); ++i)
+        arr.append(qaadmin::GroupToJson(groups[i].first, groups[i].second));
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+//======================== 机器人（/admin/bot/*.do 与 /bot/webhook.do，docs/机器人方案.md 6.3） ========================
+
+//机器人管理接口写操作的审计级别（与企业问答相同）
+static const int kBotAuditWriteSeverity = 1;
+//Webhook 的请求路径，随列表与详情一起回给管理端；服务端没有配置对外地址时，管理端用它按自己的连接地址拼出完整地址
+static const char* const kBotWebhookPath = bot::kWebhookPath;
+
+//读一个 id：数字或数字字符串都接受；缺失或不合法时为 0
+static int64_t JId(const Json::Value& root, const char* key)
+{
+    const Json::Value& v = root[key];
+    if (v.isIntegral())
+        return v.asInt64();
+    if (v.isString())
+        return static_cast<int64_t>(atoll(v.asString().c_str()));
+    return 0;
+}
+
+//ValidateBot 的结果换成管理端错误码
+static int32_t BotCheckToAdminCode(int rc)
+{
+    switch (rc)
+    {
+    //合法
+    case bot::bot_check_ok:
+        return error_code_ok;
+    //规则、关键词、所选的群超出上限
+    case bot::bot_check_full:
+        return error_code_botadmin_full;
+    //不允许的触发方式、动作，或外部服务地址不在白名单内
+    case bot::bot_check_not_allowed:
+        return error_code_botadmin_not_allowed;
+    //其余字段不合法
+    default:
+        return error_code_botadmin_invalid;
+    }
+}
+
+//找本企业的一个企业机器人；找不到返回空
+static std::shared_ptr<const bot::BotRecord> FindEnterpriseBot(int64_t enterpriseId, int64_t botId)
+{
+    std::shared_ptr<const bot::BotRecord> b = Singleton<BotManager>::Instance().snapshot()->find(botId);
+    if (!b || b->m_ownerType != bot::bot_owner_enterprise || b->m_enterpriseId != enterpriseId)
+        return std::shared_ptr<const bot::BotRecord>();
+    return b;
+}
+
+//机器人 → 管理端 JSON：列表不带规则与密钥，详情都带；附上最近发消息时间与 Webhook 路径，
+//服务端配置了对外地址（botwebhookbaseurl）时再附上完整地址 webhookurl（§11 Q19）
+static Json::Value AdminBotJson(const bot::BotRecord& b, bool detail)
+{
+    Json::Value v = bot::BotToJson(b, detail, detail);
+    v["lastfire"] = static_cast<Json::Int64>(Singleton<BotManager>::Instance().lastFireTime(b.m_botId));
+    v["webhookpath"] = kBotWebhookPath;
+    const std::string& url = Singleton<BotManager>::Instance().webhookUrl();
+    if (!url.empty())
+        v["webhookurl"] = url;
+    return v;
+}
+
+//所选的群、定时消息的目标群都必须属于本企业
+static bool BotGroupsInEnterprise(const bot::BotRecord& rec, const std::set<int64_t>& entGroups)
+{
+    if (rec.m_scope == bot::bot_scope_selected)
+    {
+        if (rec.m_groupIds.empty())
+            return false;
+        for (size_t i = 0; i < rec.m_groupIds.size(); ++i)
+        {
+            if (entGroups.count(rec.m_groupIds[i]) == 0)
+                return false;
+        }
+    }
+    for (size_t i = 0; i < rec.m_rules.size(); ++i)
+    {
+        const std::vector<int64_t>& targets = rec.m_rules[i].m_trigger.m_scheduleGroups;
+        for (size_t k = 0; k < targets.size(); ++k)
+        {
+            if (entGroups.count(targets[k]) == 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+void HttpSession::onAdminBotList(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    std::vector<std::shared_ptr<const bot::BotRecord> > bots;
+    Singleton<BotManager>::Instance().snapshot()->enterpriseBots(enterpriseId, bots);
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < bots.size(); ++i)
+        arr.append(AdminBotJson(*bots[i], false));
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+    LOGI("admin bot list, enterprise: %lld, count: %u", (long long)enterpriseId, static_cast<unsigned>(bots.size()));
+}
+
+void HttpSession::onAdminBotDetail(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    std::shared_ptr<const bot::BotRecord> b = FindEnterpriseBot(enterpriseId, JId(root, "botid"));
+    if (!b)
+    {
+        sendAdminResult(conn, error_code_botadmin_notexist, "bot not exist");
+        return;
+    }
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["bot"] = AdminBotJson(*b, true);
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminBotSave(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    bot::BotRecord rec;
+    if (!root["bot"].isObject() || !bot::BotFromJson(root["bot"], rec))
+    {
+        sendAdminResult(conn, error_code_botadmin_invalid, "invalid bot fields");
+        return;
+    }
+    rec.m_ownerType = bot::bot_owner_enterprise;
+    rec.m_ownerId = enterpriseId;
+    rec.m_enterpriseId = enterpriseId;
+    rec.m_source = bot::bot_source_rules;
+    if (!BotGroupsInEnterprise(rec, EnterpriseGroupIds(enterpriseId)))
+    {
+        sendAdminResult(conn, error_code_botadmin_group_invalid, "groups not in enterprise");
+        return;
+    }
+    BotManager& mgr = Singleton<BotManager>::Instance();
+    std::shared_ptr<const bot::BotSnapshot> snap = mgr.snapshot();
+    std::string why;
+    const int check = bot::ValidateBot(rec, true, snap->domains(enterpriseId), why);
+    if (check != bot::bot_check_ok)
+    {
+        LOGW("admin bot save rejected, enterprise: %lld, reason: %s", (long long)enterpriseId, why.c_str());
+        sendAdminResult(conn, BotCheckToAdminCode(check), why);
+        return;
+    }
+    const int64_t now = SensitiveNowMs();
+    const bool isNew = rec.m_botId <= 0;
+    int stored = bot::bot_store_ok;
+    if (!isNew)
+    {
+        std::shared_ptr<const bot::BotRecord> exist = FindEnterpriseBot(enterpriseId, rec.m_botId);
+        if (!exist)
+        {
+            sendAdminResult(conn, error_code_botadmin_notexist, "bot not exist");
+            return;
+        }
+        if (exist->m_source != bot::bot_source_rules)
+        {
+            sendAdminResult(conn, error_code_botadmin_readonly, "repo bot is read-only here");
+            return;
+        }
+        stored = mgr.updateBot(rec, now);
+    }
+    else
+    {
+        std::vector<std::shared_ptr<const bot::BotRecord> > existing;
+        snap->enterpriseBots(enterpriseId, existing);
+        if (static_cast<int>(existing.size()) >= bot::kEnterpriseBotMax)
+        {
+            sendAdminResult(conn, error_code_botadmin_full, "bot limit reached");
+            return;
+        }
+        rec.m_creatorType = bot::bot_creator_admin;
+        rec.m_creatorId = admin.adminid;
+        rec.m_creatorName = admin.name;
+        rec.m_webhookToken = bot::RandomHex32();
+        rec.m_secret = bot::RandomHex32();
+        stored = mgr.createBot(rec, now);
+    }
+    if (stored != bot::bot_store_ok)
+    {
+        sendAdminResult(conn, stored == bot::bot_store_not_exist ? error_code_botadmin_notexist : error_code_unknown,
+                        "save bot failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, isNew ? "bot.create" : "bot.update", std::to_string(static_cast<long long>(rec.m_botId)),
+        kBotAuditWriteSeverity, isNew ? u8"新建企业机器人" : u8"修改企业机器人");
+    Singleton<ChatServer>::Instance().broadcastBotsChanged(enterpriseId);
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["botid"] = std::to_string(static_cast<long long>(rec.m_botId));
+    sendJsonResponse(conn, DumpJson(resp));
+    LOGI("admin bot saved, enterprise: %lld, botid: %lld, new: %d, rules: %u", (long long)enterpriseId,
+         (long long)rec.m_botId, isNew ? 1 : 0, static_cast<unsigned>(rec.m_rules.size()));
+}
+
+void HttpSession::onAdminBotDelete(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    const int64_t botId = JId(root, "botid");
+    std::shared_ptr<const bot::BotRecord> exist = FindEnterpriseBot(enterpriseId, botId);
+    if (!exist)
+    {
+        sendAdminResult(conn, error_code_botadmin_notexist, "bot not exist");
+        return;
+    }
+    if (exist->m_source != bot::bot_source_rules)
+    {
+        sendAdminResult(conn, error_code_botadmin_readonly, "repo bot is read-only here");
+        return;
+    }
+    if (Singleton<BotManager>::Instance().deleteBot(botId, SensitiveNowMs()) != bot::bot_store_ok)
+    {
+        sendAdminResult(conn, error_code_unknown, "delete bot failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "bot.delete", std::to_string(static_cast<long long>(botId)), kBotAuditWriteSeverity,
+        u8"删除企业机器人");
+    Singleton<ChatServer>::Instance().broadcastBotsChanged(enterpriseId);
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onAdminBotSetStatus(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    const int64_t botId = JId(root, "botid");
+    const int status = static_cast<int>(JId(root, "status"));
+    if (status != bot::bot_status_active && status != bot::bot_status_disabled)
+    {
+        sendAdminResult(conn, error_code_botadmin_invalid, "bad status");
+        return;
+    }
+    if (!FindEnterpriseBot(enterpriseId, botId))
+    {
+        sendAdminResult(conn, error_code_botadmin_notexist, "bot not exist");
+        return;
+    }
+    if (Singleton<BotManager>::Instance().setStatus(botId, status, SensitiveNowMs()) != bot::bot_store_ok)
+    {
+        sendAdminResult(conn, error_code_unknown, "set status failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "bot.status", std::to_string(static_cast<long long>(botId)), kBotAuditWriteSeverity,
+        status == bot::bot_status_active ? u8"启用企业机器人" : u8"停用企业机器人");
+    Singleton<ChatServer>::Instance().broadcastBotsChanged(enterpriseId);
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onAdminBotGroups(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    //与企业问答的 groups.do 相同：列出群主属于本企业的群
+    onAdminQaGroups(body, conn);
+}
+
+void HttpSession::onAdminBotTry(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    bot::BotRecord rec;
+    if (root["bot"].isObject())
+    {
+        if (!bot::BotFromJson(root["bot"], rec))
+        {
+            sendAdminResult(conn, error_code_botadmin_invalid, "invalid bot fields");
+            return;
+        }
+        rec.m_ownerType = bot::bot_owner_enterprise;
+        rec.m_ownerId = enterpriseId;
+        rec.m_enterpriseId = enterpriseId;
+    }
+    else
+    {
+        std::shared_ptr<const bot::BotRecord> exist = FindEnterpriseBot(enterpriseId, JId(root, "botid"));
+        if (!exist)
+        {
+            sendAdminResult(conn, error_code_botadmin_notexist, "bot not exist");
+            return;
+        }
+        rec = *exist;
+    }
+    const Json::Value& in = root["input"];
+    BotTryInput input;
+    input.m_text = in["text"].isString() ? in["text"].asString() : std::string();
+    input.m_at = !in.isMember("at") || JId(in, "at") != 0 || (in["at"].isBool() && in["at"].asBool());
+    input.m_groupid = JId(in, "groupid");
+    input.m_timeMs = JId(in, "time");
+    if (input.m_groupid > 0 && EnterpriseGroupIds(enterpriseId).count(input.m_groupid) == 0)
+        input.m_groupid = 0;
+    const bot::BotDecision d = Singleton<BotEngine>::Instance().tryBot(rec, input);
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["matched"] = d.m_kind != bot::bot_decision_none ? 1 : 0;
+    resp["kind"] = d.m_kind;
+    resp["ruleid"] = std::to_string(static_cast<long long>(d.m_ruleId));
+    resp["rulename"] = d.m_ruleName;
+    resp["text"] = d.m_text;
+    resp["markdown"] = d.m_markdown ? 1 : 0;
+    resp["url"] = d.m_url;
+    resp["reason"] = d.m_reason;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminBotResetToken(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    const int64_t botId = JId(root, "botid");
+    if (!FindEnterpriseBot(enterpriseId, botId))
+    {
+        sendAdminResult(conn, error_code_botadmin_notexist, "bot not exist");
+        return;
+    }
+    std::string token;
+    std::string secret;
+    if (Singleton<BotManager>::Instance().resetSecrets(botId, token, secret) != bot::bot_store_ok)
+    {
+        sendAdminResult(conn, error_code_unknown, "reset token failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "bot.resettoken", std::to_string(static_cast<long long>(botId)), kBotAuditWriteSeverity,
+        u8"重置机器人的 Webhook 令牌与签名密钥");
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    resp["webhooktoken"] = token;
+    resp["secret"] = secret;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminBotDomains(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    const std::vector<std::string> domains = Singleton<BotManager>::Instance().snapshot()->domains(enterpriseId);
+    Json::Value resp;
+    resp["code"] = error_code_ok;
+    resp["msg"] = "ok";
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < domains.size(); ++i)
+        arr.append(domains[i]);
+    resp["domains"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminBotSetDomains(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    AdminInfo admin;
+    int64_t enterpriseId = 0;
+    const char* failMsg = "";
+    const int32_t prepared = PrepareSensitiveRequest(body, root, admin, enterpriseId, failMsg);
+    if (prepared != error_code_ok)
+    {
+        sendAdminResult(conn, prepared, failMsg);
+        return;
+    }
+    const Json::Value& arr = root["domains"];
+    if (!arr.isArray() || static_cast<int>(arr.size()) > bot::kBotDomainMax)
+    {
+        sendAdminResult(conn, error_code_botadmin_domain_invalid, "bad domains");
+        return;
+    }
+    std::vector<std::string> domains;
+    for (Json::ArrayIndex i = 0; i < arr.size(); ++i)
+    {
+        std::string d = arr[i].isString() ? arr[i].asString() : std::string();
+        for (size_t k = 0; k < d.size(); ++k)
+        {
+            if (d[k] >= 'A' && d[k] <= 'Z')
+                d[k] = static_cast<char>(d[k] - 'A' + 'a');
+        }
+        if (!bot::IsValidDomain(d))
+        {
+            sendAdminResult(conn, error_code_botadmin_domain_invalid, "bad domain: " + d);
+            return;
+        }
+        domains.push_back(d);
+    }
+    if (!Singleton<BotManager>::Instance().setDomains(enterpriseId, domains))
+    {
+        sendAdminResult(conn, error_code_unknown, "save domains failed");
+        return;
+    }
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name, conn->peerAddress().toIpPort(),
+        enterpriseId, "bot.domains", std::to_string(static_cast<long long>(domains.size())), kBotAuditWriteSeverity,
+        u8"修改机器人外部服务的域名白名单");
+    sendAdminResult(conn, error_code_ok, "ok");
+}
+
+void HttpSession::onBotWebhook(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    std::string resp;
+    const int code = Singleton<BotEngine>::Instance().handleWebhook(body, resp);
+    LOGI("bot webhook from %s, code: %d", conn->peerAddress().toIpPort().c_str(), code);
+    sendJsonResponse(conn, resp);
+}

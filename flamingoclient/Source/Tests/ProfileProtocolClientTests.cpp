@@ -81,14 +81,25 @@ TEST_CASE("PPC6 parse 非法 JSON / 缺 code → false", "[profileproto]")
     CHECK_FALSE(ProfileProtocolClient::parseUpdateProfileResponse("", r3));
 }
 
-TEST_CASE("PPC6b buildUpdateProfile 全 6 字段都在、值正确、邮箱键名是 mail",
+TEST_CASE("PPC6b buildUpdateProfile 标记提交的 6 个字段都在、值正确、邮箱键名是 mail",
           "[profileproto]")
 {
     // 用 ASCII 值断言契约：jsoncpp 默认把非 ASCII 转义成 \uXXXX，用中文字面量查子串
     // 会假阴性；中文整段往返留运行期目检。这里只验"键名 / 类型 / 值"结构正确。
-    std::string j = ProfileProtocolClient::buildUpdateProfileRequest(
-        "Tom", "hello", /*gender*/1, /*birthday*/19950402,
-        "Shanghai", "tom@a.com");
+    ProfileUpdateFields fields;
+    fields.m_values.m_nickname  = "Tom";
+    fields.m_values.m_signature = "hello";
+    fields.m_values.m_gender    = 1;
+    fields.m_values.m_birthday  = 19950402;
+    fields.m_values.m_address   = "Shanghai";
+    fields.m_values.m_mail      = "tom@a.com";
+    fields.m_hasNickname  = true;
+    fields.m_hasSignature = true;
+    fields.m_hasGender    = true;
+    fields.m_hasBirthday  = true;
+    fields.m_hasAddress   = true;
+    fields.m_hasMail      = true;
+    std::string j = ProfileProtocolClient::buildUpdateProfileRequest(fields);
     CHECK(j.find("\"nickname\":\"Tom\"")       != std::string::npos);
     CHECK(j.find("\"signature\":\"hello\"")    != std::string::npos);
     CHECK(j.find("\"gender\":1")               != std::string::npos);
@@ -99,11 +110,16 @@ TEST_CASE("PPC6b buildUpdateProfile 全 6 字段都在、值正确、邮箱键�
     CHECK(j.find("\"email\"") == std::string::npos);
 }
 
-TEST_CASE("PPC6c buildUpdateProfile 空串字段与 birthday=0（未设）也照常出键",
+TEST_CASE("PPC6c buildUpdateProfile 标记提交的空串字段与 birthday=0（未设）也照常出键",
           "[profileproto]")
 {
-    std::string j = ProfileProtocolClient::buildUpdateProfileRequest(
-        "", "", /*gender*/0, /*birthday*/0, "", "");
+    // 值全部是默认的空串与 0，只把要提交的几项标记上
+    ProfileUpdateFields fields;
+    fields.m_hasNickname = true;
+    fields.m_hasGender   = true;
+    fields.m_hasBirthday = true;
+    fields.m_hasMail     = true;
+    std::string j = ProfileProtocolClient::buildUpdateProfileRequest(fields);
     CHECK(j.find("\"nickname\":\"\"")  != std::string::npos);
     CHECK(j.find("\"gender\":0")       != std::string::npos);
     CHECK(j.find("\"birthday\":0")     != std::string::npos);

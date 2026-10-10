@@ -6,6 +6,7 @@
  */
 #include "doctest.h"
 #include "../chatserversrc/FileProtocol.h"
+#include "../chatserversrc/Protocol.h"   //enum file_scene（SW-P9）
 #include "../jsoncpp1.9.0/json.h"
 
 //把 JSON 文本解析成 Json::Value，供断言检查
@@ -135,4 +136,15 @@ TEST_CASE("L7 buildSimpleResponse 错误应答")
     REQUIRE(parseJson(text, root));
     CHECK(root["code"].asInt() == 602);
     CHECK(root["msg"].asString() == "file too large");
+}
+
+TEST_CASE("SW-P9 申请上传时只有聊天文件与群文件的文件名做敏感词检查")
+{
+    //这两类的文件名会显示在聊天记录与群文件库里
+    CHECK(FileProtocol::isNameCheckedScene(file_scene_chat_file));
+    CHECK(FileProtocol::isNameCheckedScene(file_scene_group_file));
+    //头像、图片消息的文件名不展示给别人；升级包不经 cmd_request_upload 申请
+    CHECK_FALSE(FileProtocol::isNameCheckedScene(file_scene_avatar));
+    CHECK_FALSE(FileProtocol::isNameCheckedScene(file_scene_image_msg));
+    CHECK_FALSE(FileProtocol::isNameCheckedScene(file_scene_update));
 }

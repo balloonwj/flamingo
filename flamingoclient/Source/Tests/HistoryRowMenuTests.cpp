@@ -139,7 +139,8 @@ TEST_CASE("HRM1 文本消息：复制 / 定位 / Pin", "[historymenu]")
 
     const std::vector<int> expect = {
         kHistoryRowMenuCopy, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
@@ -159,7 +160,8 @@ TEST_CASE("HRM2 图片消息 + 本地有文件：复制图片 / 图片另存为 
     const std::vector<int> expect = {
         kHistoryRowMenuCopyImage, kHistoryRowMenuSaveImageAs, kHistoryRowMenuOpenFolder,
         kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
@@ -179,7 +181,8 @@ TEST_CASE("HRM3 图片消息 + 本地无文件：只给下载", "[historymenu]")
 
     const std::vector<int> expect = {
         kHistoryRowMenuDownload, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
@@ -199,7 +202,8 @@ TEST_CASE("HRM4 文件消息 + 本地有文件：打开文件 / 打开所在文�
     const std::vector<int> expect = {
         kHistoryRowMenuOpenFile, kHistoryRowMenuOpenFolder, kHistoryRowMenuSaveFileAs,
         kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
@@ -218,7 +222,8 @@ TEST_CASE("HRM5 文件消息 + 本地无文件：只给下载", "[historymenu]")
 
     const std::vector<int> expect = {
         kHistoryRowMenuDownload, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
@@ -249,7 +254,8 @@ TEST_CASE("HRM6 正在下载时只给取消下载，且优先于本地文件状�
 
             const std::vector<int> expect = {
                 kHistoryRowMenuCancelDownload, kSeparatorMark,
-                kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+                kHistoryRowMenuLocate, kSeparatorMark,
+                kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
                 kSeparatorMark, kHistoryRowMenuDelete
             };
             CHECK(IdsOf(model) == expect);
@@ -285,6 +291,7 @@ TEST_CASE("HRM7 语音及其它未单独支持的类型：只有定位、转发�
                                   && types[t] != ::message_type_system);
         std::vector<int> expect;
         expect.push_back(kHistoryRowMenuLocate);
+        expect.push_back(kSeparatorMark);
         if (forwardable)
         {
             expect.push_back(kHistoryRowMenuForward);
@@ -411,7 +418,8 @@ TEST_CASE("HRM11 截图按图片行处理", "[historymenu]")
     const std::vector<int> expectWithFile = {
         kHistoryRowMenuCopyImage, kHistoryRowMenuSaveImageAs, kHistoryRowMenuOpenFolder,
         kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(withFile) == expectWithFile);
@@ -421,7 +429,8 @@ TEST_CASE("HRM11 截图按图片行处理", "[historymenu]")
                                          kNotDownloading, kNotPinned, kAssignedMsgId));
     const std::vector<int> expectWithoutFile = {
         kHistoryRowMenuDownload, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kHistoryRowMenuLocate, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
         kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(withoutFile) == expectWithoutFile);
@@ -575,7 +584,7 @@ int IndexOf(const std::vector<int>& ids, int id)
 
 } // anonymous namespace
 
-TEST_CASE("FWD-C19a 有 msgid 的普通行有「转发」，排在定位与查看上下文之后、Pin 之前", "[historymenu][forward]")
+TEST_CASE("FWD-C19a 有 msgid 的普通行有「转发」，在定位与查看上下文那组之后另起一组、排在 Pin 之前", "[historymenu][forward]")
 {
     //文本、图片、文件、合并记录、语音：本地文件标志取 true，让图片 / 文件走"本地已有"那一支
     const int types[] = { ::message_type_text, ::message_type_image, ::message_type_file,
@@ -587,21 +596,23 @@ TEST_CASE("FWD-C19a 有 msgid 的普通行有「转发」，排在定位与查�
                                             kNotPinned, kAssignedMsgId);
         CHECK(CanForwardHistoryRow(types[t], kAssignedMsgId));
 
-        //没有筛选条件：紧跟「定位到聊天窗」
+        //没有筛选条件：「转发」打头另起一组，前面隔一条线，再往前是「定位到聊天窗」
         std::vector<int> ids = IdsOf(BuildHistoryRowMenuModel(ctx));
         int fwd = IndexOf(ids, kHistoryRowMenuForward);
-        REQUIRE(fwd > 0);
-        CHECK(ids[(std::size_t)fwd - 1] == (int)kHistoryRowMenuLocate);
+        REQUIRE(fwd > 1);
+        CHECK(ids[(std::size_t)fwd - 1] == kSeparatorMark);
+        CHECK(ids[(std::size_t)fwd - 2] == (int)kHistoryRowMenuLocate);
         REQUIRE((std::size_t)fwd + 1 < ids.size());
         CHECK(ids[(std::size_t)fwd + 1] == (int)kHistoryRowMenuMultiSelect);
         CHECK(LabelOf(BuildHistoryRowMenuModel(ctx), kHistoryRowMenuForward) == L"转发");
 
-        //有筛选条件：排在「查看上下文」之后
+        //有筛选条件：前面那组以「查看上下文」结尾
         ctx.m_canViewContext = true;
         ids = IdsOf(BuildHistoryRowMenuModel(ctx));
         fwd = IndexOf(ids, kHistoryRowMenuForward);
-        REQUIRE(fwd > 0);
-        CHECK(ids[(std::size_t)fwd - 1] == (int)kHistoryRowMenuViewContext);
+        REQUIRE(fwd > 1);
+        CHECK(ids[(std::size_t)fwd - 1] == kSeparatorMark);
+        CHECK(ids[(std::size_t)fwd - 2] == (int)kHistoryRowMenuViewContext);
         REQUIRE((std::size_t)fwd + 1 < ids.size());
         CHECK(ids[(std::size_t)fwd + 1] == (int)kHistoryRowMenuMultiSelect);
         CHECK(SeparatorInvariantHolds(BuildHistoryRowMenuModel(ctx)));
@@ -660,5 +671,102 @@ TEST_CASE("FWD-C19d 图片或文件本地没有、或正在下载时仍有「转
         CHECK(HasItem(BuildHistoryRowMenuModel(MakeCtx(types[t], kHasLocal, kDownloading,
                                                        kNotPinned, kAssignedMsgId)),
                       kHistoryRowMenuForward));
+    }
+}
+
+// =====================================================================
+// HRM-C1~C3 —— 「清空聊天记录」（2026-10-03 起从聊天窗头部移到消息记录窗，行右键菜单也有一项）
+// =====================================================================
+
+TEST_CASE("HRM-C1 普通行的菜单末尾依次是「删除」、分隔线、「清空聊天记录」", "[historymenu][clearconv]")
+{
+    HistoryRowMenuContext ctx = MakeCtx(::message_type_text, kNoLocal, kNotDownloading,
+                                        kNotPinned, kAssignedMsgId);
+    ctx.m_canClearConversation = true;
+    const std::vector<HistoryRowMenuItem> model = BuildHistoryRowMenuModel(ctx);
+    const std::vector<int> ids = IdsOf(model);
+    REQUIRE(ids.size() >= 4);
+    CHECK(ids[ids.size() - 1] == (int)kHistoryRowMenuClearConversation);
+    //删除一条与清空整个会话影响范围不同，各成一组
+    CHECK(ids[ids.size() - 2] == kSeparatorMark);
+    CHECK(ids[ids.size() - 3] == (int)kHistoryRowMenuDelete);
+    //「删除」前面那条分隔线不变
+    CHECK(ids[ids.size() - 4] == kSeparatorMark);
+    CHECK(SeparatorInvariantHolds(model));
+    CHECK(model.back().m_label == std::wstring(L"清空聊天记录"));
+}
+
+TEST_CASE("HRM-C2 还没分配 msgid 的行（没有「删除」）也有「清空聊天记录」，前面照样隔一条线", "[historymenu][clearconv]")
+{
+    HistoryRowMenuContext ctx = MakeCtx(::message_type_text, kNoLocal, kNotDownloading,
+                                        kNotPinned, kHistoryRowMsgIdUnassigned);
+    ctx.m_canClearConversation = true;
+    const std::vector<HistoryRowMenuItem> model = BuildHistoryRowMenuModel(ctx);
+    const std::vector<int> ids = IdsOf(model);
+    REQUIRE(ids.size() >= 2);
+    CHECK_FALSE(HasItem(model, kHistoryRowMenuDelete));
+    CHECK(ids[ids.size() - 1] == (int)kHistoryRowMenuClearConversation);
+    CHECK(ids[ids.size() - 2] == kSeparatorMark);
+    CHECK(SeparatorInvariantHolds(model));
+}
+
+TEST_CASE("HRM-C3 没有主面板时（调试入口）不出现「清空聊天记录」", "[historymenu][clearconv]")
+{
+    //默认构造的上下文即为这种情形
+    HistoryRowMenuContext ctx = MakeCtx(::message_type_text, kNoLocal, kNotDownloading,
+                                        kNotPinned, kAssignedMsgId);
+    CHECK_FALSE(ctx.m_canClearConversation);
+    CHECK_FALSE(HasItem(BuildHistoryRowMenuModel(ctx), kHistoryRowMenuClearConversation));
+    ctx.m_msgId = kHistoryRowMsgIdUnassigned;
+    CHECK_FALSE(HasItem(BuildHistoryRowMenuModel(ctx), kHistoryRowMenuClearConversation));
+}
+
+TEST_CASE("HRM19 五组的完整顺序，空组不留分隔线", "[historymenu][clearconv]")
+{
+    //五组齐全：内容 | 查看 | 转发与标记 | 删除这一条 | 清空整个会话
+    HistoryRowMenuContext ctx = MakeCtx(::message_type_text, kNoLocal, kNotDownloading,
+                                        kNotPinned, kAssignedMsgId);
+    ctx.m_canViewContext = true;
+    ctx.m_canClearConversation = true;
+    const std::vector<int> full = {
+        kHistoryRowMenuCopy, kSeparatorMark,
+        kHistoryRowMenuLocate, kHistoryRowMenuViewContext, kSeparatorMark,
+        kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin, kSeparatorMark,
+        kHistoryRowMenuDelete, kSeparatorMark,
+        kHistoryRowMenuClearConversation
+    };
+    CHECK(IdsOf(BuildHistoryRowMenuModel(ctx)) == full);
+
+    //msgid 未分配：第三、四组整组为空，两组之间只留一条分隔线
+    ctx.m_msgId = kHistoryRowMsgIdUnassigned;
+    const std::vector<int> unassigned = {
+        kHistoryRowMenuCopy, kSeparatorMark,
+        kHistoryRowMenuLocate, kHistoryRowMenuViewContext, kSeparatorMark,
+        kHistoryRowMenuClearConversation
+    };
+    CHECK(IdsOf(BuildHistoryRowMenuModel(ctx)) == unassigned);
+
+    //「查看上下文」「清空聊天记录」两个开关与 msgid 有无的各种组合下，分隔线都不打头、不结尾、不连续
+    const bool flags[] = { false, true };
+    const int64_t msgIds[] = { kHistoryRowMsgIdUnassigned, kAssignedMsgId };
+    const int types[] = { ::message_type_text, ::message_type_voice, ::message_type_folder };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        for (std::size_t v = 0; v < sizeof(flags) / sizeof(flags[0]); ++v)
+        {
+            for (std::size_t c = 0; c < sizeof(flags) / sizeof(flags[0]); ++c)
+            {
+                for (std::size_t m = 0; m < sizeof(msgIds) / sizeof(msgIds[0]); ++m)
+                {
+                    INFO("msgType=" << types[t] << " viewContext=" << (flags[v] ? 1 : 0)
+                         << " clear=" << (flags[c] ? 1 : 0) << " msgId=" << (long long)msgIds[m]);
+                    HistoryRowMenuContext combo = MakeCtx(types[t], kNoLocal, kNotDownloading,
+                                                          kNotPinned, msgIds[m]);
+                    combo.m_canViewContext = flags[v];
+                    combo.m_canClearConversation = flags[c];
+                    CHECK(SeparatorInvariantHolds(BuildHistoryRowMenuModel(combo)));
+                }
+            }
+        }
     }
 }

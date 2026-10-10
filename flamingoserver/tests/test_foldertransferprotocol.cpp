@@ -517,7 +517,7 @@ TEST_CASE("FTP17 buildRelayInfo 字段齐全：地址字段名为 relayip / rela
 
 // ======================= 取值校验 =======================
 
-TEST_CASE("FTP18 isValidState 认 1~8、拒绝两端越界值")
+TEST_CASE("FTP18 isValidState 认 1~9、拒绝两端越界值")
 {
     CHECK(FolderTransferProtocol::isValidState(folder_state_ringing));
     CHECK(FolderTransferProtocol::isValidState(folder_state_transferring));
@@ -527,7 +527,8 @@ TEST_CASE("FTP18 isValidState 认 1~8、拒绝两端越界值")
     CHECK_FALSE(FolderTransferProtocol::isValidState(0));
     CHECK_FALSE(FolderTransferProtocol::isValidState(-1));
     //9 是紧邻上界的第一个越界值
-    CHECK_FALSE(FolderTransferProtocol::isValidState(folder_state_completed + 1));
+    //2026-10-04 起上界是单文件直传的「已改为离线发送」(9)
+    CHECK_FALSE(FolderTransferProtocol::isValidState(folder_state_to_offline + 1));
 }
 
 TEST_CASE("FTP19 isValidErrorCode 认 606~620、拒绝紧邻的 605 与 621")
@@ -873,7 +874,7 @@ TEST_CASE("FTP26B 幂等键：同一会话同一序号恒相同，不同序号�
           != FolderTransferProtocol::buildRecordClientMsgId("sess", 12));
 }
 
-TEST_CASE("FTP27 isTerminalState 认 3~8、拒绝响铃中与传输中这两个过程态")
+TEST_CASE("FTP27 isTerminalState 认 3~9、拒绝响铃中与传输中这两个过程态")
 {
     CHECK(FolderTransferProtocol::isTerminalState(folder_state_rejected));
     CHECK(FolderTransferProtocol::isTerminalState(folder_state_canceled));
@@ -889,7 +890,8 @@ TEST_CASE("FTP27 isTerminalState 认 3~8、拒绝响铃中与传输中这两个�
     //两端越界
     CHECK_FALSE(FolderTransferProtocol::isTerminalState(0));
     CHECK_FALSE(FolderTransferProtocol::isTerminalState(-1));
-    CHECK_FALSE(FolderTransferProtocol::isTerminalState(folder_state_completed + 1));
+    //2026-10-04 起上界是单文件直传的「已改为离线发送」(9)
+    CHECK_FALSE(FolderTransferProtocol::isTerminalState(folder_state_to_offline + 1));
 }
 
 TEST_CASE("FTP28 记录条的大整数、中文目录名与空目录都能原样往返")
@@ -936,4 +938,251 @@ TEST_CASE("FTP28 记录条的大整数、中文目录名与空目录都能原样
     CHECK(backEmpty.totaldirs == 0);
     CHECK(backEmpty.totalfiles == 0);
     CHECK(backEmpty.totalsize == 0);
+}
+
+TEST_CASE("FTP29 buildRelayInfo 的 p2psessionid：建了 P2P 会话时带上，没建时不出现（P2P 方案第 5 期）")
+{
+    const std::string token = "7f3a2c1b-0004|5|100001|100002|1716272400000.5d41402abc4b2a76";
+    Json::Value root;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildRelayInfo("7f3a2c1b-0004", FTP_ROLE_FOLDER_SENDER, "192.168.1.8",
+                                                                     20001, token, 4, "p2p-100001-100002-1-1"), root));
+    CHECK(root["p2psessionid"].asString() == "p2p-100001-100002-1-1");
+    CHECK(root["lanes"].asInt() == 4);
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildRelayInfo("7f3a2c1b-0004", FTP_ROLE_FOLDER_SENDER, "192.168.1.8",
+                                                                     20001, token, 4), root));
+    CHECK_FALSE(root.isMember("p2psessionid"));
+}
+
+// ======================= 2026-10-04 单聊单文件 P2P 直传与链路路径 =======================
+// 方案见 docs/单聊文件P2P直传与P2P徽章方案.md：同一组 1810~1817 信令带 kind 区分文件夹传输与单文件直传，
+// 1814 带上客户端看到的链路路径与 MD5，结束时直传留下的是一条普通文件消息（msgtype 3，带 direct=1）。
+
+//一份合法的 32 位十六进制 MD5
+static const char* FTP_SAMPLE_MD5 = "0123456789abcdef0123456789abcdef";
+
+TEST_CASE("FTP30 parseInviteRequest 的 kind：缺省为文件夹；为 1 时须恰好一个文件、没有目录；其余取值非法")
+{
+    FolderInviteRequest req;
+    REQUIRE(FolderTransferProtocol::parseInviteRequest(FTP_VALID_INVITE, req));
+    CHECK(req.kind == folder_kind_folder);
+
+    FolderInviteRequest file;
+    REQUIRE(FolderTransferProtocol::parseInviteRequest(
+        u8"{\"peerid\":\"100002\",\"foldername\":\"报价单.xlsx\",\"totaldirs\":0,\"totalfiles\":1,"
+        u8"\"totalsize\":53687091200,\"kind\":1}", file));
+    CHECK(file.kind == folder_kind_file);
+    CHECK(file.foldername == u8"报价单.xlsx");
+    CHECK(file.totalsize == FTP_MAX_SIZE_50GIB);
+
+    //显式写 0 与缺省相同
+    FolderInviteRequest zero;
+    REQUIRE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a\",\"totaldirs\":3,\"totalfiles\":9,\"totalsize\":1,\"kind\":0}", zero));
+    CHECK(zero.kind == folder_kind_folder);
+
+    FolderInviteRequest bad;
+    //单文件直传带了目录、或文件数不是 1：非法
+    CHECK_FALSE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a.txt\",\"totaldirs\":1,\"totalfiles\":1,\"totalsize\":1,\"kind\":1}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a.txt\",\"totaldirs\":0,\"totalfiles\":2,\"totalsize\":1,\"kind\":1}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a.txt\",\"totaldirs\":0,\"totalfiles\":0,\"totalsize\":0,\"kind\":1}", bad));
+    //未知取值与类型不对：非法
+    CHECK_FALSE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,\"kind\":2}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,\"kind\":\"1\"}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseInviteRequest(
+        "{\"peerid\":\"7\",\"foldername\":\"a\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,\"kind\":-1}", bad));
+}
+
+TEST_CASE("FTP31 buildInviteNotify：单文件直传写 kind=1，文件夹传输不写（旧客户端看到的包体不变）")
+{
+    FolderInviteRequest file;
+    file.peerid = 100002;
+    file.foldername = "a.txt";
+    file.totalfiles = 1;
+    file.totalsize = 10;
+    file.kind = folder_kind_file;
+    Json::Value root;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildInviteNotify("s-1", 100001, "alice", file), root));
+    CHECK(root["kind"].asInt() == folder_kind_file);
+    CHECK(root["foldername"].asString() == "a.txt");
+
+    file.kind = folder_kind_folder;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildInviteNotify("s-1", 100001, "alice", file), root));
+    CHECK_FALSE(root.isMember("kind"));
+}
+
+TEST_CASE("FTP32 parseCancelRequest：tooffline 缺省为 0，可为 1，其余非法；sessionid 必填")
+{
+    std::string sid;
+    int tooffline = -1;
+    REQUIRE(FolderTransferProtocol::parseCancelRequest("{\"sessionid\":\"s-1\"}", sid, tooffline));
+    CHECK(sid == "s-1");
+    CHECK(tooffline == 0);
+    REQUIRE(FolderTransferProtocol::parseCancelRequest("{\"sessionid\":\"s-2\",\"tooffline\":1}", sid, tooffline));
+    CHECK(sid == "s-2");
+    CHECK(tooffline == 1);
+    REQUIRE(FolderTransferProtocol::parseCancelRequest("{\"sessionid\":\"s-3\",\"tooffline\":0}", sid, tooffline));
+    CHECK(tooffline == 0);
+    CHECK_FALSE(FolderTransferProtocol::parseCancelRequest("{\"sessionid\":\"s-4\",\"tooffline\":2}", sid, tooffline));
+    CHECK_FALSE(FolderTransferProtocol::parseCancelRequest("{\"sessionid\":\"s-4\",\"tooffline\":\"1\"}", sid, tooffline));
+    CHECK_FALSE(FolderTransferProtocol::parseCancelRequest("{\"sessionid\":\"\",\"tooffline\":1}", sid, tooffline));
+    CHECK_FALSE(FolderTransferProtocol::parseCancelRequest("{\"tooffline\":1}", sid, tooffline));
+}
+
+TEST_CASE("FTP33 parseCloseRequest 的 linkpath 与 md5：缺省为 0 与空，越界或格式不对非法，md5 统一为小写")
+{
+    FolderCloseRequest req;
+    REQUIRE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0}", req));
+    CHECK(req.linkpath == kFolderLinkPathNone);
+    CHECK(req.md5.empty());
+
+    REQUIRE(FolderTransferProtocol::parseCloseRequest(
+        "{\"sessionid\":\"s-1\",\"result\":0,\"linkpath\":1,\"md5\":\"0123456789ABCDEF0123456789abcdef\"}", req));
+    CHECK(req.linkpath == 1);
+    CHECK(req.md5 == FTP_SAMPLE_MD5);
+    REQUIRE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0,\"linkpath\":3}", req));
+    CHECK(req.linkpath == kFolderLinkPathMax);
+    //失败结束也可以带路径
+    REQUIRE(FolderTransferProtocol::parseCloseRequest(
+        "{\"sessionid\":\"s-1\",\"result\":1,\"errcode\":613,\"linkpath\":2}", req));
+    CHECK(req.linkpath == 2);
+
+    FolderCloseRequest bad;
+    CHECK_FALSE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0,\"linkpath\":4}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0,\"linkpath\":-1}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0,\"linkpath\":\"1\"}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0,\"md5\":\"0123\"}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseCloseRequest(
+        "{\"sessionid\":\"s-1\",\"result\":0,\"md5\":\"0123456789abcdef0123456789abcdeg\"}", bad));
+    CHECK_FALSE(FolderTransferProtocol::parseCloseRequest("{\"sessionid\":\"s-1\",\"result\":0,\"md5\":12}", bad));
+    //622 是合法的失败原因（直传建不起 P2P 链路）
+    REQUIRE(FolderTransferProtocol::parseCloseRequest(
+        "{\"sessionid\":\"s-1\",\"result\":1,\"errcode\":622}", req));
+    CHECK(req.errcode == error_code_folder_direct_unavailable);
+}
+
+TEST_CASE("FTP34 文件夹记录条的 linkpath：大于 0 时写入并能取回，为 0 时不写；越界非法")
+{
+    FolderTransferRecord rec;
+    rec.sessionid = "s-1";
+    rec.foldername = "docs";
+    rec.totalfiles = 3;
+    rec.result = folder_state_completed;
+    rec.linkpath = 2;
+    Json::Value root;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildRecordContent(rec), root));
+    CHECK(root["linkpath"].asInt() == 2);
+    FolderTransferRecord back;
+    REQUIRE(FolderTransferProtocol::parseRecordContent(FolderTransferProtocol::buildRecordContent(rec), back));
+    CHECK(back.linkpath == 2);
+
+    rec.linkpath = kFolderLinkPathNone;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildRecordContent(rec), root));
+    CHECK_FALSE(root.isMember("linkpath"));
+    REQUIRE(FolderTransferProtocol::parseRecordContent(FolderTransferProtocol::buildRecordContent(rec), back));
+    CHECK(back.linkpath == kFolderLinkPathNone);
+
+    CHECK_FALSE(FolderTransferProtocol::parseRecordContent(
+        "{\"sessionid\":\"s-1\",\"foldername\":\"d\",\"totaldirs\":0,\"totalfiles\":1,\"totalsize\":1,"
+        "\"result\":8,\"linkpath\":7}", back));
+}
+
+TEST_CASE("FTP35 buildDirectFileContent：普通文件消息的字段加 direct=1，不写 fileid；md5、linkpath 按需写")
+{
+    DirectFileRecord rec;
+    rec.sessionid = "100001-100002-1-1";
+    rec.filename = u8"报价单.xlsx";
+    rec.filesize = FTP_MAX_SIZE_50GIB;
+    rec.md5 = FTP_SAMPLE_MD5;
+    rec.result = folder_state_completed;
+    rec.linkpath = 1;
+    Json::Value root;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildDirectFileContent(rec), root));
+    CHECK(root["direct"].asInt() == 1);
+    CHECK(root["sessionid"].asString() == "100001-100002-1-1");
+    CHECK(root["filename"].asString() == u8"报价单.xlsx");
+    CHECK(root["filesize"].asInt64() == FTP_MAX_SIZE_50GIB);
+    CHECK(root["md5"].asString() == FTP_SAMPLE_MD5);
+    CHECK(root["result"].asInt() == folder_state_completed);
+    CHECK(root["linkpath"].asInt() == 1);
+    CHECK_FALSE(root.isMember("fileid"));
+
+    //拒绝：没有 md5、没有链路
+    DirectFileRecord rejected;
+    rejected.sessionid = "s-2";
+    rejected.filename = "a.txt";
+    rejected.filesize = 10;
+    rejected.result = folder_state_rejected;
+    REQUIRE(ftpParseJsonText(FolderTransferProtocol::buildDirectFileContent(rejected), root));
+    CHECK(root["result"].asInt() == folder_state_rejected);
+    CHECK_FALSE(root.isMember("md5"));
+    CHECK_FALSE(root.isMember("linkpath"));
+}
+
+TEST_CASE("FTP36 parseDirectFileContent：往返一致，direct 不为 1、结局不是 3 / 8、字段不合法时失败")
+{
+    DirectFileRecord rec;
+    rec.sessionid = "s-1";
+    rec.filename = "a.txt";
+    rec.filesize = 10;
+    rec.md5 = FTP_SAMPLE_MD5;
+    rec.result = folder_state_completed;
+    rec.linkpath = 2;
+    DirectFileRecord back;
+    REQUIRE(FolderTransferProtocol::parseDirectFileContent(FolderTransferProtocol::buildDirectFileContent(rec), back));
+    CHECK(back.sessionid == "s-1");
+    CHECK(back.filename == "a.txt");
+    CHECK(back.filesize == 10);
+    CHECK(back.md5 == FTP_SAMPLE_MD5);
+    CHECK(back.result == folder_state_completed);
+    CHECK(back.linkpath == 2);
+
+    //普通的离线文件消息（有 fileid、没有 direct）：不是直传记录
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"fileid\":\"abc\",\"filename\":\"a.txt\",\"filesize\":10,\"md5\":\"0123456789abcdef0123456789abcdef\"}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":0,\"sessionid\":\"s\",\"filename\":\"a\",\"filesize\":1,\"result\":8}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":1,\"sessionid\":\"s\",\"filename\":\"a\",\"filesize\":1,\"result\":7}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":1,\"sessionid\":\"\",\"filename\":\"a\",\"filesize\":1,\"result\":8}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":1,\"sessionid\":\"s\",\"filename\":\"\",\"filesize\":1,\"result\":8}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":1,\"sessionid\":\"s\",\"filename\":\"a\",\"filesize\":-1,\"result\":8}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":1,\"sessionid\":\"s\",\"filename\":\"a\",\"filesize\":1,\"result\":8,\"linkpath\":9}", back));
+    CHECK_FALSE(FolderTransferProtocol::parseDirectFileContent(
+        "{\"direct\":1,\"sessionid\":\"s\",\"filename\":\"a\",\"filesize\":1,\"result\":8,\"md5\":\"xyz\"}", back));
+}
+
+TEST_CASE("FTP37 shouldWriteRecord：文件夹传输每个终态都留记录；单文件直传只在完成与拒绝时留")
+{
+    for (int state = folder_state_rejected; state <= folder_state_completed; ++state)
+        CHECK(FolderTransferProtocol::shouldWriteRecord(folder_kind_folder, state));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_folder, folder_state_ringing));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_folder, folder_state_transferring));
+
+    CHECK(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_completed));
+    CHECK(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_rejected));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_canceled));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_peer_offline));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_timeout));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_failed));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_to_offline));
+    CHECK_FALSE(FolderTransferProtocol::shouldWriteRecord(folder_kind_file, folder_state_ringing));
+}
+
+TEST_CASE("FTP38 取值范围：状态 9 是终态，622 是合法的失败原因，621 不是")
+{
+    CHECK(FolderTransferProtocol::isTerminalState(folder_state_to_offline));
+    CHECK(FolderTransferProtocol::isValidState(folder_state_to_offline));
+    CHECK_FALSE(FolderTransferProtocol::isValidState(10));
+    CHECK(FolderTransferProtocol::isValidErrorCode(error_code_folder_direct_unavailable));
+    CHECK_FALSE(FolderTransferProtocol::isValidErrorCode(error_code_file_sensitive_word));
+    CHECK_FALSE(FolderTransferProtocol::isValidErrorCode(623));
 }

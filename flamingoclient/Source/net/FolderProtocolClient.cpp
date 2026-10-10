@@ -106,6 +106,73 @@ static bool getRequiredNonNegativeInt64(const Json::Value& root, const char* key
     return out >= 0;
 }
 
+//取出可选的整型字段：缺省时 out 置 0 并返回 true；存在时必须是 JSON 整数（写成字符串、小数都判非法）。
+//与服务端 FolderTransferProtocol.cpp 的同名判定同口径
+static bool getOptionalInt(const Json::Value& root, const char* key, int& out)
+{
+    out = 0;
+    if (!root.isMember(key))
+        return true;
+    if (!root[key].isInt())
+        return false;
+    out = root[key].asInt();
+    return true;
+}
+
+//链路路径是否在合法范围内（0 没有走 P2P，1~3 见 kFolderLinkPathMax 的注释）
+static bool isValidLinkPath(int linkPath)
+{
+    return linkPath >= kFolderLinkPathNone && linkPath <= kFolderLinkPathMax;
+}
+
+//取出可选的链路路径字段：缺省按 0 处理；存在时必须是 0~3 的整数
+static bool getOptionalLinkPath(const Json::Value& root, int& out)
+{
+    if (!getOptionalInt(root, "linkpath", out))
+        return false;
+    return isValidLinkPath(out);
+}
+
+/**
+ *  把一个 MD5 串规范成 32 位小写十六进制。
+ *  @param in  原串
+ *  @param out [出参] 规范后的串；返回 false 时内容不确定
+ *  @return 长度是 32 且全是十六进制字符时返回 true
+ */
+static bool normalizeMd5(const std::string& in, std::string& out)
+{
+    if (in.size() != kFolderMd5HexLength)
+        return false;
+    out = in;
+    for (size_t i = 0; i < out.size(); ++i)
+    {
+        char c = out[i];
+        if (c >= 'A' && c <= 'F')
+            c = static_cast<char>(c - 'A' + 'a');
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            return false;
+        out[i] = c;
+    }
+    return true;
+}
+
+//取出可选的 MD5 字段：缺省为空并返回 true；存在时必须是 32 位十六进制字符串，统一转成小写
+static bool getOptionalMd5(const Json::Value& root, std::string& out)
+{
+    out.clear();
+    if (!root.isMember("md5"))
+        return true;
+    if (!root["md5"].isString())
+        return false;
+    return normalizeMd5(root["md5"].asString(), out);
+}
+
+//文件夹记录条与直传文件消息的结局是否合法：只认 3~8（状态 9「已改为离线发送」不留任何记录）
+static bool isRecordResult(int result)
+{
+    return result >= folder_state_rejected && result <= folder_state_completed;
+}
+
 //==================== 请求构造 ====================
 
 std::string FolderProtocolClient::buildInviteRequest(int64_t peerUserId, const std::string& folderName,
@@ -267,6 +334,12 @@ bool FolderProtocolClient::parseInviteNotify(const std::string& jsonbody, Folder
     if (!getRequiredNonNegativeInt64(root, "totalsize", out.m_totalSize))
         return false;
 
+    //传输种类（2026-10-04 起）：缺省是文件夹传输；只认 0 与 1，别的取值说明两端协议版本对不上，按非法推送丢弃
+    if (!getOptionalInt(root, "kind", out.m_kind))
+        return false;
+    if (out.m_kind != folder_kind_folder && out.m_kind != folder_kind_file)
+        return false;
+
     return true;
 }
 
@@ -287,6 +360,21 @@ bool FolderProtocolClient::parseStateNotify(const std::string& jsonbody, FolderS
     return true;
 }
 
+bool FolderProtocolClient::parseRelayHelloAck(const std::string& jsonbody, FolderRelayHelloAck& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+
+    //没有整型 code 视为非法应答：调用方据 code 判定报到成败，猜不出就不能当成功
+    if (!root.isMember("code") || !root["code"].isInt())
+        return false;
+
+    out.m_code = root["code"].asInt();
+    out.m_msg  = getString(root, "msg");
+    return true;
+}
+
 bool FolderProtocolClient::parseRelayInfo(const std::string& jsonbody, FolderRelayInfo& out)
 {
     Json::Value root;
@@ -301,6 +389,8 @@ bool FolderProtocolClient::parseRelayInfo(const std::string& jsonbody, FolderRel
     out.m_relayPort = getInt(root, "relayport");
     out.m_token     = getString(root, "token");
     out.m_lanes     = getInt(root, "lanes");
+    //可选：服务端为本次传输建了 P2P 会话时才带，老服务端没有这个字段
+    out.m_p2pSessionId = getString(root, "p2psessionid");
 
     //缺会话 id 或令牌，中转连接报到不上去
     if (out.m_sessionId.empty() || out.m_token.empty())
@@ -326,20 +416,21 @@ bool FolderProtocolClient::parseRelayInfo(const std::string& jsonbody, FolderRel
 
 bool FolderProtocolClient::isValidState(int state)
 {
-    //enum folder_transfer_state 取值连续（1~8），按上下界判定即可
-    return state >= folder_state_ringing && state <= folder_state_completed;
+    //enum folder_transfer_state 取值连续（1~9；9 是 2026-10-04 起单文件直传的「已改为离线发送」），按上下界判定即可
+    return state >= folder_state_ringing && state <= folder_state_to_offline;
 }
 
 bool FolderProtocolClient::isValidErrorCode(int errCode)
 {
-    //error_code_folder_* 这组码取值连续（606~620），按上下界判定即可
-    return errCode >= error_code_folder_rejected && errCode <= error_code_folder_busy;
+    //error_code_folder_* 这组码 606~620 取值连续；622（单文件直传不可用）是 2026-10-04 加的，中间的 621 属于敏感词，不在其列
+    return (errCode >= error_code_folder_rejected && errCode <= error_code_folder_busy)
+        || errCode == error_code_folder_direct_unavailable;
 }
 
 bool FolderProtocolClient::isTerminalState(int state)
 {
-    //响铃中(1) 与传输中(2) 是过程状态，会话还没有结局；3~8 六个都是定局
-    return state >= folder_state_rejected && state <= folder_state_completed;
+    //响铃中(1) 与传输中(2) 是过程状态，会话还没有结局；3~9 都是定局
+    return state >= folder_state_rejected && state <= folder_state_to_offline;
 }
 
 //==================== 传输记录条的 content 编解码 ====================
@@ -348,11 +439,13 @@ std::string FolderProtocolClient::buildRecordContent(const FolderRecordContent& 
 {
     //缺会话 id 的记录无从与聊天窗里那条本地气泡对上；非终态的结局说不清这次传输到底
     //怎么收的场。两者都不该被写进聊天记录，就地返回空串暴露问题
-    if (rec.m_sessionId.empty() || !isTerminalState(rec.m_result))
+    if (rec.m_sessionId.empty() || !isRecordResult(rec.m_result))
         return std::string();
 
     //三项规模统计不得为负；同时为 0 是合法的（发送了一个空目录）
     if (rec.m_totalDirs < 0 || rec.m_totalFiles < 0 || rec.m_totalSize < 0)
+        return std::string();
+    if (!isValidLinkPath(rec.m_linkPath))
         return std::string();
 
     Json::Value root;
@@ -366,6 +459,9 @@ std::string FolderProtocolClient::buildRecordContent(const FolderRecordContent& 
     //「errcode 仅失败态有意义」这条不变式在此归一：其余五种结局一律写 0，
     //各调用点不必各判一遍，也不会出现"已完成却带着失败原因"这种自相矛盾的记录
     root["errcode"]    = (rec.m_result == folder_state_failed) ? rec.m_errCode : 0;
+    //链路路径只在走过 P2P 时写，与服务端 buildRecordContent 一致
+    if (rec.m_linkPath > kFolderLinkPathNone)
+        root["linkpath"] = rec.m_linkPath;
     return writeCompact(root);
 }
 
@@ -381,9 +477,10 @@ bool FolderProtocolClient::parseRecordContent(const std::string& jsonbody, Folde
     if (out.m_sessionId.empty())
         return false;
 
-    //结局必须是终态：过程状态与越界值都无从映射成气泡样式，按脏数据丢弃
+    //结局必须是终态：过程状态与越界值都无从映射成气泡样式，按脏数据丢弃。状态 9 只属于单文件直传、
+    //且不留记录，文件夹记录里出现它同样是脏数据
     out.m_result = getInt(root, "result");
-    if (!isTerminalState(out.m_result))
+    if (!isRecordResult(out.m_result))
         return false;
 
     //三项规模统计必填且不得为负。写成字符串、写成小数、缺字段都在这里被挡下 ——
@@ -398,7 +495,124 @@ bool FolderProtocolClient::parseRecordContent(const std::string& jsonbody, Folde
     //与构造侧对称地归一：非失败结局一律把失败原因抹成 0，免得界面显示出一条
     //本不该存在的失败原因
     out.m_errCode = (out.m_result == folder_state_failed) ? getInt(root, "errcode") : 0;
-    return true;
+
+    //链路路径（2026-10-04 起）：缺省为 0，越界按脏数据丢弃
+    return getOptionalLinkPath(root, out.m_linkPath);
+}
+
+
+//==================== 单文件直传与链路路径（2026-10-04） ====================
+
+std::string FolderProtocolClient::buildFileInviteRequest(int64_t peerUserId, const std::string& fileName, int64_t fileSize)
+{
+    //服务端对这几项都会再校验一遍；此处先拦一道，不把必然被拒的包发出去。0 字节文件是合法的
+    if (peerUserId <= 0 || fileName.empty() || fileSize < 0)
+        return std::string();
+
+    Json::Value root;
+    root["peerid"]     = std::to_string(peerUserId);
+    //与文件夹传输共用字段：foldername 填文件名，目录数 0、文件数 1，总大小即文件大小
+    root["foldername"] = fileName;
+    root["totaldirs"]  = static_cast<Json::Int64>(0);
+    root["totalfiles"] = static_cast<Json::Int64>(1);
+    root["totalsize"]  = static_cast<Json::Int64>(fileSize);
+    root["kind"]       = folder_kind_file;
+    return writeCompact(root);
+}
+
+std::string FolderProtocolClient::buildCancel(const std::string& sessionId, bool toOffline)
+{
+    if (!toOffline)
+        return buildCancel(sessionId);
+    if (sessionId.empty())
+        return std::string();
+
+    Json::Value root;
+    root["sessionid"] = sessionId;
+    //发送端改为上传服务器发离线文件：服务端推「已改为离线发送」(9)、不留文件消息
+    root["tooffline"] = 1;
+    return writeCompact(root);
+}
+
+std::string FolderProtocolClient::buildClose(const std::string& sessionId, bool success, int errCode,
+                                             const std::string& errMsg, int linkPath, const std::string& md5)
+{
+    //两个可选字段先校验，越界或格式不对的不发出去：服务端会判非法请求，那一帧 1814 等于没发
+    if (!isValidLinkPath(linkPath))
+        return std::string();
+    std::string md5Lower;
+    if (!md5.empty() && !normalizeMd5(md5, md5Lower))
+        return std::string();
+
+    //其余字段与校验沿用旧重载，再按需补上两个字段：都没有时产出与旧重载逐字相同
+    const std::string base = buildClose(sessionId, success, errCode, errMsg);
+    if (base.empty())
+        return std::string();
+    if (linkPath == kFolderLinkPathNone && md5Lower.empty())
+        return base;
+
+    Json::Value root;
+    if (!parseObject(base, root))
+        return std::string();
+    if (linkPath > kFolderLinkPathNone)
+        root["linkpath"] = linkPath;
+    if (!md5Lower.empty())
+        root["md5"] = md5Lower;
+    return writeCompact(root);
+}
+
+std::string FolderProtocolClient::buildDirectFileContent(const DirectFileContent& rec)
+{
+    //缺会话 id 无从接管气泡；没有文件名画不出气泡；直传只在完成与拒绝两种结局留文件消息
+    if (rec.m_sessionId.empty() || rec.m_fileName.empty() || rec.m_fileSize < 0)
+        return std::string();
+    if (rec.m_result != folder_state_completed && rec.m_result != folder_state_rejected)
+        return std::string();
+    if (!isValidLinkPath(rec.m_linkPath))
+        return std::string();
+    std::string md5Lower;
+    if (!rec.m_md5.empty() && !normalizeMd5(rec.m_md5, md5Lower))
+        return std::string();
+
+    Json::Value root;
+    //与普通文件消息同名的三项，字段名逐字对应服务端 FolderTransferProtocol::buildDirectFileContent
+    root["filename"] = rec.m_fileName;
+    root["filesize"] = static_cast<Json::Int64>(rec.m_fileSize);
+    if (!md5Lower.empty())
+        root["md5"] = md5Lower;
+    root["direct"]    = 1;
+    root["sessionid"] = rec.m_sessionId;
+    root["result"]    = rec.m_result;
+    if (rec.m_linkPath > kFolderLinkPathNone)
+        root["linkpath"] = rec.m_linkPath;
+    return writeCompact(root);
+}
+
+bool FolderProtocolClient::parseDirectFileContent(const std::string& jsonbody, DirectFileContent& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+
+    //没有 direct=1 的是普通离线文件消息，不归本函数解析
+    int direct = 0;
+    if (!getOptionalInt(root, "direct", direct) || direct != 1)
+        return false;
+
+    out.m_sessionId = getString(root, "sessionid");
+    out.m_fileName  = getString(root, "filename");
+    if (out.m_sessionId.empty() || out.m_fileName.empty())
+        return false;
+    if (!getRequiredNonNegativeInt64(root, "filesize", out.m_fileSize))
+        return false;
+    if (!root["result"].isInt())
+        return false;
+    out.m_result = root["result"].asInt();
+    if (out.m_result != folder_state_completed && out.m_result != folder_state_rejected)
+        return false;
+    if (!getOptionalMd5(root, out.m_md5))
+        return false;
+    return getOptionalLinkPath(root, out.m_linkPath);
 }
 
 } // namespace net

@@ -203,8 +203,9 @@ static bool WriteAllToHandle(HANDLE handle, const unsigned char* data, size_t le
 
 //==================== FolderRecvLane ====================
 
-FolderRecvLane::FolderRecvLane(int laneIndex)
+FolderRecvLane::FolderRecvLane(int laneIndex, IFolderLaneTransport* transport)
     : m_laneIndex(laneIndex)
+    , m_client(transport)
     , m_closed(false)
     , m_peerClosed(false)
 {
@@ -213,12 +214,12 @@ FolderRecvLane::FolderRecvLane(int laneIndex)
 FolderRecvLane::~FolderRecvLane()
 {
     Shutdown();
-    m_client.Close();
+    m_client->Close();
 }
 
-FolderRelayClient& FolderRecvLane::GetClient()
+IFolderLaneTransport& FolderRecvLane::GetClient()
 {
-    return m_client;
+    return *m_client;
 }
 
 int FolderRecvLane::GetLaneIndex() const
@@ -356,7 +357,14 @@ bool FolderRecvSession::Start(const FolderRecvSessionParams& params,
     const size_t laneCount = static_cast<size_t>(params.m_dataLanes) + 1;
     m_lanes.clear();
     for (size_t i = 0; i < laneCount; ++i)
-        m_lanes.push_back(std::unique_ptr<FolderRecvLane>(new FolderRecvLane(static_cast<int>(i))));
+    {
+        //有通道工厂（P2P）时用它建，否则按中转参数建到 fileserver 的中转连接
+        IFolderLaneTransport* transport = (params.m_transportFactory != NULL)
+            ? params.m_transportFactory->CreateLane(static_cast<int>(i))
+            : new FolderRelayLaneTransport(params.m_relayIp, params.m_relayPort, params.m_relayToken,
+                                           params.m_serverPubKey);
+        m_lanes.push_back(std::unique_ptr<FolderRecvLane>(new FolderRecvLane(static_cast<int>(i), transport)));
+    }
 
     m_laneFiles.clear();
     m_laneFiles.resize(laneCount);
@@ -422,7 +430,14 @@ void FolderRecvSession::SessionProc()
                 new std::thread(&FolderRecvSession::LaneProc, this, m_lanes[i].get())));
         }
 
-        ControlLoop();
+        //扩展点的前置交换从这里开始（文件共享的访问者在此发 st_job）
+        int hookCode = 0;
+        if (m_params.m_hooks != NULL)
+            hookCode = m_params.m_hooks->OnLanesReady(*this);
+        if (hookCode != 0)
+            Fail(hookCode, "lanes ready hook failed");
+        else
+            ControlLoop();
     }
 
     //收尾顺序不能颠倒：先唤醒并关掉各通道的队列，卡在入队处的中转接收线程才会退出；
@@ -484,8 +499,7 @@ bool FolderRecvSession::ConnectAllLanes()
             return false;
 
         const int lane = m_lanes[i]->GetLaneIndex();
-        if (!m_lanes[i]->GetClient().Connect(m_params.m_relayIp, m_params.m_relayPort,
-                                             m_params.m_relayToken, lane, m_lanes[i].get()))
+        if (!m_lanes[i]->GetClient().Connect(lane, m_lanes[i].get(), kFolderRelayConnectTimeoutSec))
         {
             LOG_ERROR("folder recv: session %s connect relay lane %d to %s:%d failed.",
                       m_params.m_sessionId.c_str(), lane,
@@ -519,6 +533,16 @@ void FolderRecvSession::ControlLoop()
                 Fail(error_code_folder_relay_broken, "control lane disconnected");
                 break;
             }
+            //控制通道空闲：给扩展点一个定时重发的机会
+            if (m_params.m_hooks != NULL)
+            {
+                const int code = m_params.m_hooks->OnControlIdle(*this);
+                if (code != 0)
+                {
+                    Fail(code, "control idle hook failed");
+                    break;
+                }
+            }
             continue;
         }
 
@@ -543,6 +567,15 @@ void FolderRecvSession::LaneProc(FolderRecvLane* lane)
         {
             if (lane->IsPeerClosed())
             {
+                //全部文件都已校验通过：发送端发完 ft_complete 就关闭了全部通道，本通道只是先看到了断开，
+                //退出本通道的循环即可，整体结果由控制通道判定
+                if (!folderrecv::IsDataLaneCloseFatal(m_manifestReady.load(), m_state->GetCompletedFileCount(),
+                                                      static_cast<int64_t>(m_files.size())))
+                {
+                    LOG_INFO("folder recv: session %s data lane closed by peer after all files completed.",
+                             m_params.m_sessionId.c_str());
+                    break;
+                }
                 Fail(error_code_folder_relay_broken, "data lane disconnected");
                 break;
             }
@@ -559,6 +592,18 @@ void FolderRecvSession::LaneProc(FolderRecvLane* lane)
 bool FolderRecvSession::HandleControlFrame(const std::string& frame)
 {
     const unsigned char* body = reinterpret_cast<const unsigned char*>(frame.data());
+
+    //首字节不属于 ft_* 的帧是扩展点的自定义帧（文件共享的 st_job / st_job_ack），交给扩展点
+    if (m_params.m_hooks != NULL && !frame.empty() && !IsFolderFrameTypeByte(body[0]))
+    {
+        const int code = m_params.m_hooks->OnControlFrame(*this, frame);
+        if (code != 0)
+        {
+            Fail(code, "control frame hook failed");
+            return false;
+        }
+        return true;
+    }
 
     FolderRelayInboundFrame inbound;
     if (!relayframing::DecodeFrame(body, frame.size(), inbound))
@@ -585,6 +630,13 @@ bool FolderRecvSession::HandleControlFrame(const std::string& frame)
             }
             if (fed == FolderRelayManifestAssembler::folder_manifest_done)
                 return OnManifestReady();
+            //发送端在回执到达前重发的多余一份、或开头被 fileserver 丢掉的那一份：丢弃本段，继续等
+            if (fed == FolderRelayManifestAssembler::folder_manifest_ignored)
+            {
+                LOG_INFO("folder recv: session %s manifest segment %lld/%lld ignored (resent copy or partial copy).",
+                         m_params.m_sessionId.c_str(), inbound.m_manifest.m_segindex,
+                         inbound.m_manifest.m_segcount);
+            }
 
             return true;
         }
@@ -629,11 +681,12 @@ bool FolderRecvSession::OnManifestReady()
              m_params.m_sessionId.c_str(), static_cast<unsigned int>(m_dirs.size()),
              static_cast<unsigned int>(m_files.size()), m_totalBytes, m_folderName.c_str());
 
-    //根文件夹名必须是单独一段：它要直接拼到用户选定的保存位置下面，带分隔符就等于越权指定落点
-    if (m_folderName.empty()
+    //根文件夹名必须是单独一段：它要直接拼到用户选定的保存位置下面，带分隔符就等于越权指定落点。
+    //有扩展点时允许为空（清单没有根文件夹，顶层条目直接落在扩展点给出的根目录下）
+    if ((m_folderName.empty() && m_params.m_hooks == NULL)
+        || (!m_folderName.empty() && CheckFolderRelativePath(m_folderName) != kFolderPathOk)
         || m_folderName.find(kFolderPathSeparator) != std::string::npos
-        || m_folderName.find('\\') != std::string::npos
-        || CheckFolderRelativePath(m_folderName) != kFolderPathOk)
+        || m_folderName.find('\\') != std::string::npos)
     {
         LOG_ERROR("folder recv: session %s root folder name is unsafe: %s.",
                   m_params.m_sessionId.c_str(), m_folderName.c_str());
@@ -723,6 +776,24 @@ bool FolderRecvSession::OnManifestReady()
 
 bool FolderRecvSession::PrepareRootDirectory()
 {
+    //扩展点决定落点（文件共享：下载落到用户选的目录、上传落到共享内的目标目录，各自的同名规则由它处理）
+    if (m_params.m_hooks != NULL)
+    {
+        std::wstring root;
+        const int code = m_params.m_hooks->PrepareRoot(m_folderName, m_dirs, m_files, root);
+        if (code != 0 || root.empty())
+        {
+            LOG_ERROR("folder recv: session %s prepare root by hooks failed, code %d.", m_params.m_sessionId.c_str(), code);
+            Fail(code != 0 ? code : error_code_folder_mkdir_fail, "prepare root directory by hooks failed");
+            return false;
+        }
+        m_rootPath = root;
+        m_state->SetRootPath(m_rootPath);
+        LOG_INFO("folder recv: session %s root dir given by hooks: %s.", m_params.m_sessionId.c_str(),
+                 PathForLog(m_rootPath).c_str());
+        return true;
+    }
+
     //重试：复用上次那个根目录，不再改名新建（方案 8.3）
     if (m_state->HasRootPath())
     {
@@ -1077,6 +1148,10 @@ bool FolderRecvSession::BeginFile(FolderRecvLane* lane, const FolderRelayFileBeg
         return false;
     }
 
+    //半成品已打开：告诉扩展点（文件共享的上传据此给它设隐藏属性）
+    if (m_params.m_hooks != NULL)
+        m_params.m_hooks->OnPartFileOpened(ctx.m_partPath);
+
     ctx.m_fileHandle = handle;
     ctx.m_index      = info.m_index;
     ctx.m_size       = entry.m_size;
@@ -1248,13 +1323,22 @@ bool FolderRecvSession::FinishFile(FolderRecvLane* lane, const FolderRelayFileEn
             ctx.m_fileHandle = NULL;
         }
 
-        if (!::MoveFileExW(MakeLongPath(ctx.m_partPath).c_str(), MakeLongPath(ctx.m_finalPath).c_str(),
-                           MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        //有扩展点时由它决定正式名已存在能否覆盖（文件共享的上传不覆盖）
+        const bool replace = (m_params.m_hooks == NULL) || m_params.m_hooks->ReplaceExistingOnFinish();
+        const DWORD moveFlags = MOVEFILE_WRITE_THROUGH | (replace ? MOVEFILE_REPLACE_EXISTING : 0);
+        if (!::MoveFileExW(MakeLongPath(ctx.m_partPath).c_str(), MakeLongPath(ctx.m_finalPath).c_str(), moveFlags))
         {
             LOG_ERROR("folder recv: session %s rename %s to the final name failed, win32 error %lu.",
                       m_params.m_sessionId.c_str(), PathForLog(ctx.m_partPath).c_str(), ::GetLastError());
             resultCode = error_code_folder_write_fail;
             resultMsg  = "rename the part file to its final name failed";
+        }
+        else if (m_params.m_hooks != NULL)
+        {
+            //先于下面的结果帧：发送端收到完成时，正式文件已经是最终的样子
+            m_params.m_hooks->OnFileFinalized(ctx.m_partPath, ctx.m_finalPath);
+            //字节数与 MD5 都已校验通过：交出落地路径与这份 MD5（发送端没给 MD5 时为空）
+            m_params.m_hooks->OnFileVerified(ctx.m_finalPath, actualMd5);
         }
     }
 
@@ -1338,6 +1422,11 @@ void FolderRecvSession::Fail(int errcode, const std::string& errmsg)
         if (relayframing::BuildAbortFrame(abort, frame))
             SendControlFrame(frame);
     }
+}
+
+bool FolderRecvSession::SendControl(const std::string& frame)
+{
+    return SendControlFrame(frame);
 }
 
 bool FolderRecvSession::SendControlFrame(const std::string& frame)

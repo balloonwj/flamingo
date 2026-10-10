@@ -3,6 +3,7 @@
  *  balloonwj@qq.com   2026-08-12
  */
 #include "CommandLine.h"
+#include "../Source/Common/I18n/I18n.h"   // TR / TRF：提示文字的多语言查找
 
 namespace iupdate {
 
@@ -14,6 +15,8 @@ const wchar_t* const kOptTarget = L"--target";
 const wchar_t* const kOptExec   = L"--exec";
 const wchar_t* const kOptPid    = L"--pid";
 const wchar_t* const kOptSilent = L"--silent";
+//界面语言（多语言第 3c 步），可选的带值参数
+const wchar_t* const kOptLang   = L"--lang";
 
 //进程 id 的十进制位数上限。Windows 的进程 id 是 32 位无符号数，十进制最多 10 位；
 //超过这个长度的输入一律判为非法，顺带挡住溢出。
@@ -83,7 +86,7 @@ bool ParseCommandLine(int argc, wchar_t* const* argv,
 
     if (argc <= 0 || argv == NULL)
     {
-        errmsg = L"命令行参数为空。";
+        errmsg = TR(L"命令行参数为空。");
         return false;
     }
 
@@ -109,8 +112,9 @@ bool ParseCommandLine(int argc, wchar_t* const* argv,
         const bool isTarget = EqualsW(opt, kOptTarget);
         const bool isExec   = EqualsW(opt, kOptExec);
         const bool isPid    = EqualsW(opt, kOptPid);
+        const bool isLang   = EqualsW(opt, kOptLang);
 
-        if (!isZip && !isTarget && !isExec && !isPid)
+        if (!isZip && !isTarget && !isExec && !isPid && !isLang)
         {
             //未知参数：忽略而不报错。将来加新开关时，旧版更新器碰到它不至于罢工。
             continue;
@@ -119,7 +123,7 @@ bool ParseCommandLine(int argc, wchar_t* const* argv,
         //带值参数后面必须还有一个参数
         if (i + 1 >= argc || argv[i + 1] == NULL)
         {
-            errmsg = std::wstring(L"参数 ") + opt + L" 后面缺少取值。";
+            errmsg = TRF(L"参数 {0} 后面缺少取值。", opt);
             return false;
         }
 
@@ -138,11 +142,15 @@ bool ParseCommandLine(int argc, wchar_t* const* argv,
         {
             out.m_execPath = value;
         }
+        else if (isLang)
+        {
+            out.m_language = value;
+        }
         else
         {
             if (!ParseUnsigned(value, out.m_pid) || out.m_pid == 0)
             {
-                errmsg = L"参数 --pid 必须是正整数。";
+                errmsg = TR(L"参数 --pid 必须是正整数。");
                 return false;
             }
             pidSeen = true;
@@ -152,26 +160,43 @@ bool ParseCommandLine(int argc, wchar_t* const* argv,
     //四个必填项逐个检查，缺哪个就报哪个，方便从日志里直接看出调用方哪里写错了
     if (out.m_zipPath.empty())
     {
-        errmsg = L"缺少参数 --zip（升级包路径）。";
+        errmsg = TR(L"缺少参数 --zip（升级包路径）。");
         return false;
     }
     if (out.m_targetDir.empty())
     {
-        errmsg = L"缺少参数 --target（安装目录）。";
+        errmsg = TR(L"缺少参数 --target（安装目录）。");
         return false;
     }
     if (out.m_execPath.empty())
     {
-        errmsg = L"缺少参数 --exec（要重启的程序）。";
+        errmsg = TR(L"缺少参数 --exec（要重启的程序）。");
         return false;
     }
     if (!pidSeen)
     {
-        errmsg = L"缺少参数 --pid（主进程 id）。";
+        errmsg = TR(L"缺少参数 --pid（主进程 id）。");
         return false;
     }
 
     return true;
+}
+
+std::wstring PeekLanguageArg(int argc, wchar_t* const* argv)
+{
+    if (argc <= 0 || argv == NULL)
+    {
+        return std::wstring();
+    }
+    //从 1 开始：argv[0] 是程序自身路径
+    for (int i = 1; i < argc; ++i)
+    {
+        if (EqualsW(argv[i], kOptLang))
+        {
+            return (i + 1 < argc && argv[i + 1] != NULL) ? std::wstring(argv[i + 1]) : std::wstring();
+        }
+    }
+    return std::wstring();
 }
 
 } // namespace iupdate

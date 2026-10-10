@@ -185,7 +185,9 @@ HBITMAP MakeRoundedAvatarFromFile(LPCWSTR path, int sizePx, int radiusPx)
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
     Gdiplus::REAL r = (Gdiplus::REAL)radiusPx;
-    Gdiplus::REAL maxR = (Gdiplus::REAL)sizePx * 0.5f;
+    // 圆角路径四边各往里收 0.5 像素，宽高是 sizePx - 1，半径上限按它的一半算。按 sizePx 的一半算时，
+    // 画圆形头像的四段圆弧会彼此错开半个像素、路径自相交，形状左右上下不对称（2026-10-03 实测）
+    Gdiplus::REAL maxR = ((Gdiplus::REAL)sizePx - 1.0f) * 0.5f;
     if (r > maxR)
     {
         r = maxR;
@@ -195,14 +197,26 @@ HBITMAP MakeRoundedAvatarFromFile(LPCWSTR path, int sizePx, int radiusPx)
         r = 0.0f;
     }
 
-    // 圆角方形裁剪：clip 到圆角路径后把裁方区域缩放铺满。角外保持透明。
+    // 圆角方形：先把裁方区域缩放到目标尺寸画进一张中间位图，再拿它作纹理画刷填充圆角路径，
+    // 角外保持透明。不用「SetClip 到圆角路径再 DrawImage」：GDI+ 的裁剪区按整像素划分，抗锯齿
+    // 设置对它不起作用，切出来的边缘只有完全不透明与完全透明两种像素，是台阶状的锯齿
+    // （2026-10-03 实测）。FillPath 遵守抗锯齿设置，边缘像素按覆盖比例得到半透明值。
+    Gdiplus::Bitmap scaled(sizePx, sizePx, PixelFormat32bppPARGB);
+    {
+        Gdiplus::Graphics gs(&scaled);
+        gs.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        gs.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        Gdiplus::Rect destRc(0, 0, sizePx, sizePx);
+        gs.DrawImage(&src, destRc, cropX, cropY, side, side, Gdiplus::UnitPixel);
+    }
+
+    // 纹理画刷不做任何变换：中间位图与目标位图同尺寸、左上角对齐，像素一一对应。两边都用
+    // PixelOffsetModeHalf，纹理不会出现半像素的错位。
+    Gdiplus::TextureBrush brush(&scaled);
     Gdiplus::GraphicsPath path2;
     AddRoundRectPath(path2, 0.5f, 0.5f,
                      (Gdiplus::REAL)sizePx - 1.0f, (Gdiplus::REAL)sizePx - 1.0f, r);
-    g.SetClip(&path2);
-    Gdiplus::Rect destRc(0, 0, sizePx, sizePx);
-    g.DrawImage(&src, destRc, cropX, cropY, side, side, Gdiplus::UnitPixel);
-    g.ResetClip();
+    g.FillPath(&brush, &path2);
 
     return hBmp;
 }

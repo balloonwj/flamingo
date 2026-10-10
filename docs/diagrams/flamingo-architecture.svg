@@ -1,0 +1,259 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1660" height="1180" viewBox="0 0 1660 1180">
+  <!-- Flamingo IM 总体服务架构图（中文版，供 README.md 使用；英文版为 flamingo-architecture-en.svg，两份内容须保持一致）。balloonwj@qq.com 2026-10-10
+       源文件，PNG 由 tools/render_diagrams.ps1 用 Edge 无头模式渲染生成，改图请改本文件后重新渲染。 -->
+  <defs>
+    <style>
+      text { font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif; fill: #1E293B; }
+      .title { font-size: 30px; font-weight: 700; fill: #0F172A; }
+      .subtitle { font-size: 15px; fill: #64748B; }
+      .h { font-size: 17px; font-weight: 700; }
+      .h2 { font-size: 20px; font-weight: 700; }
+      .b { font-size: 14px; font-weight: 700; }
+      .t { font-size: 13px; fill: #334155; }
+      .s { font-size: 12px; fill: #64748B; }
+      .xs { font-size: 11px; fill: #94A3B8; }
+      .c { text-anchor: middle; }
+      .r { text-anchor: end; }
+      .tab { font-size: 17px; font-weight: 700; fill: #FFFFFF; letter-spacing: 6px; }
+    </style>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <marker id="aBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563EB"/></marker>
+    <marker id="aCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0891B2"/></marker>
+    <marker id="aGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+    <marker id="aSlate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="aPink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#DB2777"/></marker>
+    <marker id="aOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#EA580C"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1660" height="1180" fill="#FFFFFF"/>
+
+  <!-- 标题 -->
+  <text class="title c" x="830" y="50">Flamingo IM 总体服务架构</text>
+  <text class="subtitle c" x="830" y="80">chatserver · fileserver · imgserver 三个独立服务　|　PC 客户端与企业管理控制台　|　MySQL / SQLite 双后端</text>
+
+  <!-- 左侧分层标签 -->
+  <rect x="12" y="100" width="40" height="190" rx="10" fill="#2563EB"/>
+  <text class="tab c" x="32" y="195" writing-mode="tb" dominant-baseline="middle">客户端</text>
+  <rect x="12" y="305" width="40" height="540" rx="10" fill="#7C3AED"/>
+  <text class="tab c" x="32" y="575" writing-mode="tb" dominant-baseline="middle">服务端</text>
+  <rect x="12" y="860" width="40" height="140" rx="10" fill="#475569"/>
+  <text class="tab c" x="32" y="930" writing-mode="tb" dominant-baseline="middle">存储</text>
+  <rect x="12" y="1015" width="40" height="80" rx="10" fill="#1E293B"/>
+  <text class="tab c" x="32" y="1055" writing-mode="tb" dominant-baseline="middle">框架</text>
+
+  <g transform="translate(60,0)">
+    <!-- 分层底色 -->
+    <rect x="20" y="100" width="1570" height="190" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <rect x="20" y="305" width="1570" height="540" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <rect x="20" y="860" width="1570" height="140" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+
+    <!-- ===================== 连接线（先画，压在卡片下面） ===================== -->
+    <!-- 运维 → 监控端口 -->
+    <path d="M140,270 V340" stroke="#64748B" stroke-width="2.5" fill="none" marker-end="url(#aGray)"/>
+    <!-- 管理控制台 → HTTP 端口与控制台长连接端口 -->
+    <path d="M380,270 V340" stroke="#0891B2" stroke-width="2.5" fill="none" marker-end="url(#aCyan)"/>
+    <path d="M555,270 V340" stroke="#0891B2" stroke-width="2.5" fill="none" marker-end="url(#aCyan)"/>
+    <text class="s" x="388" y="314" style="fill:#0891B2">HTTP 短连接</text>
+    <text class="s" x="563" y="314" style="fill:#0891B2">长连接</text>
+    <!-- PC 客户端 → 五个端口 -->
+    <path d="M705,270 V340" stroke="#2563EB" stroke-width="2.5" fill="none" marker-end="url(#aBlue)"/>
+    <path d="M975,270 V340" stroke="#2563EB" stroke-width="2.5" fill="none" marker-end="url(#aBlue)"/>
+    <path d="M1240,270 V340" stroke="#2563EB" stroke-width="2.5" fill="none" marker-end="url(#aBlue)"/>
+    <path d="M1370,270 V340" stroke="#2563EB" stroke-width="2.5" fill="none" marker-end="url(#aBlue)"/>
+    <path d="M1500,270 V340" stroke="#2563EB" stroke-width="2.5" fill="none" marker-end="url(#aBlue)"/>
+    <text class="s" x="713" y="314" style="fill:#2563EB">长连接 · JSON · 加密</text>
+    <text class="s" x="983" y="314" style="fill:#2563EB">上传 / 下载</text>
+    <text class="s" x="1248" y="314" style="fill:#2563EB">图片</text>
+    <text class="s" x="1378" y="314" style="fill:#2563EB">中转</text>
+    <text class="s" x="1508" y="314" style="fill:#2563EB">探测</text>
+
+    <!-- 存储读写 -->
+    <path d="M230,710 V881" stroke="#94A3B8" stroke-width="2.5" fill="none" marker-start="url(#aSlate)" marker-end="url(#aSlate)"/>
+    <path d="M600,710 V881" stroke="#DB2777" stroke-width="2.5" fill="none" marker-end="url(#aPink)"/>
+    <path d="M975,730 V881" stroke="#94A3B8" stroke-width="2.5" fill="none" marker-start="url(#aSlate)" marker-end="url(#aSlate)"/>
+    <path d="M1240,714 V881" stroke="#94A3B8" stroke-width="2.5" fill="none" marker-start="url(#aSlate)" marker-end="url(#aSlate)"/>
+    <path d="M1410,714 V881" stroke="#94A3B8" stroke-width="2.5" fill="none" marker-end="url(#aSlate)"/>
+    <text class="s" x="608" y="800" style="fill:#DB2777">机器人回调</text>
+
+    <!-- chatserver → imgserver 云端录制控制连接（跨越两条存储线处画跨线弧） -->
+    <path d="M780,680 H800 V800 H965 a10,10 0 0 1 20,0 H1230 a10,10 0 0 1 20,0 H1330 V716"
+          stroke="#EA580C" stroke-width="2.5" stroke-dasharray="8 5" fill="none" marker-end="url(#aOrange)"/>
+    <text class="b c" x="1107" y="790" style="fill:#EA580C">云端录制控制连接</text>
+    <text class="s c" x="1107" y="822" style="fill:#EA580C">chatserver → 中转端口</text>
+
+    <!-- ===================== 客户端层 ===================== -->
+    <!-- 运维 -->
+    <rect x="40" y="140" width="200" height="130" rx="12" fill="#FFFFFF" stroke="#64748B" stroke-width="2" filter="url(#sh)"/>
+    <rect x="40" y="140" width="200" height="8" rx="4" fill="#64748B"/>
+    <text class="h" x="60" y="178" style="fill:#475569">运维人员</text>
+    <text class="t" x="60" y="206">nc / telnet 连监控端口</text>
+    <text class="s" x="60" y="230">help · ul · su</text>
+    <text class="s" x="60" y="252">查看在线用户与服务状态</text>
+
+    <!-- 企业管理控制台 -->
+    <rect x="280" y="140" width="360" height="130" rx="12" fill="#FFFFFF" stroke="#0891B2" stroke-width="2" filter="url(#sh)"/>
+    <rect x="280" y="140" width="360" height="8" rx="4" fill="#0891B2"/>
+    <text class="h" x="300" y="178" style="fill:#0E7490">企业管理控制台</text>
+    <text class="s r" x="622" y="178">flamingoAdmin（Windows）</text>
+    <text class="t" x="300" y="206">企业 · 部门 · 员工 · 群 · 公告 · 客户端版本</text>
+    <text class="t" x="300" y="230">机器人 · 敏感词 · 文件共享审计 · 数据看板</text>
+    <text class="s" x="300" y="254" style="fill:#0891B2">FlamingoLink.dll：在线用户实时推送</text>
+
+    <!-- PC 客户端 -->
+    <rect x="680" y="140" width="880" height="130" rx="12" fill="#FFFFFF" stroke="#2563EB" stroke-width="2" filter="url(#sh)"/>
+    <rect x="680" y="140" width="880" height="8" rx="4" fill="#2563EB"/>
+    <text x="700" y="176"><tspan class="h" style="fill:#1D4ED8">PC 客户端 Flamingo.exe</tspan><tspan class="s" dx="14">Windows · Win32 + WTL · balloonui 自绘界面 · 十余个插件 DLL 按需加载</tspan></text>
+    <rect x="700" y="190" width="260" height="64" rx="10" fill="#EFF6FF" stroke="#93C5FD"/>
+    <text class="b c" x="830" y="216" style="fill:#1D4ED8">客户端 A</text>
+    <text class="s c" x="830" y="240">聊天 · 通话 · 共享 · 传文件</text>
+    <rect x="1280" y="190" width="260" height="64" rx="10" fill="#EFF6FF" stroke="#93C5FD"/>
+    <text class="b c" x="1410" y="216" style="fill:#1D4ED8">客户端 B</text>
+    <text class="s c" x="1410" y="240">同一企业的同事</text>
+    <path d="M966,222 H1274" stroke="#2563EB" stroke-width="2.5" stroke-dasharray="7 5" fill="none" marker-start="url(#aBlue)" marker-end="url(#aBlue)"/>
+    <text class="b c" x="1120" y="212" style="fill:#2563EB">P2P 直连 · UDP 打洞</text>
+    <text class="s c" x="1120" y="244">打不通时回落到 imgserver 中转</text>
+
+    <!-- ===================== 服务端层 ===================== -->
+    <!-- chatserver -->
+    <rect x="40" y="370" width="740" height="360" rx="14" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2.5" filter="url(#sh)"/>
+    <!-- 端口：跨在边框上 -->
+    <g>
+      <rect x="60" y="342" width="160" height="58" rx="10" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text class="b c" x="140" y="366" style="fill:#6D28D9">TCP 18889</text>
+      <text class="s c" x="140" y="388">MonitorServer 监控</text>
+      <rect x="300" y="342" width="160" height="58" rx="10" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text class="b c" x="380" y="366" style="fill:#6D28D9">HTTP 12345</text>
+      <text class="s c" x="380" y="388">HttpServer 管理接口</text>
+      <rect x="475" y="342" width="160" height="58" rx="10" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text class="b c" x="555" y="366" style="fill:#6D28D9">TCP 20006</text>
+      <text class="s c" x="555" y="388">AdminLinkServer</text>
+      <rect x="645" y="342" width="122" height="58" rx="10" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text class="b c" x="706" y="366" style="fill:#6D28D9">TCP 20000</text>
+      <text class="s c" x="706" y="388">ChatServer</text>
+    </g>
+    <text class="h2" x="60" y="440" style="fill:#6D28D9">chatserver · 聊天服务</text>
+    <text class="s r" x="760" y="440">ChatSession 按 cmd 号段分发 · libsodium 加密握手</text>
+    <text class="s" x="60" y="470">业务模块（各 Manager / Service）</text>
+    <g class="chips">
+      <rect x="60" y="480" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="144" y="500">账号与登录</text>
+      <rect x="237" y="480" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="321" y="500">企业与组织架构</text>
+      <rect x="414" y="480" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="498" y="500">群组与群管理</text>
+      <rect x="591" y="480" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="675" y="500">消息与会话</text>
+
+      <rect x="60" y="518" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="144" y="538">单聊 / 群通话信令</text>
+      <rect x="237" y="518" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="321" y="538">屏幕共享与远程桌面</text>
+      <rect x="414" y="518" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="498" y="538">文件共享与文件夹传输</text>
+      <rect x="591" y="518" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="675" y="538">P2P 信令</text>
+
+      <rect x="60" y="556" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="144" y="576">帖子群</text>
+      <rect x="237" y="556" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="321" y="576">密聊</text>
+      <rect x="414" y="556" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="498" y="576">备忘与群问答</text>
+      <rect x="591" y="556" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="675" y="576">公告与服务号</text>
+
+      <rect x="60" y="594" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="144" y="614">收藏与 Pin</text>
+      <rect x="237" y="594" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="321" y="614">敏感词过滤</text>
+      <rect x="414" y="594" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="498" y="614">云端录制</text>
+      <rect x="591" y="594" width="168" height="30" rx="8" fill="#EDE9FE" stroke="#C4B5FD"/><text class="t c" x="675" y="614">客户端版本与升级</text>
+    </g>
+    <rect x="60" y="644" width="340" height="66" rx="10" fill="#7C3AED"/>
+    <text class="b" x="78" y="670" style="fill:#FFFFFF">CMysqlManager 数据库线程池</text>
+    <text class="s" x="78" y="694" style="fill:#EDE9FE">任务队列 · dbapi 抽象层，业务不直接碰数据库</text>
+    <rect x="420" y="644" width="340" height="66" rx="10" fill="#A855F7"/>
+    <text class="b" x="438" y="670" style="fill:#FFFFFF">BotEngine 机器人引擎</text>
+    <text class="s" x="438" y="694" style="fill:#F3E8FF">独立事件线程 + HTTP(S) 工作线程</text>
+
+    <!-- fileserver -->
+    <rect x="820" y="370" width="310" height="360" rx="14" fill="#ECFDF5" stroke="#059669" stroke-width="2.5" filter="url(#sh)"/>
+    <rect x="905" y="342" width="140" height="58" rx="10" fill="#FFFFFF" stroke="#059669" stroke-width="2"/>
+    <text class="b c" x="975" y="366" style="fill:#047857">TCP 20001</text>
+    <text class="s c" x="975" y="388">FileServer</text>
+    <text class="h2" x="840" y="440" style="fill:#047857">fileserver · 文件服务</text>
+    <rect x="840" y="458" width="270" height="52" rx="10" fill="#D1FAE5" stroke="#6EE7B7"/>
+    <text class="b" x="856" y="480" style="fill:#065F46">聊天文件 · 群文件</text>
+    <text class="s" x="856" y="500">上传下载 · 令牌校验 · 秒传</text>
+    <rect x="840" y="518" width="270" height="52" rx="10" fill="#D1FAE5" stroke="#6EE7B7"/>
+    <text class="b" x="856" y="540" style="fill:#065F46">客户端升级包</text>
+    <text class="s" x="856" y="560">供 FlamingoUpdater 下载</text>
+    <rect x="840" y="578" width="270" height="52" rx="10" fill="#D1FAE5" stroke="#6EE7B7"/>
+    <text class="b" x="856" y="600" style="fill:#065F46">文件夹传输中转</text>
+    <text class="s" x="856" y="620">单聊「发送文件夹」</text>
+    <rect x="840" y="638" width="270" height="52" rx="10" fill="#D1FAE5" stroke="#6EE7B7"/>
+    <text class="b" x="856" y="660" style="fill:#065F46">文件共享中转</text>
+    <text class="s" x="856" y="680">访问同事共享的磁盘与文件夹</text>
+    <text class="xs c" x="975" y="714">与 imgserver 共用 FileSession 等源文件</text>
+
+    <!-- imgserver -->
+    <rect x="1170" y="370" width="400" height="360" rx="14" fill="#FFF7ED" stroke="#EA580C" stroke-width="2.5" filter="url(#sh)"/>
+    <rect x="1185" y="342" width="110" height="58" rx="10" fill="#FFFFFF" stroke="#EA580C" stroke-width="2"/>
+    <text class="b c" x="1240" y="366" style="fill:#C2410C">TCP 20002</text>
+    <text class="s c" x="1240" y="388">图片端口</text>
+    <rect x="1305" y="342" width="130" height="58" rx="10" fill="#FFFFFF" stroke="#EA580C" stroke-width="2"/>
+    <text class="b c" x="1370" y="366" style="fill:#C2410C">TCP 20003</text>
+    <text class="s c" x="1370" y="388">RelayServer</text>
+    <rect x="1445" y="342" width="110" height="58" rx="10" fill="#FFFFFF" stroke="#EA580C" stroke-width="2"/>
+    <text class="b c" x="1500" y="366" style="fill:#C2410C">UDP 20004/5</text>
+    <text class="s c" x="1500" y="388">地址探测</text>
+    <text class="h2" x="1190" y="440" style="fill:#C2410C">imgserver · 图片与中转服务</text>
+    <!-- 三列，分别对应三个端口 -->
+    <rect x="1185" y="456" width="110" height="256" rx="10" fill="#FFEDD5" stroke="#FDBA74"/>
+    <text class="b c" x="1240" y="480" style="fill:#9A3412">图片服务</text>
+    <rect x="1195" y="492" width="90" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1240" y="512">聊天图片</text>
+    <rect x="1195" y="530" width="90" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1240" y="550">自定义头像</text>
+    <text class="s c" x="1240" y="586">上传 / 下载</text>
+    <text class="s c" x="1240" y="606">令牌校验</text>
+
+    <rect x="1305" y="456" width="130" height="256" rx="10" fill="#FFEDD5" stroke="#FDBA74"/>
+    <text class="b c" x="1370" y="480" style="fill:#9A3412">按令牌配对中转</text>
+    <rect x="1315" y="490" width="110" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1370" y="510">远程桌面</text>
+    <rect x="1315" y="526" width="110" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1370" y="546">一对一通话</text>
+    <rect x="1315" y="562" width="110" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1370" y="582">群音视频通话</text>
+    <rect x="1315" y="598" width="110" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1370" y="618">屏幕共享房间</text>
+    <rect x="1315" y="634" width="110" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1370" y="654">P2P 回落中转</text>
+    <rect x="1315" y="670" width="110" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1370" y="690">云端录制</text>
+
+    <rect x="1445" y="456" width="110" height="256" rx="10" fill="#FFEDD5" stroke="#FDBA74"/>
+    <text class="b c" x="1500" y="480" style="fill:#9A3412">P2P 打洞前</text>
+    <rect x="1455" y="492" width="90" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1500" y="512">双端口探测</text>
+    <rect x="1455" y="530" width="90" height="30" rx="8" fill="#FFFFFF" stroke="#FDBA74"/><text class="t c" x="1500" y="550">回报公网地址</text>
+    <text class="s c" x="1500" y="586">类 STUN</text>
+    <text class="s c" x="1500" y="606">识别对称型 NAT</text>
+
+    <!-- ===================== 存储与外部服务层 ===================== -->
+    <rect x="40" y="885" width="380" height="100" rx="12" fill="#FFFFFF" stroke="#475569" stroke-width="2" filter="url(#sh)"/>
+    <text class="h" x="60" y="914" style="fill:#334155">数据库</text>
+    <text class="t" x="60" y="942">MySQL（MariaDB Connector/C 3.4.9 源码编译）</text>
+    <text class="t" x="60" y="966">或 SQLite 单文件库，由 dbtype 切换</text>
+
+    <rect x="430" y="885" width="350" height="100" rx="12" fill="#FFFFFF" stroke="#DB2777" stroke-width="2" filter="url(#sh)"/>
+    <text class="h" x="450" y="914" style="fill:#BE185D">外部 HTTP(S) 服务</text>
+    <text class="t" x="450" y="942">机器人 Webhook · 外部接口回调</text>
+    <text class="s" x="450" y="966">Windows 用 WinHTTP，Linux 用 OpenSSL</text>
+
+    <rect x="820" y="885" width="310" height="100" rx="12" fill="#FFFFFF" stroke="#475569" stroke-width="2" filter="url(#sh)"/>
+    <text class="h" x="840" y="914" style="fill:#334155">磁盘目录</text>
+    <text class="t" x="840" y="942">filecache/　聊天文件与群文件</text>
+    <text class="t" x="840" y="966">updatecache/　客户端升级包</text>
+
+    <rect x="1170" y="885" width="400" height="100" rx="12" fill="#FFFFFF" stroke="#475569" stroke-width="2" filter="url(#sh)"/>
+    <text class="h" x="1190" y="914" style="fill:#334155">磁盘目录</text>
+    <text class="t" x="1190" y="942">imgcache/　图片与头像</text>
+    <text class="t" x="1190" y="966">cloudrecords/　云端录像</text>
+
+    <!-- ===================== 基础框架 ===================== -->
+    <rect x="20" y="1015" width="1570" height="80" rx="14" fill="#1E293B"/>
+    <text class="h" x="44" y="1046" style="fill:#FFFFFF">通用 C++11 服务器框架<tspan class="s" dx="12" style="fill:#94A3B8">三个服务共用，也可以单独拿来写别的服务</tspan></text>
+    <text class="t" x="44" y="1076" style="fill:#CBD5E1">net/ 多 Reactor：EventLoop · EventLoopThreadPool · TcpServer · epoll / poll / select　｜　base/ 异步日志 · 单例 · 配置读取　｜　utils/ MD5 · SHA-256 · Base64 · 令牌 · HTTPS 客户端　｜　libsodium 协议加密</text>
+
+    <!-- ===================== 图例 ===================== -->
+    <g transform="translate(20,1130)">
+      <path d="M0,0 H40" stroke="#2563EB" stroke-width="2.5" marker-end="url(#aBlue)"/><text class="s" x="50" y="4">PC 客户端连接</text>
+      <path d="M170,0 H210" stroke="#0891B2" stroke-width="2.5" marker-end="url(#aCyan)"/><text class="s" x="220" y="4">管理控制台连接</text>
+      <path d="M350,0 H390" stroke="#64748B" stroke-width="2.5" marker-end="url(#aGray)"/><text class="s" x="400" y="4">运维连接</text>
+      <path d="M490,0 H530" stroke="#EA580C" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#aOrange)"/><text class="s" x="540" y="4">服务端之间</text>
+      <path d="M650,0 H690" stroke="#94A3B8" stroke-width="2.5" marker-start="url(#aSlate)" marker-end="url(#aSlate)"/><text class="s" x="700" y="4">存储读写</text>
+      <text class="s" x="800" y="4">上传、下载与中转令牌由 chatserver 签发（HMAC），fileserver / imgserver 用同一把密钥本地验签</text>
+    </g>
+  </g>
+</svg>

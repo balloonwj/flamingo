@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "MainPanelRecordMenu.h"
 #include <windows.h>      // UINT
 #include <vector>
 
@@ -45,8 +46,17 @@ enum TrayMenuId : UINT
     kTrayMenuExit      = 6,   // 退出 —— 退出程序
     kTrayMenuAway      = 7,   // 离开 —— 切到离开状态（presence_away，cmd_change_presence）
     kTrayMenuBusy      = 8,   // 忙碌 —— 切到忙碌状态（presence_busy，cmd_change_presence）
+    kTrayMenuRecord    = 10,  // 发起录制 / 停止录制 —— 开始独立录屏，录制中则停止并保存（只在登录后的完整菜单里）
+    kTrayMenuScreenShare = 11, // 发起屏幕共享 —— 先选一个会话，再弹出共享内容选择窗（只在登录后的完整菜单里，
+                               // 屏幕共享模块没有加载或系统不支持时不出现；docs/屏幕共享与录制方案.md 第 2 节第 42 条）
     kTrayMenuLogout    = 9,   // 登出 —— 二次确认后断开当前连接、销毁主面板并回到登录界面；
                               // 与 kTrayMenuExit（退出程序）不同，登出后程序仍在运行
+    kTrayMenuLockScreen = 12, // 锁屏 —— 设好临时密码后全屏锁定（docs/锁屏方案.md）；登录前、登录后的菜单里都有，
+                              // 锁屏模块没有加载时不出现。不复用 3（那是已移除的「锁定主面板」）
+    kTrayMenuMarkdownEditor = 13, // Markdown 编辑器 —— 打开一个空白的 Markdown 编辑器（docs/Markdown消息方案.md 第 11.3 节）；
+                                  // 登录前、登录后的菜单里都有，排在「锁屏」之后；FlamingoMarkdown.dll 不可用时不出现
+    kTrayMenuScreenshot = 14,     // 截图 —— 发起一次不绑定会话的截图，结果放进剪贴板（docs/截图独立模块方案.md 3.6 节）；
+                                  // 登录前、登录后的菜单里都有，紧跟「打开主面板」；截图功能不可用时不出现
 };
 
 /**
@@ -114,11 +124,27 @@ struct TrayMenuEntry
  *                     判定分别走 OnlineCapability 的 GetConnectionBadgePresence /
  *                     GetConnectionMenuLabel / IsActionAllowedInState，本文件不另立口径。
  *                     kTrayBeforeLogin / kTrayLocked 两种形态忽略该参数。
+ *    recordState：    「发起录制」一项的状态（RecordMenuState）；只在 kTrayNormal 下、出现时排在「打开主面板」
+ *                     （能共享屏幕时排在「发起屏幕共享」）之后。
+ *    withScreenShare：能否发起屏幕共享（屏幕共享模块已加载）；为真时 kTrayNormal 下「打开主面板」之后多一项
+ *                     「发起屏幕共享」。
+ *    withLock：       能否锁屏（锁屏模块已加载）；为真时各形态都在「打开主面板」紧下面多一项「锁屏」
+ *                     （docs/锁屏方案.md）。
+ *    withMarkdown：   能否打开 Markdown 编辑器（FlamingoMarkdown.dll 可用）；为真时各形态都在「锁屏」（没有锁屏时为
+ *                     「打开主面板」）紧下面多一项「Markdown 编辑器」（docs/Markdown消息方案.md 第 11.3 节）。
+ *    screenshotLabel：「截图」一项的文字（balloonscreenshot::TrayScreenshotLabel，如「截图（Alt+Z）」），借用，须活到
+ *                     调用方用完返回的模型；为 NULL 表示截图功能不可用，不出现这一项。不为 NULL 时各形态都在
+ *                     「打开主面板」紧下面多一项「截图」（docs/截图独立模块方案.md 3.6 节）。
  *
  *  返回：行模型 vector（值语义，调用方拥有）。label 指向静态常量串，生命周期为
  *        进程级，调用方可直接持有 / 转宽字符使用。
  */
 std::vector<TrayMenuEntry> BuildTrayMenuModel(TrayMenuKind kind, bool muted,
-                                              int currentPresence, int connUiState);
+                                              int currentPresence, int connUiState,
+                                              int recordState = kRecordMenuHidden,
+                                              bool withScreenShare = false,
+                                              bool withLock = false,
+                                              bool withMarkdown = false,
+                                              const wchar_t* screenshotLabel = NULL);
 
 } // namespace balloonmain

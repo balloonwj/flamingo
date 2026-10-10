@@ -5,6 +5,7 @@
 #include "ZipInflate.h"
 
 #include "../Source/third-party/zlib1.2.11/zlib.h"
+#include "../Source/Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace iupdate {
 
@@ -29,7 +30,7 @@ bool InflateRaw(const unsigned char* src, size_t srcLen, size_t expectedSize,
     }
     if (src == NULL || srcLen == 0)
     {
-        errmsg = L"压缩数据为空，但条目声明的解压后长度不为零。";
+        errmsg = TR(L"压缩数据为空，但条目声明的解压后长度不为零。");
         return false;
     }
 
@@ -41,7 +42,7 @@ bool InflateRaw(const unsigned char* src, size_t srcLen, size_t expectedSize,
     int ret = inflateInit2(&stream, -MAX_WBITS);
     if (ret != Z_OK)
     {
-        errmsg = L"初始化解压器失败。";
+        errmsg = TR(L"初始化解压器失败。");
         return false;
     }
 
@@ -63,7 +64,7 @@ bool InflateRaw(const unsigned char* src, size_t srcLen, size_t expectedSize,
 
         if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR)
         {
-            errmsg = L"解压失败，升级包内容已损坏。";
+            errmsg = TR(L"解压失败，升级包内容已损坏。");
             ok = false;
             break;
         }
@@ -82,7 +83,7 @@ bool InflateRaw(const unsigned char* src, size_t srcLen, size_t expectedSize,
         //既没产出、输入也用完了：再循环下去就是死循环，判为数据不完整
         if (produced == 0 && stream.avail_in == 0)
         {
-            errmsg = L"压缩数据不完整，解压未能正常结束。";
+            errmsg = TR(L"压缩数据不完整，解压未能正常结束。");
             ok = false;
             break;
         }
@@ -100,7 +101,7 @@ bool InflateRaw(const unsigned char* src, size_t srcLen, size_t expectedSize,
     //程序会以一种难以排查的方式坏掉。
     if (out.size() != expectedSize)
     {
-        errmsg = L"解压后长度与升级包记录的不一致，包已损坏。";
+        errmsg = TR(L"解压后长度与升级包记录的不一致，包已损坏。");
         out.clear();
         return false;
     }

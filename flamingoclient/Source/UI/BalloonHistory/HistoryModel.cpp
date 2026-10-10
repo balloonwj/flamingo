@@ -21,6 +21,7 @@ const int64_t kMsPerSecond = 1000;
 
 HistoryModel::HistoryModel()
     : m_store(NULL)
+    , m_keywordHighlightOnly(false)
     , m_total(0)
     , m_countValid(false)
     , m_countQueries(0)
@@ -75,10 +76,63 @@ void HistoryModel::SetKeyword(const std::string& keyword)
     ResetToFirstPage();
 }
 
+void HistoryModel::SetWildcard(bool wildcard)
+{
+    if (m_filter.m_wildcard == wildcard)
+    {
+        return;
+    }
+    m_filter.m_wildcard = wildcard;
+    //没有关键字时解释方式不影响结果，停在原来那一页
+    if (!m_filter.m_keyword.empty())
+    {
+        ResetToFirstPage();
+    }
+}
+
 void HistoryModel::SetSenderFilter(int64_t fromid)
 {
     m_filter.m_fromid = (fromid > 0) ? fromid : 0;
     ResetToFirstPage();
+}
+
+void HistoryModel::SetSyntaxFromIds(const std::vector<int64_t>& ids)
+{
+    if (m_filter.m_syntaxFromIds == ids)
+    {
+        return;
+    }
+    m_filter.m_syntaxFromIds = ids;
+    ResetToFirstPage();
+}
+
+void HistoryModel::SetKeywordHighlightOnly(bool highlightOnly)
+{
+    if (m_keywordHighlightOnly == highlightOnly)
+    {
+        return;
+    }
+    m_keywordHighlightOnly = highlightOnly;
+    //关键字筛选不生效时两种解释查出的是同一批消息，停在原来那一页
+    if (HasKeywordFilter(m_filter))
+    {
+        ResetToFirstPage();
+    }
+}
+
+bool HistoryModel::KeywordHighlightOnly() const
+{
+    return m_keywordHighlightOnly;
+}
+
+HistoryFilter HistoryModel::QueryFilter() const
+{
+    HistoryFilter f = m_filter;
+    if (m_keywordHighlightOnly)
+    {
+        f.m_keyword.clear();
+    }
+    return f;
 }
 
 int HistoryModel::PageOfPosition(int64_t nowMs, int64_t timestamp, int64_t msgid)
@@ -88,7 +142,7 @@ int HistoryModel::PageOfPosition(int64_t nowMs, int64_t timestamp, int64_t msgid
         return 0;
     }
     int64_t before = 0;
-    if (!m_store->CountBefore(m_filter, nowMs, timestamp, msgid, before))
+    if (!m_store->CountBefore(QueryFilter(), nowMs, timestamp, msgid, before))
     {
         return 0;
     }
@@ -134,7 +188,7 @@ HistoryDateJump HistoryModel::JumpToDate(int64_t nowMs, int64_t dayStartMs, int6
 
     //时间晚于那天结束的有 before 条；排在第 before+1 条的就是那天及以前最晚的一条
     int64_t before = 0;
-    if (!m_store->CountBefore(m_filter, nowMs, dayEndMs, INT64_MAX, before))
+    if (!m_store->CountBefore(QueryFilter(), nowMs, dayEndMs, INT64_MAX, before))
     {
         return result;
     }
@@ -179,6 +233,7 @@ bool HistoryModel::QuerySenders(std::vector<int64_t>& out) const
 void HistoryModel::ResetSearchFilters()
 {
     m_filter.m_keyword.clear();
+    m_filter.m_syntaxFromIds.clear();
     m_filter.m_fromid = 0;
     m_filter.m_range = kHistoryTimeAll;
     m_filter.m_customMinMs = 0;
@@ -221,13 +276,17 @@ bool HistoryModel::Refresh(int64_t nowMs)
     {
         return false;
     }
-    m_total = m_store->Count(m_filter, nowMs);
+    const HistoryFilter query = QueryFilter();
+    m_total = m_store->Count(query, nowMs);
     ++m_countQueries;
     //记下这次统计用的筛选条件，供只换页的 RefreshPage 判断能否沿用这个总数
-    m_countedFilter = m_filter;
+    m_countedFilter = query;
     m_countValid = true;
     ClampPageToTotal();
-    return m_store->QueryPage(m_filter, nowMs, m_records);
+    //页号可能刚被夹取过，按夹取后的页号取页
+    HistoryFilter pageFilter = query;
+    pageFilter.m_page = m_filter.m_page;
+    return m_store->QueryPage(pageFilter, nowMs, m_records);
 }
 
 const HistoryFilter& HistoryModel::Filter() const
@@ -242,14 +301,14 @@ bool HistoryModel::RefreshPage(int64_t nowMs)
         return false;
     }
     //筛选条件变过（或从没统计过）：总数可能不同，与整页刷新相同
-    if (!m_countValid || !SameCountFilter(m_filter, m_countedFilter))
+    if (!m_countValid || !SameCountFilter(QueryFilter(), m_countedFilter))
     {
         return Refresh(nowMs);
     }
 
     //沿用上次统计的总数，只按它夹取页号、取当前页
     ClampPageToTotal();
-    return m_store->QueryPage(m_filter, nowMs, m_records);
+    return m_store->QueryPage(QueryFilter(), nowMs, m_records);
 }
 
 int64_t HistoryModel::CountQueryTimes() const
@@ -267,7 +326,9 @@ bool HistoryModel::SameCountFilter(const HistoryFilter& a, const HistoryFilter& 
         && a.m_customMinMs == b.m_customMinMs
         && a.m_customMaxMs == b.m_customMaxMs
         && a.m_keyword == b.m_keyword
+        && a.m_wildcard == b.m_wildcard
         && a.m_fromid == b.m_fromid
+        && a.m_syntaxFromIds == b.m_syntaxFromIds
         && a.m_minMsgid == b.m_minMsgid;
 }
 
@@ -314,7 +375,7 @@ bool HistoryModel::QueryAll(int64_t nowMs, std::vector<HistoryRecord>& out)
     }
     //用当前过滤条件、较大页逐页取，直到取空或不足整页；不动 m_filter 的当前页 / 页大小。
     const int kBatch = 500;
-    HistoryFilter f = m_filter;
+    HistoryFilter f = QueryFilter();
     f.m_page = 1;
     f.m_pageSize = kBatch;
     for (;;)
@@ -454,7 +515,11 @@ bool ShouldResetListScroll(const HistoryFilter& shown, const HistoryFilter& now)
         || shown.m_customMinMs != now.m_customMinMs
         || shown.m_customMaxMs != now.m_customMaxMs
         || shown.m_keyword != now.m_keyword
-        || shown.m_fromid != now.m_fromid;
+        //关键字为空时通配符开关不影响结果，不算换了一批消息（关键字相同才比到这一项）
+        || (!now.m_keyword.empty() && shown.m_wildcard != now.m_wildcard)
+        || shown.m_fromid != now.m_fromid
+        //关键字里 from:名字 解析出的人变了（如本会话新来了一位发言人）也是换了一批消息
+        || shown.m_syntaxFromIds != now.m_syntaxFromIds;
 }
 
 bool ShouldOfferViewContext(const HistoryFilter& filter, int64_t msgid)
@@ -468,7 +533,7 @@ bool ShouldOfferViewContext(const HistoryFilter& filter, int64_t msgid)
     {
         return false;
     }
-    return !filter.m_keyword.empty()
+    return HasKeywordFilter(filter)
         || filter.m_type != kHistoryTypeAll
         || filter.m_range != kHistoryTimeAll
         || filter.m_fromid > 0;

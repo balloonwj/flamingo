@@ -11,8 +11,10 @@
 #include "catch_amalgamated.hpp"
 #include "../UI/BalloonHistory/V2MsgQuery.h"
 #include "../net/MessageProtocolClient.h"   // net::MessageNotify
+#include "../net/CardProtocolClient.h"      // V2Q-RELAY*：还原出的接龙卡片内容再交给 parseRelayCardContent
 #include "../net/Protocol.h"                // ::message_type_*
 #include "../third-party/jsoncpp-1.9.0/json.h"
+#include <memory>   // V2Q-SYS1：std::unique_ptr 管 CharReader
 
 using namespace balloonhistory;
 
@@ -165,11 +167,17 @@ TEST_CASE("V2Q4 TimeRangeToBounds 各档边界正确")
     CHECK(mx == 222);
 }
 
+//「图片」分类的类型条件：图片、截图，以及带图片、不是已删除形态的帖子卡片与补充卡片（docs/帖子群方案.md 14.5）
+static const std::string kImageTypeFragment =
+    "(msgtype IN (2,9) OR (msgtype IN (25,26) AND CASE WHEN json_valid(content) THEN "
+    "IFNULL(json_array_length(content,'$.threadcard.images'),0)>0 AND "
+    "IFNULL(json_extract(content,'$.threadcard.deleted'),0)=0 ELSE 0 END))";
+
 TEST_CASE("V2Q5 TypeFilterToSqlFragment 各胶囊映射正确")
 {
     CHECK(TypeFilterToSqlFragment(kHistoryTypeAll).empty());
     CHECK(TypeFilterToSqlFragment(kHistoryTypeText) == "msgtype=1 AND is_link=0");
-    CHECK(TypeFilterToSqlFragment(kHistoryTypeImage) == "msgtype IN (2,9)");
+    CHECK(TypeFilterToSqlFragment(kHistoryTypeImage) == kImageTypeFragment);
     CHECK(TypeFilterToSqlFragment(kHistoryTypeFile) == "msgtype=3");
     CHECK(TypeFilterToSqlFragment(kHistoryTypeVoice) == "msgtype=4");
     CHECK(TypeFilterToSqlFragment(kHistoryTypeLink) == "is_link=1");
@@ -204,11 +212,12 @@ TEST_CASE("V2Q6 BuildCountSql/BuildPageSql 拼装正确")
     g.m_pageSize = 10;
     CHECK(BuildCountSql(g, 0) ==
         "SELECT COUNT(*) FROM t_msg WHERE ctype=2 AND cid=777 AND recalled=0 "
-        "AND msgtype IN (2,9) AND search_text LIKE ?");
+        "AND " + kImageTypeFragment + " AND search_text LIKE ? ESCAPE '\\'");
     CHECK(BuildPageSql(g, 0) ==
         "SELECT msgid,clientmsgid,ctype,cid,fromid,msgtype,content,search_text,is_link,timestamp,recalled,"
         "pinned,pin_time "
-        "FROM t_msg WHERE ctype=2 AND cid=777 AND recalled=0 AND msgtype IN (2,9) AND search_text LIKE ? "
+        "FROM t_msg WHERE ctype=2 AND cid=777 AND recalled=0 AND " + kImageTypeFragment
+        + " AND search_text LIKE ? ESCAPE '\\' "
         "ORDER BY timestamp DESC, msgid DESC LIMIT 10 OFFSET 20");
 
     //近7天时间范围内联进 SQL
@@ -298,12 +307,12 @@ TEST_CASE("V2Q10 Pin 分类可与关键字、自定义时间区间叠加")
     //类型胶囊与关键字 / 时间是两个维度，选了 Pin 之后搜索框与时间下拉照常生效
     CHECK(BuildCountSql(f, 0) ==
         "SELECT COUNT(*) FROM t_msg WHERE ctype=2 AND cid=777 AND recalled=0 "
-        "AND pinned=1 AND timestamp>=1000 AND timestamp<=2000 AND search_text LIKE ?");
+        "AND pinned=1 AND timestamp>=1000 AND timestamp<=2000 AND search_text LIKE ? ESCAPE '\\'");
     CHECK(BuildPageSql(f, 0) ==
         "SELECT msgid,clientmsgid,ctype,cid,fromid,msgtype,content,search_text,is_link,timestamp,recalled,"
         "pinned,pin_time "
         "FROM t_msg WHERE ctype=2 AND cid=777 AND recalled=0 "
-        "AND pinned=1 AND timestamp>=1000 AND timestamp<=2000 AND search_text LIKE ? "
+        "AND pinned=1 AND timestamp>=1000 AND timestamp<=2000 AND search_text LIKE ? ESCAPE '\\' "
         "ORDER BY timestamp DESC, msgid DESC LIMIT 10 OFFSET 10");
 }
 
@@ -548,4 +557,177 @@ TEST_CASE("FWD-C5 类型 15 落本地库：content 存为 merged 子对象，搜
     CHECK(brokenRoot["merged"].isObject());
     CHECK(brokenRoot["merged"].size() == 0);
     CHECK(BuildSearchText(broken).empty());
+}
+
+//==================== 群接龙 2c：本地库保存接龙卡片 ====================
+
+namespace {
+
+//一张接龙卡片的 content：标题、说明与一条名单，state 取给定值
+static std::string MakeRelayContentJson(const std::string& note, const std::string& entryText, int state)
+{
+    Json::Value item;
+    item["userid"] = "100008";
+    item["text"]   = entryText;
+    Json::Value content;
+    content["title"]     = u8"周五团建报名";
+    content["note"]      = note;
+    content["deadline"]  = static_cast<Json::Int64>(0);
+    content["items"]     = Json::Value(Json::arrayValue);
+    content["items"].append(item);
+    content["state"]     = state;
+    content["closedby"]  = "0";
+    content["closetime"] = static_cast<Json::Int64>(0);
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    return Json::writeString(wb, content);
+}
+
+//一条服务端下发的接龙卡片消息的原始 JSON，content 为给定内容
+static std::string MakeRelayRawJson(const std::string& contentJson)
+{
+    Json::Value content;
+    ParseJson(contentJson, content);
+    Json::Value msg;
+    msg["msgid"]     = "9007199254741011";
+    msg["ctype"]     = 2;
+    msg["cid"]       = "600001";
+    msg["from"]      = "100001";
+    msg["to"]        = "600001";
+    msg["msgtype"]   = ::message_type_relay;
+    msg["content"]   = content;
+    msg["timestamp"] = static_cast<Json::Int64>(1759400000000LL);
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    return Json::writeString(wb, msg);
+}
+
+} // namespace
+
+TEST_CASE("V2Q-RELAY1 BuildContentJson 把接龙卡片内容放进 relay 子对象", "[grouprelay]")
+{
+    net::MessageNotify n;
+    n.m_msgtype      = ::message_type_relay;
+    n.m_relayContent = MakeRelayContentJson("note", u8"本人+1", 0);
+
+    Json::Value root;
+    REQUIRE(ParseJson(BuildContentJson(n), root));
+    REQUIRE(root["relay"].isObject());
+    CHECK(root["relay"]["title"].asString() == u8"周五团建报名");
+    REQUIRE(root["relay"]["items"].size() == 1);
+    CHECK(root["relay"]["items"][0]["text"].asString() == u8"本人+1");
+
+    //卡片内容解析不了：留一个空的 relay 子对象，不崩
+    net::MessageNotify broken;
+    broken.m_msgtype      = ::message_type_relay;
+    broken.m_relayContent = "not json";
+    Json::Value brokenRoot;
+    REQUIRE(ParseJson(BuildContentJson(broken), brokenRoot));
+    REQUIRE(brokenRoot["relay"].isObject());
+    CHECK(brokenRoot["relay"].size() == 0);
+}
+
+TEST_CASE("V2Q-RELAY2 BuildSearchText 接龙卡片取标题与说明，不含接龙条目", "[grouprelay]")
+{
+    net::MessageNotify n;
+    n.m_msgtype      = ::message_type_relay;
+    n.m_relayContent = MakeRelayContentJson(u8"格式：姓名", u8"本人+1", 0);
+    CHECK(BuildSearchText(n) == std::string(u8"周五团建报名 格式：姓名"));
+
+    //说明为空时只有标题
+    n.m_relayContent = MakeRelayContentJson("", u8"本人+1", 0);
+    CHECK(BuildSearchText(n) == std::string(u8"周五团建报名"));
+
+    //接龙条目不进搜索文本
+    CHECK(BuildSearchText(n).find(u8"本人") == std::string::npos);
+
+    //内容解析不了：没有搜索文本
+    n.m_relayContent = "not json";
+    CHECK(BuildSearchText(n).empty());
+}
+
+TEST_CASE("V2Q-RELAY3 NotifyFromRecord 接龙卡片以 content 列的最新内容为准", "[grouprelay]")
+{
+    //raw 是当初收到时的样子（名单里是「旧」），content 列已被变更推送更新（名单里是「新」）
+    net::MessageNotify updated;
+    updated.m_msgtype      = ::message_type_relay;
+    updated.m_relayContent = MakeRelayContentJson("", u8"新", relay_state_closed);
+
+    HistoryRecord rec;
+    rec.m_msgtype = ::message_type_relay;
+    rec.m_raw     = MakeRelayRawJson(MakeRelayContentJson("", u8"旧", relay_state_open));
+    rec.m_content = BuildContentJson(updated);
+
+    net::MessageNotify out;
+    REQUIRE(NotifyFromRecord(rec, out));
+    net::RelayCardContent card;
+    REQUIRE(net::CardProtocolClient::parseRelayCardContent(out.m_relayContent, card));
+    REQUIRE(card.m_items.size() == 1);
+    CHECK(card.m_items[0].m_text == u8"新");
+    CHECK(card.m_state == relay_state_closed);
+
+    //content 列没有 relay（本功能之前写入的旧行）：退回 raw 里的内容
+    rec.m_content = "{}";
+    REQUIRE(NotifyFromRecord(rec, out));
+    REQUIRE(net::CardProtocolClient::parseRelayCardContent(out.m_relayContent, card));
+    CHECK(card.m_items[0].m_text == u8"旧");
+}
+
+TEST_CASE("V2Q-RELAY4 RelayContentFromRecord 取用次序：content 列优先，退回 raw", "[grouprelay]")
+{
+    HistoryRecord rec;
+    rec.m_msgtype = ::message_type_relay;
+    rec.m_raw     = MakeRelayRawJson(MakeRelayContentJson("", u8"旧", relay_state_open));
+
+    net::MessageNotify updated;
+    updated.m_msgtype      = ::message_type_relay;
+    updated.m_relayContent = MakeRelayContentJson("", u8"新", relay_state_open);
+    rec.m_content = BuildContentJson(updated);
+
+    //取出的是 JSON 文本，jsoncpp 序列化时把中文写成 \uXXXX，故先解析再比较名单内容
+    std::string relayJson;
+    net::RelayCardContent card;
+    REQUIRE(RelayContentFromRecord(rec, relayJson));
+    REQUIRE(net::CardProtocolClient::parseRelayCardContent(relayJson, card));
+    REQUIRE(card.m_items.size() == 1);
+    CHECK(card.m_items[0].m_text == u8"新");
+
+    //content 列的 relay 为空对象（当初解析不了）：退回 raw
+    rec.m_content = "{\"relay\":{}}";
+    REQUIRE(RelayContentFromRecord(rec, relayJson));
+    REQUIRE(net::CardProtocolClient::parseRelayCardContent(relayJson, card));
+    REQUIRE(card.m_items.size() == 1);
+    CHECK(card.m_items[0].m_text == u8"旧");
+
+    //两处都没有：返回 false，出参不被改写
+    rec.m_raw.clear();
+    relayJson = "untouched";
+    CHECK_FALSE(RelayContentFromRecord(rec, relayJson));
+    CHECK(relayJson == "untouched");
+}
+
+// ---- 群系统提示（msgtype = 17）落本地库：正文写进 content 列与搜索文本（2026-10-03 起）----
+
+TEST_CASE("V2Q-SYS1 BuildContentJson 系统提示的正文写进 text，BuildSearchText 取正文", "[history][systemtip]")
+{
+    net::MessageNotify m;
+    m.m_msgtype = ::message_type_system;
+    m.m_from    = 0;
+    m.m_text    = u8"「张勇」结束了接龙「周五团建报名」，共 1 人参与";
+
+    Json::Value root;
+    Json::CharReaderBuilder b;
+    JSONCPP_STRING errs;
+    const std::string content = BuildContentJson(m);
+    std::unique_ptr<Json::CharReader> reader(b.newCharReader());
+    REQUIRE(reader->parse(content.c_str(), content.c_str() + content.size(), &root, &errs));
+    REQUIRE(root["text"].isString());
+    CHECK(root["text"].asString() == m.m_text);
+
+    CHECK(BuildSearchText(m) == m.m_text);
+
+    //没有正文的系统提示：content 里的 text 为空串，搜索文本为空
+    net::MessageNotify empty;
+    empty.m_msgtype = ::message_type_system;
+    CHECK(BuildSearchText(empty).empty());
 }

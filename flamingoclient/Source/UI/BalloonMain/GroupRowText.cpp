@@ -15,6 +15,7 @@
 #define _WIN32_WINNT    0x0601
 
 #include "GroupRowText.h"
+#include "../../Common/I18n/I18n.h"   // TR / TR_NOOP：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -22,18 +23,18 @@ namespace {
 
 // 群名为空、但群号可用时的占位名格式。与会话列表 CBalloonMainPanel::GroupDisplayName
 // 的占位名同口径，免得同一个无名群在群列表和会话列表里叫两个不同的名字。
-const TCHAR* const kFmtFallbackName = _T("群聊(%I64d)");
+const TCHAR* const kFmtFallbackName = TR_NOOP(L"群聊(%I64d)");
 
 // 群名与群号都取不到时的兜底名 —— 至少让这一行能读出"这是个群"。
-const TCHAR* const kFallbackNameNoId = _T("群聊");
+const TCHAR* const kFallbackNameNoId = TR_NOOP(L"群聊");
 
 // 第一行右侧成员数的格式。数字与"人"之间留一个空格，与群信息对话框的
 // "群号 N · M 人"（BalloonGroupInfoLayout.cpp）写法保持一致。
-const TCHAR* const kFmtMemberCount = _T("%d 人");
+const TCHAR* const kFmtMemberCount = TR_NOOP(L"%d 人");
 
 // 第二行群号的格式。带"群号"前缀，否则脱离上下文看不出这串数字是什么；
 // 前缀同样取自群信息对话框，两处口径一致。
-const TCHAR* const kFmtGroupNo = _T("群号 %I64d");
+const TCHAR* const kFmtGroupNo = TR_NOOP(L"群号 %I64d");
 
 } // anonymous namespace
 
@@ -50,23 +51,23 @@ GroupRowTexts BuildGroupRowTexts(LPCTSTR name, int memberCount, __int64 groupId)
     }
     else if (groupId > 0)
     {
-        texts.m_name.Format(kFmtFallbackName, groupId);
+        texts.m_name.Format(TR(kFmtFallbackName), groupId);
     }
     else
     {
-        texts.m_name = kFallbackNameNoId;
+        texts.m_name = TR(kFallbackNameNoId);
     }
 
     // ---- 第一行右侧：成员数 ----
     if (memberCount > 0)
     {
-        texts.m_memberText.Format(kFmtMemberCount, memberCount);
+        texts.m_memberText.Format(TR(kFmtMemberCount), memberCount);
     }
 
     // ---- 第二行：群号 ----
     if (groupId > 0)
     {
-        texts.m_groupNoText.Format(kFmtGroupNo, groupId);
+        texts.m_groupNoText.Format(TR(kFmtGroupNo), groupId);
     }
 
     return texts;

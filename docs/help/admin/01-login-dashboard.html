@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+  FlamingoIM 使用教程 · 企业管理员第 1 章：启动管理控制台、登录、网络设置与仪表板。
+  页面框架（顶栏、导航、本页目录、上一章 / 下一章）由 ../assets/help.js 生成。
+  balloonwj@qq.com   2026-10-09
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录与仪表板 · FlamingoIM 使用教程</title>
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body data-root="../" data-chapter="a01">
+<article class="doc">
+  <h1>登录与仪表板</h1>
+  <p class="lead">本章介绍企业管理员第一次使用管理控制台（flamingoAdmin）要做的几件事：配置服务器地址、用管理员账户登录，以及看懂登录后的界面布局和仪表板。</p>
+  <ul class="facts">
+    <li>适用：企业管理员</li>
+    <li>需要：平台超级管理员为你开通的管理员账户（邮箱）与初始密码</li>
+  </ul>
+
+  <h2 id="roles">管理员的两种角色</h2>
+  <p>管理控制台是同一个程序，登录的账户不同，能看到的内容也不同：</p>
+  <table>
+    <tr><th>角色</th><th>管理范围</th><th>演示账号</th></tr>
+    <tr><td>企业管理员</td><td>只能管理自己所在的企业：组织架构、员工、服务号、功能开关、敏感词、企业问答、企业机器人等</td><td>王怡然（wang@mingyuan.com），管理明远科技有限公司</td></tr>
+    <tr><td>平台超级管理员</td><td>管理平台上的全部企业，另外负责发布平台公告和客户端版本</td><td>李正阳（li@flamingo.com）</td></tr>
+  </table>
+  <p>本部分（第二部分）按企业管理员的视角介绍。平台超级管理员多出来的功能见第三部分<a href="../platform/01-overview.html">「平台总览」</a>。</p>
+
+  <h2 id="login">登录</h2>
+  <p>双击程序目录里的 <code>flamingoAdmin.exe</code> 启动管理控制台，窗口右侧是 <span class="ui">管理员登录</span> 表单：</p>
+  <figure class="shot">
+    <img src="../img/ad_login.png" width="880" alt="管理员登录页">
+    <figcaption>管理员登录页，右下方显示当前要连接的服务器</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">账户</span> 框中输入平台分配给你的管理员账户，一般是你的邮箱，例如 <code>wang@mingyuan.com</code>。</li>
+    <li>在 <span class="ui">密码</span> 框中输入密码，右侧的眼睛图标可以临时显示明文。</li>
+    <li>按需勾选 <span class="ui">记住密码</span>。勾选后，下次打开控制台会自动填入账户和密码。</li>
+    <li>点 <span class="ui">登录控制台</span>。</li>
+  </ol>
+  <div class="callout note"><b>记住的密码保存在哪里</b>账户和密码保存在程序目录的 <code>flamingoAdmin.ini</code> 里，密码经过加密，只有当前电脑上的当前 Windows 用户能解开。换了电脑或换了 Windows 用户登录时，需要重新输入密码。在公用电脑上请不要勾选。</div>
+  <div class="callout tip"><b>先确认服务器地址</b>登录按钮下方的 <span class="ui">连接到 127.0.0.1:29945</span> 显示的是当前要连接的服务器。如果地址不对，请先点右侧的 <span class="ui">网络设置</span> 修改，详见下一节。截图中的端口 29945 是演示环境的端口。</div>
+
+  <h2 id="net">网络设置</h2>
+  <p>管理控制台连接的是聊天服务器的 HTTP 管理端口（服务端配置项 <code>httplistenport</code>，默认 12345，以实际部署为准）。在登录页点 <span class="ui">网络设置</span> 进入设置页：</p>
+  <figure class="shot">
+    <img src="../img/ad_netsettings.png" width="880" alt="网络设置页">
+    <figcaption>网络设置页</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>在 <span class="ui">服务器地址</span> 中填写服务器的主机名或 IP 地址，例如 <code>192.168.1.10</code>。</li>
+    <li>在 <span class="ui">端口</span> 中填写端口号（1~65535）。</li>
+    <li>服务端按 TLS 方式部署时，打开 <span class="ui">使用 TLS 加密连接</span> 开关；是否需要打开请以部署方的说明为准。</li>
+    <li>点 <span class="ui">测试连接</span>，确认这台电脑能连通该地址和端口。</li>
+    <li>点 <span class="ui">保存并返回</span>。设置保存到本地，登录页的「连接到 …」随之更新。不想保存时点左上角的 <span class="ui">返回登录</span>。</li>
+  </ol>
+
+  <h2 id="layout">认识控制台界面</h2>
+  <p>登录成功后进入控制台主界面，默认打开仪表板。界面分为左侧导航、顶栏和内容区三部分：</p>
+  <figure class="shot center">
+    <div class="annotated">
+      <img src="../img/ad_dashboard.png" width="880" alt="企业管理员的仪表板">
+      <span class="pin" style="left:17.4%;top:9.3%">1</span>
+      <span class="pin" style="left:22.4%;top:9.3%">2</span>
+      <span class="pin" style="left:26.5%;top:6.1%">3</span>
+      <span class="pin" style="left:84.9%;top:6.1%">4</span>
+      <span class="pin" style="left:97.8%;top:9.8%">5</span>
+      <span class="pin" style="left:13.9%;top:27.8%">6</span>
+      <span class="pin" style="left:41.7%;top:22.2%">7</span>
+      <span class="pin" style="left:29.9%;top:33.2%">8</span>
+      <span class="pin" style="left:79.2%;top:22.8%">9</span>
+    </div>
+    <figcaption>企业管理员王怡然登录后看到的仪表板</figcaption>
+  </figure>
+  <ol class="legend">
+    <li><b>折叠 / 展开侧边栏</b>：收起左侧导航，让内容区更宽</li>
+    <li><b>面包屑</b>：显示当前所在的页面</li>
+    <li><b>最新审计</b>：轮流显示最近几条审计记录</li>
+    <li><b>账号名与角色</b>：当前登录的管理员姓名、角色和邮箱</li>
+    <li><b>退出登录</b>：回到登录页</li>
+    <li><b>左侧导航</b>：在各功能页面之间切换</li>
+    <li><b>统计卡</b>：本企业员工总数与今日审计</li>
+    <li><b>近 14 天消息量</b>：每天的消息条数柱状图</li>
+    <li><b>近期审计</b>：最近的管理操作</li>
+  </ol>
+  <p>企业管理员的左侧导航共有八项：</p>
+  <table>
+    <tr><th>导航项</th><th>用途</th><th>详见</th></tr>
+    <tr><td>仪表板</td><td>本企业的消息量与近期管理操作</td><td>本章</td></tr>
+    <tr><td>本企业</td><td>组织架构、员工、服务号、在线用户、功能开关，以及建群</td><td><a href="02-organization.html">组织架构与员工</a>、<a href="03-service-accounts.html">服务号</a>、<a href="04-groups-online.html">建群与在线用户</a>、<a href="05-feature-switches.html">功能开关</a></td></tr>
+    <tr><td>审计日志</td><td>所有管理操作的记录</td><td><a href="10-audit-settings.html">审计日志与平台设置</a></td></tr>
+    <tr><td>敏感词</td><td>维护敏感词库，查看被拦截的内容</td><td><a href="06-sensitive-words.html">敏感词</a></td></tr>
+    <tr><td>文件共享</td><td>查看员工发起的文件共享，必要时强制取消</td><td><a href="07-file-share.html">文件共享管理</a></td></tr>
+    <tr><td>企业问答</td><td>维护显示在群聊「问答」页签里的问答</td><td><a href="08-enterprise-qa.html">企业问答</a></td></tr>
+    <tr><td>机器人</td><td>配置企业机器人</td><td><a href="09-enterprise-bots.html">企业机器人</a></td></tr>
+    <tr><td>平台设置</td><td>修改自己的姓名与登录密码</td><td><a href="10-audit-settings.html#settings">审计日志与平台设置</a></td></tr>
+  </table>
+
+  <h2 id="dashboard">仪表板</h2>
+  <p>企业管理员的仪表板标题是 <span class="ui">企业总览</span>，用来快速了解本企业的整体情况：</p>
+  <ul>
+    <li><b>总用户</b>：本企业的员工总数，下方注明「本企业员工」。</li>
+    <li><b>今日审计</b>：今天产生的审计事件数，下方显示其中有几条告警。</li>
+    <li><b>近 14 天消息量</b>：最近 14 天每天的消息条数，右上角显示这段时间的峰值，当天的柱子用深色突出。</li>
+    <li><b>近期审计</b>：最近的管理操作，每条显示操作说明、时间和操作者。圆点颜色表示级别：蓝色为普通，橙色为警告，红色为危险（例如删除员工）。点右上角的 <span class="ui">查看全部 →</span> 会跳到审计日志页。</li>
+  </ul>
+  <div class="callout note"><b>近期审计里为什么有别人的名字</b>审计记录包含所有对本企业做过的管理操作，平台超级管理员替你的企业做的操作（例如截图中李正阳新增员工、设置员工角色）也会出现在这里。</div>
+</article>
+<script src="../assets/toc.js"></script>
+<script src="../assets/search-index.js"></script>
+<script src="../assets/help.js"></script>
+</body>
+</html>

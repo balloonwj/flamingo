@@ -19,6 +19,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiButton;
@@ -153,7 +154,7 @@ void DrawGdi(HDC hdc, LPCWSTR text, const RECT& rc, int px, bool bold,
         -px, 0, 0, 0, bold ? FW_SEMIBOLD : FW_NORMAL,
         italic ? TRUE : FALSE, underline ? TRUE : FALSE, strike ? TRUE : FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -287,7 +288,7 @@ public:
         if (px > 22) { px = 22; }   // 预览框高有限，超大字号压一下
         if (px < 8)  { px = 8;  }
         RECT r = { m_rcItem.left + 12, m_rcItem.top, m_rcItem.right - 12, m_rcItem.bottom };
-        DrawGdi(hdc, L"样式预览文字 Preview", r, px,
+        DrawGdi(hdc, TR(L"样式预览文字 Preview"), r, px,
                 m_font.m_bold, m_font.m_italic, m_font.m_underline, m_font.m_strike,
                 RgbToColorRef(m_font.m_colorRgb),
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
@@ -403,7 +404,7 @@ void CFontSettingPopup::BuildContentOnce()
     // ---- 样式行：标签 + B/I/U/S + 清除 ----
     std::unique_ptr<DuiHBox> styleRow(new DuiHBox());
     styleRow->SetGap(6);
-    styleRow->AddChild(MakeRowLabel(_T("样式")), Hint().Fixed(40));
+    styleRow->AddChild(MakeRowLabel(TR(L"样式")), Hint().Fixed(40));
     {
         std::unique_ptr<DuiControl> b = MakeChip(kIdBold, _T("B"));
         ((FontChip*)b.get())->SetGlyphStyle(true, false, false, false);
@@ -419,13 +420,13 @@ void CFontSettingPopup::BuildContentOnce()
         styleRow->AddChild(std::move(s), Hint().Fixed(30));
     }
     styleRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
-    styleRow->AddChild(MakeChip(kIdClear, _T("清除")), Hint().Fixed(50));
+    styleRow->AddChild(MakeChip(kIdClear, TR(L"清除")), Hint().Fixed(50));
     root->AddChild(std::move(styleRow), Hint().Fixed(30));
 
     // ---- 字号行：标签 + − 值 + + 快选 ----
     std::unique_ptr<DuiHBox> sizeRow(new DuiHBox());
     sizeRow->SetGap(6);
-    sizeRow->AddChild(MakeRowLabel(_T("字号")), Hint().Fixed(40));
+    sizeRow->AddChild(MakeRowLabel(TR(L"字号")), Hint().Fixed(40));
     sizeRow->AddChild(MakeChip(kIdSizeMinus, _T("−")), Hint().Fixed(28));
     {
         std::unique_ptr<DuiLabel> val(new DuiLabel());
@@ -452,7 +453,7 @@ void CFontSettingPopup::BuildContentOnce()
     // ---- 颜色行：标签 + 一排色块 ----
     std::unique_ptr<DuiHBox> colorRow(new DuiHBox());
     colorRow->SetGap(6);
-    colorRow->AddChild(MakeRowLabel(_T("颜色")), Hint().Fixed(40));
+    colorRow->AddChild(MakeRowLabel(TR(L"颜色")), Hint().Fixed(40));
     for (int i = 0; i < kPaletteCount; ++i)
     {
         std::unique_ptr<ColorSwatch> sw(new ColorSwatch());
@@ -477,7 +478,7 @@ void CFontSettingPopup::BuildContentOnce()
     {
         std::unique_ptr<DuiHBox> defaultRow(new DuiHBox());
         defaultRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
-        std::unique_ptr<DuiControl> chip = MakeChip(kIdUseDefault, _T("使用默认字体"));
+        std::unique_ptr<DuiControl> chip = MakeChip(kIdUseDefault, TR(L"使用默认字体"));
         chip->SetEnabled(m_useDefaultEnabled);
         m_pUseDefault = chip.get();
         defaultRow->AddChild(std::move(chip), Hint().Fixed(kUseDefaultChipW));

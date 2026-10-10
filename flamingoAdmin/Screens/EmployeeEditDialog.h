@@ -32,7 +32,7 @@
 #include "Controls/Window/DuiFrameWindow.h"
 #include "Mock/MockData.h"
 
-namespace balloonwjui { class DuiEdit; }
+namespace balloonwjui { class DuiEdit; class DuiComboBox; }
 
 namespace flamingoadmin {
 
@@ -72,10 +72,11 @@ public:
     CString GetEmployeeNo() const;    // 工号
     CString GetJoinDate() const;      // 入职日期
     CString GetEmail() const;         // 邮箱
-    CString GetPhone() const;         // 手机号
+    CString GetPhone() const;         // 手机号（已去掉首尾空白；2026-10-06 起必填）
     CString GetLandline() const;      // 座机
     CString GetWorkstation() const;   // 工位地址
     CString GetSignature() const;     // 个性签名
+    int     GetGenderCode() const;    // 性别编码：0 保密 / 1 男 / 2 女
 
     // 切换"提交中"状态。提交 HTTP 期间,保存按钮置灰、文字改为"保存中…",
     // 防止用户连点;HTTP reply 回来后由 AdminFrame 再切回 false(若保留弹窗,
@@ -83,6 +84,7 @@ public:
     void SetBusy(bool busy);
 
     BEGIN_MSG_MAP(EmployeeEditDialog)
+        MESSAGE_HANDLER(WM_KEYDOWN,    OnKeyDownMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_CLOSE,      OnCloseMsg)
         MESSAGE_HANDLER(WM_DESTROY,    OnDestroyMsg)
@@ -109,6 +111,9 @@ private:
     // WM_CLOSE:用户点标题栏关闭按钮(或调 RequestClose)→ DestroyWindow。
     LRESULT OnCloseMsg(UINT, WPARAM, LPARAM, BOOL& bHandled);
 
+    // WM_KEYDOWN：Esc 等同点关闭按钮（不提交）；其余按键不处理，交给基类派发给获得焦点的控件。
+    LRESULT OnKeyDownMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled);
+
     // WM_DESTROY:无论怎么关,都在此恢复主窗口 Enable + 通知 AdminFrame 清
     // 自己指针。是真模态语义解除的唯一收口。
     LRESULT OnDestroyMsg(UINT, WPARAM, LPARAM, BOOL& bHandled);
@@ -130,6 +135,7 @@ private:
     balloonwjui::DuiEdit* m_editLandline;    // 座机
     balloonwjui::DuiEdit* m_editWorkstation; // 工位地址
     balloonwjui::DuiEdit* m_editSignature;   // 个性签名
+    balloonwjui::DuiComboBox* m_cbGender;    // 性别下拉框（保密 / 男 / 女），按 m_node.m_genderCode 预选
 
     balloonwjui::DuiControl*  m_btnSave;         // 「保存」按钮(busy 时改文字)
 };

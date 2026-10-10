@@ -22,6 +22,7 @@
 #include <string>
 #include <map>
 #include <mutex>
+#include <vector>
 
 //一条活跃远程桌面会话，对应一次"控制端 ↔ 被控端"的远程桌面
 struct RemoteDesktopSessionInfo
@@ -31,9 +32,11 @@ struct RemoteDesktopSessionInfo
     int64_t     controlledId;  //被控端 userid（被观看与控制的一方）
     int         state;         //会话状态，取值见 enum rd_state
     int64_t     createTime;    //会话创建时间，Unix 毫秒（供超时清理）
+    int64_t     controllerOfflineAt;   //控制端最后一个登录连接断开的时刻，Unix 毫秒；0 表示在线（掉线宽限用）
+    int64_t     controlledOfflineAt;   //被控端最后一个登录连接断开的时刻，Unix 毫秒；0 表示在线（掉线宽限用）
 
     RemoteDesktopSessionInfo()
-        : controllerId(0), controlledId(0), state(0), createTime(0)
+        : controllerId(0), controlledId(0), state(0), createTime(0), controllerOfflineAt(0), controlledOfflineAt(0)
     {
     }
 };
@@ -107,6 +110,38 @@ public:
      */
     bool signTokenFor(const std::string& sessionid, int role, int64_t now, std::string& outToken);
 
+    //参与方掉线后保留会话的默认宽限期（毫秒）；可由 chatserver.conf 的 rdofflinegracems 覆盖
+    static const int64_t kDefaultOfflineGraceMs = 30 * 1000;
+
+    /**
+     *  设置掉线宽限期。
+     *  @param graceMs 宽限期，单位毫秒；不大于 0 时按 kDefaultOfflineGraceMs 处理
+     */
+    void setOfflineGraceMs(int64_t graceMs);
+
+    //当前的掉线宽限期，单位毫秒
+    int64_t offlineGraceMs() const;
+
+    /**
+     *  用户最后一个登录连接断开：给他参与的每个远程桌面会话记下掉线时刻。已记过的不改（以第一次为准）。
+     *  @param userId 掉线的用户
+     *  @param now    当前时间，Unix 毫秒
+     */
+    void markUserOffline(int64_t userId, int64_t now);
+
+    /**
+     *  用户重新登录：清掉他参与的会话的掉线时刻。
+     *  @param userId 登录的用户
+     */
+    void markUserOnline(int64_t userId);
+
+    /**
+     *  收集并移除「有参与方掉线已达宽限期」的会话（响铃中与已接受的都算）。
+     *  @param now 当前时间，Unix 毫秒
+     *  @param out [出参] 追加被移除的会话（含双方掉线时刻）；调用前不清空由调用方负责
+     */
+    void reapOfflineSessions(int64_t now, std::vector<RemoteDesktopSessionInfo>& out);
+
 private:
     mutable std::mutex                              m_mutex;        //保护会话表
     std::map<std::string, RemoteDesktopSessionInfo> m_sessions;     //sessionid → 会话
@@ -114,4 +149,5 @@ private:
     std::string                                     m_relayTokenKey;//relay 令牌 HMAC 密钥
     std::string                                     m_relayHost;    //imgserver 中转对外主机地址
     int                                             m_relayPort;    //imgserver 中转端口
+    int64_t                                         m_offlineGraceMs;   //掉线宽限期（毫秒），由 setOfflineGraceMs 设置
 };

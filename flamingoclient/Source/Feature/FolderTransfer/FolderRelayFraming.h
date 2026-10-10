@@ -105,9 +105,12 @@ struct FolderRelayFileEntry
 {
     std::string m_relpath;   //相对根文件夹的路径，一律用 '/' 分隔，不含根文件夹名本身
     int64_t     m_size;      //文件字节数，取值 >= 0
+    int64_t     m_mtime;     //最后修改时间（Unix 毫秒）；0 表示未知，此时清单里不写这个字段。单聊文件夹传输的接收端
+                             //不使用它，文件共享的下载据它判断半截文件能否续传
 
     FolderRelayFileEntry()
         : m_size(0)
+        , m_mtime(0)
     {
     }
 };
@@ -446,9 +449,10 @@ bool DecodeFileChunk(const unsigned char* body, size_t bodylen,
 
 //清单分段重组器：接收端按到达顺序逐段喂入 ft_manifest 解出的分段，重组出整份清单。
 //每次文件夹传输的接收端持有一个本对象；重试续传时应先 Reset 再重新收清单。
-//重组过程中会校验分段的连续性与自洽性（段序号连续、段数与文件夹名各段一致、
-//dirbase / filebase 与已累积的条数吻合、收齐后条数与总计吻合），任一项不符即返回
-//错误并重置，避免把一份残缺的清单当成完整清单用下去。
+//重组过程中会校验分段的自洽性（段数与文件夹名各段一致、dirbase / filebase 与已累积的条数吻合、
+//收齐后条数与总计吻合），任一项不符即返回错误并重置，避免把一份残缺的清单当成完整清单用下去。
+//发送端在回执到达前会重发整份清单（2026-10-05 起），故段序号的问题不算错误：0 号段总是从头
+//开始一份；缺了开头的一份、跳号或重复的一份丢弃后等下一份；收齐之后多余的整份丢弃（folder_manifest_ignored）。
 class FolderRelayManifestAssembler
 {
 public:
@@ -463,6 +467,9 @@ public:
         folder_manifest_done = 1,
         //分段不连续或字段自相矛盾，内部状态已重置，调用方应中止本次传输
         folder_manifest_error = -1,
+        //本段来自一份不完整或多余的清单，已丢弃，调用方继续等待即可（2026-10-05）：
+        //已经收齐之后又来的整份清单（发送端在回执到达前重发的），或开头几段被 fileserver 丢弃的那一份的后续段
+        folder_manifest_ignored = 2,
     };
 
     /**

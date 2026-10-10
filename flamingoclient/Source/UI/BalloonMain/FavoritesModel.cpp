@@ -17,6 +17,7 @@
 
 #include "../../net/Protocol.h"   // conversation_single / conversation_group
 #include "ContactRemarkModel.h"   // ResolveContactDisplayName（显示名口径全局唯一）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace balloonmain {
 
@@ -24,7 +25,7 @@ namespace {
 
 //群行第二行显示成员数时的文案格式："12 人"。人数未知（<= 0）时不显示第二行，
 //宁可留空也不显示骗人的 "0 人"（与 GroupRowText 的口径一致）。
-const wchar_t* const kGroupMemberFormat = L"%d 人";
+const wchar_t* const kGroupMemberFormat = TR_NOOP(L"%d 人");
 
 //UTF-8 → CString。空串安全。
 //
@@ -165,8 +166,8 @@ void FavoritesModel::ExportItems(std::vector<net::FavoriteItem>& out) const
 const wchar_t* FavoritesModel::GetMenuLabel(bool isFavorite)
 {
     if (isFavorite)
-        return L"取消收藏";
-    return L"添加到收藏";
+        return TR(L"取消收藏");
+    return TR(L"添加到收藏");
 }
 
 void FavoritesModel::BuildRows(const std::vector<net::ContactItem>& contacts,
@@ -244,7 +245,7 @@ void FavoritesModel::BuildRows(const std::vector<net::ContactItem>& contacts,
 
             if (g->m_membercount > 0)
             {
-                row.m_subLabel.Format(kGroupMemberFormat, g->m_membercount);
+                row.m_subLabel.Format(TR(kGroupMemberFormat), g->m_membercount);
             }
 
             row.m_facetype   = g->m_facetype;

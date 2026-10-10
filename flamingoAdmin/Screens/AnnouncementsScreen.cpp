@@ -5,12 +5,15 @@
  */
 #include "stdafx.h"
 #include "Screens/AnnouncementsScreen.h"
+#include "Util/AdminApi.h"   // adminapi::AnnSeverityLabel：公告级别的统一叫法
 #include "Screens/AnnouncementPreviewPanel.h"
 #include "UiIds.h"
 #include "Theme/AdminTheme.h"
 #include "Widgets/UiHelpers.h"
 #include "Widgets/IconRenderer.h"
 #include "Widgets/Widgets.h"
+#include "Widgets/PagerBar.h"   // 左侧列表底部的共用分页条
+#include "Util/TimeText.h"   // 时间显示格式（日期 / 分钟 / 秒）
 #include "Widgets/CommonWidgets.h"
 #include "Widgets/OverlayScrollbar.h"  // 公告列表 / 预览区的悬浮滚动条子控件
 #include "Mock/DataStore.h"
@@ -70,17 +73,10 @@ int MeasureWrappedH(LPCTSTR text, HFONT font, int width)
     return rc.bottom - rc.top;
 }
 
-// 公告严重级别 → 徽章文案。
+// 公告严重级别 → 徽章文案。与新建公告、公告详情、导出共用一套名称（普通 / 提醒 / 警告）。
 LPCTSTR SeverityChipLabel(Severity s)
 {
-    switch (s)
-    {
-    case Severity::Warn:   return _T("提醒");
-    case Severity::Danger: return _T("安全公告");
-    case Severity::Info:   return _T("通知");
-    case Severity::Normal:
-    default:               return _T("通知");
-    }
+    return adminapi::AnnSeverityLabel(s);
 }
 
 } // anonymous namespace
@@ -123,6 +119,12 @@ AnnouncementsScreen::AnnouncementsScreen()
     m_listSb = listSb.get();
     m_listSb->SetOnScroll(&AnnouncementsScreen::OnListSbScroll, this);
     AddChild(std::move(listSb));
+
+    // 左侧公告列表底部的分页条：与企业列表、审计页共用。同样以具名指针定位。
+    auto listPager = std::make_unique<ui::PagerBar>();
+    listPager->SetPageCallback(&AnnouncementsScreen::OnListPageThunk, this);
+    m_listPager = listPager.get();
+    AddChild(std::move(listPager));
 
     // 右栏「公告详情」面板。整块替代原 PaintPreview 自绘 —— 文字字段(标题 /
     // 正文 / 日期 / 发送者 / 受众 / 进度 / 推送描述)由 DuiLabel(selectable) /
@@ -221,9 +223,9 @@ void AnnouncementsScreen::Layout(const RECT& rcAvail)
     m_previewRc = RECT{ rcAvail.left + kListW, rcAvail.top + kHeaderH,
                         rcAvail.right, rcAvail.bottom };
 
-    // 悬浮滚动条：摆在预览区右内缘的细竖条上，高 = 预览可视区高度。距右缘
+    // 悬浮滚动条：摆在预览区右内缘的竖条上，高 = 预览可视区高度。距右缘
     // 留 kSbInset 像素，悬浮于内容之上、不占用预览内容宽度。
-    const int kSbInset = 3;   // 滚动条距区域右缘的内缩像素
+    const int kSbInset = 0;   // 滚动条距区域右缘的内缩像素；0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致
     m_previewSb->ForceLayout(RECT{
         m_previewRc.right - kSbInset - OverlayScrollbar::kSuggestedWidth,
         m_previewRc.top,
@@ -241,6 +243,10 @@ void AnnouncementsScreen::Layout(const RECT& rcAvail)
         listItemsTop,
         listItemsRight - kSbInset,
         listItemsBottom });
+
+    // 列表栏底部的分页条，宽度到列表栏右侧分隔线为止。
+    m_listPager->ForceLayout(RECT{ rcAvail.left, rcAvail.bottom - kPagerH,
+                                   listItemsRight, rcAvail.bottom });
 
     // 「公告详情」面板:铺满整个预览区 m_previewRc。面板内正文区是弹性高度
     // (Weight),会撑满标题 / 发送者 / 分隔线之下、状态卡 / 按钮行之上的剩余
@@ -382,7 +388,8 @@ void AnnouncementsScreen::PaintList(HDC hdc, const RECT& rc)
             metaX += cw + 6;
         }
         RECT dr = { metaX, ly + 8, rc.right - 14, ly + 24 };
-        ui::DrawTextLine(hdc, a.m_sentAt.Mid(5, 11), dr, theme::kInk400,
+        ui::DrawTextLine(hdc, timetext::FormatTimeText(a.m_sentAt, timetext::TimeStyle::Minute), dr,
+                         theme::kInk400,
                          ui::UiFont(theme::kFontSizeSmall, false),
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         // 标题。
@@ -424,8 +431,19 @@ void AnnouncementsScreen::PaintList(HDC hdc, const RECT& rc)
     // 分页模式不滚动,列表悬浮滚动条恒隐藏(contentH<=viewH 它自动不画)。
     m_listContentH = 0;
 
-    // 底部分页条。
-    PaintPager(hdc, RECT{ rc.left, pagerTop, rc.right, rc.bottom }, total, pageSize);
+    // 底部分页条由子控件 m_listPager 绘制；这里只刷新它的页码（值不变时它不会重绘）。
+    m_listPager->SetPageInfo(m_listPage + 1, total, pageSize);
+}
+
+void AnnouncementsScreen::OnListPageThunk(void* user, int newPage)
+{
+    AnnouncementsScreen* self = static_cast<AnnouncementsScreen*>(user);
+    const int page = newPage - 1;   // 分页条从 1 起，m_listPage 从 0 起
+    if (page != self->m_listPage)
+    {
+        self->m_listPage = page;
+        self->Invalidate();
+    }
 }
 
 int AnnouncementsScreen::CollectFiltered(std::vector<const Announcement*>* out) const
@@ -468,61 +486,6 @@ int AnnouncementsScreen::ListPageSize() const
     return n;
 }
 
-void AnnouncementsScreen::PaintPager(HDC hdc, const RECT& rc, int total, int pageSize)
-{
-    const int pageCount = ListPageCount(total, pageSize);
-
-    // 顶部分隔线(与列表项区分隔)。
-    ui::FillLine(hdc, rc.left, rc.top, kListW - 1, 1, theme::kInk100);
-
-    const bool canPrev = (m_listPage > 0);
-    const bool canNext = (m_listPage < pageCount - 1);
-
-    const int kPagerBtnW = 64;   // 上一页 / 下一页 按钮宽
-    const int kPagerBtnH = 26;   // 上一页 / 下一页 按钮高
-    const int cy = (rc.top + rc.bottom) / 2;
-
-    // 上一页(左)。
-    RECT prev = { rc.left + 12, cy - kPagerBtnH / 2,
-                  rc.left + 12 + kPagerBtnW, cy + kPagerBtnH / 2 };
-    ui::StrokeRoundRect(hdc, prev,
-                        canPrev ? theme::kInk200 : theme::kInk100,
-                        theme::kRadiusSm, 1.0f);
-    ui::DrawTextLine(hdc, _T("上一页"), prev,
-                     canPrev ? theme::kInk600 : theme::kInk300,
-                     ui::UiFont(theme::kFontSizeSmall, false),
-                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    if (canPrev)
-    {
-        Hit h; h.m_rc = prev; h.m_kind = 3; h.m_arg = -1;
-        m_hits.push_back(h);
-    }
-
-    // 下一页(右)。
-    RECT next = { rc.right - 12 - kPagerBtnW, cy - kPagerBtnH / 2,
-                  rc.right - 12, cy + kPagerBtnH / 2 };
-    ui::StrokeRoundRect(hdc, next,
-                        canNext ? theme::kInk200 : theme::kInk100,
-                        theme::kRadiusSm, 1.0f);
-    ui::DrawTextLine(hdc, _T("下一页"), next,
-                     canNext ? theme::kInk600 : theme::kInk300,
-                     ui::UiFont(theme::kFontSizeSmall, false),
-                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    if (canNext)
-    {
-        Hit h; h.m_rc = next; h.m_kind = 3; h.m_arg = 1;
-        m_hits.push_back(h);
-    }
-
-    // 中间页码 "第 X / Y 页"。
-    CString pageText;
-    pageText.Format(_T("第 %d / %d 页"), m_listPage + 1, pageCount);
-    RECT mid = { prev.right, rc.top, next.left, rc.bottom };
-    ui::DrawTextLine(hdc, pageText, mid, theme::kInk500,
-                     ui::UiFont(theme::kFontSizeSmall, false),
-                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-}
-
 // 注:原 PaintPreview(自绘 380 行)已被 AnnouncementPreviewPanel 取代 ——
 // 公告详情文字可拖选 + Ctrl+C 复制,装饰图形(徽章 / 头像 / 分隔线 / 进度条 /
 // 调度卡图标)由 PreviewPanel::OnPaint 接管。详见 Screens/AnnouncementPreviewPanel.h。
@@ -560,25 +523,6 @@ bool AnnouncementsScreen::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
         else if (h.m_kind == 2)       // 动作
         {
             RaisePending(static_cast<Pending>(h.m_arg));
-        }
-        else if (h.m_kind == 3)       // 分页:m_arg = -1 上一页 / +1 下一页
-        {
-            const int pageCount = ListPageCount(CollectFiltered(nullptr),
-                                                ListPageSize());
-            int np = m_listPage + h.m_arg;
-            if (np < 0)
-            {
-                np = 0;
-            }
-            if (np > pageCount - 1)
-            {
-                np = pageCount - 1;
-            }
-            if (np != m_listPage)
-            {
-                m_listPage = np;
-                Invalidate();
-            }
         }
         return true;
     }

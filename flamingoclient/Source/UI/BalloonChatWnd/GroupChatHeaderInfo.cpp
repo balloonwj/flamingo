@@ -1,8 +1,9 @@
 /**
  *  GroupChatHeaderInfo.cpp
  *
- *  群聊头部信息块的绘制实现。文字用 GDI DrawText（清晰）。群名 / 人数 / 公告
- *  标题三项由宿主窗口经 setter 写入，本控件只负责画。
+ *  群聊头部信息块的绘制实现。文字用 GDI DrawText（清晰）。群简介由宿主窗口经
+ *  setter 写入，本控件只负责画（2026-10-03 起不再画群名与人数，2026-10-04 起由公告标题
+ *  改为群简介，见头文件）。
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 它要被 Flamingo.vcxproj 与
  *  FlamingoUnit.vcxproj 共用。在 Flamingo.vcxproj 里需标记
@@ -34,6 +35,7 @@ extern CAppModule _Module;
 #include <atlmisc.h>
 
 #include "GroupChatHeaderInfo.h"
+#include "../../Common/I18n/I18n.h"   // i18n::UiFontName：当前界面语言的界面字体
 
 namespace balloonchatwnd {
 
@@ -41,13 +43,24 @@ namespace {
 
 // ---- 配色 / 字号 -------------------------------------------------------
 
-const COLORREF kNameColor   = RGB(0x2A, 0x2A, 0x2A);   // 群名
-const COLORREF kCountColor  = RGB(0x8A, 0x8A, 0x8A);   // 人数
-const COLORREF kNoticeColor = RGB(0x8A, 0x8A, 0x8A);   // 公告
+const COLORREF kIntroColor = RGB(0x8A, 0x8A, 0x8A);   // 群简介文字颜色（浅灰，作为标题栏下方的辅助信息）
 
-const int kNamePx   = 15;   // 群名字号
-const int kCountPx  = 12;   // 人数字号
-const int kNoticePx = 12;   // 公告字号
+const int kIntroPx    = 12;   // 群简介字号（像素）
+const int kIntroLineH = 17;   // 群简介一行的高度（像素），这一行在信息块里垂直居中
+
+const wchar_t kFullWidthSpace = 0x3000;   // 全角空格，整理群简介时与半角空格一样从首尾去掉
+
+// 是否为需要折叠成一个空格的控制字符：换行、回车、制表符
+bool IsIntroBreakChar(wchar_t ch)
+{
+    return ch == L'\r' || ch == L'\n' || ch == L'\t';
+}
+
+// 是否为需要从首尾去掉的空白：半角空格或全角空格
+bool IsIntroTrimChar(wchar_t ch)
+{
+    return ch == L' ' || ch == kFullWidthSpace;
+}
 
 // 用 GDI 绘制文字 —— DrawText 经系统 ClearType 光栅化，清晰锐利。
 void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
@@ -63,7 +76,7 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
         FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
+        i18n::UiFontName());
     if (hFont == NULL)
     {
         return;
@@ -79,54 +92,54 @@ void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
     ::DeleteObject(hFont);
 }
 
-// 测量一段文字的像素宽度。
-int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
-{
-    if (text == NULL || text[0] == L'\0')
-    {
-        return 0;
-    }
-    HFONT hFont = ::CreateFontW(
-        -pixelHeight, 0, 0, 0,
-        bold ? FW_SEMIBOLD : FW_NORMAL,
-        FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Microsoft YaHei");
-    if (hFont == NULL)
-    {
-        return 0;
-    }
-    HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
-    SIZE sz = { 0, 0 };
-    ::GetTextExtentPoint32W(hdc, text, (int)::wcslen(text), &sz);
-    ::SelectObject(hdc, hOldFont);
-    ::DeleteObject(hFont);
-    return sz.cx;
-}
-
 } // anonymous namespace
 
+CString MakeHeaderIntroLine(LPCTSTR intro)
+{
+    CString line;
+    if (intro == NULL)
+    {
+        return line;
+    }
+
+    // 每一段连续的换行 / 回车 / 制表符只换成一个空格："第一行\r\n\r\n第二行" 得到 "第一行 第二行"
+    bool inBreak = false;
+    for (LPCTSTR p = intro; *p != _T('\0'); ++p)
+    {
+        if (IsIntroBreakChar(*p))
+        {
+            if (!inBreak)
+            {
+                line += _T(' ');
+            }
+            inBreak = true;
+            continue;
+        }
+        inBreak = false;
+        line += *p;
+    }
+
+    // 去掉首尾的半角 / 全角空格（包括上一步换出来的空格）
+    int begin = 0;
+    int end = line.GetLength();
+    while (begin < end && IsIntroTrimChar(line[begin]))
+    {
+        ++begin;
+    }
+    while (end > begin && IsIntroTrimChar(line[end - 1]))
+    {
+        --end;
+    }
+    return line.Mid(begin, end - begin);
+}
+
 GroupChatHeaderInfo::GroupChatHeaderInfo()
-    : m_memberCount(0)
 {
 }
 
-void GroupChatHeaderInfo::SetGroupName(LPCTSTR name)
+void GroupChatHeaderInfo::SetGroupIntro(LPCTSTR intro)
 {
-    m_groupName = (name != NULL) ? name : _T("");
-    Invalidate();
-}
-
-void GroupChatHeaderInfo::SetMemberCount(int count)
-{
-    m_memberCount = count;
-    Invalidate();
-}
-
-void GroupChatHeaderInfo::SetAnnouncementTitle(LPCTSTR title)
-{
-    m_announceTitle = (title != NULL) ? title : _T("");
+    m_introLine = MakeHeaderIntroLine(intro);
     Invalidate();
 }
 
@@ -141,44 +154,20 @@ void GroupChatHeaderInfo::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         return;
     }
 
-    // 两行整体垂直居中；没有公告时只有一行，此时按单行居中，不让群名孤零零
-    // 悬在上半区。
-    const int kNameLineH   = 20;   // 群名行高
-    const int kNoticeLineH = 17;   // 公告行高
-    const int kLineGap     = 1;    // 两行之间的间距
-
-    const bool hasNotice = !m_announceTitle.IsEmpty();
-    const int  blockH    = hasNotice ? (kNameLineH + kLineGap + kNoticeLineH) : kNameLineH;
-    const int  nameTop   = y + (h - blockH) / 2;
-    const int  noticeTop = nameTop + kNameLineH + kLineGap;
-
-    // ---- 群名 ----
-    const int nameW = MeasureTextWidth(hdc, (LPCWSTR)m_groupName, kNamePx, true);
-    RECT nameRc = { x, nameTop, x + nameW + 2, nameTop + kNameLineH };
-    DrawGdiText(hdc, (LPCWSTR)m_groupName, nameRc, kNamePx, true, kNameColor,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-
-    // ---- 人数 "(N 人)"（群名右侧）----
-    // 成员列表还没回来时（count 为 0）不画这一段 —— 显示"(0 人)"会让人以为群空了。
-    if (m_memberCount > 0)
+    // 只有一行群简介，在信息块里垂直居中；没有群简介时整块空白
+    if (m_introLine.IsEmpty())
     {
-        CString countStr;
-        countStr.Format(_T("(%d 人)"), m_memberCount);
-        RECT countRc = { x + nameW + 8, nameTop, x + w, nameTop + kNameLineH };
-        DrawGdiText(hdc, (LPCWSTR)countStr, countRc, kCountPx, false, kCountColor,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        return;
     }
+    const int introTop = y + (h - kIntroLineH) / 2;
 
-    // ---- 群公告（📌 前缀）----
-    if (hasNotice)
-    {
-        CString noticeLine = _T("📌 ");
-        noticeLine += m_announceTitle;
-        RECT noticeRc = { x, noticeTop, x + w, noticeTop + kNoticeLineH };
-        DrawGdiText(hdc, (LPCWSTR)noticeLine, noticeRc, kNoticePx, false,
-                    kNoticeColor,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    }
+    // 文字矩形与本控件同宽：DrawText 在矩形内裁剪，DT_END_ELLIPSIS 让过长的简介以省略号结尾，
+    // 因此不会画到右侧的图标按钮上。DT_NOPREFIX：简介是用户填写的文字，其中的 & 要原样显示，
+    // 不能被当成快捷键前缀（否则 & 本身不显示，下一个字还会带下划线）。
+    RECT introRc = { x, introTop, x + w, introTop + kIntroLineH };
+    DrawGdiText(hdc, (LPCWSTR)m_introLine, introRc, kIntroPx, false,
+                kIntroColor,
+                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 }
 
 } // namespace balloonchatwnd

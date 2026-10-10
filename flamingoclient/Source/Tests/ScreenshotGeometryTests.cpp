@@ -3,7 +3,9 @@
  *
  *  第一期（单聊截图）测试：覆盖截图浮层的纯几何运算 —— 选区归一化 / 夹取 /
  *  最小尺寸判定、尺寸读数、操作工具栏落点。对应方案用例 P1~P5。浮层本身的
- *  冻结遮罩 / 拖拽 / 工具栏渲染等只能目视核对，不在本文件覆盖范围内。
+ *  冻结遮罩 / 拖拽 / 工具栏渲染等只能人工核对界面，不在本文件覆盖范围内。
+ *  2026-10-05 加上 P6~P10：多显示器查找、全屏选区的工具栏落点、尺寸读数与框选
+ *  提示条的落点（docs/截图快捷键与隐藏当前窗口方案.md 第 4 节）。
  *
  *  用 Catch2 v3（amalgamated）。全局 _Module 由 BalloonChatLayoutTests.cpp
  *  统一定义，本文件只引用。
@@ -15,7 +17,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../UI/BalloonScreenshot/ScreenshotGeometry.h"
+#include <vector>
+
+#include "../../FlamingoScreenshot/Capture/ScreenshotGeometry.h"
 
 using namespace balloonscreenshot;
 
@@ -172,6 +176,141 @@ TEST_CASE("P5 选区贴近左边：右对齐落点越界 → 夹到工作区左�
     const int gap = 8;
     POINT pt = PlaceActionBar(sel, bar, work, gap);
     CHECK(pt.x == work.left);                   // 夹到左边缘
+}
+
+// =====================================================================
+// P6 ~ P10. 多显示器与全屏选区（截图快捷键方案，2026-10-05）
+// =====================================================================
+
+namespace {
+
+// 两块显示器：左边主屏 1920×1080，右边副屏 1280×1024 且顶边低 100 像素，
+// 两屏之间的下方与上方都有不属于任何显示器的空白区
+std::vector<RECT> TwoMonitors()
+{
+    std::vector<RECT> v;
+    v.push_back(MakeRect(0, 0, 1920, 1080));
+    v.push_back(MakeRect(1920, 100, 3200, 1124));
+    return v;
+}
+
+} // anonymous namespace
+
+TEST_CASE("P6 按点找显示器：点在某块屏内取那一块", "[screenshot][geom][monitor]")
+{
+    std::vector<RECT> mons = TwoMonitors();
+    CHECK(FindMonitorIndex(mons, MakePoint(100, 100)) == 0);
+    CHECK(FindMonitorIndex(mons, MakePoint(2500, 600)) == 1);
+}
+
+TEST_CASE("P6 按点找显示器：点落在各屏之间的空白区取最近的一块", "[screenshot][geom][monitor]")
+{
+    std::vector<RECT> mons = TwoMonitors();
+    // 副屏上方的空白区（x 在副屏范围内、y 小于副屏顶边），离副屏 50、离主屏 580
+    CHECK(FindMonitorIndex(mons, MakePoint(2500, 50)) == 1);
+    // 主屏下方的空白区（y 超过主屏底边 20），离主屏 20、离副屏 x 方向 120
+    CHECK(FindMonitorIndex(mons, MakePoint(1800, 1100)) == 0);
+}
+
+TEST_CASE("P6 按点找显示器：没有显示器返回 -1", "[screenshot][geom][monitor]")
+{
+    std::vector<RECT> none;
+    CHECK(FindMonitorIndex(none, MakePoint(0, 0)) == -1);
+}
+
+TEST_CASE("P7 按矩形找显示器：取相交面积最大的一块", "[screenshot][geom][monitor]")
+{
+    std::vector<RECT> mons = TwoMonitors();
+    // 跨两屏，主屏里占 100 列、副屏里占 300 列
+    RECT sel = MakeRect(1820, 300, 2220, 500);
+    RECT m = MonitorRectForRect(mons, sel, MakeRect(0, 0, 3200, 1124));
+    CHECK(m.left == 1920);
+    CHECK(m.top == 100);
+    CHECK(m.right == 3200);
+    CHECK(m.bottom == 1124);
+}
+
+TEST_CASE("P7 按矩形找显示器：与哪块都不相交时取离中心最近的一块；没有显示器时用后备矩形",
+          "[screenshot][geom][monitor]")
+{
+    std::vector<RECT> mons = TwoMonitors();
+    // 完全落在副屏上方的空白区
+    RECT sel = MakeRect(2400, 10, 2600, 60);
+    RECT m = MonitorRectForRect(mons, sel, MakeRect(0, 0, 3200, 1124));
+    CHECK(m.left == 1920);
+
+    std::vector<RECT> none;
+    RECT fb = MakeRect(-5, -6, 7, 8);
+    RECT got = MonitorRectForRect(none, sel, fb);
+    CHECK(got.left == -5);
+    CHECK(got.top == -6);
+    CHECK(got.right == 7);
+    CHECK(got.bottom == 8);
+}
+
+TEST_CASE("P8 全屏选区：工具栏上下都放不下时放进选区内右下角", "[screenshot][geom][fullscreen]")
+{
+    RECT mon = MakeRect(1920, 100, 3200, 1124);
+    RECT sel = mon;                                // 选区就是整块副屏
+    SIZE bar = MakeSize(600, 96);
+    const int gap = 8;
+    POINT pt = PlaceActionBar(sel, bar, mon, gap);
+    CHECK(pt.x == sel.right - gap - bar.cx);       // 右边与选区右边留 gap
+    CHECK(pt.y == sel.bottom - gap - bar.cy);      // 下边与选区下边留 gap
+}
+
+TEST_CASE("P8 选区下方超出所在显示器、上方放得下：仍翻到上方（以所在显示器为准）",
+          "[screenshot][geom][fullscreen]")
+{
+    // 选区贴着副屏底边；副屏下方在虚拟桌面里没有显示器，不能把工具栏放过去
+    RECT mon = MakeRect(1920, 100, 3200, 1124);
+    RECT sel = MakeRect(2200, 900, 2800, 1120);
+    SIZE bar = MakeSize(500, 44);
+    const int gap = 8;
+    POINT pt = PlaceActionBar(sel, bar, mon, gap);
+    CHECK(pt.y == sel.top - gap - bar.cy);
+}
+
+TEST_CASE("P9 尺寸读数：常态在选区左上角上方", "[screenshot][geom][readout]")
+{
+    RECT mon = MakeRect(0, 0, 1920, 1080);
+    RECT sel = MakeRect(400, 300, 800, 600);
+    SIZE box = MakeSize(80, 20);
+    const int gap = 4;
+    POINT pt = PlaceSizeReadout(sel, box, mon, gap);
+    CHECK(pt.x == sel.left);
+    CHECK(pt.y == sel.top - gap - box.cy);
+}
+
+TEST_CASE("P9 尺寸读数：选区贴显示器顶边时放进选区内；右边越界时夹回显示器内",
+          "[screenshot][geom][readout]")
+{
+    // 副屏顶边为 100：读数若放在上方会落进不属于任何显示器的空白区
+    RECT mon = MakeRect(1920, 100, 3200, 1124);
+    RECT sel = mon;
+    SIZE box = MakeSize(80, 20);
+    const int gap = 4;
+    POINT pt = PlaceSizeReadout(sel, box, mon, gap);
+    CHECK(pt.x == sel.left);
+    CHECK(pt.y == sel.top + gap);
+
+    RECT nearRight = MakeRect(3150, 400, 3200, 500);
+    POINT pr = PlaceSizeReadout(nearRight, box, mon, gap);
+    CHECK(pr.x == mon.right - box.cx);
+}
+
+TEST_CASE("P10 框选提示条：在显示器顶部水平居中", "[screenshot][geom][hint]")
+{
+    SIZE bar = MakeSize(400, 36);
+    const int topGap = 24;
+    POINT a = PlaceHintBar(MakeRect(0, 0, 1920, 1080), bar, topGap);
+    CHECK(a.x == (1920 - 400) / 2);
+    CHECK(a.y == topGap);
+
+    // 原点不为 0 的副屏
+    POINT b = PlaceHintBar(MakeRect(1920, 100, 3200, 1124), bar, topGap);
+    CHECK(b.x == 1920 + (1280 - 400) / 2);
+    CHECK(b.y == 100 + topGap);
 }
 
 // =====================================================================

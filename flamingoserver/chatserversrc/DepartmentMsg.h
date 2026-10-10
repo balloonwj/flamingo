@@ -23,12 +23,12 @@ enum org_change_type
 };
 
 //部门成员（msg_type_getorgstructure 应答中 members 数组的元素）。
-//前若干字段为成员展示信息，后三个字段为该成员在本部门的归属信息。
+//前若干字段为成员展示信息，职位、是否主部门、排序权重三个字段为该成员在本部门的归属信息，最后是账号状态。
 struct DepartmentMember
 {
     DepartmentMember()
         : userid(0), facetype(0), status(0), clienttype(0)
-        , isprimary(1), memberorder(0)
+        , isprimary(1), memberorder(0), accountstatus(0)
     {
     }
 
@@ -43,6 +43,8 @@ struct DepartmentMember
     std::string position;     //该成员在本部门的职位/职务
     int32_t     isprimary;    //是否主部门：1=主部门 0=兼属部门
     int32_t     memberorder;  //成员在本部门内的排序权重，值小者靠前
+    int32_t     accountstatus;//账号状态，取 t_user.f_status：0=启用 1=停用。管理控制台据此显示「已停用」与启用 / 停用按钮；
+                              //与在线状态 status 是两回事（管理台曾把 status==1（在线）当成停用）
 };
 
 //部门（msg_type_getorgstructure 应答中 departments 数组的元素）。

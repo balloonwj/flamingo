@@ -122,6 +122,10 @@
       <AdditionalLibraryDirectories>..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>copy /b "$(ProjectDir)Util\LoginText.cpp"+,, "$(ProjectDir)Util\LoginText.cpp" &gt;nul</Command>
+      <Message>更新登录页版本行所在源文件的时间，使其随本次构建重新编译，版本行里的构建日期即当次构建的日期</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <!-- ===================== Release | x64 ===================== -->
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -146,6 +150,10 @@
       <AdditionalLibraryDirectories>..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>copy /b "$(ProjectDir)Util\LoginText.cpp"+,, "$(ProjectDir)Util\LoginText.cpp" &gt;nul</Command>
+      <Message>更新登录页版本行所在源文件的时间，使其随本次构建重新编译，版本行里的构建日期即当次构建的日期</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <!-- ===================== Debug | Win32 ===================== -->
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -168,6 +176,10 @@
       <AdditionalLibraryDirectories>..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>copy /b "$(ProjectDir)Util\LoginText.cpp"+,, "$(ProjectDir)Util\LoginText.cpp" &gt;nul</Command>
+      <Message>更新登录页版本行所在源文件的时间，使其随本次构建重新编译，版本行里的构建日期即当次构建的日期</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <!-- ===================== Release | Win32 ===================== -->
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -192,6 +204,10 @@
       <AdditionalLibraryDirectories>..\third-party\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>copy /b "$(ProjectDir)Util\LoginText.cpp"+,, "$(ProjectDir)Util\LoginText.cpp" &gt;nul</Command>
+      <Message>更新登录页版本行所在源文件的时间，使其随本次构建重新编译，版本行里的构建日期即当次构建的日期</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -199,6 +215,12 @@
     <ClCompile Include="Util\Logger.cpp" />
     <ClCompile Include="Util\CrashHandler.cpp" />
     <ClCompile Include="Util\AppConfig.cpp" />
+    <ClCompile Include="Util\LoginText.cpp" />
+    <ClCompile Include="Util\TimeText.cpp" />
+    <ClCompile Include="Util\PluginLibrary.cpp" />
+    <ClCompile Include="Util\LinkPageState.cpp" />
+    <ClCompile Include="Util\LinkBridge.cpp" />
+    <ClCompile Include="Util\ColumnFit.cpp" />
     <ClCompile Include="Util\DpapiSecret.cpp" />
     <ClCompile Include="Util\NetProbe.cpp" />
     <ClCompile Include="Util\HttpClient.cpp" />
@@ -208,6 +230,17 @@
     <ClCompile Include="Util\DebugConsoleWindow.cpp" />
     <ClCompile Include="Util\ScrollbarMetrics.cpp" />
     <ClCompile Include="Util\ListPaging.cpp" />
+    <ClCompile Include="Util\SensitiveWordText.cpp" />
+    <ClCompile Include="Screens\FileShareAuditScreen.cpp" />
+    <ClCompile Include="Screens\FileSharesScreen.cpp" />
+    <ClCompile Include="Screens\FileShareCenterScreen.cpp" />
+    <ClCompile Include="Screens\FeatureSwitchesPage.cpp" />
+    <ClCompile Include="Screens\FeatureSwitchPanel.cpp" />
+    <ClCompile Include="Screens\CloudRecordQuotaPanel.cpp" />
+    <ClCompile Include="Screens\FileShareUi.cpp" />
+    <ClCompile Include="Widgets\KeyValueGrid.cpp" />
+    <ClCompile Include="Util\FileShareText.cpp" />
+    <ClCompile Include="Util\TextFileSave.cpp" />
     <ClCompile Include="Util\OrgTreeBuilder.cpp" />
     <ClCompile Include="Util\OrgToolbarLayout.cpp" />
     <ClCompile Include="Util\Pinyin.cpp" />
@@ -228,6 +261,10 @@
     <ClCompile Include="Widgets\IconRenderer.cpp" />
     <ClCompile Include="Widgets\Widgets.cpp" />
     <ClCompile Include="Widgets\CommonWidgets.cpp" />
+    <ClCompile Include="Widgets\PagerBar.cpp" />
+    <ClCompile Include="Widgets\ActionTable.cpp" />
+    <ClCompile Include="Widgets\ColumnHeader.cpp" />
+    <ClCompile Include="Widgets\LinkPageSlot.cpp" />
     <ClCompile Include="Widgets\OrgTree.cpp" />
     <ClCompile Include="Widgets\Toast.cpp" />
     <ClCompile Include="Widgets\OverlayScrollbar.cpp" />
@@ -254,6 +291,18 @@
     <ClCompile Include="Screens\GroupModal.cpp" />
     <ClCompile Include="Screens\AuditScreen.cpp" />
     <ClCompile Include="Screens\ClientVersionsScreen.cpp" />
+    <ClCompile Include="Screens\SensitiveWordsScreen.cpp" />
+    <ClCompile Include="Screens\SensitiveWordModal.cpp" />
+    <ClCompile Include="Util\QaAdminApi.cpp" />
+    <ClCompile Include="Screens\EnterpriseQaScreen.cpp" />
+    <ClCompile Include="Screens\EnterpriseQaModal.cpp" />
+    <ClCompile Include="Util\BotAdminApi.cpp" />
+    <ClCompile Include="Util\BotRuleText.cpp" />
+    <ClCompile Include="Screens\EnterpriseBotScreen.cpp" />
+    <ClCompile Include="Screens\EnterpriseBotModal.cpp" />
+    <ClCompile Include="Screens\BotRuleModal.cpp" />
+    <ClCompile Include="Screens\BotDomainsModal.cpp" />
+    <ClCompile Include="Screens\SensitiveImportModal.cpp" />
     <ClCompile Include="Screens\ClientVersionModal.cpp" />
     <ClCompile Include="Screens\SettingsScreen.cpp" />
     <ClCompile Include="Screens\NetworkSettingsScreen.cpp" />
@@ -267,6 +316,13 @@
     <ClInclude Include="Util\Logger.h" />
     <ClInclude Include="Util\CrashHandler.h" />
     <ClInclude Include="Util\AppConfig.h" />
+    <ClInclude Include="Util\LoginText.h" />
+    <ClInclude Include="Util\TimeText.h" />
+    <ClInclude Include="Util\PluginLibrary.h" />
+    <ClInclude Include="Util\LinkPageState.h" />
+    <ClInclude Include="Util\LinkBridge.h" />
+    <ClInclude Include="FlamingoLink\FlamingoLinkApi.h" />
+    <ClInclude Include="Util\ColumnFit.h" />
     <ClInclude Include="Util\DpapiSecret.h" />
     <ClInclude Include="Util\NetProbe.h" />
     <ClInclude Include="Util\HttpClient.h" />
@@ -276,6 +332,17 @@
     <ClInclude Include="Util\DebugConsoleWindow.h" />
     <ClInclude Include="Util\ScrollbarMetrics.h" />
     <ClInclude Include="Util\ListPaging.h" />
+    <ClInclude Include="Util\SensitiveWordText.h" />
+    <ClInclude Include="Screens\FileShareAuditScreen.h" />
+    <ClInclude Include="Screens\FileSharesScreen.h" />
+    <ClInclude Include="Screens\FileShareCenterScreen.h" />
+    <ClInclude Include="Screens\FeatureSwitchesPage.h" />
+    <ClInclude Include="Screens\FeatureSwitchPanel.h" />
+    <ClInclude Include="Screens\CloudRecordQuotaPanel.h" />
+    <ClInclude Include="Screens\FileShareUi.h" />
+    <ClInclude Include="Widgets\KeyValueGrid.h" />
+    <ClInclude Include="Util\FileShareText.h" />
+    <ClInclude Include="Util\TextFileSave.h" />
     <ClInclude Include="Util\OrgTreeBuilder.h" />
     <ClInclude Include="Util\OrgToolbarLayout.h" />
     <ClInclude Include="Util\Pinyin.h" />
@@ -285,6 +352,10 @@
     <ClInclude Include="Widgets\IconRenderer.h" />
     <ClInclude Include="Widgets\Widgets.h" />
     <ClInclude Include="Widgets\CommonWidgets.h" />
+    <ClInclude Include="Widgets\PagerBar.h" />
+    <ClInclude Include="Widgets\ActionTable.h" />
+    <ClInclude Include="Widgets\ColumnHeader.h" />
+    <ClInclude Include="Widgets\LinkPageSlot.h" />
     <ClInclude Include="Widgets\OrgTree.h" />
     <ClInclude Include="Widgets\Toast.h" />
     <ClInclude Include="Widgets\OverlayScrollbar.h" />
@@ -311,6 +382,18 @@
     <ClInclude Include="Screens\GroupModal.h" />
     <ClInclude Include="Screens\AuditScreen.h" />
     <ClInclude Include="Screens\ClientVersionsScreen.h" />
+    <ClInclude Include="Screens\SensitiveWordsScreen.h" />
+    <ClInclude Include="Screens\SensitiveWordModal.h" />
+    <ClInclude Include="Util\QaAdminApi.h" />
+    <ClInclude Include="Screens\EnterpriseQaScreen.h" />
+    <ClInclude Include="Screens\EnterpriseQaModal.h" />
+    <ClInclude Include="Util\BotAdminApi.h" />
+    <ClInclude Include="Util\BotRuleText.h" />
+    <ClInclude Include="Screens\EnterpriseBotScreen.h" />
+    <ClInclude Include="Screens\EnterpriseBotModal.h" />
+    <ClInclude Include="Screens\BotRuleModal.h" />
+    <ClInclude Include="Screens\BotDomainsModal.h" />
+    <ClInclude Include="Screens\SensitiveImportModal.h" />
     <ClInclude Include="Screens\ClientVersionModal.h" />
     <ClInclude Include="Screens\SettingsScreen.h" />
     <ClInclude Include="Screens\NetworkSettingsScreen.h" />

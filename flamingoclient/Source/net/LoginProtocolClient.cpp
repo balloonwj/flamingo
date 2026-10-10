@@ -8,6 +8,18 @@
 
 namespace net {
 
+const char* const kFeatureFileShare = "fileshare";
+const char* const kFeatureInviteConfirm = "inviteconfirm";
+const char* const kFeatureGroupCall = "groupcall";
+const char* const kFeatureCaption = "caption";
+const char* const kFeatureCloudRecord = "cloudrecord";
+const char* const kFeatureSecretChat = "secretchat";
+const char* const kFeatureThreadGroup = "threadgroup";
+const char* const kFeatureBot = "bot";
+const char* const kFeatureBotGroup = "botgroup";
+const char* const kFeatureBotPersonal = "botpersonal";
+const char* const kFeatureBotGroupExternal = "botgroupexternal";
+
 //把 Json::Value 序列化为紧凑（无缩进、无换行）的 JSON 文本
 static std::string writeCompact(const Json::Value& v)
 {
@@ -39,6 +51,21 @@ std::string LoginProtocolClient::buildLoginRequest(const LoginRequestParams& par
     root["deviceid"]      = params.deviceid;
     root["devicename"]    = params.devicename;
     return writeCompact(root);
+}
+
+//features 对象：功能名 → 0 / 1；不是对象时为空，不是整数的项略去
+static std::map<std::string, int> parseFeatureObject(const Json::Value& value)
+{
+    std::map<std::string, int> out;
+    if (!value.isObject())
+        return out;
+    const Json::Value::Members names = value.getMemberNames();
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        if (value[names[i]].isInt())
+            out[names[i]] = value[names[i]].asInt();
+    }
+    return out;
 }
 
 bool LoginProtocolClient::parseLoginResponse(const std::string& jsonbody, LoginResponse& resp)
@@ -81,10 +108,41 @@ bool LoginProtocolClient::parseLoginResponse(const std::string& jsonbody, LoginR
         resp.profile.address      = p["address"].isString()   ? p["address"].asString()      : std::string();
         resp.profile.phonenumber  = p["phonenumber"].isString()? p["phonenumber"].asString() : std::string();
         resp.profile.mail         = p["mail"].isString()      ? p["mail"].asString()         : std::string();
+        resp.profile.landline     = p["landline"].isString()  ? p["landline"].asString()     : std::string();
+        resp.profile.post         = p["post"].isString()      ? p["post"].asString()         : std::string();
         resp.profile.enterpriseid = jsonToInt64(p["enterpriseid"]);
+        //公开范围（2026-10-06 起下发）：缺字段时保留构造时的默认值，与服务端两列的默认值一致
+        if (p["phonevisible"].isInt())
+            resp.profile.phonevisible = p["phonevisible"].asInt();
+        if (p["landlinevisible"].isInt())
+            resp.profile.landlinevisible = p["landlinevisible"].asInt();
     }
 
+    //功能开关：老服务端没有这个字段，按全部关闭处理（features 留空）
+    resp.features = parseFeatureObject(root["features"]);
     return true;
+}
+
+bool LoginProtocolClient::parseFeaturesNotify(const std::string& jsonbody, FeaturesNotify& notify)
+{
+    Json::CharReaderBuilder b;
+    Json::Value root;
+    JSONCPP_STRING errs;
+    Json::CharReader* reader = b.newCharReader();
+    bool ok = reader->parse(jsonbody.c_str(), jsonbody.c_str() + jsonbody.size(), &root, &errs);
+    delete reader;
+    if (!ok || !errs.empty() || !root.isObject())
+        return false;
+    notify.m_features = parseFeatureObject(root);
+    return true;
+}
+
+bool LoginProtocolClient::isFeatureOn(const std::map<std::string, int>& features, const char* feature)
+{
+    if (feature == NULL)
+        return false;
+    std::map<std::string, int>::const_iterator it = features.find(feature);
+    return it != features.end() && it->second == 1;
 }
 
 bool LoginProtocolClient::parseKickoutNotify(const std::string& jsonbody, KickoutNotify& notify)

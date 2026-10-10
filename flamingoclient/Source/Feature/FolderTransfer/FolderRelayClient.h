@@ -22,7 +22,7 @@
  *
  *  典型用法（每条通道各一个实例，控制通道与数据通道用法相同）：
  *      foldertransfer::FolderRelayClient lane0;
- *      if (!lane0.Connect(ip, port, token, foldertransfer::kFolderControlLane, this))
+ *      if (!lane0.Connect(ip, port, token, foldertransfer::kFolderControlLane, serverPubKey, this))
  *          ...（建通道失败，按整个文件夹传输失败收场）
  *
  *      std::string frame;
@@ -31,11 +31,11 @@
  *      ...
  *      lane0.Close();
  *
- *  socket 收发本身不在单元测试覆盖范围（与 RdRelayClient 一致，靠真机联调验证）。报到
- *  帧包体的构造与 lane 序号校验是纯逻辑，故抽成 folderrelay 命名空间下的内联函数，由
- *  Source/Tests/FolderRelayClientTests.cpp 覆盖；做成内联而不是放进 .cpp，是因为本文件
- *  的实现要用 CIUSocket 取服务端公钥，而测试工程不编译 net/IUSocket.cpp，.cpp 里的东西
- *  测试工程链接不到。
+ *  服务器公钥由调用方经 Connect 传入，本类不依赖主程序的任何全局对象，因此主程序与
+ *  文件共享 DLL（FlamingoFileShare.dll）可以编译同一份源文件（docs/文件共享方案.md 第 1 期
+ *  第 3 步；此前本文件直接从 CIUSocket 单例取公钥）。报到帧包体的构造与 lane 序号校验是
+ *  纯逻辑，抽成 folderrelay 命名空间下的内联函数，由 Source/Tests/FolderRelayClientTests.cpp
+ *  覆盖；连接、加密握手与报到由 Source/Tests/FolderRelayConnectTests.cpp 用本机假中转服务覆盖。
  *
  *  balloonwj@qq.com   2026-08-13
  */
@@ -227,6 +227,9 @@ public:
      *                    帧包体提交服务端校验；本端 N+1 条通道共用同一枚
      *  @param lane       本连接的通道序号：0 为控制通道，1..N 为数据通道；越过硬上限
      *                    kFolderMaxLaneIndex 时本函数直接判失败，不发起连接
+     *  @param serverPubKey 服务器的长期公钥（net::IDENTITY_PUBLICKEY_BYTES 即 32 字节），
+     *                    用于协议加密握手；本函数内部拷贝一份，调用返回后调用方即可释放。
+     *                    传 NULL 表示服务端未配置公钥，本连接全程明文、不做握手
      *  @param handler    事件回调（非空，<u>不接管所有权</u>；其生命周期须长于本连接，
      *                    至少持续到 Close() 返回）
      *  @param timeoutSec 连接 + 加密握手 + 报到的总超时，单位秒
@@ -236,6 +239,7 @@ public:
      *  副作用：成功时启动一条接收线程，此后 handler 可能随时被回调。
      */
     bool Connect(const std::string& ip, int port, const std::string& token, int lane,
+                 const unsigned char* serverPubKey,
                  FolderRelayClientHandler* handler,
                  int timeoutSec = kFolderRelayConnectTimeoutSec);
 
@@ -317,6 +321,11 @@ private:
     std::unique_ptr<std::thread> m_recvThread;  //接收线程
     std::mutex                   m_sendMtx;     //串行化发送，避免多条线程交错写同一 socket
     std::string                  m_recvBuf;     //接收累积缓冲（报到成功后归接收线程私有，处理粘包与半包）
+
+    //服务器长期公钥的副本，Connect 时从调用方拷入，供协议加密握手使用；m_hasServerPubKey 为
+    //false 表示调用方传了 NULL（服务端未配置公钥），此时不做握手、全程明文
+    unsigned char                m_serverPubKey[net::IDENTITY_PUBLICKEY_BYTES];
+    bool                         m_hasServerPubKey;
 
     //本连接的协议加密状态。<u>每条通道各一个</u>——一次传输本端就有 N+1 条连接，共用
     //会让若干条流互相踩踏。

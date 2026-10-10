@@ -17,6 +17,10 @@
 #include "../../Session/UserSessionData.h"       // FMG_MSG_CONV_SEND_BUMP / ConvSendBumpData
 #include "../../Common/Log/IULog.h"                 // LOG_INFO
 #include "../../Common/Util/EncodeUtil.h"            // UTF-8 ↔ Unicode
+#include "../BalloonMemo/MemoCenter.h"               // 边栏「备忘」页签：备忘簿、编辑对话框、删除确认
+#include "../BalloonMemo/MemoCardList.h"             // 「备忘」面板的备忘卡片：重建、悬停、ctrlId 反推
+#include "../../Feature/Memo/MemoClock.h"            // 本地当前时间（列表里的下一次提醒时间）
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"   // 备忘列表的右键菜单
 #include "../../App/FlamingoClient.h"        // CFlamingoClient::m_UserMgr（取自己 userid）
 #include "ChatInputRichEdit.h"   // 输入框控件（无窗口富文本的聊天定制子类）
 #include "GroupChatWindowLayout.h"    // BuildGroupChatWindowBody / GroupCtrlId
@@ -26,6 +30,10 @@
 #include "ChatMessageList.h"          // ChatMessageList::AppendMessage
 #include "ChatDropModel.h"            // 拖进来的路径归类成 DropPlan
 #include "ChatLinkDetect.h"           // IsSafeLinkUrl（打开链接前的协议白名单）
+// RaiseWindowForAttention：字幕上点「回到聊天窗」时把本窗口调到前台。必须排在 <windowsx.h> 之前：
+// windowsx.h 定义了函数式宏 IsMinimized(hwnd) → IsIconic(hwnd)，排在它之后时接口里的 IsMinimized
+// 会被改写成 IsIconic，本文件与 WindowAttention.cpp 对同一个类的理解不一致，链接时报无法解析的外部符号
+#include "WindowAttention.h"
 #include <windowsx.h>                 // GET_X_LPARAM / GET_Y_LPARAM（旁听点击定焦点区域）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"   // 拖放跳过项的轻量提示
 #include "ChatMockData.h"             // ChatMessage / MakeTextMessage / MakeGroupAutoReply
@@ -35,6 +43,31 @@
 #include "GroupMemberOrder.h"         // OrderMemberIndicesByRole（成员侧栏：群主 → 管理员 → 普通成员）
 #include "ChatQuoteModel.h"           // FillQuoteForRender（引用回复的统一入口）
 #include "ChatMergedCard.h"           // ApplyMergedCard（合并转发的聊天记录画成卡片）
+#include "ChatFileShareCard.h"        // ApplyFileShareCard（文件共享卡片）
+#include "ChatScreenShareCard.h"      // ApplyScreenShareCard（屏幕共享卡片）
+#include "ChatSystemTip.h"            // MakeSystemTipRow（系统提示行，与单聊窗共用）
+#include "../../Feature/ScreenShare/ScreenShareHub.h" // 屏幕共享：发起、加入、查询与各会话的共享状态
+#include "../../Feature/Voice/VoiceHub.h"                 // 语音消息：开始、停止、取消录音
+#include "ChatReceivedVoice.h"                             // 语音消息：收到或翻到时做成气泡、查已听状态
+#include "ChatVoiceBubble.h"                               // 语音消息：发送中气泡、能否重发、气泡动作
+#include "../../net/VoiceContent.h"                        // 语音消息：发送时把波形编成 Base64
+#include "../../../FlamingoMedia/Api/FlamingoMediaApi.h"  // media_voice_record_ok 等开始录音的结果
+#include "../../net/UserCachePath.h"                      // net::UserCacheDir（语音缓存目录）
+#include "ChatShareCardBridge.h"      // MakeShareCardLiveState / RefreshShareCardsInList
+#include "../../Feature/FileShare/FileShareHost.h"   // 文件共享模块是否已加载、打开共享与本会话共享浮层
+#include "../../Feature/GroupCall/GroupCallHub.h"    // 群通话：发起、加入、查询与本群的群通话状态
+#include "ChatGroupCallCard.h"                        // 群通话卡片的解析与套用（复用屏幕共享卡片的版式）
+#include "ChatAnnouncementCard.h"                     // 群公告卡片的解析与套用（复用屏幕共享卡片的版式）
+#include "GroupMustRead.h"                           // 入群必读：输入区状态判定、标记与界面文字
+#include "GroupQaModel.h"                            // 问答：筛选、网址提取、发到群里的文字、权限
+#include "GroupBotModel.h"                           // 机器人：成员页签的行标签、头像与资料卡内容（docs/机器人方案.md §4.2）
+#include "GroupBotSection.h"          // ApplyGroupBotSection：成员页签「机器人」区域的重建与逐层重排
+#include "GroupQaCardList.h"                         // 问答卡片列表
+#include "../BalloonMemo/MemoCardList.h"             // kMemoScrollGutter：问答卡片视口与备忘页签共用
+#include "ChatMemoCard.h"                             // 群备忘卡片的解析与套用（复用屏幕共享卡片的版式）
+#include "ChatCloudRecordCard.h"                      // 云端录像卡片的解析与套用（复用屏幕共享卡片的版式）
+#include "../BalloonMain/CreateGroupDlg.h"            // CCreateGroupDlg / IMemberPickSink（群通话选人）
+#include "ChatIconButton.h"                          // 头部文件共享按钮的角标
 #include "ChatMessageMenu.h"          // ChatImageActionData / ChatMessageMenuId（图片气泡右键动作）
 #include "ChatImageSaveAs.h"          // SaveChatImageAs（图片另存为，与单聊窗共用）
 #include "ChatReceivedFile.h"         // 文件气泡的构造与本地文件动作（与单聊窗共用）
@@ -45,6 +78,9 @@
 #include "GroupMemberList.h"          // 成员侧栏容器
 #include "../BalloonMain/OverlayScrollBarGeometry.h"   // ComputeResizeBorderInsetPx：成员侧栏给窗口缩放边框让位
 #include "GroupMemberItem.h"          // 成员行
+#include "GroupFollowTarget.h"        // 群关注名单的查询与切换负载（FMG_MSG_QUERY_GROUP_FOLLOW / FMG_MSG_TOGGLE_GROUP_FOLLOW）
+#include "GroupMemberDeptTree.h"      // 成员侧栏的部门树视图：部门树的行序列
+#include "GroupDeptHeaderItem.h"      // 成员侧栏的部门树视图：部门标题行
 #include "GroupFileList.h"            // 群文件列表堆叠容器（DuiScrollView 内容）
 #include "GroupFileItem.h"            // 群文件行
 #include "FileBubbleFormat.h"         // FormatFileSize / FormatRelativeDayTime（文件行说明文字）
@@ -78,11 +114,12 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include "../../net/MessageProtocolClient.h"  // net::MessageNotify / digestForMsgType
 #include "../../net/GroupProtocolClient.h"    // net::GroupMembersResult
 #include "../../net/Protocol.h"               // group_member_role（群主/管理员/成员角色枚举，全局命名空间）
+#include "../BalloonCard/RelayDetailModel.h"  // ballooncard::RelayDetailRequest（打开接龙详情窗的请求）
 #include "../../net/ImageTransfer.h"
 #include "../../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）          // net::ImageTransfer（发图工作线程）
 #include "../../net/FileTransfer.h"           // net::FileTransfer（群文件上传/下载）+ GroupFileUpload/DownloadResult
 #include "ChatAvatarResolve.h"             // ResolveAvatarRender（气泡 / 成员真图头像呈现解析）
-#include "GroupChatHeaderInfo.h"           // 头部群名 / 人数 / 公告摘要行
+#include "GroupChatHeaderInfo.h"           // 头部公告摘要行
 //公告卡底部那行时间与群管理窗的历史公告列表同一个口径，复用同一个纯函数，
 //不在这里另写一份（两处显示不一致比多一个依赖更糟）。
 #include "../BalloonGroupManage/GroupManageMapping.h"   // FormatAnnouncementTime
@@ -90,12 +127,28 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include <gdiplus.h>                       // 读图片真实宽高以算展示尺寸
 #pragma comment(lib, "gdiplus.lib")
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"      // 成员搜索框
-#include "../BalloonScreenshot/ScreenCaptureOverlay.h"  // 截图浮层（截图按钮调起）
+#include "ChatScreenshotMenu.h"                         // 剪刀右边 ▾ 的截图选项菜单、截图请求编号
+#include "ChatRecordMenu.h"                             // 录制按钮的下拉菜单（开始录制、录制管理）
+#include "../../Feature/Screenshot/ScreenshotHotkey.h"  // 剪刀悬停提示里的快捷键文字
+#include "../../Feature/Screenshot/ScreenshotEntry.h"   // 全局配置里的截图快捷键与「截图时隐藏当前窗口」
 #include "ChatRichContentSplit.h"     // 输入框图文混排的有序拆分（发送用）
-#include "ChatSendLimit.h"            // 发送前检查单条消息体积（BUG-32）
+#include "ChatSendLimit.h"            // 发送前检查单条消息体积；发送失败的原因文案
+#include "ChatReedit.h"               // 「重新编辑」把原文放回输入框
+#include "RecallEdit.h"               // 撤回提示行的「编辑」：快照查询、到期定时器（docs/撤回后重新编辑方案.md）
+#include "ChatMemoPrefill.h"          // 「添加到我的备忘 / 群备忘」的预填内容（docs/备忘与提醒方案.md §8）
+#include "GroupNotifyOnly.h"          // 仅通知模式：能否发言的判定（docs/群管理接入方案.md §14）
+#include "ChatCodeMessage.h"                    // ApplyCodeFields：收到与拉取的代码片段消息
+#include "ChatCodeBlock.h"                      // NormalizeCodeNewlines：粘贴识别把输入框文字移进发送代码窗口
+#include "../../Common/Code/CodeLexer.h"        // codesnippet::CodeLanguageId：发送代码片段时写 content.lang
+#include "../BalloonCode/CodeViewerWindow.h"     // 代码片段卡片打开的代码查看窗
 #include "ChatFaceTag.h"              // 内联表情的 dwUser 标记编码 + 显示尺寸
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // BodyToDigest（会话摘要里表情→[表情]）
+#include "ChatMarkdown.h"                         // ApplyMarkdownEditorButton（工具栏的 Markdown 编辑器按钮）
+#include "../BalloonMarkdown/MarkdownEditorManager.h"   // 打开 Markdown 编辑器（docs/Markdown消息方案.md 第 11.3 节）
+#include "../BalloonMarkdown/MarkdownEditorModel.h"     // MarkdownBodyFromSourceUtf8：编辑器发来的文档转成聊天正文
 #include "ChatSendMode.h"             // 发送键模式（Enter / Ctrl+Enter）
+#include "ChatSendMenu.h"             // 发送按钮 ▾ 菜单：快捷回复与发送键（docs/快捷回复方案.md）
+#include "../BalloonSettings/SettingsPageModel.h"   // kPageChat：「设置快捷回复…」打开的设置页
 #include "ChatSendButton.h"           // ChatSendButton::DUIN_SENDBTN_DROPDOWN
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"      // 发送模式切换菜单
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"    // 提示文字 SetText
@@ -105,9 +158,13 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include <objbase.h>                  // CoCreateGuid（生成 clientmsgid）
 #include <shellapi.h>                 // ShellExecuteW（群文件下载完成后打开文件）
 #pragma comment(lib, "shell32.lib")
+#include <set>
 #include <vector>
 #include <string>
 #include <ctime>                      // time()（群文件相对时间的当下基准）
+#include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "../../Common/Util/FileDialogFilter.h"   // filedlg::MakeFilter：文件对话框过滤串的说明文字逐段翻译
+#include "../../Feature/Ocr/OcrLauncher.h"   // ocr::LaunchOcrForFile：图片右键菜单「图片文字识别」
 
 #pragma comment(lib, "ole32.lib")     // CoCreateGuid
 
@@ -127,12 +184,14 @@ static bool PrevCharIsWhitespace(balloonchatwnd::ChatInputRichEdit* edit, int po
 // 避免大图把输入框撑得过高。只影响展示，发送的仍是原图。
 static const int kGroupInlineImageMaxPx = 320;
 
-static const int kGroupChatWindowWidth  = 880;
-static const int kGroupChatWindowHeight = 620;
+// 含标题栏的整窗初始尺寸（逻辑像素）。2026-10-02 修复 ResizeClient 多叠加系统边框的问题时由 880×620 加上
+// 修复前多叠加的 18×47（120 DPI 实测），保持修复前的窗口大小；2026-10-06 按用户要求
+// 由 898×667 调大为 1000×720（工具栏加了「代码」按钮、输入区也调高了，见 docs/代码片段方案.md 第 3.1 节）。
+static const int kGroupChatWindowWidth  = 1000;
+static const int kGroupChatWindowHeight = 720;
 
-// 群聊窗允许缩放到的最小尺寸。
-static const int kGroupChatWindowMinWidth  = 620;
-static const int kGroupChatWindowMinHeight = 440;
+// 群聊窗允许缩放到的最小尺寸见 GroupChatWindowLayout.h 的 kGroupChatWindowMinWidth /
+// kGroupChatWindowMinHeight（布局单测要按最小宽度检查头部，故放在布局头文件里）。
 
 // 标题栏高度（逻辑像素）—— 常规标题栏，承载 min/max/close。
 static const int kGroupChatWindowTitleBarHeight = 32;
@@ -145,12 +204,76 @@ static const UINT     kReplyDelayMs = 1400;
 // 先等一个系统双击间隔，期间收到双击就把这次打开作废（双击的语义是选中整条）。
 static const UINT_PTR kLinkOpenTimerId = 0xC104;
 
+// 接龙卡片截止定时器 id。一次性定时器，安排在最早的那个截止时间，到时把卡片重画为已截止
+// （服务端到截止时间不发推送，客户端自己判断，见 docs/群接龙方案.md §3.5）。
+static const UINT_PTR kRelayExpiryTimerId = 0xC105;
+// 截止定时器最短等多久（毫秒）：截止时间已过或就在眼前时也至少等这么久，避免定时器连续触发
+static const long long kRelayExpiryMinDelayMs = 1000;
+// 截止定时器最长等多久（毫秒）：截止时间很远时每小时检查一次，本机时间被调整之后也不会错过太久
+static const long long kRelayExpiryMaxDelayMs = 3600LL * 1000;
+
+// 「备忘」页签的重画定时器 id。一次性定时器，安排在卡片上最早的那个提醒时刻：到了这一分钟，那张卡片的
+// 时间要换成下一次事件或「已结束」。本人不是被提醒的人时备忘中枢在这个时刻不会通知本窗口，所以由本窗口自己安排
+static const UINT_PTR kMemoPanelRefreshTimerId = 0xC106;
+// 撤回提示行「编辑」的到期定时器 id（docs/撤回后重新编辑方案.md §3.3）。时长按最早的到期时刻现算，
+// 见 balloonchatwnd::RescheduleRecallEditTimer。
+static const UINT_PTR kRecallEditTimerId = 0xC107;
+// 重画定时器在那一分钟开始之后再多等多久（毫秒），保证重画时已经进入那一分钟
+static const long long kMemoPanelRefreshSlackMs = 500;
+// 重画定时器最长等多久（毫秒）：最早的提醒很远时每小时重画一次，本机时间被调整之后也不会错过太久
+static const long long kMemoPanelRefreshMaxDelayMs = 3600LL * 1000;
+
+// 群聊窗不掌握本人的禁言状态：不记全员禁言，个人禁言的变化也不推送到本窗口。接龙卡片因此按
+// 未禁言显示按钮，被禁言的人点了参与之后由服务端以 306 拒绝，详情窗据应答提示原因
+static const bool kRelaySelfMutedUnknown = false;
+
 // 消息类型常量，与 net::message_type（net/Protocol.h）对齐。
 static const int kMsgTypeText  = 1;   // message_type_text
 static const int kMsgTypeImage = 2;   // message_type_image
-static const int kMsgTypeFile  = 3;   // message_type_file：群里只会来自转发（本窗口发文件走群文件库）
+static const int kMsgTypeFile  = 3;   // message_type_file：来自转发，或宿主「发送到会话」发来的文件（上传群文件后再发，2026-10-05）
+static const int kMsgTypeVoice = 4;   // message_type_voice：语音消息，画成语音气泡（docs/语音消息方案.md）
 static const int kMsgTypeMerged = 15; // message_type_merged：合并转发的聊天记录，画成卡片
+static const int kMsgTypeRelay  = 11; // message_type_relay：群接龙卡片，画成卡片，见 docs/群接龙方案.md §3.2
+static const int kMsgTypeScreenShare = 19; // message_type_screenshare：屏幕共享卡片（服务端在发起共享时生成），画成卡片
+static const int kMsgTypeRtc = 16;         // message_type_rtc：通话记录，目前只有群通话卡片（服务端在发起群通话时生成），画成卡片
+static const int kMsgTypeFileShare = 20; // message_type_fileshare：文件共享卡片（服务端生成），画成卡片，见 docs/文件共享方案.md 7.3
+// 入群必读卡片发送人头像的底色（系统发出的卡片没有真实发送人，用固定的蓝色）
+static const COLORREF kMustReadAvatarColor = RGB(0x45, 0x6C, 0xDF);
+static const int kMsgTypeAnnouncement = 22; // message_type_announcement：群公告卡片（服务端以发布人名义生成），画成卡片，见 docs/群公告接入方案.md §13.4
+static const int kMsgTypeCloudRecord = 24;  // message_type_cloudrecord：云端录像卡片（服务端以开启者名义生成），画成卡片，见 docs/屏幕共享与录制方案.md 12.6.5
+static const int kMsgTypeMemo = 23;         // message_type_memo：群备忘卡片（服务端以操作人名义生成，只给接收者看），画成卡片，见 docs/备忘与提醒方案.md §7.3
 static const int kMsgTypeSystem = 17; // message_type_system：服务端生成的系统提示（发布公告、入群欢迎语、退出群聊、转让群主），画成居中提示行
+
+// 群通话一次最多邀请几个人：服务端人数上限默认 16（含发起人，docs/协议设计-v2.md 21.7），选多了先在本地提示，
+// 免得服务端整单拒绝（724）。服务端改了上限时以服务端为准，超出的同样会被拒绝
+static const size_t kGroupCallMaxInvitees = 15;
+
+/**
+ *  群通话选人框的结果接收方：把选人框确认的结果转给群聊窗。由群聊窗持有，选人框关闭之前一直有效。
+ */
+class GroupCallPickSink : public IMemberPickSink
+{
+public:
+    /**
+     *  @param owner 所属群聊窗（不拥有），须比本对象活得久
+     */
+    explicit GroupCallPickSink(CBalloonGroupChatWindow* owner)
+        : m_owner(owner)
+    {
+    }
+
+    //选人框确认：转给群聊窗
+    virtual void OnMembersPicked(const std::vector<int64_t>& userIds) override
+    {
+        if (m_owner != NULL)
+        {
+            m_owner->OnGroupCallMembersPicked(userIds);
+        }
+    }
+
+private:
+    CBalloonGroupChatWindow* m_owner;   // 所属群聊窗（不拥有）
+};
 
 // CString(UTF-16) → UTF-8 std::string。空串安全。
 static std::string CStringToUtf8(const CString& text)
@@ -189,6 +312,13 @@ static const int kGroupFileFetchPageSize = 50;
 // 几千条也不受服务端单页上限影响，本地也只留一条。
 static const int kNoticeFetchPageSize = 1;
 
+// 当前时间，Unix 毫秒。接龙卡片按它判断是否已截止、格式化截止时间。
+static int64_t NowMillisecondsForRelay()
+{
+    const int64_t kMillisPerSecond = 1000;
+    return static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+}
+
 // 当前时间，Unix毫秒。公告卡底部那行"发布人 · 时间"按这个口径算相对日期。
 static int64_t NowMillisecondsForNotice()
 {
@@ -199,6 +329,7 @@ static int64_t NowMillisecondsForNotice()
 // 构造一批 mock 群文件条目，仅用于调试入口（--groupchatwindow，无真实群）目检面板。
 // 覆盖各扩展名（决定彩色角标 + 分类筛选）与各上传时间（决定相对时间显示：今天/昨天/
 // 周X/日期）。真实群的文件由 cmd_get_group_files 应答填充，不走本函数。
+// i18n-ignore-begin: 调试入口的模拟群文件列表
 static std::vector<net::GroupFileEntry> MockGroupFileEntries()
 {
     // 以当前时刻为基准造各种"多久以前"的上传时间。
@@ -249,6 +380,7 @@ static std::vector<net::GroupFileEntry> MockGroupFileEntries()
     }
     return out;
 }
+// i18n-ignore-end
 
 // 在群文件列表（GroupFileList）里按 entryid 找到对应的文件行控件；找不到返回 NULL
 // （该条目不在当前页 / 列表未建时）。下载进度回投后据此定位那一行就地更新进度。
@@ -325,31 +457,12 @@ static COLORREF AvatarColorForUser(int64_t userid)
 // 把一条"自己发"的群消息气泡的发送者头像填成本端真实头像（字形 / 真图，按本端
 // (facetype, customface) 解析；真图未缓存会入队下载，完成后 OnAvatarDownloaded 回刷）。
 // 群聊里自己气泡不显示发送者名，故不设 senderName。
-/**
- *  把一条服务端生成的系统消息（msgtype=17，发送者为 0）构造成居中的灰色提示行。复用列表里
- *  "居中时间分隔"那一种行（kMsgTime），与单聊窗 AppendSystemTip 的做法一致；带上 msgid 与时间，
- *  列表据 msgid 去重（推送与拉历史可能各来一次）。
- *    m：系统消息；正文在 m.m_text（UTF-8），为空时用类型占位文字。
- *  @return 构造好的提示行。
- */
-static balloonchatwnd::ChatMessage MakeGroupSystemTip(const net::MessageNotify& m)
-{
-    const std::string text = m.m_text.empty()
-                           ? net::MessageProtocolClient::digestForMsgType(m.m_msgtype, m.m_text)
-                           : m.m_text;
-    balloonchatwnd::ChatMessage tip = balloonchatwnd::MakeTextMessage(false, Utf8ToCString(text));
-    tip.kind        = balloonchatwnd::kMsgTime;
-    tip.msgid       = m.m_msgid;
-    tip.timestampMs = m.m_timestamp;
-    return tip;
-}
-
 static void FillSelfSenderAvatar(CFlamingoClient* client, balloonchatwnd::ChatMessage& msg)
 {
     int64_t     selfId = 0;
     int         facetype = 0;
     std::string customface;
-    CString     name = _T("我");
+    CString     name = TR(L"我");
     if (client != NULL)
     {
         const CBuddyInfo& me = client->m_UserMgr.m_UserInfo;
@@ -454,6 +567,7 @@ static void RegisterTip(balloonwjui::DuiControl* content, UINT ctrlId,
 
 CBalloonGroupChatWindow::CBalloonGroupChatWindow(CFlamingoClient* pFMGClient)
     : m_lpFMGClient(pFMGClient)
+    , m_pendingMemoCardId(0)
     , m_hMainDlg(NULL)
     , m_replyIndex(0)
     // kConnUiOnline：能开出群聊窗说明此刻本就在线，随后由主面板把真实状态推过来。
@@ -461,9 +575,24 @@ CBalloonGroupChatWindow::CBalloonGroupChatWindow(CFlamingoClient* pFMGClient)
     , m_connUiState(0)
     , m_groupId(0)
     , m_myRole(0)
+    , m_atAllScope(balloonchatwnd::kGroupAtAllOwnerAdminVal)
+    , m_muteAll(0)
+    , m_notifyOnlyShown(-1)
+    , m_mustReadPending(false)
+    , m_groupBotsLoaded(false)
+    , m_mustReadId(0)
+    , m_mustReadHasItem(false)
+    , m_mustReadPopupShown(false)
+    , m_qaState(balloonchatwnd::kQaPanelLoading)
+    , m_qaRequested(false)
+    , m_qaRenderedWidth(0)
     , m_hostPanel(NULL)
     , m_pendingLocateMsgid(0)
     , m_pinnedCount(0)            //开窗先按"一条都没钉"起步，提示带隐藏；随后由服务端全集校准
+    , m_shareBannerSelfHost(false)
+    , m_shareBannerForced(false)
+    , m_callPickMedia(0)
+    , m_callInvitePending(false)
     , m_titleIconBmp(NULL)
     , m_hTaskIcon(NULL)
     , m_groupFacetype(0)          //默认自动头像（群名首字 + 按 groupid 取色）
@@ -482,6 +611,8 @@ CBalloonGroupChatWindow::CBalloonGroupChatWindow(CFlamingoClient* pFMGClient)
     , m_noticeLoading(false)
     , m_noticeReqOffset(-1)   //-1=还没发过拉公告的请求，此时不认领任何应答
 {
+    // 成员列表的视图在 InitUi 里按账号配置设好；放在函数体里赋值，免得与成员的声明顺序对不上
+    m_memberTreeView = false;
 }
 
 //「回车是发送还是换行」的查询回调，注册给输入框控件。
@@ -508,24 +639,10 @@ void CBalloonGroupChatWindow::SetGroupId(int64_t groupId)
 void CBalloonGroupChatWindow::SetGroupName(LPCTSTR name)
 {
     m_groupName = (name != NULL) ? name : _T("");
-    // 已显示则即时刷新标题。
+    // 已显示则即时刷新标题（桌面字幕上的群名由主面板直接更新，字幕由主面板持有）。群名只显示在标题栏，头部左侧的信息块不再重复画它（2026-10-03 起）。
     if (IsWindow() && !m_groupName.IsEmpty())
     {
         SetTitle(m_groupName);
-
-        // 头部左侧那块也显示群名，一并刷新 —— 标题栏与头部各画一遍同一个名字，
-        // 只改一处会让两边对不上。
-        balloonwjui::DuiControl* content = GetClientContent();
-        if (content != NULL)
-        {
-            balloonchatwnd::GroupChatHeaderInfo* header =
-                dynamic_cast<balloonchatwnd::GroupChatHeaderInfo*>(
-                    content->FindCtrlById(balloonchatwnd::kGIdHeaderInfo));
-            if (header != NULL)
-            {
-                header->SetGroupName(m_groupName);
-            }
-        }
     }
 }
 
@@ -639,14 +756,63 @@ void CBalloonGroupChatWindow::SetMemberPresence(int64_t userid, int presence)
     {
         memberList->SetMemberPresence(userid, presence);
     }
+
+    // 消息区里该成员发的气泡头像随之变灰 / 恢复彩色。本人的气泡只看本端连接态，不在这里处理
+    const int64_t selfId = (m_lpFMGClient != NULL)
+                           ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    if (userid != selfId)
+    {
+        balloonchatwnd::ChatMessageList* msgList = dynamic_cast<balloonchatwnd::ChatMessageList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+        if (msgList != NULL)
+        {
+            msgList->SetSenderAvatarGray(userid, balloonmain::ShouldGrayUserAvatar(false, presence, m_connUiState));
+        }
+    }
+}
+
+void CBalloonGroupChatWindow::ApplyAvatarGrayToMessageList()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessageList* msgList = dynamic_cast<balloonchatwnd::ChatMessageList*>(
+        content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (msgList == NULL)
+    {
+        return;
+    }
+    const int64_t selfId = (m_lpFMGClient != NULL)
+                           ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    for (std::map<int64_t, int>::const_iterator it = m_memberPresence.begin();
+         it != m_memberPresence.end(); ++it)
+    {
+        if (it->first != selfId)
+        {
+            msgList->SetSenderAvatarGray(it->first,
+                                         balloonmain::ShouldGrayUserAvatar(false, it->second, m_connUiState));
+        }
+    }
+    msgList->SetSelfAvatarGray(balloonmain::ShouldGrayAvatar(m_connUiState));
 }
 
 void CBalloonGroupChatWindow::SetMyRole(int role)
 {
+    //「未确认必读」标记只给群主与管理员看：本人是否为管理员这一点变了，成员边栏要按新角色重建
+    const bool wasAdmin = balloonchatwnd::ShouldShowMustReadMark(m_myRole, 1);
     m_myRole = role;
+    const bool isAdmin = balloonchatwnd::ShouldShowMustReadMark(m_myRole, 1);
+    if (IsWindow() && wasAdmin != isAdmin && !m_lastMembers.empty())
+    {
+        RebuildMemberRows();
+    }
     if (IsWindow())
     {
         ApplyAdminGearVisibility();
+        //角色变了，能不能在仅通知模式下发言也随之变化
+        ApplyNotifyOnlyState();
         //本人角色变了，气泡 @ 菜单里的管理项跟着变，故同步给消息区；成员侧栏各行的
         //右键菜单同理，也要当场同步。不能指望随后的成员列表重填：角色变更时主面板先发
         //成员列表请求、后发群资料请求，成员列表先到时各行按旧角色重建，之后群资料到达
@@ -660,6 +826,10 @@ void CBalloonGroupChatWindow::SetMyRole(int role)
             if (msgList != NULL)
             {
                 msgList->SetMyNetRole(m_myRole);
+                //「添加到群备忘」只给能新建群备忘的人（docs/备忘与提醒方案.md §8），角色变化时一并更新
+                msgList->SetMemoMenuMode(balloonmemo::CanEditGroupMemo(m_myRole)
+                                             ? balloonchatwnd::kChatMemoMenuGroupBoth
+                                             : balloonchatwnd::kChatMemoMenuGroupMine);
             }
             balloonchatwnd::GroupMemberList* memberList =
                 dynamic_cast<balloonchatwnd::GroupMemberList*>(
@@ -669,7 +839,391 @@ void CBalloonGroupChatWindow::SetMyRole(int role)
                 memberList->SetMyNetRoleForAll(m_myRole);
             }
         }
+        //「备忘」面板的「＋ 新建群备忘」只对群主、管理员显示，角色变了跟着重画
+        RenderMemoPanel();
+        //「问答」面板同理：「＋ 新建问答」与卡片上的「修改」「删除」只给群主、管理员
+        RenderQaPanel();
     }
+}
+
+void CBalloonGroupChatWindow::SetAtAllScope(int scope)
+{
+    m_atAllScope = scope;
+}
+
+void CBalloonGroupChatWindow::SetMuteAll(int muteall)
+{
+    m_muteAll = (muteall != 0) ? 1 : 0;
+    if (IsWindow())
+    {
+        ApplyNotifyOnlyState();
+    }
+}
+
+bool CBalloonGroupChatWindow::IsNotifyOnlyForMe() const
+{
+    return !balloonchatwnd::CanSpeakInGroup(m_muteAll, m_myRole);
+}
+
+void CBalloonGroupChatWindow::ApplyNotifyOnlyState()
+{
+    //仅通知模式与入群必读共用同一行提示：待确认入群必读时显示可点的「点此阅读」，否则显示仅通知的灰字
+    const int state = balloonchatwnd::DecideGroupInputBlock(m_muteAll, m_myRole, m_mustReadPending);
+    if (state == m_notifyOnlyShown)
+    {
+        return;
+    }
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    const bool blocked = (state != balloonchatwnd::kGroupInputOpen);
+    if (blocked)
+    {
+        //待发的引用随输入框一起看不见了，留着的话恢复发言后第一条消息会带上一个看不见的引用
+        CancelPendingReply();
+        //焦点移开已隐藏的输入框
+        SetDuiFocus(NULL);
+    }
+    balloonwjui::DuiLabel* bar = dynamic_cast<balloonwjui::DuiLabel*>(
+        content->FindCtrlById(balloonchatwnd::kGIdNotifyOnlyBar));
+    if (bar != NULL)
+    {
+        if (state == balloonchatwnd::kGroupInputMustRead)
+        {
+            bar->SetText(balloonchatwnd::MustReadInputHintText());
+            bar->SetMode(balloonwjui::DuiLabel::ModeLink);
+        }
+        else
+        {
+            bar->SetText(balloonchatwnd::NotifyOnlyInputHintText());
+            bar->SetMode(balloonwjui::DuiLabel::ModeText);
+        }
+    }
+    if (!balloonchatwnd::ApplyNotifyOnlyInput(content, blocked))
+    {
+        return;
+    }
+    m_notifyOnlyShown = state;
+    LOG_INFO("group chat window: input block state %d, group=%lld, muteall=%d, role=%d, mustread pending=%d.", state,
+             (long long)m_groupId, m_muteAll, m_myRole, m_mustReadPending ? 1 : 0);
+    InvalidateRect(NULL, FALSE);
+}
+
+void CBalloonGroupChatWindow::RefreshMustRead()
+{
+    if (m_groupId == 0)
+    {
+        return;
+    }
+    CIUSocket::GetInstance().SendGetMustRead(m_groupId);
+}
+
+void CBalloonGroupChatWindow::OnMustReadArrived(const net::MustReadResult& result)
+{
+    if (result.m_code != 0)
+    {
+        LOG_WARNING("group chat window: get must-read failed, group=%lld, code=%d.", (long long)m_groupId, result.m_code);
+        return;
+    }
+    m_mustReadPending = result.m_pending;
+    m_mustReadId = result.m_mustreadid;
+    m_mustReadHasItem = result.m_hasAnnouncement;
+    if (result.m_hasAnnouncement)
+    {
+        m_mustReadItem = result.m_announcement;
+    }
+    LOG_INFO("group chat window: must-read state, group=%lld, mustreadid=%lld, pending=%d, has item=%d.",
+             (long long)m_groupId, (long long)m_mustReadId, m_mustReadPending ? 1 : 0, m_mustReadHasItem ? 1 : 0);
+    if (IsWindow())
+    {
+        ApplyNotifyOnlyState();
+    }
+
+    //已确认（或必读被取消）：弹窗若还开着就收起来，免得再点「我已阅读」
+    if (!m_mustReadPending && m_mustReadDlg.IsWindow() && m_mustReadDlg.IsWindowVisible())
+    {
+        m_mustReadDlg.ShowWindow(SW_HIDE);
+    }
+
+    if (balloonchatwnd::ShouldAutoPopupMustRead(m_mustReadPending, m_mustReadHasItem, m_mustReadPopupShown)
+        && IsWindow())
+    {
+        m_mustReadPopupShown = true;
+        PostMessage(kMustReadShowMsg, 0, 0);
+    }
+}
+
+void CBalloonGroupChatWindow::ShowMustReadPopup()
+{
+    if (!m_mustReadHasItem)
+    {
+        //内容还没取到：再查一次，应答到达后若仍待确认会按 m_mustReadPopupShown 决定是否弹出
+        m_mustReadPopupShown = false;
+        RefreshMustRead();
+        return;
+    }
+    const CString timeText = balloongroupmanage::FormatAnnouncementTime(m_mustReadItem.m_publishtime,
+                                                                       NowMillisecondsForNotice());
+    m_mustReadDlg.SetCaption(balloonchatwnd::MustReadPopupCaption());
+    //以本窗口为所有者：弹窗总在群聊窗之上。此前没有所有者，打开群聊窗时弹窗被随后激活的群聊窗压在下面（2026-10-08 实测）
+    m_mustReadDlg.SetOwnedByHost(true);
+    //待确认时按钮是「我已阅读」；已确认的人点开必读卡片时按普通公告详情显示
+    m_mustReadDlg.SetMustReadMode(m_mustReadPending, kMustReadConfirmMsg);
+    m_mustReadDlg.ShowAnnouncement(m_hWnd, (int64_t)m_groupId, m_groupName, Utf8ToCString(m_mustReadItem.m_title),
+                                   Utf8ToCString(m_mustReadItem.m_content), m_mustReadItem.m_severity,
+                                   Utf8ToCString(m_mustReadItem.m_publishername), timeText);
+    LOG_INFO("group chat window: must-read popup shown, group=%lld, announcement=%lld, pending=%d.",
+             (long long)m_groupId, (long long)m_mustReadItem.m_id, m_mustReadPending ? 1 : 0);
+}
+
+LRESULT CBalloonGroupChatWindow::OnMustReadConfirmMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/,
+                                                      BOOL& /*bHandled*/)
+{
+    if (m_groupId == 0)
+    {
+        return 0;
+    }
+    //界面不在这里乐观恢复：服务端确认成功后推 1317（changetype 7），主面板据此让本窗口重查一次再恢复输入区
+    CIUSocket::GetInstance().SendConfirmMustRead(m_groupId);
+    LOG_INFO("group chat window: must-read confirm sent, group=%lld.", (long long)m_groupId);
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnMustReadShowMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/,
+                                                   BOOL& /*bHandled*/)
+{
+    ShowMustReadPopup();
+    return 0;
+}
+
+// ---------------- 边栏「问答」页签（docs/群问答方案.md） ----------------
+
+void CBalloonGroupChatWindow::RequestGroupQa()
+{
+    if (m_groupId == 0)
+    {
+        return;
+    }
+    m_qaRequested = true;
+    if (m_qaItems.empty())
+    {
+        m_qaState = balloonchatwnd::kQaPanelLoading;
+    }
+    CIUSocket::GetInstance().SendGetGroupQa(m_groupId);
+}
+
+void CBalloonGroupChatWindow::OnGroupQaArrived(const net::GroupQaResult& result)
+{
+    if (result.m_code != 0)
+    {
+        LOG_WARNING("group chat window: get group qa failed, group=%lld, code=%d.", (long long)m_groupId, result.m_code);
+        //已有列表时保留旧内容，只在还没有内容时显示「没有加载出来」
+        if (m_qaItems.empty())
+        {
+            m_qaState = balloonchatwnd::kQaPanelFailed;
+        }
+    }
+    else
+    {
+        m_qaItems = result.m_items;
+        m_qaState = balloonchatwnd::kQaPanelLoaded;
+        LOG_INFO("group chat window: group qa arrived, group=%lld, count=%u.", (long long)m_groupId,
+                 (unsigned)m_qaItems.size());
+    }
+    RenderQaPanel();
+}
+
+void CBalloonGroupChatWindow::OnGroupQaChanged()
+{
+    if (!m_qaRequested)
+    {
+        return;
+    }
+    RequestGroupQa();
+}
+
+void CBalloonGroupChatWindow::RenderQaPanel()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiControl* panel = content->FindCtrlById(balloonchatwnd::kGIdQaPanel);
+    if (panel == NULL || !panel->IsVisible())
+    {
+        return;
+    }
+    //卡片外面的底色：边栏是聊天窗根控件的白底
+    const COLORREF kQaListBg = RGB(0xFF, 0xFF, 0xFF);
+    balloonwjui::DuiScrollView* list =
+        dynamic_cast<balloonwjui::DuiScrollView*>(content->FindCtrlById(balloonchatwnd::kGIdQaList));
+    balloonwjui::DuiLabel* empty = dynamic_cast<balloonwjui::DuiLabel*>(content->FindCtrlById(balloonchatwnd::kGIdQaEmpty));
+    balloonwjui::DuiEdit* search = dynamic_cast<balloonwjui::DuiEdit*>(content->FindCtrlById(balloonchatwnd::kGIdQaSearch));
+    balloonwjui::DuiControl* add = content->FindCtrlById(balloonchatwnd::kGIdQaAdd);
+
+    const std::wstring keyword = (search != NULL) ? std::wstring((LPCWSTR)search->GetText()) : std::wstring();
+    m_qaShown = balloonchatwnd::FilterGroupQa(m_qaItems, keyword);
+
+    const int64_t now = NowMillisecondsForNotice();
+    std::vector<balloonchatwnd::QaCardText> cards;
+    for (size_t i = 0; i < m_qaShown.size(); ++i)
+    {
+        const net::GroupQaItem& item = m_qaItems[m_qaShown[i]];
+        balloonchatwnd::QaCardText card;
+        card.m_question = std::wstring((LPCWSTR)Utf8ToCString(item.m_question));
+        card.m_answer = std::wstring((LPCWSTR)Utf8ToCString(item.m_answer));
+        card.m_links = balloonchatwnd::ExtractQaUrls(card.m_answer, balloonchatwnd::kQaMaxLinksPerCard);
+        card.m_editable = balloonchatwnd::CanEditQaItem(m_myRole, item.m_source);
+        if (item.m_source == net::kGroupQaSourceEnterprise)
+        {
+            card.m_meta = TR(L"企业问答");
+        }
+        else
+        {
+            const CString when = balloongroupmanage::FormatAnnouncementTime(item.m_updatetime, now);
+            card.m_meta = item.m_editorname.empty()
+                          ? TRF(L"修改于 {0}", when)
+                          : TRF(L"{0} 修改于 {1}", Utf8ToCString(item.m_editorname), when);
+        }
+        cards.push_back(card);
+    }
+    const int built = balloonchatwnd::SetQaCards(list, cards, kQaListBg);
+    if (list != NULL && built >= 0)
+    {
+        const RECT rc = list->GetRect();
+        m_qaRenderedWidth = rc.right - rc.left;
+    }
+
+    //空状态提示：有内容时隐藏，让出高度给卡片
+    const std::wstring hint = balloonchatwnd::QaEmptyHintText(m_qaState, m_qaItems.size(), m_qaShown.size(),
+                                                              !balloonchatwnd::TrimQaText(keyword).empty());
+    bool relayout = false;
+    if (empty != NULL)
+    {
+        empty->SetText(hint.c_str());
+        const bool showEmpty = !hint.empty();
+        if (empty->IsVisible() != showEmpty)
+        {
+            empty->SetVisible(showEmpty);
+            relayout = true;
+        }
+    }
+    if (add != NULL)
+    {
+        const bool showAdd = (m_groupId != 0) && balloonchatwnd::CanAddQa(m_myRole);
+        if (add->IsVisible() != showAdd)
+        {
+            add->SetVisible(showAdd);
+            relayout = true;
+        }
+    }
+    //SetVisible 不会重排：显隐变了就对面板按当前矩形 ForceLayout（开发约定文档 UI 约定 5），再按新的视口宽度重建卡片
+    if (relayout)
+    {
+        panel->ForceLayout(panel->GetRect());
+        if (list != NULL)
+        {
+            const RECT rc = list->GetRect();
+            if (rc.right - rc.left != m_qaRenderedWidth)
+            {
+                balloonchatwnd::SetQaCards(list, cards, kQaListBg);
+                m_qaRenderedWidth = rc.right - rc.left;
+            }
+        }
+        panel->Invalidate();
+    }
+}
+
+void CBalloonGroupChatWindow::PostQaCardAction(int action, int cardIndex)
+{
+    if (action != kQaCardActionAdd)
+    {
+        if (cardIndex < 0 || (size_t)cardIndex >= m_qaShown.size() || m_qaShown[cardIndex] >= m_qaItems.size())
+        {
+            return;
+        }
+        m_pendingQaItem = m_qaItems[m_qaShown[cardIndex]];
+    }
+    PostMessage(kQaCardActionMsg, (WPARAM)action, 0);
+}
+
+LRESULT CBalloonGroupChatWindow::OnQaCardActionMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    const int action = (int)wParam;
+    const net::GroupQaItem item = m_pendingQaItem;
+    const std::wstring question((LPCWSTR)Utf8ToCString(item.m_question));
+    const std::wstring answer((LPCWSTR)Utf8ToCString(item.m_answer));
+    switch (action)
+    {
+    //「发到群里」：与按发送键同一道在线检查，问答以一条文字消息发出（仅通知模式、入群必读由服务端判断）
+    case kQaCardActionSend:
+        if (!CheckOnlineFor(balloonmain::kActionSendMessage))
+        {
+            break;
+        }
+        SendPlainText(balloonchatwnd::BuildQaSendText(question, answer));
+        LOG_INFO("group chat window: qa sent to group, group=%lld, qa=%lld.", (long long)m_groupId, (long long)item.m_id);
+        break;
+
+    //「修改」：只有能修改的卡片才有这个按钮，这里再按角色判断一次（角色可能刚刚变过）
+    case kQaCardActionEdit:
+        if (balloonchatwnd::CanEditQaItem(m_myRole, item.m_source))
+        {
+            m_qaEditDlg.Open(m_hWnd, item.m_id, question, answer, kQaEditResultMsg);
+        }
+        break;
+
+    //「删除」：确认后发送删除请求，界面等 1339 推送后重拉
+    case kQaCardActionDelete:
+        if (!balloonchatwnd::CanEditQaItem(m_myRole, item.m_source))
+        {
+            break;
+        }
+        if (::MessageBox(m_hWnd, TRF(L"确定删除问答「{0}」吗？", question).c_str(), TR(L"删除问答"),
+                         MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
+        {
+            break;
+        }
+        if (!CheckOnlineFor(balloonmain::kActionSendMessage))
+        {
+            break;
+        }
+        CIUSocket::GetInstance().SendDeleteGroupQa(m_groupId, item.m_id);
+        break;
+
+    //「＋ 新建问答」
+    case kQaCardActionAdd:
+        if (balloonchatwnd::CanAddQa(m_myRole))
+        {
+            m_qaEditDlg.Open(m_hWnd, 0, std::wstring(), std::wstring(), kQaEditResultMsg);
+        }
+        break;
+
+    //未知操作：不处理
+    default:
+        break;
+    }
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnQaEditResultMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    //lParam 为编辑窗堆上分配的结果，用完在这里释放
+    std::unique_ptr<balloonchatwnd::QaEditResult> result((balloonchatwnd::QaEditResult*)lParam);
+    if (!result || m_groupId == 0)
+    {
+        return 0;
+    }
+    if (!CheckOnlineFor(balloonmain::kActionSendMessage))
+    {
+        return 0;
+    }
+    CIUSocket::GetInstance().SendSaveGroupQa(m_groupId, result->m_id, result->m_questionUtf8, result->m_answerUtf8);
+    LOG_INFO("group chat window: qa save sent, group=%lld, qa=%lld.", (long long)m_groupId, (long long)result->m_id);
+    return 0;
 }
 
 void CBalloonGroupChatWindow::ApplyAdminGearVisibility()
@@ -912,6 +1466,10 @@ void CBalloonGroupChatWindow::InsertFaceToInput(int faceId, const wchar_t* faceP
 
 CBalloonGroupChatWindow::~CBalloonGroupChatWindow()
 {
+    // 没有经过 OnCloseMsg 就销毁时（如登出时直接销毁窗口），同样取消或丢弃还没发送的录音、停止试听
+    m_voiceSession.OnWindowClosing();
+    // 本窗口正在播放语音时一并停止，之后语音中心不再给本窗口发播放通知（第 3e 步）
+    balloonvoice::CVoiceHub::GetInstance().DetachPlayListener(this);
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
     // 标题栏图标位图与任务栏图标由本类持有，这里释放。
     if (m_titleIconBmp != NULL)
@@ -930,6 +1488,21 @@ CBalloonGroupChatWindow::~CBalloonGroupChatWindow()
         ::DeleteObject(m_hInputFont);
         m_hInputFont = NULL;
     }
+    // 「发送代码」窗口同理
+    if (m_codeComposeWnd)
+    {
+        m_codeComposeWnd->Close();
+    }
+    // 「发起接龙」窗口是独立的顶层窗口，对象析构时仍持有窗口句柄会触发断言
+    if (m_relayComposeDlg && m_relayComposeDlg->IsWindow())
+    {
+        m_relayComposeDlg->DestroyWindow();
+    }
+    // 群通话选人框同理
+    if (m_callPicker && m_callPicker->IsWindow())
+    {
+        m_callPicker->DestroyWindow();
+    }
 }
 
 // =======================================================================
@@ -944,7 +1517,7 @@ void CBalloonGroupChatWindow::CreateAndShow(HWND hMainDlg)
     m_openStopWatch.Restart();
     BUI_TRACE("GROUPWND-OPEN-BEGIN group=%lld", (long long)m_groupId);
 
-    if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"),
+    if (Create(NULL, CWindow::rcDefault, g_strAppTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("group chat window: Create failed, group=%lld.", (long long)m_groupId);
@@ -954,32 +1527,25 @@ void CBalloonGroupChatWindow::CreateAndShow(HWND hMainDlg)
 
     // 标题栏：常规（非透明）标题栏，承载 min/max/close 三按钮。标题取真实群名；
     // 群名还没到位（仅占位）时先用占位，群资料到达后主面板会再 SetGroupName 刷新。
-    CString title = m_groupName.IsEmpty() ? CString(_T("群聊")) : m_groupName;
+    CString title = m_groupName.IsEmpty() ? CString(TR(L"群聊")) : m_groupName;
     SetTitle(title);
     SetTitleBarHeight(kGroupChatWindowTitleBarHeight);
     SetButtons(true, true, true);
-    SetMinSize(kGroupChatWindowMinWidth, kGroupChatWindowMinHeight);
+    SetMinSize(balloonchatwnd::kGroupChatWindowMinWidth, balloonchatwnd::kGroupChatWindowMinHeight);
 
     // 开启双击合成，让群聊气泡能收到双击（双击图片放大查看）。
+    // （2026-10-06 更正：balloonui 窗口的窗口类其实带 CS_DBLCLKS，系统本就会投递双击，这里的双击合成实际不起作用，保留无害）
     EnableDoubleClick(true);
 
     // 标题栏图标 = 群头像（真图或字形 monogram），同时设到标题栏左侧与任务栏 /
     // Alt-Tab（照单聊窗口径）。仅真实群（绑定了 groupid）设置。
     RebuildGroupIcons();
 
-    InitUi();
-    const double initUiMs = m_openStopWatch.ElapsedMs();
-    ResizeClient(kGroupChatWindowWidth, kGroupChatWindowHeight);
-    CenterWindow();
-    ShowWindow(SW_SHOW);
-    UpdateWindow();
-    ::SetForegroundWindow(m_hWnd);
-    const double shownMs = m_openStopWatch.ElapsedMs();
-    BUI_TRACE("GROUPWND-OPEN-SHOWN create=%.3fms initui=%.3fms shown=%.3fms",
-              createdMs, initUiMs, shownMs);
-
     // 真实群：拉群成员，填成员侧栏并建发送人映射（应答经主面板路由回
     // OnGroupMembersArrived）。无群 id 的调试入口保持 mock，不拉。
+    // 以下三个请求放在 InitUi 之前发出（2026-10-04 起），理由同单聊窗 CBalloonChatWindow::CreateAndShow：
+    // 服务端处理与本端建界面同时进行，且排在 InitUi 里发出的文件共享、屏幕共享状态查询之前；
+    // 应答要等本函数返回、本窗口登记进主面板的窗口表之后才会被界面线程取出处理。
     if (m_groupId != 0)
     {
         CIUSocket::GetInstance().RequestGroupMembers(m_groupId);
@@ -997,6 +1563,29 @@ void CBalloonGroupChatWindow::CreateAndShow(HWND hMainDlg)
         // 的 OnPinnedMessagesArrived 落库并回投到本窗口。
         CIUSocket::GetInstance().GetPinnedMessages(conversation_group, m_groupId);
 
+        // 查询本人在本群的入群必读状态：待确认时输入区换成「点此阅读」并自动弹出必读公告（docs/群公告接入方案.md §14）。
+        // 应答经主面板路由回 OnMustReadArrived
+        CIUSocket::GetInstance().SendGetMustRead(m_groupId);
+
+        // 拉取本群可用的机器人（docs/机器人方案.md §4.2）：发送者名字、「机器人」徽章、@ 候选与成员页签都用它。
+        // 应答经主面板路由回 OnGroupBotsArrived；在那之前机器人区域保持隐藏
+        RefreshBotMemberSection();
+        RequestGroupBots();
+    }
+
+    InitUi();
+    const double initUiMs = m_openStopWatch.ElapsedMs();
+    ResizeClient(kGroupChatWindowWidth, kGroupChatWindowHeight);
+    CenterWindow();
+    ShowWindow(SW_SHOW);
+    UpdateWindow();
+    ::SetForegroundWindow(m_hWnd);
+    const double shownMs = m_openStopWatch.ElapsedMs();
+    BUI_TRACE("GROUPWND-OPEN-SHOWN create=%.3fms initui=%.3fms shown=%.3fms",
+              createdMs, initUiMs, shownMs);
+
+    if (m_groupId != 0)
+    {
         // 群文件也在开窗时就拉：边栏「群文件」Tab 上要显示真实数量，不能等用户切到
         // 那个 Tab 才知道有几个（切过去时的那次拉取因此多半直接返回，见 StartLoadGroupFiles）。
         StartLoadGroupFiles();
@@ -1068,6 +1657,10 @@ void CBalloonGroupChatWindow::InitUi()
         memberList->SetRightInset(insetPx);
         LOG_INFO("group chat window: member list right inset %d px (border %d, dpi %d).",
                  insetPx, GetBorderPx(), GetDpi());
+        // 成员列表的视图（平铺 / 按部门）用账号配置里记住的那一种，所有群共用
+        m_memberTreeView = (m_lpFMGClient != NULL) && m_lpFMGClient->m_UserConfig.IsGroupMemberTreeView();
+        memberList->SetTreeMode(m_memberTreeView);
+        balloonchatwnd::ApplyMemberViewToggle(content, m_memberTreeView);
     }
 
     // 调试入口（无真实群）：用 mock 群文件预填库并置已加载，切到群文件 Tab 即渲染。
@@ -1107,6 +1700,8 @@ void CBalloonGroupChatWindow::InitUi()
             input->SetImageStager(&CBalloonGroupChatWindow::StageImageThunk, this);
             // 群聊窗没有单独的「正在输入」通知，内容变化统一走 @ 提醒那一路。
             input->SetMentionMsgs(kMentionChangedMsg, kMentionNavMsg, kMentionWheelMsg);
+            // 粘贴识别：往空输入框里粘贴像代码的文字时显示「以代码片段发送」提示条（docs/代码片段方案.md 第 3.1 节）
+            input->SetPasteTextMsg(balloonchatwnd::kMsgChatCodePaste);
 
             // 浮窗提前建好（此刻不显示）。建窗 + 建控件树是同步的，留到首次键入 '@'
             // 时再做，会把那一拍拖长、让刚敲的 '@' 迟迟不显示。
@@ -1127,10 +1722,17 @@ void CBalloonGroupChatWindow::InitUi()
                 msgList->SetMemberRoleQuery(
                     &CBalloonGroupChatWindow::MemberRoleThunk, this);
                 msgList->SetMyNetRole(m_myRole);
+                // 文字消息右键菜单里的「添加到我的备忘」，能新建群备忘的人再多一项「添加到群备忘」
+                msgList->SetMemoMenuMode(balloonmemo::CanEditGroupMemo(m_myRole)
+                                             ? balloonchatwnd::kChatMemoMenuGroupBoth
+                                             : balloonchatwnd::kChatMemoMenuGroupMine);
                 // 再装"是否被特别关注"的钩子：气泡里 @某人 与发送者头像的右键菜单
                 // 据它决定那一项的文案是「特别关注」还是「取消特别关注」。
                 msgList->SetStarredQuery(
                     &CBalloonGroupChatWindow::StarredThunk, this);
+                // 「关注 TA 在本群的发言」的文案同样要现问主面板的群关注名单
+                msgList->SetGroupFollowQuery(
+                    &CBalloonGroupChatWindow::GroupFollowThunk, this);
             }
         }
         // 按"本群自定义 > 全局默认"取聊天字体并应用到输入框（所见即所得）；两者都
@@ -1145,28 +1747,91 @@ void CBalloonGroupChatWindow::InitUi()
     m_fontPopup.SetUseDefaultCallback(&CBalloonGroupChatWindow::OnUseDefaultFont, this);
 
     // 给头部 / 输入工具栏 / 发送按钮 / @提醒 注册 tooltip。
-    RegisterTip(content, balloonchatwnd::kGIdHdrVoice,     _T("语音通话"));
-    RegisterTip(content, balloonchatwnd::kGIdHdrVideo,     _T("视频通话"));
-    RegisterTip(content, balloonchatwnd::kGIdHdrHistory,   _T("消息记录"));
-    RegisterTip(content, balloonchatwnd::kGIdHdrAdmin,     _T("群管理"));
-    RegisterTip(content, balloonchatwnd::kGIdHdrMore,      _T("更多"));
-    RegisterTip(content, balloonchatwnd::kGIdTbEmoji,      _T("表情"));
-    RegisterTip(content, balloonchatwnd::kGIdTbImage,      _T("图片"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrVoice,     TR(L"语音通话"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrVideo,     TR(L"视频通话"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrScreenShare, TR(L"共享屏幕"));
+    RegisterTip(content, balloonchatwnd::kGIdTbRecord, TR(L"屏幕录制"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrHistory,   TR(L"消息记录"));
+    // 「字幕模式」按钮的提示随本群字幕的开关切换（用户 2026-10-05 确认），状态由主面板经 SetSubtitleHighlight 设置
+    balloonchatwnd::ChatIconButton* subtitleBtn = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatIconButton*>(content->FindCtrlById(balloonchatwnd::kGIdHdrSubtitle))
+        : NULL;
+    if (subtitleBtn != NULL)
+    {
+        subtitleBtn->SetToggleTips(TR(L"字幕已开启"), TR(L"字幕已关闭"));
+    }
+    RegisterTip(content, balloonchatwnd::kGIdHdrAdmin,     TR(L"群管理"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrMore,      TR(L"更多"));
+    RegisterTip(content, balloonchatwnd::kGIdTbEmoji,      TR(L"表情"));
+    RegisterTip(content, balloonchatwnd::kGIdTbImage,      TR(L"图片"));
     // 群聊里这个按钮上传的是群文件（进右侧群文件库），不是发给某个人的文件消息，
-    // 提示文字写清楚，免得用户以为是单聊那种"发文件"。
-    RegisterTip(content, balloonchatwnd::kGIdTbFile,       _T("上传群文件"));
-    RegisterTip(content, balloonchatwnd::kGIdTbScreenshot, _T("截图"));
-    RegisterTip(content, balloonchatwnd::kGIdTbVoice,      _T("语音消息"));
-    RegisterTip(content, balloonchatwnd::kGIdTbFont,       _T("字体设置"));
-    RegisterTip(content, balloonchatwnd::kGIdTbPlus,       _T("更多功能"));
-    RegisterTip(content, balloonchatwnd::kGIdMention,      _T("@提醒成员"));
-    RegisterTip(content, balloonchatwnd::kGIdSendButton,   _T("发送"));
+    // 提示文字写清楚，免得用户以为是单聊那种"发文件"。第二行说明也可以拖进输入框上传（2026-10-07 起；
+    // 群聊不支持发送文件夹，拖进来的文件夹会被跳过并提示，所以这里只提文件）
+    RegisterTip(content, balloonchatwnd::kGIdTbFile,       TR(L"上传群文件\n也可以把文件直接拖到下面的输入框里上传"));
+    RefreshScreenshotTip();   // 剪刀：「截图（Alt+Z）」，随设置里的截图快捷键变化
+    RegisterTip(content, balloonchatwnd::kGIdTbScreenshotMenu, TR(L"截图选项"));
+    RegisterTip(content, balloonchatwnd::kGIdTbVoice,      TR(L"语音消息"));
+    RegisterTip(content, balloonchatwnd::kGIdTbFont,       TR(L"字体设置"));
+    RegisterTip(content, balloonchatwnd::kGIdTbCode,       TR(L"发送代码"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrShare,      TR(L"文件共享"));
+    RegisterTip(content, balloonchatwnd::kGIdHdrRelay,     TR(L"发起接龙"));
+    RegisterTip(content, balloonchatwnd::kGIdTbPlus,       TR(L"更多功能"));
+    RegisterTip(content, balloonchatwnd::kGIdMention,      TR(L"@提醒成员"));
+    RegisterTip(content, balloonchatwnd::kGIdSendButton,   TR(L"发送"));
+    // Markdown 编辑器按钮：打开独立的 Markdown 编辑器并预先选好本群；FlamingoMarkdown.dll 不可用时隐藏
+    //（docs/Markdown消息方案.md 第 11.3 节）
+    RegisterTip(content, balloonchatwnd::kGIdTbMarkdown, TR(L"Markdown 编辑器"));
+    balloonchatwnd::ApplyMarkdownEditorButton(content, balloonchatwnd::kGIdTbMarkdown);
+    // 截图的剪刀与 ▾：截图模块 FlamingoScreenshot.dll 不可用时隐藏（docs/截图独立模块方案.md 3.3 节）
+    balloonchatwnd::ApplyScreenshotButtons(content, balloonchatwnd::kGIdTbScreenshot, balloonchatwnd::kGIdTbScreenshotMenu,
+                                           balloonscreenshot::IsScreenshotAvailable());
+    ApplyShareButtonVisibility();
+    ApplyScreenShareButtonVisibility();
+    ApplyGroupCallButtonVisibility();
+    ApplyVoiceButtonVisibility();
+    // 录音条（语音消息第 3b、6g 步）：由录音会话在布局的占位里建出控件，平时隐藏
+    {
+        balloonchatwnd::VoiceRecordBarIds voiceIds;
+        voiceIds.m_pause = balloonchatwnd::kGIdVoicePause;
+        voiceIds.m_stop = balloonchatwnd::kGIdVoiceStop;
+        voiceIds.m_preview = balloonchatwnd::kGIdVoicePreview;
+        voiceIds.m_cancel = balloonchatwnd::kGIdVoiceCancel;
+        voiceIds.m_send = balloonchatwnd::kGIdVoiceSend;
+        voiceIds.m_confirm = balloonchatwnd::kGIdVoiceConfirm;
+        voiceIds.m_back = balloonchatwnd::kGIdVoiceBack;
+        m_voiceSession.Init(this, dynamic_cast<balloonwjui::DuiHBox*>(content->FindCtrlById(balloonchatwnd::kGIdVoiceBar)),
+                            voiceIds);
+    }
+    // 登记本群：文件共享模块数出可用共享的个数后经主面板设置头部按钮的角标
+    if (m_groupId != 0)
+    {
+        balloonfileshare::CFileShareHost::GetInstance().WatchConversationShares(conversation_group, m_groupId);
+    }
+    // 屏幕共享横幅先按已知状态显示（之前在别处收到过本群的开始推送时立即可见）
+    RefreshScreenShareBanner();
+    // 本次登录还不知道本群有没有进行中的屏幕共享：查一次，结果回来后历史里的共享卡片与横幅据此显示状态
+    if (m_groupId != 0)
+    {
+        balloonscreenshare::CScreenShareHub::GetInstance().Query(conversation_group, (int64_t)m_groupId);
+    }
+    // 群通话横幅同理：先按已知状态显示，再查一次本群有没有进行中的群通话（docs/群音视频通话方案.md 6.3）
+    RefreshGroupCallBanner();
+    if (m_groupId != 0)
+    {
+        balloongroupcall::CGroupCallHub::GetInstance().Query((int64_t)m_groupId);
+    }
 
     // 按持久化的发送模式刷新左下角提示与输入框 placeholder（重启后保留上次选择）。
     RefreshSendModeUi();
 
     // 按本人角色决定"群管理"齿轮是否显示（仅群主 / 管理员可见）。
     ApplyAdminGearVisibility();
+
+    // 仅通知模式：本人是普通成员且本群开着时，输入区换成提示行（开关与角色可能在建窗之前就已推来）
+    ApplyNotifyOnlyState();
+
+    // 气泡头像的灰彩：消息列表此刻才存在，把已知成员的在线状态与本端连接态告知它
+    ApplyAvatarGrayToMessageList();
 
     // 注册到图片解码缓存：群里图片气泡发起后台解码后，缩放完成经 WM_CHAT_IMAGE_READY
     // 通知本窗口重绘。注销在 OnCloseMsg。
@@ -1222,6 +1887,13 @@ void CBalloonGroupChatWindow::InitUi()
     // 反应（见 ChatDropController.h 的文件头）。输入框已换成无窗口控件、没有子窗口
     // 需要摘，故第二个参数传空。
     m_dropCtrl.Attach(this, NULL, this);
+
+    // 备忘：登记为备忘中枢的观察者，备忘簿变化时收 FMG_MSG_MEMO_CHANGED；先按现有数据画一次页签角标
+    if (m_groupId != 0)
+    {
+        balloonmemo::CMemoCenter::Instance().RegisterObserver(m_hWnd);
+        RefreshMemoTabBadge();
+    }
 
     LOG_INFO(_T("群聊窗客户区 UI 初始化完成。"));
 }
@@ -1294,7 +1966,7 @@ void CBalloonGroupChatWindow::OnChatDropHintChanged(bool visible)
             if (visible)
             {
                 // 群里拖文件的落点是群文件库，文案要说清楚，免得用户以为是发消息。
-                hint->SetText(_T("松开发送：图片进聊天，文件进群文件"));
+                hint->SetText(TR(L"松开发送：图片进聊天，文件进群文件"));
             }
             else
             {
@@ -1338,7 +2010,7 @@ void CBalloonGroupChatWindow::OnChatFilesDropped(const std::vector<std::wstring>
     {
         if (m_dropToast != NULL)
         {
-            m_dropToast->Show(_T("调试窗口没有绑定群，无法发送"));
+            m_dropToast->Show(TR(L"调试窗口没有绑定群，无法发送"));
         }
         return;
     }
@@ -1349,8 +2021,8 @@ void CBalloonGroupChatWindow::OnChatFilesDropped(const std::vector<std::wstring>
     if (plan.m_needConfirm)
     {
         CString ask;
-        ask.Format(_T("确定要发送 %d 个文件吗？"), (int)plan.m_items.size());
-        if (::MessageBoxW(m_hWnd, (LPCWSTR)ask, L"发送文件",
+        ask.Format(TR(L"确定要发送 %d 个文件吗？"), (int)plan.m_items.size());
+        if (::MessageBoxW(m_hWnd, (LPCWSTR)ask, TR(L"发送文件"),
                           MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
         {
             LOG_INFO("群聊窗拖放：用户取消了 %d 个文件的发送。", (int)plan.m_items.size());
@@ -1385,7 +2057,7 @@ void CBalloonGroupChatWindow::OnChatFilesDropped(const std::vector<std::wstring>
     CString folderNote;
     if (!plan.m_folders.empty())
     {
-        folderNote.Format(_T("群聊暂不支持发送文件夹（%d 个未发送）"), (int)plan.m_folders.size());
+        folderNote.Format(TR(L"群聊暂不支持发送文件夹（%d 个未发送）"), (int)plan.m_folders.size());
     }
 
     // 提示只有一条浮层可用，故把"文件夹没发"与"另有几项发不出去"拼成一句，
@@ -1451,8 +2123,28 @@ LRESULT CBalloonGroupChatWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     }
     // 从图片解码缓存注销本窗口，避免就绪后向已销毁窗口 PostMessage。
     balloonchatwnd::ChatImageCache::Inst().UnregisterListener(m_hWnd);
+    // 录音中关窗按取消处理、试听中的录音丢弃（语音消息第 3b、6g 步），之后语音消息中心不再给录音会话发通知
+    m_voiceSession.OnWindowClosing();
+    // 本窗口正在播放语音时一并停止，之后语音中心不再给本窗口发播放通知（第 3e 步）
+    balloonvoice::CVoiceHub::GetInstance().DetachPlayListener(this);
     // 注销拖放目标。须在 DestroyWindow 之前 —— RevokeDragDrop 要求窗口还在。
     m_dropCtrl.Detach();
+    // 「发送代码」窗口随本窗口关闭（还没发出的代码不保留）
+    if (m_codeComposeWnd)
+    {
+        m_codeComposeWnd->Close();
+    }
+    // 「发起接龙」窗口随本窗口关闭
+    if (m_relayComposeDlg && m_relayComposeDlg->IsWindow())
+    {
+        m_relayComposeDlg->DestroyWindow();
+    }
+    // 群通话选人框随本窗口关闭；它的结果接收方由本窗口持有，窗口销毁后不能再收到确认
+    if (m_callPicker && m_callPicker->IsWindow())
+    {
+        m_callPicker->DestroyWindow();
+    }
+    // 桌面字幕由主面板持有，不随群聊窗关闭（docs/聊天字幕模式方案.md 第 1 节第 10 条），这里不动它
     if (IsWindow())
     {
         DestroyWindow();
@@ -1536,6 +2228,12 @@ LRESULT CBalloonGroupChatWindow::OnChatCopySelection(UINT /*uMsg*/, WPARAM /*wPa
 LRESULT CBalloonGroupChatWindow::OnKeyDownMsg(UINT uMsg, WPARAM wParam,
                                               LPARAM lParam, BOOL& bHandled)
 {
+    // 录音条显示时：Enter 等于「发送」、Esc 等于「取消」，确认放弃状态下 Esc 等于「返回」（语音消息第 3b、6g 步）。
+    // 输入框此时隐藏但可能仍持有焦点，必须在这里截住，否则 Enter 会被输入框当成发送文字消息
+    if (m_voiceSession.HandleKey((UINT)wParam))
+    {
+        return 0;
+    }
     // 焦点不在输入框时的 Ctrl+C。焦点在输入框里时走的是输入框键盘钩子那条路。
     if (wParam == 'C' && (::GetKeyState(VK_CONTROL) & 0x8000) != 0)
     {
@@ -1589,6 +2287,25 @@ void CBalloonGroupChatWindow::OpenPendingLink()
     const std::wstring url = m_pendingLinkUrl;
     m_pendingLinkUrl.clear();
 
+    // 屏幕共享的分享链接（第 25 期）：在客户端里凭链接加入，不交给浏览器
+    if (balloonchatwnd::IsScreenShareLinkUrl(url))
+    {
+        LOG_INFO("group chat window: share link clicked.");
+        balloonscreenshare::CScreenShareHub::GetInstance().JoinByLink(url);
+        return;
+    }
+    // 加群链接（docs/邀请入群方案.md §12）：交给主面板查群并弹确认框，不交给浏览器
+    std::string joinCode;
+    if (balloonchatwnd::IsJoinGroupLinkUrl(url, &joinCode))
+    {
+        LOG_INFO("group chat window: join-group link clicked.");
+        std::string* pCode = new std::string(joinCode);
+        if (m_hostPanel == NULL || !::PostMessage(m_hostPanel, FMG_MSG_OPEN_JOIN_GROUP_LINK, 0, (LPARAM)pCode))
+        {
+            delete pCode;
+        }
+        return;
+    }
     // 协议白名单：只放行 http / https。理由与单聊窗同一处注释。
     if (balloonchatwnd::IsSafeLinkUrl(url))
     {
@@ -1630,6 +2347,62 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     // WM_DUI_NOTIFY 的 LPARAM 指向一个 DuiNotify（仅在本次同步派发内有效）。
     const balloonwjui::DuiNotify* pNotify =
         reinterpret_cast<const balloonwjui::DuiNotify*>(lParam);
+    // 问答面板：搜索框文字变化（每键触发）→ 按问题或答案筛选，重建卡片
+    if (pNotify != NULL && pNotify->code == balloonwjui::DUIN_VALUECHANGED
+        && pNotify->ctrlId == balloonchatwnd::kGIdQaSearch)
+    {
+        RenderQaPanel();
+        return 0;
+    }
+    // 问答卡片上的「发到群里」「修改」「删除」：ctrlId 落在问答卡片的 id 段内才进分支，等这次通知处理完再执行
+    int qaCardIndex = 0;
+    int qaCardPart = 0;
+    if (pNotify != NULL && pNotify->code == balloonwjui::DUIN_CLICK
+        && balloonchatwnd::QaCardFromCtrlId(pNotify->ctrlId, qaCardIndex, qaCardPart)
+        && (qaCardPart == balloonchatwnd::kQaCardPartSend || qaCardPart == balloonchatwnd::kQaCardPartEdit
+            || qaCardPart == balloonchatwnd::kQaCardPartDelete))
+    {
+        const int action = (qaCardPart == balloonchatwnd::kQaCardPartSend) ? kQaCardActionSend
+                         : (qaCardPart == balloonchatwnd::kQaCardPartEdit) ? kQaCardActionEdit
+                                                                           : kQaCardActionDelete;
+        PostQaCardAction(action, qaCardIndex);
+        return 0;
+    }
+    // 输入区的「点此阅读」提示行（只在待确认入群必读时是链接）：等这次通知处理完再弹出必读公告
+    if (pNotify != NULL && pNotify->code == balloonwjui::DUIN_CLICK
+        && pNotify->ctrlId == balloonchatwnd::kGIdNotifyOnlyBar && m_mustReadPending)
+    {
+        PostMessage(kMustReadShowMsg, 0, 0);
+        return 0;
+    }
+    // 备忘卡片：「修改」「删除」、双击修改或查看、右键弹菜单。卡片里每个控件的 ctrlId 都落在卡片的 id 段内，
+    // 反推得出是第几张卡片才进分支，别的控件的同码通知照常往下走。操作都先投给自己再做（见 kMemoCardActionMsg）
+    int memoCardIndex = 0;
+    int memoCardPart = 0;
+    const bool onMemoCard = (pNotify != NULL)
+        && balloonmemo::MemoCardFromCtrlId(pNotify->ctrlId, memoCardIndex, memoCardPart);
+    const bool onMemoCardButton = onMemoCard
+        && (memoCardPart == balloonmemo::kMemoCardPartEdit || memoCardPart == balloonmemo::kMemoCardPartDelete);
+    if (onMemoCard && pNotify->code == balloonwjui::DUIN_CLICK && memoCardPart == balloonmemo::kMemoCardPartEdit)
+    {
+        PostMemoCardAction(kMemoCardActionOpen, memoCardIndex);
+        return 0;
+    }
+    if (onMemoCard && pNotify->code == balloonwjui::DUIN_CLICK && memoCardPart == balloonmemo::kMemoCardPartDelete)
+    {
+        PostMemoCardAction(kMemoCardActionDelete, memoCardIndex);
+        return 0;
+    }
+    if (onMemoCard && pNotify->code == balloonwjui::DUIN_DBLCLK && !onMemoCardButton)
+    {
+        PostMemoCardAction(kMemoCardActionOpen, memoCardIndex);
+        return 0;
+    }
+    if (onMemoCard && pNotify->code == balloonwjui::DUIN_RCLICK)
+    {
+        PostMemoCardAction(kMemoCardActionMenu, memoCardIndex);
+        return 0;
+    }
     if (pNotify != NULL && pNotify->code == balloonwjui::DUIN_CLICK)
     {
         // 「发送」按钮 → 发消息。
@@ -1638,15 +2411,46 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             DoSend();
             return 0;
         }
+        // 工具栏的 Markdown 编辑器按钮：打开空白编辑器，发送对象预选本群（docs/Markdown消息方案.md 第 11.3 节）
+        if (pNotify->ctrlId == balloonchatwnd::kGIdTbMarkdown)
+        {
+            OpenMarkdownEditor(std::string());
+            return 0;
+        }
         // 顶部离线提示带只作告知、不可点击，故这里没有它的分支 —— 恢复在线统一走
         // 托盘 / 主面板的状态菜单那个唯一入口。
 
-        // 右侧边栏三个 Tab → 切换选中。
+        // 右侧边栏四个 Tab → 切换选中。
         if (pNotify->ctrlId == balloonchatwnd::kGIdTabMembers ||
             pNotify->ctrlId == balloonchatwnd::kGIdTabFiles ||
-            pNotify->ctrlId == balloonchatwnd::kGIdTabNotice)
+            pNotify->ctrlId == balloonchatwnd::kGIdTabNotice ||
+            pNotify->ctrlId == balloonchatwnd::kGIdTabMemo ||
+            pNotify->ctrlId == balloonchatwnd::kGIdTabQa)
         {
             SwitchSideTab(pNotify->ctrlId);
+            return 0;
+        }
+
+        // 成员页签的机器人区域（docs/机器人方案.md §4.2）：点某个机器人弹资料卡，等这次通知处理完再做
+        // （弹框期间 2801 到达会重建这些行，UI 约定第 13 条）
+        if (pNotify->ctrlId >= balloonchatwnd::kGIdBotRowFirst && pNotify->ctrlId <= balloonchatwnd::kGIdBotRowLast)
+        {
+            PostMessage(kGroupBotActionMsg, (WPARAM)kGroupBotActionCard,
+                        (LPARAM)(pNotify->ctrlId - balloonchatwnd::kGIdBotRowFirst));
+            return 0;
+        }
+
+        // 问答面板：「＋ 新建问答」，等这次通知处理完再打开编辑窗
+        if (pNotify->ctrlId == balloonchatwnd::kGIdQaAdd)
+        {
+            PostQaCardAction(kQaCardActionAdd, -1);
+            return 0;
+        }
+
+        // 备忘面板：「＋ 新建群备忘」
+        if (pNotify->ctrlId == balloonchatwnd::kGIdMemoAdd)
+        {
+            OpenGroupMemoEditor(0);
             return 0;
         }
 
@@ -1729,13 +2533,56 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             }
             return 0;
         }
+        // 点击「代码」工具栏按钮 → 打开「发送代码」窗口（docs/代码片段方案.md 第 3.1 节）。
+        if (pNotify->ctrlId == balloonchatwnd::kGIdTbCode)
+        {
+            OpenCodeCompose(std::wstring(), RememberedCodeLang());
+            return 0;
+        }
+        // 点了粘贴识别提示条上的「以代码片段发送」→ 把输入框里的文字移进发送代码窗口（语言按自动识别），输入框清空。
+        if (pNotify->ctrlId == balloonchatwnd::kGIdCodePasteSend)
+        {
+            balloonwjui::DuiControl* pasteContent = GetClientContent();
+            balloonchatwnd::ChatInputRichEdit* pasteInput = (pasteContent != NULL)
+                ? dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(pasteContent->FindCtrlById(balloonchatwnd::kGIdInputEdit))
+                : NULL;
+            // 先收起提示条（同时清掉记下的文字），清空输入框引起的变化通知就不会再处理提示条
+            ShowCodePasteBar(false);
+            if (pasteInput != NULL)
+            {
+                const std::wstring code =
+                    balloonchatwnd::NormalizeCodeNewlines(std::wstring((LPCWSTR)pasteInput->GetText()));
+                pasteInput->SetText(_T(""));
+                m_pendingMentions.clear();   // 输入框清空了，记下的 @ 一并作废
+                OpenCodeCompose(code, std::string());
+            }
+            return 0;
+        }
+        // 点了粘贴识别提示条上的「不用了」→ 只收起提示条，输入框不动，回车照常按普通文字发送。
+        if (pNotify->ctrlId == balloonchatwnd::kGIdCodePasteDismiss)
+        {
+            ShowCodePasteBar(false);
+            return 0;
+        }
         // 点击"字体"工具栏按钮（AF）→ 打开字体设置面板。
         if (pNotify->ctrlId == balloonchatwnd::kGIdTbFont)
         {
             OpenFontPanel();
             return 0;
         }
-        // 点击"表情"工具栏按钮 → 打开 Bin/Face 图片表情选择面板。
+        // 点击头部的「发起接龙」按钮 → 打开「发起接龙」窗口。
+        if (pNotify->ctrlId == balloonchatwnd::kGIdHdrRelay)
+        {
+            OpenRelayCompose();
+            return 0;
+        }
+        // 点击头部的「文件共享」按钮 → 在按钮旁弹出本会话的共享列表浮层
+        if (pNotify->ctrlId == balloonchatwnd::kGIdHdrShare)
+        {
+            OpenConversationShares();
+            return 0;
+        }
+        // 点击"表情"工具栏按钮 → 打开 程序目录/Face 图片表情选择面板。
         if (pNotify->ctrlId == balloonchatwnd::kGIdTbEmoji)
         {
             OpenEmojiPicker();
@@ -1748,6 +2595,12 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         if (pNotify->ctrlId == balloonchatwnd::kGIdReplyClose)
         {
             CancelPendingReply();
+            return 0;
+        }
+        // 成员搜索框右边的「按部门 / 平铺」切换按钮：切换成员列表的视图（docs/群成员部门树方案.md）
+        if (pNotify->ctrlId == balloonchatwnd::kGIdMemberViewToggle)
+        {
+            ToggleMemberView();
             return 0;
         }
 
@@ -1773,7 +2626,13 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         // 发送按钮等点击失灵（与发送▼菜单同理）。延后到鼠标事件外再发起。
         if (pNotify->ctrlId == balloonchatwnd::kGIdTbScreenshot)
         {
-            ::PostMessage(m_hWnd, kDoScreenshotMsg, 0, 0);
+            ::PostMessage(m_hWnd, kDoScreenshotMsg, (WPARAM)balloonchatwnd::kShotReqCapture, 0);
+            return 0;
+        }
+        // 点击剪刀右边的 ▾ → 弹出截图选项菜单。同样延后到鼠标事件之外再弹（模态菜单）。
+        if (pNotify->ctrlId == balloonchatwnd::kGIdTbScreenshotMenu)
+        {
+            ::PostMessage(m_hWnd, kDoScreenshotMsg, (WPARAM)balloonchatwnd::kShotReqMenu, 0);
             return 0;
         }
         // 头部「消息记录」按钮 → 请主面板打开本群的历史消息记录窗，落在"全部"分类上。
@@ -1782,11 +2641,39 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             RequestOpenHistory(balloonhistory::kHistoryTypeAll);
             return 0;
         }
+        // 头部「字幕模式」按钮 → 进入或退出字幕模式（桌面上显示本群最新一条消息的字幕）
+        if (pNotify->ctrlId == balloonchatwnd::kGIdHdrSubtitle)
+        {
+            ToggleSubtitleMode();
+            return 0;
+        }
         // 头部下方的「已 Pin N 条」提示带 → 同样打开历史消息记录窗，但直接切到 Pin
         // 分类。与单聊窗同一套做法，理由见 CBalloonChatWindow::OnDuiNotify 里那段注释。
         if (pNotify->ctrlId == balloonchatwnd::kGIdPinBanner)
         {
             RequestOpenHistory(balloonhistory::kHistoryTypePinned);
+            return 0;
+        }
+        // 群通话横幅 → 加入本群进行中的群通话（本人已在通话里时 DLL 把通话窗提到前面）。离线时加入必然失败，在入口拦住
+        if (pNotify->ctrlId == balloonchatwnd::kGIdGroupCallBanner)
+        {
+            if (!m_callBannerRoomId.empty() && CheckOnlineFor(balloonmain::kActionRealtimeCall))
+            {
+                balloongroupcall::CGroupCallHub::GetInstance().JoinCall((int64_t)m_groupId, m_groupName,
+                                                                        m_callBannerRoomId);
+            }
+            return 0;
+        }
+        // 屏幕共享横幅 → 加入本群进行中的共享（本人发起的共享横幅只告知，点击不加入）。离线时加入必然失败，在入口拦住
+        if (pNotify->ctrlId == balloonchatwnd::kGIdScreenShareBanner)
+        {
+            if (!m_shareBannerSelfHost && !m_shareBannerRoomId.empty()
+                && CheckOnlineFor(balloonmain::kActionRealtimeCall))
+            {
+                balloonscreenshare::CScreenShareHub::GetInstance().JoinShare(
+                    conversation_group, (int64_t)m_groupId, m_shareBannerRoomId, m_shareBannerHostName,
+                    m_shareBannerForced);
+            }
             return 0;
         }
         // 头部「群管理」齿轮 → 请主面板打开本群的群管理对话框（仅群主 / 管理员；
@@ -1809,13 +2696,42 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             }
             return 0;
         }
-        // 头部「语音通话」/「视频通话」按钮 → 群组（一对多）暂不支持音视频通话（本期
-        // 只做 1 对 1）；给出明确提示，避免点击"没反应"。
+        // 工具栏「语音消息」→ 开始录音并显示录音条；录音条上的各个按钮交给录音会话（语音消息第 3b、6g 步）。
+        // 录音会话只认自己那几个按钮编号，别的控件返回 false、照常往下分派
+        if (pNotify->ctrlId == balloonchatwnd::kGIdTbVoice)
+        {
+            StartVoiceRecording();
+            return 0;
+        }
+        if (m_voiceSession.HandleButton(pNotify->ctrlId))
+        {
+            return 0;
+        }
+        // 工具栏「屏幕录制」→ 弹出录制菜单（开始录制 / 停止录制、录制管理，docs/语音字幕方案.md 第 2 节第 10 条），
+        // 菜单不能在鼠标事件里弹，先投递消息
+        if (pNotify->ctrlId == balloonchatwnd::kGIdTbRecord)
+        {
+            PostMessage(kOpenRecordMenuMsg);
+            return 0;
+        }
+        // 头部「共享屏幕」按钮 → 经屏幕共享中心交给 FlamingoMedia.dll：先弹出共享内容选择窗，选好后才发起。
+        // 正在共享或观看、系统不支持时由 DLL 提示原因。离线时发起必然失败，在入口就拦住
+        if (pNotify->ctrlId == balloonchatwnd::kGIdHdrScreenShare)
+        {
+            if (CheckOnlineFor(balloonmain::kActionRealtimeCall) && m_groupId != 0)
+            {
+                balloonscreenshare::CScreenShareHub::GetInstance().StartShare(conversation_group, (int64_t)m_groupId,
+                                                                              m_groupName);
+            }
+            return 0;
+        }
+        // 头部「语音通话」/「视频通话」按钮 → 群通话（docs/群音视频通话方案.md）：本群已有群通话时直接加入，
+        // 否则先选要振铃的人再发起
         if (pNotify->ctrlId == balloonchatwnd::kGIdHdrVoice
             || pNotify->ctrlId == balloonchatwnd::kGIdHdrVideo)
         {
-            ::MessageBox(m_hWnd, _T("群聊暂不支持语音 / 视频通话。"),
-                         _T("提示"), MB_OK | MB_ICONINFORMATION);
+            StartGroupCallFromHeader(pNotify->ctrlId == balloonchatwnd::kGIdHdrVideo ? balloongroupcall::kGroupCallVideo
+                                                                                     : balloongroupcall::kGroupCallVoice);
             return 0;
         }
     }
@@ -1915,6 +2831,28 @@ LRESULT CBalloonGroupChatWindow::OnTimer(UINT /*uMsg*/, WPARAM wParam,
         return 0;
     }
 
+    if (wParam == (WPARAM)kRecallEditTimerId)
+    {
+        // 撤回提示行的「编辑」到期：去掉已到期的，再按下一个到期时刻重新定时（没有了就停掉）
+        RefreshRecallEditTimer();
+        return 0;
+    }
+
+    if (wParam == (WPARAM)kRelayExpiryTimerId)
+    {
+        // 一次性定时器：最早的接龙截止时间到了，重画到期的卡片并安排下一次
+        OnRelayExpiryTimer();
+        return 0;
+    }
+
+    if (wParam == (WPARAM)kMemoPanelRefreshTimerId)
+    {
+        // 一次性定时器：「备忘」页签上最早的提醒时刻到了，重画卡片；RenderMemoPanel 会安排下一次
+        ::KillTimer(m_hWnd, kMemoPanelRefreshTimerId);
+        RenderMemoPanel();
+        return 0;
+    }
+
     if (wParam == (WPARAM)kReplyTimerId)
     {
         // 一次性定时器：先关掉，再追加一条某位群成员的 mock 回复。
@@ -1949,11 +2887,70 @@ LRESULT CBalloonGroupChatWindow::OnSendOnEnter(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
-LRESULT CBalloonGroupChatWindow::OnDoScreenshot(UINT /*uMsg*/, WPARAM /*wParam*/,
+LRESULT CBalloonGroupChatWindow::OnDoScreenshot(UINT /*uMsg*/, WPARAM wParam,
                                                 LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 已脱离 DUI 鼠标事件派发栈，安全地发起模态截图浮层。
-    DoScreenshot();
+    // 已脱离 DUI 鼠标事件派发栈，安全地发起模态截图浮层或弹出菜单。
+    switch ((int)wParam)
+    {
+    //点了剪刀右边的 ▾：弹出截图选项菜单
+    case balloonchatwnd::kShotReqMenu:
+        OpenScreenshotMenu();
+        break;
+    //菜单选了「截取全屏」：选区直接为鼠标所在的整块显示器
+    case balloonchatwnd::kShotReqFullScreen:
+        DoScreenshot(true);
+        break;
+    //点了剪刀、菜单选了「截图」，或主面板转来的截图快捷键
+    case balloonchatwnd::kShotReqCapture:
+    default:
+        DoScreenshot(false);
+        break;
+    }
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnOpenRecordMenu(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                  LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return 0;
+    }
+    balloonwjui::DuiControl* btn = content->FindCtrlById(balloonchatwnd::kGIdTbRecord);
+    if (btn == NULL)
+    {
+        return 0;
+    }
+    // 菜单贴在录制按钮下方弹出
+    RECT rc = btn->GetRect();
+    POINT tl = { rc.left, rc.top };
+    POINT br = { rc.right, rc.bottom };
+    ::ClientToScreen(m_hWnd, &tl);
+    ::ClientToScreen(m_hWnd, &br);
+    const RECT anchor = { tl.x, tl.y, br.x, br.y };
+    balloonscreenshare::CScreenShareHub& hub = balloonscreenshare::CScreenShareHub::GetInstance();
+    const balloonchatwnd::RecordMenuChoice choice =
+        balloonchatwnd::TrackRecordMenu(m_hWnd, anchor, hub.IsRecording(), hub.IsModuleReady());
+    switch (choice)
+    {
+    //开始录制：弹出「选择要录制的内容」，录完可一键发到本会话
+    case balloonchatwnd::kRecordMenuStart:
+        hub.StartRecording(conversation_group, (int64_t)m_groupId, m_groupName);
+        break;
+    //停止并保存正在进行的录制
+    case balloonchatwnd::kRecordMenuStop:
+        hub.StopRecording();
+        break;
+    //打开录制管理窗口（录像列表，可在那里编辑字幕）
+    case balloonchatwnd::kRecordMenuManager:
+        hub.ShowRecordManager();
+        break;
+    //没有选
+    default:
+        break;
+    }
     return 0;
 }
 
@@ -1976,33 +2973,70 @@ LRESULT CBalloonGroupChatWindow::OnOpenSendMenu(UINT /*uMsg*/, WPARAM /*wParam*/
     POINT anchor = { rc.left, rc.top };
     ::ClientToScreen(m_hWnd, &anchor);
 
-    const UINT kMenuIdEnter     = 1;   // 「按 Enter 发送消息」
-    const UINT kMenuIdCtrlEnter = 2;   // 「按 Ctrl+Enter 发送消息」
-    balloonchatwnd::SendKeyMode cur = balloonchatwnd::GetChatSendMode();
-
-    balloonwjui::DuiMenu menu;
-    menu.AppendChecked(kMenuIdEnter,     _T("按 Enter 发送消息"),
-                       cur == balloonchatwnd::kSendOnEnter);
-    menu.AppendChecked(kMenuIdCtrlEnter, _T("按 Ctrl+Enter 发送消息"),
-                       cur == balloonchatwnd::kSendOnCtrlEnter);
-
-    // 菜单弹在发送按钮上方、不遮挡按钮：按项数估算菜单高度（DuiMenu 行高 32），
-    // 把锚点从按钮顶部再上移「菜单高 + 间隙」。
-    const int kMenuRowHeightPx = 32;   // 与 balloonui DuiMenu 的行高一致
-    const int kMenuGapPx       = 6;    // 菜单底与按钮顶之间的间隙
-    int menuHeight = menu.GetCount() * kMenuRowHeightPx;
-    UINT chosen = menu.TrackPopup(anchor.x, anchor.y - menuHeight - kMenuGapPx, m_hWnd);
-    if (chosen == kMenuIdEnter)
+    // 快捷回复（docs/快捷回复方案.md）：三条按本人账号配置取，没设过的是默认文字，特意清空的为空串、不出菜单项
+    std::vector<CString> replies;
+    if (m_lpFMGClient != NULL)
     {
+        for (int i = 0; i < CUserConfig::kQuickReplySlotCount; ++i)
+        {
+            replies.push_back(m_lpFMGClient->m_UserConfig.GetQuickReply(i));
+        }
+    }
+    const balloonchatwnd::ChatSendMenuCommand cmd = balloonchatwnd::PopupChatSendMenu(
+        m_hWnd, anchor, replies, balloonchatwnd::GetChatSendMode() == balloonchatwnd::kSendOnEnter);
+    switch (cmd.m_kind)
+    {
+    //点了一条快捷回复：直接发出去，输入框里的文字、待发的引用与 @ 都不动
+    case balloonchatwnd::kSendMenuQuickReply:
+        if (cmd.m_replyIndex >= 0 && cmd.m_replyIndex < (int)replies.size())
+        {
+            SendQuickReply(replies[cmd.m_replyIndex]);
+        }
+        break;
+
+    //改为按 Enter 发送
+    case balloonchatwnd::kSendMenuEnterKey:
         balloonchatwnd::SetChatSendMode(balloonchatwnd::kSendOnEnter);
         RefreshSendModeUi();
-    }
-    else if (chosen == kMenuIdCtrlEnter)
-    {
+        break;
+
+    //改为按 Ctrl+Enter 发送
+    case balloonchatwnd::kSendMenuCtrlEnterKey:
         balloonchatwnd::SetChatSendMode(balloonchatwnd::kSendOnCtrlEnter);
         RefreshSendModeUi();
+        break;
+
+    //「设置快捷回复…」：系统设置窗由主面板持有，请它打开并切到「聊天」页
+    case balloonchatwnd::kSendMenuSettings:
+        if (::IsWindow(m_hostPanel))
+        {
+            ::PostMessage(m_hostPanel, FMG_MSG_OPEN_SETTINGS_PAGE, (WPARAM)balloonsettings::kPageChat, 0);
+        }
+        break;
+
+    //菜单被取消
+    default:
+        break;
     }
     return 0;
+}
+
+void CBalloonGroupChatWindow::SendQuickReply(const CString& reply)
+{
+    //与按发送键发消息同一道在线检查：离线时给出相同的提示，不发送。仅通知模式、禁言由服务端判断，
+    //被拒时气泡标为发送失败，与手工发送的结果一致
+    if (!CheckOnlineFor(balloonmain::kActionSendMessage))
+    {
+        return;
+    }
+    const CString body = balloonchatwnd::QuickReplyBody(reply);
+    if (body.IsEmpty())
+    {
+        return;
+    }
+    LOG_INFO("group chat window: quick reply sent, group=%lld, chars=%d.", (long long)m_groupId, reply.GetLength());
+    //SendPlainText 不带引用与 @、不读也不清输入框
+    SendPlainText(std::wstring((LPCWSTR)body));
 }
 
 void CBalloonGroupChatWindow::RefreshSendModeUi()
@@ -2103,6 +3137,17 @@ void CBalloonGroupChatWindow::ApplyConnectionState(int state)
         sendBtn->SetEnabled(bOnline);
     }
 
+    // 成员侧栏里本人那一行的头像随本端连接态变灰 / 恢复彩色；别人的头像只看各自的在线状态
+    balloonchatwnd::GroupMemberList* memberList =
+        dynamic_cast<balloonchatwnd::GroupMemberList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMemberList));
+    if (memberList != NULL)
+    {
+        memberList->SetSelfConnectionStateForAll(state);
+    }
+    // 消息区里本人的气泡头像同理
+    ApplyAvatarGrayToMessageList();
+
     // 提示条显隐改变了客户区顶部的占位高度，必须补一次整树布局才生效 ——
     // 原因与单聊窗 CBalloonChatWindow::ApplyConnectionState 完全一致，详见那里的说明。
     if (bannerVisibilityChanged)
@@ -2133,7 +3178,7 @@ bool CBalloonGroupChatWindow::CheckOnlineFor(int action)
              "connUiState=%d (0=online 1=connecting 2=offline).",
         (long long)m_groupId, action, m_connUiState);
     ::MessageBox(m_hWnd, balloonmain::GetBlockedActionTip(action),
-                 _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+                 g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
     return false;
 }
 
@@ -2169,7 +3214,31 @@ void CBalloonGroupChatWindow::DoSend()
         balloonchatwnd::BuildOutgoingParts(segs);
     if (parts.empty())
     {
-        return;   // 空 / 全空白，不发
+        // 空 / 全空白，不发。输入框里有内容却聚合不出可发送部分时记一条，以后同类问题有迹可查（BUG-106）
+        if (!segs.empty())
+        {
+            LOG_INFO("GroupChatWindow::DoSend: nothing to send, %u input segment(s) are blank, group=%lld.",
+                     (unsigned)segs.size(), (long long)m_groupId);
+        }
+        return;
+    }
+
+    // 整条消息以 ``` 包起来时按代码片段发送（docs/代码片段方案.md 第 3.1 节）：只有一段文字、没有图片时才判断。
+    // 聊天输入框已没有 Markdown 模式（docs/Markdown消息方案.md 第 11.2 节），故第二个参数恒为 false。
+    // 代码片段不带 @；没有发出（离线、超限）时输入框原样保留
+    if (parts.size() == 1 && parts[0].kind == balloonchatwnd::kRichPartText)
+    {
+        std::wstring fencedCode;
+        int fencedLang = codesnippet::code_lang_plain;
+        if (balloonchatwnd::TryCodeFenceSend(std::wstring((LPCWSTR)parts[0].text), false, fencedCode, fencedLang))
+        {
+            if (SendCodeSnippet(fencedCode, fencedLang))
+            {
+                input->SetText(_T(""));
+                m_pendingMentions.clear();
+            }
+            return;
+        }
     }
 
     // 调试入口（--groupchatwindow，无群 id）：不支持发图。把各文字段拼起来做 mock
@@ -2210,7 +3279,7 @@ void CBalloonGroupChatWindow::DoSend()
         return;
     }
 
-    // 发送前检查每段文字的体积：超过单条消息上限的，服务端会拒收（bugs.md 的 BUG-32）。
+    // 发送前检查每段文字的体积：超过单条消息上限的，服务端会拒收。
     // 任何一段超限就整条不发、不生成气泡，输入框与 @ 记录原样保留，方便用户删减后再发。
     // @ 按每段重扫后计入，与 SendGroupTextPart 的做法相同。
     const int oversized = balloonchatwnd::FindOversizedTextPart(
@@ -2219,8 +3288,8 @@ void CBalloonGroupChatWindow::DoSend()
     {
         LOG_WARNING("group chat window: text part %d is too large to send, group=%lld.",
                     oversized, (long long)m_groupId);
-        ::MessageBox(m_hWnd, balloonchatwnd::kSendTextTooLargeTip,
-                     _T("FlamingoIM"), MB_OK | MB_ICONWARNING);
+        ::MessageBox(m_hWnd, TR(balloonchatwnd::kSendTextTooLargeTip),
+                     g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
         return;
     }
 
@@ -2496,16 +3565,30 @@ LRESULT CBalloonGroupChatWindow::OnMentionChanged(UINT /*uMsg*/, WPARAM wParam,
                       ? m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
     std::vector<balloonchatwnd::AtCandidate> cands;
 
-    // 「所有人」置顶，且只对群主 / 管理员开放 —— @所有人 会给全群每个人都推一次
-    // 提醒，放开给普通成员等于把打扰全群的权力交给任何人（判定见 CanMentionAll）。
-    // 普通成员看不到这一项，也就没法从浮层里选中它；即便手动打出 "@所有人"，发送前
+    // 「所有人」置顶，按群设置「谁可以 @ 全体」开放：群主、管理员恒可，群主放开给所有人时
+    // 普通成员也可以（判定见 CanMentionAll，与服务端同一规则）。
+    // 没有权限的人看不到这一项，也就没法从浮层里选中它；即便手动打出 "@所有人"，发送前
     // 的重扫也只认"用户真正选过的候选"，扫不出片段，于是只当普通文字发出去。
-    if (balloonchatwnd::CanMentionAll(m_myRole))
+    if (balloonchatwnd::CanMentionAll(m_myRole, m_atAllScope))
     {
         balloonchatwnd::AtCandidate all;
         all.m_uid  = balloonchatwnd::kMentionUidAll;
         all.m_name = Utf8ToCString(balloonchatwnd::kMentionAllNameUtf8);
         cands.push_back(all);
+    }
+
+    //本群可被 @ 的机器人排在成员之前（docs/机器人方案.md §4.2）：只列在本群生效、且有被 @ 规则的机器人
+    for (size_t i = 0; i < m_groupBots.size(); ++i)
+    {
+        const net::GroupBotInfo& b = m_groupBots[i];
+        if (!b.m_active || !b.m_atable || b.m_userId <= 0)
+        {
+            continue;
+        }
+        balloonchatwnd::AtCandidate one;
+        one.m_uid  = b.m_userId;
+        one.m_name = Utf8ToCString(b.m_name);
+        cands.push_back(one);
     }
 
     for (std::map<int64_t, MemberInfo>::const_iterator it = m_memberInfo.begin();
@@ -2520,7 +3603,7 @@ LRESULT CBalloonGroupChatWindow::OnMentionChanged(UINT /*uMsg*/, WPARAM wParam,
         one.m_name = it->second.m_name;
         if (one.m_name.IsEmpty())
         {
-            one.m_name.Format(_T("用户%lld"), (long long)it->first);
+            one.m_name.Format(TR(L"用户%lld"), (long long)it->first);
         }
         cands.push_back(one);
     }
@@ -2671,7 +3754,16 @@ LRESULT CBalloonGroupChatWindow::OnActivateForMention(UINT /*uMsg*/, WPARAM wPar
 static CString ResolveQuoteThumbPath(long long selfUserId, const net::ReplyQuote& q,
                                      balloonchatwnd::ChatMessageList* list);
 
-void CBalloonGroupChatWindow::SendGroupTextPart(const CString& text)
+void CBalloonGroupChatWindow::SendPlainText(const std::wstring& text)
+{
+    if (text.empty())
+    {
+        return;
+    }
+    SendGroupTextPart(CString(text.c_str()), false);
+}
+
+void CBalloonGroupChatWindow::SendGroupTextPart(const CString& text, bool withQuote)
 {
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL || m_groupId == 0)
@@ -2693,8 +3785,12 @@ void CBalloonGroupChatWindow::SendGroupTextPart(const CString& text)
     // @提醒：以本段最终文本为准重扫，扫不到的候选自动作废（用户可能把插入的
     // "@张三" 删了一半、或在中间插了字，插入时记的偏移已经不准）。
     std::string utf8 = CStringToUtf8(text);
+    //不带引用时（SendPlainText，屏幕共享第 25 期）也不带 @ 提醒：用空引用、空的提醒片段
+    const net::ReplyQuote noQuote;
+    const net::ReplyQuote& quote = withQuote ? m_pendingQuote : noQuote;
     const std::vector<balloonchatwnd::MentionSpan> ats =
-        balloonchatwnd::RescanMentions(utf8, m_pendingMentions);
+        withQuote ? balloonchatwnd::RescanMentions(utf8, m_pendingMentions)
+                  : std::vector<balloonchatwnd::MentionSpan>();
 
     // 乐观回显气泡（带当前字体）。此刻 msgid / timestampMs 还未知，留 0 待回执回填。
     balloonchatwnd::ChatMessage echo = balloonchatwnd::MakeTextMessage(true, text);
@@ -2711,8 +3807,7 @@ void CBalloonGroupChatWindow::SendGroupTextPart(const CString& text)
     // 本端乐观气泡也要显示引用块 —— 否则"发出去自己看不到引用、对方却看得到"。
     const int64_t selfForQuote = (m_lpFMGClient != NULL)
                                ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
-    balloonchatwnd::FillQuoteForRender(m_pendingQuote, echo,
-                                       ResolveQuoteThumbPath(selfForQuote, m_pendingQuote, list));
+    balloonchatwnd::FillQuoteForRender(quote, echo, ResolveQuoteThumbPath(selfForQuote, quote, list));
     FillSelfSenderAvatar(m_lpFMGClient, echo);   // 自己气泡显示本端真实头像（字形 / 真图）
     list->AppendMessage(echo);
 
@@ -2723,7 +3818,7 @@ void CBalloonGroupChatWindow::SendGroupTextPart(const CString& text)
     if (ats.empty())
     {
         CIUSocket::GetInstance().SendGroupTextMessage(m_groupId, clientMsgId, utf8,
-                                                      m_currentFont, m_pendingQuote);
+                                                      m_currentFont, quote);
     }
     else
     {
@@ -2731,26 +3826,374 @@ void CBalloonGroupChatWindow::SendGroupTextPart(const CString& text)
         // content.at.all 就必须跟着置上，否则对端按标志位判"是否@到我"时会漏。
         CIUSocket::GetInstance().SendGroupTextMessageWithMentions(
             m_groupId, clientMsgId, utf8, ats,
-            balloonchatwnd::HasMentionAll(ats), m_currentFont, m_pendingQuote);
+            balloonchatwnd::HasMentionAll(ats), m_currentFont, quote);
     }
 
     // 引用是"一次性"的：这一条带出去之后就该清掉并收起引用条，
-    // 否则后面每条消息都会带同一个引用。
-    CancelPendingReply();
+    // 否则后面每条消息都会带同一个引用。没带引用时引用条保持原样
+    if (withQuote)
+    {
+        CancelPendingReply();
+    }
     LOG_INFO("群聊窗发送一段文字: group=%lld, clientmsgid=%s.",
              (long long)m_groupId, clientMsgId.c_str());
 
-    // 通知主面板把该群会话冒泡到顶部、刷新预览（自己发出，不计未读）。
-    if (m_hostPanel != NULL && ::IsWindow(m_hostPanel))
+    // 登记待冒泡：发送回执成功后才通知主面板把该会话冒泡到顶部、刷新预览，被服务端拒绝的消息
+    // 不冒泡，预览也就不会出现被拦下的内容（docs/敏感词方案.md 8.5）。
     {
-        ConvSendBumpData* pBump = new ConvSendBumpData();
-        pBump->ctype   = 2;                 // 群聊
-        pBump->cid     = (long long)m_groupId;
-        pBump->msgType = kMsgTypeText;
+        ConvSendBumpData bump;
+        bump.ctype   = 2;                 // 群聊
+        bump.cid     = (long long)m_groupId;
+        bump.msgType = kMsgTypeText;
         // 会话列表摘要：内联表情标记替换成 [表情]、转义斜杠还原，不暴露 /f["id"]。
-        pBump->digest  = CStringToUtf8(balloonchat::BodyToDigest(text));
-        ::PostMessage(m_hostPanel, FMG_MSG_CONV_SEND_BUMP, 0, (LPARAM)pBump);
+        bump.digest  = CStringToUtf8(balloonchat::BodyToDigest(text));
+        m_sendBumps.Add(clientMsgId, bump);
     }
+}
+
+bool CBalloonGroupChatWindow::SendMarkdownDocument(const std::string& sourceUtf8)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || m_groupId == 0 || sourceUtf8.empty())
+    {
+        return false;
+    }
+    balloonchatwnd::ChatMessageList* list =
+        dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (list == NULL)
+    {
+        return false;
+    }
+    //源文本按聊天正文的口径转义（字面的 /f[" 写成 //f["），接收方用 MarkdownSourceFromBody 还原
+    const std::string bodyUtf8 = balloonmd::MarkdownBodyFromSourceUtf8(sourceUtf8);
+    const std::string clientMsgId = GenClientMsgId();
+    //乐观气泡：Markdown 消息显示为卡片；不带引用与 @，字体用默认值（卡片不受聊天字体影响）
+    balloonchatwnd::ChatMessage echo = balloonchatwnd::MakeTextMessage(true, Utf8ToCString(bodyUtf8));
+    echo.isMarkdown = true;
+    echo.clientMsgId = clientMsgId;
+    FillSelfSenderAvatar(m_lpFMGClient, echo);
+    list->AppendMessage(echo);
+    CIUSocket::GetInstance().SendGroupTextMessage(m_groupId, clientMsgId, bodyUtf8, net::TextFont(), net::ReplyQuote(),
+                                                  net::text_format_markdown);
+    //窗口刚打开、首屏历史还没渲染时，上面插入的卡片会在首屏渲染时被清掉，记下来以便之后重新拉取
+    m_mdEarlySends.OnSent(clientMsgId);
+    LOG_INFO("group chat window: markdown document sent, group=%lld, clientmsgid=%s, bytes=%u, early=%u.",
+             (long long)m_groupId, clientMsgId.c_str(), (unsigned)bodyUtf8.size(),
+             (unsigned)m_mdEarlySends.PendingCount());
+
+    // 登记待冒泡：回执成功后主面板把会话冒泡到顶部，预览文字为 Markdown 摘要
+    ConvSendBumpData bump;
+    bump.ctype   = 2;
+    bump.cid     = (long long)m_groupId;
+    bump.msgType = kMsgTypeText;
+    bump.digest  = balloonchatwnd::MarkdownDigestFromUtf8Body(bodyUtf8);
+    m_sendBumps.Add(clientMsgId, bump);
+    return true;
+}
+
+void CBalloonGroupChatWindow::OpenMarkdownEditor(const std::string& sourceUtf8)
+{
+    balloonmd::MarkdownSendTarget target;
+    target.m_isGroup = true;
+    target.m_id = m_groupId;
+    target.m_name = std::wstring((LPCWSTR)m_groupName);
+    balloonmd::CMarkdownEditorManager::GetInstance().OpenEditor(sourceUtf8, (m_groupId != 0) ? &target : NULL);
+    LOG_INFO("group chat window: open markdown editor, group=%lld, bytes=%u.", (long long)m_groupId,
+             (unsigned)sourceUtf8.size());
+}
+
+void CBalloonGroupChatWindow::OpenCodeCompose(const std::wstring& initialCode, const std::string& langId,
+                                              const std::vector<codesnippet::CodeNote>& notes)
+{
+    std::wstring code = initialCode;
+    // 没有指定预填内容时，取输入框里选中的文字（RichEdit 的字符位置与 GetText 的下标一致）
+    if (code.empty())
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatInputRichEdit* input = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(content->FindCtrlById(balloonchatwnd::kGIdInputEdit))
+            : NULL;
+        if (input != NULL)
+        {
+            long selBegin = 0;
+            long selEnd = 0;
+            input->GetSel(selBegin, selEnd);
+            const CString all = input->GetText();
+            if (selEnd > selBegin && selEnd <= all.GetLength())
+            {
+                code = std::wstring((LPCWSTR)all.Mid(selBegin, selEnd - selBegin));
+            }
+        }
+    }
+    if (!m_codeComposeWnd)
+    {
+        m_codeComposeWnd.reset(new ballooncode::CCodeComposeWindow());
+    }
+    m_codeComposeWnd->Open(m_hWnd, code, langId, notes);
+}
+
+std::string CBalloonGroupChatWindow::RememberedCodeLang() const
+{
+    return (m_lpFMGClient != NULL) ? m_lpFMGClient->m_UserConfig.GetCodeSnippetLang() : std::string();
+}
+
+long long CBalloonGroupChatWindow::SelfUserIdForCode() const
+{
+    return (m_lpFMGClient != NULL) ? (long long)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+}
+
+std::map<long long, std::wstring> CBalloonGroupChatWindow::CodeNoteAuthorNames(
+    const std::vector<codesnippet::CodeNote>& notes, long long baseSenderId) const
+{
+    // 要取名字的人：本人、代码片段的发送者、各条批注的作者
+    std::vector<long long> ids;
+    ids.push_back(SelfUserIdForCode());
+    ids.push_back(baseSenderId);
+    for (size_t i = 0; i < notes.size(); ++i)
+    {
+        ids.push_back(notes[i].m_authorId);
+    }
+    std::map<long long, std::wstring> names;
+    for (size_t i = 0; i < ids.size(); ++i)
+    {
+        const long long id = ids[i];
+        if (id <= 0 || names.find(id) != names.end())
+        {
+            continue;
+        }
+        // 与引用回复同一口径：群成员表里的显示名，取不到时写「用户<id>」
+        CString name;
+        std::map<int64_t, MemberInfo>::const_iterator it = m_memberInfo.find((int64_t)id);
+        if (it != m_memberInfo.end())
+        {
+            name = it->second.m_name;
+        }
+        if (name.IsEmpty())
+        {
+            name.Format(TR(L"用户%lld"), id);
+        }
+        names[id] = std::wstring((LPCWSTR)name);
+    }
+    return names;
+}
+
+net::ReplyQuote CBalloonGroupChatWindow::CodeBaseQuote(long long baseMsgId)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    balloonchatwnd::ChatMessage src;
+    if (list == NULL || !list->GetMessageByMsgid(baseMsgId, src))
+    {
+        LOG_INFO("group chat window: base code snippet %lld is not in the list, the annotation is sent without a quote.",
+                 baseMsgId);
+        return net::ReplyQuote();
+    }
+    // 与「引用回复」同一口径：群成员表里的显示名，取不到时写「用户<id>」
+    const long long senderId = src.fromMe ? SelfUserIdForCode() : (long long)src.senderUserId;
+    CString senderName;
+    std::map<int64_t, MemberInfo>::iterator it = m_memberInfo.find((int64_t)senderId);
+    if (it != m_memberInfo.end())
+    {
+        senderName = it->second.m_name;
+    }
+    if (senderName.IsEmpty())
+    {
+        senderName.Format(TR(L"用户%lld"), senderId);
+    }
+    return balloonchatwnd::BuildQuoteFromMessage(src, senderName);
+}
+
+void CBalloonGroupChatWindow::ShowCodeViewer(const std::wstring& code, int lang, const std::vector<codesnippet::CodeNote>& notes,
+                        const std::string& key, long long msgid, long long senderId, bool fromMe, bool openNotesPane,
+                        const std::vector<codesnippet::CodeNote>& editedNotes)
+{
+    ballooncode::CodeViewerExtras extras;
+    extras.m_canAnnotate = (msgid > 0);
+    extras.m_msgid = msgid;
+    extras.m_senderId = senderId;
+    extras.m_fromMe = fromMe;
+    extras.m_selfId = SelfUserIdForCode();
+    extras.m_authorNames = CodeNoteAuthorNames(notes, senderId);
+    std::map<long long, std::wstring>::const_iterator it = extras.m_authorNames.find(senderId);
+    extras.m_senderName = (it != extras.m_authorNames.end()) ? it->second : std::wstring();
+    extras.m_editedNotes = editedNotes;
+    extras.m_openNotesPane = openNotesPane;
+    ballooncode::CCodeViewerWindow::Show(m_hWnd, code, lang, key, codesnippet::FillCodeNoteAuthors(notes, senderId),
+                                         extras);
+    LOG_INFO("group chat window: code viewer requested, key=%s, msgid=%lld, sender=%lld, notes=%u, edited=%u, open notes=%d.",
+             key.c_str(), msgid, senderId, (unsigned)notes.size(), (unsigned)editedNotes.size(), openNotesPane ? 1 : 0);
+}
+
+LRESULT CBalloonGroupChatWindow::OnCodeComposeSend(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    ballooncode::CodeComposeResult* pResult = (ballooncode::CodeComposeResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+    // 手选的语言记下来，下次打开发送代码窗口时默认选中它
+    if (pResult->m_manualLang && m_lpFMGClient != NULL)
+    {
+        m_lpFMGClient->m_UserConfig.SetCodeSnippetLang(codesnippet::CodeLanguageId(pResult->m_lang));
+    }
+    // 追加批注（docs/代码片段方案.md 第 11.3 节）：引用原消息发出；没能发出时回到批注模式并放回本次的批注
+    if (pResult->m_annotate.m_baseMsgId > 0)
+    {
+        const net::ReplyQuote quote = CodeBaseQuote(pResult->m_annotate.m_baseMsgId);
+        if (!SendCodeSnippet(pResult->m_code, pResult->m_lang, pResult->m_notes, &quote))
+        {
+            ShowCodeViewer(pResult->m_code, pResult->m_lang, pResult->m_originalNotes,
+                           std::to_string(pResult->m_annotate.m_baseMsgId), pResult->m_annotate.m_baseMsgId,
+                           pResult->m_annotate.m_baseSenderId, pResult->m_annotate.m_baseSenderId == SelfUserIdForCode(),
+                           true, pResult->m_notes);
+        }
+        delete pResult;
+        return 0;
+    }
+    // 没有发出（离线、超限）时重新打开发送代码窗口并放回这段代码与批注，用户写的内容不丢
+    if (!SendCodeSnippet(pResult->m_code, pResult->m_lang, pResult->m_notes))
+    {
+        OpenCodeCompose(pResult->m_code, codesnippet::CodeLanguageId(pResult->m_lang), pResult->m_notes);
+    }
+    delete pResult;
+    return 0;
+}
+
+bool CBalloonGroupChatWindow::SendCodeSnippet(const std::wstring& code, int lang,
+                                              const std::vector<codesnippet::CodeNote>& notes,
+                                              const net::ReplyQuote* quoteOverride)
+{
+    // 带上的引用：追加批注时是原消息，平常是输入框里待发的引用
+    const net::ReplyQuote& quote = (quoteOverride != NULL) ? *quoteOverride : m_pendingQuote;
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL || code.empty())
+    {
+        return false;
+    }
+    // 离线 / 连接未就绪时不发：消息到不了服务器，气泡却会留在窗口里（调试入口没有真实会话，不检查）
+    if (!(m_groupId == 0) && !CheckOnlineFor(balloonmain::kActionSendMessage))
+    {
+        return false;
+    }
+    const CString text(code.c_str());
+    const std::string utf8 = CStringToUtf8(text);
+    const std::string langId = codesnippet::CodeLanguageId(lang);
+    // 作者是本人的批注不写 userid（缺省即为发送者，docs/代码片段方案.md 第 11.4 节）
+    const std::vector<net::CodeNoteData> noteData = balloonchatwnd::CodeNotesToData(notes, SelfUserIdForCode());
+    // 发送前检查体积（待发的引用与批注一并计入）：超过单条消息上限的服务端会拒收，整条不发
+    if (balloonchatwnd::IsCodeTooLarge(utf8, langId, quote, noteData))
+    {
+        LOG_WARNING("group chat window: code snippet is too large to send, group=%lld, bytes=%u, notes=%u.",
+                    (long long)m_groupId, (unsigned)utf8.size(), (unsigned)notes.size());
+        ::MessageBox(m_hWnd, TR(balloonchatwnd::kSendTextTooLargeTip), g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
+        return false;
+    }
+    // 调试入口（没有真实会话）：只在本地显示
+    if (m_groupId == 0)
+    {
+        balloonchatwnd::ChatMessage echo = balloonchatwnd::MakeTextMessage(true, text);
+        echo.isCode = true;
+        echo.codeLang = lang;
+        echo.codeNotes = notes;
+        FillSelfSenderAvatar(m_lpFMGClient, echo);
+        list->AppendMessage(echo);
+        return true;
+    }
+
+    // 与 SendGroupTextPart 同一条路径：先生成 clientMsgId 再建乐观气泡，回执到达后按它回填 msgid 与时间。代码片段不带 @ 与字体
+    const std::string clientMsgId = GenClientMsgId();
+    balloonchatwnd::ChatMessage echo = balloonchatwnd::MakeTextMessage(true, text);
+    echo.isCode = true;
+    echo.codeLang = lang;
+    echo.codeNotes = notes;
+    echo.clientMsgId = clientMsgId;
+    const int64_t selfForQuote = (m_lpFMGClient != NULL)
+                               ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    balloonchatwnd::FillQuoteForRender(quote, echo, ResolveQuoteThumbPath(selfForQuote, quote, list));
+    FillSelfSenderAvatar(m_lpFMGClient, echo);   // 自己气泡显示本端真实头像（字形 / 真图）
+    list->AppendMessage(echo);
+    CIUSocket::GetInstance().SendGroupTextMessage(m_groupId, clientMsgId, utf8, net::TextFont(), quote,
+                                                  net::text_format_code, langId, noteData);
+    // 引用是一次性的：带出去之后清掉并收起引用条。追加批注时引用的是原消息，输入框里待发的引用保持不动
+    if (quoteOverride == NULL)
+    {
+        CancelPendingReply();
+    }
+    LOG_INFO("group chat window: code snippet sent, group=%lld, clientmsgid=%s, lang=%s, bytes=%u, notes=%u.",
+             (long long)m_groupId, clientMsgId.c_str(), langId.c_str(), (unsigned)utf8.size(), (unsigned)notes.size());
+
+    // 登记待冒泡：回执成功后主面板把会话冒泡到顶部，摘要写「[代码] 第一行」（追加批注时为「[批注] 说明」）
+    ConvSendBumpData bump;
+    bump.ctype   = 2;
+    bump.cid     = (long long)m_groupId;
+    bump.msgType = kMsgTypeText;
+    bump.digest  = CStringToUtf8(CString(balloonchatwnd::CodeDigestFromCode(code, notes).c_str()));
+    m_sendBumps.Add(clientMsgId, bump);
+    return true;
+}
+
+void CBalloonGroupChatWindow::ShowCodePasteBar(bool show)
+{
+    if (!show)
+    {
+        m_codePasteText.clear();
+    }
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonwjui::DuiControl* bar = (content != NULL) ? content->FindCtrlById(balloonchatwnd::kGIdCodePasteBar) : NULL;
+    if (bar == NULL || bar->IsVisible() == show)
+    {
+        return;
+    }
+    bar->SetVisible(show);
+    // SetVisible 不会重排（开发约定文档 UI 约定第 5 条）：对提示条所在的输入区块 ForceLayout，输入框才会让出或收回
+    // 这一行；只对根 ForceLayout 不够，输入区块本身的矩形没有变化，SetRect 会直接返回
+    balloonwjui::DuiControl* holder = bar->GetParent();
+    if (holder != NULL)
+    {
+        holder->ForceLayout(holder->GetRect());
+    }
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
+LRESULT CBalloonGroupChatWindow::OnCodePasteNotify(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatInputRichEdit* input = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(content->FindCtrlById(balloonchatwnd::kGIdInputEdit))
+        : NULL;
+    if (input == NULL)
+    {
+        return 0;
+    }
+    const std::wstring text((LPCWSTR)input->GetText());
+    // 刚往空输入框里粘贴了文字：像代码时显示提示条，并记下此刻的文字。聊天输入框已没有 Markdown 模式
+    //（Markdown 改由独立编辑器发送，docs/Markdown消息方案.md 第 11.2 节），故第二个参数恒为 false
+    if (wParam != 0)
+    {
+        if (balloonchatwnd::ShouldOfferCodePaste(true, false, text))
+        {
+            ShowCodePasteBar(true);
+            m_codePasteText = text;
+            LOG_INFO("group chat window: pasted text looks like code, offer code snippet, group=%lld, chars=%u.",
+                     (long long)m_groupId, (unsigned)text.size());
+        }
+        return 0;
+    }
+    // 内容变了：提示条显示之后用户继续输入、删改或发送了，提示条随即收起。粘贴本身引起的变化通知排在
+    // 粘贴通知之前处理，那时提示条还没有显示，不受影响
+    if (!m_codePasteText.empty() && text != m_codePasteText)
+    {
+        ShowCodePasteBar(false);
+    }
+    return 0;
 }
 
 void CBalloonGroupChatWindow::SendGroupImagePart(int imageIndex)
@@ -2786,7 +4229,9 @@ void CBalloonGroupChatWindow::PickAndSendImage()
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = m_hWnd;
-    ofn.lpstrFilter = L"图片文件\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0所有文件\0*.*\0";
+    //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+    const std::wstring fileFilter = filedlg::MakeFilter(TR(L"图片文件"), filedlg::kImagePatterns, TR(L"所有文件"), L"*.*");
+    ofn.lpstrFilter = fileFilter.c_str();
     ofn.lpstrFile   = szFile;
     ofn.nMaxFile    = MAX_PATH;
     ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
@@ -2847,30 +4292,113 @@ void CBalloonGroupChatWindow::SendImageFile(const std::wstring& path)
         2 /*群聊*/, (int64_t)m_groupId, clientMsgId, path);
     LOG_INFO("群聊窗发图: group=%lld, clientmsgid=%s.", (long long)m_groupId, clientMsgId.c_str());
 
-    // 通知主面板把该群会话冒泡到顶部、刷新预览（"[图片]"）。
-    if (m_hostPanel != NULL && ::IsWindow(m_hostPanel))
+    // 登记待冒泡：发送回执成功后才通知主面板把该会话冒泡到顶部、刷新预览，被服务端拒绝的消息
+    // 不冒泡，预览也就不会出现被拦下的内容（docs/敏感词方案.md 8.5）。
     {
-        ConvSendBumpData* pBump = new ConvSendBumpData();
-        pBump->ctype   = 2;                 // 群聊
-        pBump->cid     = (long long)m_groupId;
-        pBump->msgType = kMsgTypeImage;
-        pBump->digest  = net::MessageProtocolClient::digestForMsgType(kMsgTypeImage, std::string());
-        ::PostMessage(m_hostPanel, FMG_MSG_CONV_SEND_BUMP, 0, (LPARAM)pBump);
+        ConvSendBumpData bump;
+        bump.ctype   = 2;                 // 群聊
+        bump.cid     = (long long)m_groupId;
+        bump.msgType = kMsgTypeImage;
+        bump.digest  = net::MessageProtocolClient::digestForMsgType(kMsgTypeImage, std::string());
+        m_sendBumps.Add(clientMsgId, bump);
     }
 }
 
-void CBalloonGroupChatWindow::DoScreenshot()
+void CBalloonGroupChatWindow::DoScreenshot(bool fullScreen)
 {
     // 调试入口（无群绑定）截图无处可发，直接不弹。
     if (m_groupId == 0)
     {
         return;
     }
+    // 截图模块没有加载成功时截图按钮已隐藏，这里拦住截图快捷键转来的请求
+    if (!balloonscreenshot::IsScreenshotAvailable())
+    {
+        LOG_INFO("%s: screenshot ignored, the screenshot module is unavailable.", "GroupChatWindow");
+        return;
+    }
+    RefreshScreenshotTip();
     // 模态发起截图：复制 / 保存由浮层内部完成；「发送」立即发图、「发送到对话框」
-    // 把截图内联插入输入框（经下面两个回调）。
-    balloonscreenshot::CScreenCaptureOverlay overlay;
-    overlay.Run(m_hWnd, &CBalloonGroupChatWindow::OnScreenshotSend,
-                &CBalloonGroupChatWindow::OnScreenshotStage, this);
+    // 把截图内联插入输入框（经下面两个回调）。「截图时隐藏当前窗口」开启时本窗口不出现在截图里。
+    bool hideSelf = balloonscreenshot::LoadGlobalScreenshotPrefs().m_hideWindow;
+    balloonscreenshot::ScreenshotOptions opts;
+    opts.m_excludeHwnd = hideSelf ? m_hWnd : NULL;
+    opts.m_startFullScreen = fullScreen;
+    opts.m_sendFn = &CBalloonGroupChatWindow::OnScreenshotSend;
+    opts.m_stageFn = &CBalloonGroupChatWindow::OnScreenshotStage;
+    opts.m_ctx = this;
+    LOG_INFO("GroupChatWindow::DoScreenshot: group=%lld, full screen=%d, hide self=%d.",
+             (long long)m_groupId, fullScreen ? 1 : 0, hideSelf ? 1 : 0);
+    // 截图界面在 FlamingoScreenshot.dll 里（2026-10-07，docs/截图独立模块方案.md），经截图宿主模态运行
+    balloonscreenshot::RunScreenshot(m_hWnd, opts);
+}
+
+void CBalloonGroupChatWindow::RequestScreenshot(bool fullScreen)
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+    ::PostMessage(m_hWnd, kDoScreenshotMsg,
+                  (WPARAM)(fullScreen ? balloonchatwnd::kShotReqFullScreen : balloonchatwnd::kShotReqCapture), 0);
+}
+
+void CBalloonGroupChatWindow::OpenScreenshotMenu()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || m_lpFMGClient == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiControl* cut = content->FindCtrlById(balloonchatwnd::kGIdTbScreenshot);
+    balloonwjui::DuiControl* caret = content->FindCtrlById(balloonchatwnd::kGIdTbScreenshotMenu);
+    if (cut == NULL || caret == NULL)
+    {
+        return;
+    }
+    RefreshScreenshotTip();
+
+    // 锚点：剪刀与 ▾ 合起来的矩形（客户区坐标转屏幕坐标），菜单左边与剪刀左边对齐
+    RECT rcCut = cut->GetRect();
+    RECT rcCaret = caret->GetRect();
+    POINT tl = { rcCut.left, rcCut.top };
+    POINT br = { rcCaret.right, rcCaret.bottom };
+    ::ClientToScreen(m_hWnd, &tl);
+    ::ClientToScreen(m_hWnd, &br);
+    RECT anchor = { tl.x, tl.y, br.x, br.y };
+
+    //截图快捷键与「截图时隐藏当前窗口」2026-10-07 起存在全局配置里（docs/截图独立模块方案.md 3.4 节）
+    balloonscreenshot::ScreenshotPrefs prefs = balloonscreenshot::LoadGlobalScreenshotPrefs();
+    balloonchatwnd::ScreenshotMenuChoice choice = balloonchatwnd::TrackScreenshotMenu(
+        m_hWnd, anchor, prefs.m_hotkey, prefs.m_hideWindow);
+    switch (choice)
+    {
+    //「截图」：与点剪刀相同
+    case balloonchatwnd::kShotMenuCapture:
+        DoScreenshot(false);
+        break;
+    //「截取全屏」
+    case balloonchatwnd::kShotMenuFullScreen:
+        DoScreenshot(true);
+        break;
+    //「截图时隐藏当前窗口」：取反并立即存盘（与系统设置「聊天」页的开关是同一个配置）
+    case balloonchatwnd::kShotMenuToggleHide:
+        prefs.m_hideWindow = !prefs.m_hideWindow;
+        balloonscreenshot::SaveGlobalScreenshotPrefs(prefs);
+        LOG_INFO("GroupChatWindow: screenshot hide-window option set to %d.", prefs.m_hideWindow ? 1 : 0);
+        break;
+    //没有选
+    case balloonchatwnd::kShotMenuNone:
+    default:
+        break;
+    }
+}
+
+void CBalloonGroupChatWindow::RefreshScreenshotTip()
+{
+    DWORD hotkey = balloonscreenshot::LoadGlobalScreenshotPrefs().m_hotkey;
+    CString tip = balloonscreenshot::ScreenshotCommandText(hotkey);
+    RegisterTip(GetClientContent(), balloonchatwnd::kGIdTbScreenshot, tip);
 }
 
 void CBalloonGroupChatWindow::OnScreenshotSend(void* ctx, const wchar_t* pngPath)
@@ -2987,6 +4515,8 @@ void CBalloonGroupChatWindow::OnImageSendResult(bool ok, const std::string& clie
     else
     {
         list->MarkImageUploadFailed(clientMsgId);
+        //图片没能发出：不冒泡
+        m_sendBumps.Drop(clientMsgId);
     }
 }
 
@@ -3013,7 +4543,8 @@ void CBalloonGroupChatWindow::OnFileSendProgress(const std::string& clientMsgId,
     list->UpdateFileUploadProgress(clientMsgId, percent);
 }
 
-void CBalloonGroupChatWindow::OnFileSendResult(bool ok, bool cancelled, const std::string& clientMsgId)
+void CBalloonGroupChatWindow::OnFileSendResult(bool ok, bool cancelled, const std::string& clientMsgId,
+                                               int errcode)
 {
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
@@ -3039,6 +4570,9 @@ void CBalloonGroupChatWindow::OnFileSendResult(bool ok, bool cancelled, const st
     else
     {
         list->MarkFileUploadFailed(clientMsgId);
+        //气泡下方写原因（如文件名包含敏感词）；文件没能发出，不冒泡
+        list->MarkSendFailed(clientMsgId, CString(balloonchatwnd::FileSendFailureText(errcode, IsNotifyOnlyForMe()).c_str()));
+        m_sendBumps.Drop(clientMsgId);
     }
 }
 
@@ -3077,6 +4611,59 @@ void CBalloonGroupChatWindow::OnFileDownloaded(long long msgid, const std::wstri
     if (list != NULL)
     {
         list->SetFileDownloadedByMsgid(msgid, CString(localPath.c_str()));
+    }
+}
+
+void CBalloonGroupChatWindow::OnVoiceSendResult(bool ok, const std::string& clientMsgId, int errcode)
+{
+    //上传成功：等 1503 的发送回执（FMG_MSG_V2_SEND_CHATMSG_ACK）回填 msgid、去掉发送中的圆环，这里不改气泡
+    if (ok)
+    {
+        return;
+    }
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list != NULL)
+    {
+        //气泡下方写「语音发送失败（错误码 N）」；气泡左侧改画红色感叹号，点它可重发
+        list->MarkSendFailed(clientMsgId, CString(balloonchatwnd::VoiceSendFailureText(errcode).c_str()));
+    }
+    //语音没能发出，不冒泡
+    m_sendBumps.Drop(clientMsgId);
+}
+
+void CBalloonGroupChatWindow::OnVoicePlayedElsewhere(long long msgid)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessageList* list =
+        dynamic_cast<balloonchatwnd::ChatMessageList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (list != NULL && list->MarkVoicePlayedByMsgid(msgid))
+    {
+        LOG_INFO("group chat window: voice played elsewhere, red dot cleared, group=%lld, msgid=%lld.",
+                 (long long)m_groupId, msgid);
+    }
+}
+
+void CBalloonGroupChatWindow::OnVoiceDownloadResult(const std::string& md5, bool ok, const std::wstring& localPath)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessageList* list =
+        dynamic_cast<balloonchatwnd::ChatMessageList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (list != NULL)
+    {
+        list->ApplyVoiceDownloadResult(md5, ok, CString(localPath.c_str()));
     }
 }
 
@@ -3133,7 +4720,7 @@ void CBalloonGroupChatWindow::RenderIncomingGroupImage(balloonchatwnd::ChatMessa
     CString  imagePath;   // 发送人真图头像本地路径（命中缓存才非空）
     if (fromMe)
     {
-        glyph = selfName.IsEmpty() ? CString(_T("我")) : selfName.Left(1);
+        glyph = selfName.IsEmpty() ? CString(TR(L"我")) : selfName.Left(1);
         color = AvatarColorForUser(selfId);
     }
     else
@@ -3344,6 +4931,8 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
     // 本人的气泡。两者都按列表里有没有同一条（clientmsgid 或 msgid）区分。
     const bool fromMe = (selfId != 0 && (UINT)notify.m_from == selfId);
 
+    // 桌面字幕由主面板持有，收到的群消息由主面板直接交给字幕（群聊窗关着也要显示），这里不再处理
+
     // 图片消息：插"下载中"气泡并触发原图下载；下载完成后经
     // FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT 回投、按 msgid 回填。
     if (notify.m_msgtype == kMsgTypeImage)
@@ -3394,6 +4983,28 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
         return;
     }
 
+    // 语音消息：画成语音气泡，本机没有这段语音就在后台下载。本人的回显（发送时已有本地气泡）与同一条的重复推送
+    // 都按列表里有没有同一条（clientmsgid 或 msgid）去重
+    if (notify.m_msgtype == kMsgTypeVoice)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::VoicePlayedQuery played;
+        played.m_ctype = conversation_group;
+        played.m_cid = m_groupId;
+        played.m_msgids.push_back(notify.m_msgid);
+        balloonchatwnd::QueryVoicePlayed(m_hostPanel, played);
+        RenderIncomingGroupVoice(list, fromMe, notify, played);
+        return;
+    }
+
     // 合并转发的聊天记录：画成卡片。本人的回显照样按列表里有没有同一条去重
     if (notify.m_msgtype == kMsgTypeMerged)
     {
@@ -3414,6 +5025,129 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
         return;
     }
 
+    // 文件共享卡片：画成卡片，按列表里有没有同一条去重
+    if (notify.m_msgtype == kMsgTypeFileShare)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::ChatMessage card = MakeGroupShareMessage(notify, fromMe, list);
+        list->AppendMessage(card);
+        LOG_INFO("group chat window: share card shown, group=%lld, from=%lld, msgid=%lld, shareid=%lld.",
+                 (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid, card.shareId);
+        //新的共享卡片：重新拉取本群的共享，新发起的共享由此计入头部按钮的角标
+        balloonfileshare::CFileShareHost::GetInstance().WatchConversationShares(conversation_group, m_groupId);
+        return;
+    }
+
+    // 群通话卡片：画成卡片（复用屏幕共享卡片的版式），按列表里有没有同一条去重（服务端把卡片推给包括发起人在内的全体成员）
+    if (notify.m_msgtype == kMsgTypeRtc)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::ChatMessage card = MakeGroupCallCardMessage(notify, fromMe, list);
+        list->AppendMessage(card);
+        LOG_INFO("group chat window: group call card shown, group=%lld, from=%lld, msgid=%lld, room=%s, state=%d.",
+                 (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid,
+                 card.screenShareRoomId.c_str(), card.screenShareState);
+        return;
+    }
+
+    // 屏幕共享卡片：画成卡片，按列表里有没有同一条去重（服务端把卡片推给包括发起人在内的全体成员）
+    if (notify.m_msgtype == kMsgTypeScreenShare)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::ChatMessage card = MakeGroupScreenShareMessage(notify, fromMe, list);
+        list->AppendMessage(card);
+        LOG_INFO("group chat window: screen share card shown, group=%lld, from=%lld, msgid=%lld, room=%s, state=%d.",
+                 (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid,
+                 card.screenShareRoomId.c_str(), card.screenShareState);
+        return;
+    }
+
+    // 群公告卡片、群备忘卡片：画成卡片（复用屏幕共享卡片的版式），按列表里有没有同一条去重。服务端把卡片推给
+    // 包括操作人本人在内的全部可见者，本人的各台设备上同样出现这张卡片
+    if (notify.m_msgtype == kMsgTypeAnnouncement || notify.m_msgtype == kMsgTypeMemo)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::ChatMessage card = MakeGroupInfoCardMessage(notify, fromMe, list);
+        list->AppendMessage(card);
+        LOG_INFO("group chat window: info card shown, group=%lld, from=%lld, msgid=%lld, msgtype=%d, ref=%lld, openable=%d.",
+                 (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid, notify.m_msgtype,
+                 card.infoCardRefId, card.screenShareButtonEnabled ? 1 : 0);
+        return;
+    }
+
+    // 云端录像卡片：画成卡片（复用屏幕共享卡片的版式），按列表里有没有同一条去重。服务端把卡片推给包括开启者本人在内的
+    // 全体群成员，本人的各台设备上同样出现这张卡片
+    if (notify.m_msgtype == kMsgTypeCloudRecord)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::ChatMessage card = MakeGroupCloudRecordMessage(notify, fromMe, list);
+        list->AppendMessage(card);
+        LOG_INFO("group chat window: cloud record card shown, group=%lld, from=%lld, msgid=%lld, record=%lld.",
+                 (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid, card.infoCardRefId);
+        return;
+    }
+
+    // 群接龙卡片：画成卡片。服务端把卡片推给包括发起人在内的全体成员，本人的回显同样按列表里
+    // 有没有同一条去重（发起时没有乐观气泡，回显就是发起人看到的那一张）
+    if (notify.m_msgtype == kMsgTypeRelay)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        balloonchatwnd::ChatMessage card = MakeGroupRelayMessage(notify, fromMe, list);
+        list->AppendMessage(card);
+        LOG_INFO("group chat window: relay card shown, group=%lld, from=%lld, msgid=%lld, items=%d, state=%d.",
+                 (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid,
+                 card.relayCount, card.relayState);
+        return;
+    }
+
     // 服务端生成的系统提示：画成居中提示行，没有发送人气泡。按 msgid 去重
     if (notify.m_msgtype == kMsgTypeSystem)
     {
@@ -3426,7 +5160,7 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
         {
             return;
         }
-        list->AppendMessage(MakeGroupSystemTip(notify));
+        list->AppendMessage(balloonchatwnd::MakeSystemTipRow(notify));
         LOG_INFO("group chat window: system tip shown, group=%lld, msgid=%lld.",
                  (long long)m_groupId, (long long)notify.m_msgid);
         return;
@@ -3467,8 +5201,10 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
         return;
     }
 
-    // 发送人显示信息：取自群成员映射（card→nickname），查不到回退"用户<id>"。
-    const balloonchatwnd::GroupSenderRender sender = ResolveSender(notify.m_from);
+    // 发送人显示信息：取自群成员映射（card→nickname），查不到回退"用户<id>"；
+    // 机器人消息在本群机器人列表里也查不到时按消息自带的机器人名字显示。
+    const balloonchatwnd::GroupSenderRender sender =
+        ResolveSenderWithBotMark(notify.m_from, notify.m_botId, notify.m_botName);
     const CString  senderName      = sender.m_name;
     const CString  senderGlyph     = sender.m_glyph;
     const COLORREF senderColor     = sender.m_color;
@@ -3479,6 +5215,8 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
     balloonchatwnd::ChatMessage msg =
         balloonchatwnd::MakeTextMessage(false, Utf8ToCString(notify.m_text));
     msg.font                  = notify.m_font;
+    msg.isMarkdown            = (notify.m_textFormat == net::text_format_markdown);
+    balloonchatwnd::ApplyCodeFields(msg, notify.m_textFormat, notify.m_codeLang, notify.m_codeNotes, notify.m_from);
     //撤回判定所需：服务器 msgid 与消息时间，按报文原样带上。
     msg.msgid                 = notify.m_msgid;
     msg.timestampMs           = notify.m_timestamp;
@@ -3487,6 +5225,7 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
     msg.senderAvatarText      = senderGlyph;
     msg.senderAvatarColor     = senderColor;
     msg.senderAvatarImagePath = senderImagePath;
+    msg.senderIsBot           = sender.m_isBot;
     // @提醒：把协议的 UTF-8 字节偏移换算成渲染用的 UTF-16 字符下标，并按本人 uid
     // 标好 isMe（决定气泡里用橙色还是蓝色）。本条不含 @ 时为空，气泡走原快路径。
     // 与 OnHistoryMessages 走同一个 BuildRenderSpansForMessage，两条路不会再跑偏。
@@ -3501,115 +5240,101 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
              (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid);
 }
 
-void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResult& members)
+void CBalloonGroupChatWindow::RebuildMemberRows()
 {
-    int64_t selfId = (m_lpFMGClient != NULL)
-                     ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
-
-    // 建"发送人 userid → 昵称/头像"映射（群名片优先→账号昵称→"用户<id>"）。
-    m_memberInfo.clear();
-    // 非成员的通讯录查询结果随成员表一起作废：有人可能重新入群，通讯录也可能已更新
-    m_nonMemberSenders.clear();
-    for (size_t i = 0; i < members.m_members.size(); ++i)
-    {
-        const net::GroupMemberItem& m = members.m_members[i];
-        CString name = Utf8ToCString(m.m_card);
-        if (name.IsEmpty())
-        {
-            name = Utf8ToCString(m.m_nickname);
-        }
-        if (name.IsEmpty())
-        {
-            name.Format(_T("用户%lld"), (long long)m.m_userid);
-        }
-        // 按成员 (facetype, customface) 解析头像：字形 / 自动头像给字形 + 底色，真图头像
-        // 缓存命中给真图路径、未命中入队下载（完成后 OnAvatarDownloaded 回刷）。
-        balloonchatwnd::AvatarRender ar = balloonchatwnd::ResolveAvatarRender(
-            m.m_userid, m.m_facetype, m.m_customface, name, selfId);
-        MemberInfo info;
-        info.m_name       = name;
-        info.m_glyph      = ar.m_glyph;
-        info.m_color      = ar.m_color;
-        info.m_facetype   = m.m_facetype;
-        info.m_customface = m.m_customface;
-        info.m_imagePath  = ar.m_imagePath;
-        //气泡里 @某人 的右键菜单要按角色决定管理项，故一并记下（见 MemberRoleThunk）
-        info.m_role       = m.m_role;
-        m_memberInfo[m.m_userid] = info;
-    }
-
-    // 填右侧成员侧栏：清空旧成员行后按真实成员逐个挂（群主用 role==2 标徽标）。
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
     {
         return;
     }
     balloonchatwnd::GroupMemberList* list =
-        dynamic_cast<balloonchatwnd::GroupMemberList*>(
-            content->FindCtrlById(balloonchatwnd::kGIdMemberList));
-    if (list != NULL)
+        dynamic_cast<balloonchatwnd::GroupMemberList*>(content->FindCtrlById(balloonchatwnd::kGIdMemberList));
+    if (list == NULL)
     {
-        // 先清空既有成员行（真实群起始为空；防御性支持成员刷新重填）。
-        while (!list->Children().empty())
-        {
-            list->RemoveChild(list->Children()[0].get());
-        }
-        // 显示顺序：群主 → 管理员 → 普通成员，同一角色内保持服务端返回的原顺序。
-        // 服务端不保证按角色排，客户端自己排；抽成纯函数是为了能单测（见 GroupMemberOrder）。
-        std::vector<int> roles;
-        roles.reserve(members.m_members.size());
-        for (size_t i = 0; i < members.m_members.size(); ++i)
-        {
-            roles.push_back(members.m_members[i].m_role);
-        }
-        const std::vector<std::size_t> order =
-            balloonchatwnd::OrderMemberIndicesByRole(roles);
-
-        for (size_t k = 0; k < order.size(); ++k)
-        {
-            const net::GroupMemberItem& m = members.m_members[order[k]];
-            std::map<int64_t, MemberInfo>::iterator mi = m_memberInfo.find(m.m_userid);
-            CString name = (mi != m_memberInfo.end()) ? mi->second.m_name : CString();
-            CString glyph = (mi != m_memberInfo.end() && !mi->second.m_glyph.IsEmpty())
-                                ? mi->second.m_glyph : name.Left(1);
-            COLORREF color = (mi != m_memberInfo.end()) ? mi->second.m_color
-                                                        : AvatarColorForUser(m.m_userid);
-            CString imagePath = (mi != m_memberInfo.end()) ? mi->second.m_imagePath : CString();
-            std::unique_ptr<balloonchatwnd::GroupMemberItem> item(
-                new balloonchatwnd::GroupMemberItem());
-            item->SetUserId(m.m_userid);   // 真图下载完成后按它定位本行刷新
-            // 本人那一行：右键菜单只留「查看资料」，与气泡里 @ 自己的处理一致。
-            item->SetIsSelf(selfId != 0 && m.m_userid == selfId);
-            // m_role 就是网络侧角色取值，与 grouprole::NetGroupRole 同一套，直接透传。
-            item->SetMember(name, glyph, color, m.m_role, imagePath);
-            // 本人角色决定这一行的右键菜单里有没有「设为 / 撤销管理员」（仅群主可见）。
-            item->SetMyNetRole(m_myRole);
-            // 头像角上的在线状态徽标：取主面板此前推送过来的状态，查不到时不画
-            std::map<int64_t, int>::const_iterator pit = m_memberPresence.find(m.m_userid);
-            item->SetPresence(pit != m_memberPresence.end() ? pit->second
-                                                            : balloonchatwnd::kMemberPresenceUnknown);
-            // 与消息区共用同一个钩子：右键菜单里「特别关注」那一项的文案要现问一次
-            // 主面板的关注名单（别处改过之后，这里不会因此重建，故不能存状态位）。
-            item->SetStarredQuery(&CBalloonGroupChatWindow::StarredThunk, this);
-            list->AddChild(std::unique_ptr<balloonwjui::DuiControl>(item.release()));
-        }
-        // 侧栏搜索框里还有关键词时，新挂上的行要按它重新过滤，否则一收到成员变动推送，
-        // 搜索结果就会被整份成员列表替换。没有关键词时新行本来就全部可见
-        if (!list->FilterKeyword().IsEmpty())
-        {
-            list->ReapplyFilter();
-        }
-        // 重新布局成员侧栏并重绘。
-        RECT rc = list->GetRect();
-        if (rc.right > rc.left && rc.bottom > rc.top)
-        {
-            list->ForceLayout(rc);
-        }
-        if (IsWindow())
-        {
-            ::InvalidateRect(m_hWnd, NULL, FALSE);
-        }
+        return;
     }
+    // 建成员行的上下文：本人、本人角色、本端连接态、各成员的在线状态，以及右键菜单前问主面板关注名单的钩子
+    // （与消息区共用同一对钩子：别处改过关注名单之后这里不会因此重建，故不能存状态位）
+    balloonchatwnd::GroupMemberRowContext ctx;
+    ctx.m_selfId = (m_lpFMGClient != NULL) ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    ctx.m_myRole = m_myRole;
+    ctx.m_connUiState = m_connUiState;
+    ctx.m_presence = &m_memberPresence;
+    ctx.m_starredFn = &CBalloonGroupChatWindow::StarredThunk;
+    ctx.m_starredUser = this;
+    ctx.m_followFn = &CBalloonGroupChatWindow::GroupFollowThunk;
+    ctx.m_followUser = this;
+    // 群聊窗有输入框，右键菜单里保留「@TA」
+    ctx.m_allowMention = true;
+    // 平铺：群主 → 管理员 → 普通成员；按部门：部门标题行与成员行按部门树的顺序挂上（docs/群成员部门树方案.md）。
+    // 挂完之后按搜索框里的关键词重新过滤、重新排版
+    const size_t rows = balloonchatwnd::FillGroupMemberList(list, m_lastMembers, m_memberInfo, m_memberTreeView,
+                                                            m_orgDepartments, ctx);
+    if (m_memberTreeView)
+    {
+        LOG_INFO("group chat window: member dept tree rebuilt, group=%lld, members=%u, rows=%u, depts=%u.",
+                 (long long)m_groupId, (unsigned)m_lastMembers.size(), (unsigned)rows,
+                 (unsigned)m_orgDepartments.size());
+    }
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
+void CBalloonGroupChatWindow::SetOrgDepartments(const std::vector<net::DepartmentItem>& departments)
+{
+    m_orgDepartments = departments;
+    // 部门树视图且成员已到齐：按新的部门数组重建；平铺视图不受部门影响
+    if (m_memberTreeView && !m_lastMembers.empty())
+    {
+        RebuildMemberRows();
+    }
+}
+
+void CBalloonGroupChatWindow::ToggleMemberView()
+{
+    m_memberTreeView = !m_memberTreeView;
+    if (m_lpFMGClient != NULL)
+    {
+        m_lpFMGClient->m_UserConfig.SetGroupMemberTreeView(m_memberTreeView);
+        m_lpFMGClient->SaveUserConfig();
+    }
+    LOG_INFO("group chat window: member view toggled, group=%lld, tree=%d.", (long long)m_groupId,
+             m_memberTreeView ? 1 : 0);
+    balloonchatwnd::ApplyMemberViewToggle(GetClientContent(), m_memberTreeView);
+    RebuildMemberRows();
+}
+
+void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResult& members)
+{
+    int64_t selfId = (m_lpFMGClient != NULL)
+                     ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+
+    // 建"发送人 userid → 昵称/头像"映射（群名片优先→账号昵称→"用户<id>"）。头像按成员 (facetype, customface)
+    // 解析：字形 / 自动头像给字形 + 底色，真图头像缓存命中给真图路径、未命中入队下载（完成后 OnAvatarDownloaded
+    // 回刷）。角色一并记下，气泡里 @某人 的右键菜单要按角色决定管理项（见 MemberRoleThunk）。
+    // 算法与帖子群的群成员面板共用（GroupMemberPanelKit）
+    m_memberInfo = balloonchatwnd::BuildGroupMemberRowInfo(members.m_members, selfId);
+    // 非成员的通讯录查询结果随成员表一起作废：有人可能重新入群，通讯录也可能已更新
+    m_nonMemberSenders.clear();
+    //群通话窗请求过「邀请成员」、当时成员表还没加载：现在补开选人框
+    if (m_callInvitePending && !m_memberInfo.empty())
+    {
+        m_callInvitePending = false;
+        const std::vector<int64_t> exclude = m_callInviteExclude;
+        m_callInviteExclude.clear();
+        OpenGroupCallInvitePicker(exclude);
+    }
+
+    // 填右侧成员侧栏：记下这份成员，按当前视图（平铺 / 按部门）重建成员行
+    m_lastMembers = members.m_members;
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    RebuildMemberRows();
 
     // 成员到齐 → 边栏「成员」Tab 换成真实人数（"成员 12"）。群成员变动推送会让主面板
     // 重新拉一次成员（见 CBalloonMainPanel::OnGroupMemberChanged），故人数能一直是活的。
@@ -3625,10 +5350,12 @@ void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResul
     int refreshed = 0;
     if (msgList != NULL)
     {
-        //先成员表、再通讯录：已退群的人以前发的消息也能换成真名（BUG-49）
+        //先成员表、再通讯录：已退群的人以前发的消息也能换成真名
         refreshed = balloonchatwnd::ApplyGroupSendersToList(
             *msgList, &CBalloonGroupChatWindow::LookupSenderChain, this);
     }
+    //接龙卡片里的名字同理：先于成员表渲染的卡片上写的是「用户<id>」，按成员表重填一遍
+    RefreshAllRelayCards();
 
     //sinceOpen：从打开窗口到成员填充完成的累计毫秒数；refreshed：先于成员渲染出来、
     //这次被换成真实发送者信息的气泡数。
@@ -3640,6 +5367,36 @@ void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResul
              refreshed, m_openStopWatch.ElapsedMs());
 }
 
+void CBalloonGroupChatWindow::SetSubtitleHighlight(bool active)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatIconButton* btn =
+        dynamic_cast<balloonchatwnd::ChatIconButton*>(content->FindCtrlById(balloonchatwnd::kGIdHdrSubtitle));
+    if (btn != NULL)
+    {
+        btn->SetActive(active);
+    }
+}
+
+void CBalloonGroupChatWindow::ToggleSubtitleMode()
+{
+    //字幕由主面板持有（不随本窗口关闭）：同步请主面板切换，按结果高亮按钮（主面板的状态回调也会再设一次）
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+    {
+        LOG_INFO("group chat window: subtitle toggle ignored, no host panel, group=%lld.", (long long)m_groupId);
+        return;
+    }
+    int64_t cid = m_groupId;
+    const bool active = ::SendMessage(m_hostPanel, FMG_MSG_TOGGLE_SUBTITLE, (WPARAM)conversation_group,
+                                      reinterpret_cast<LPARAM>(&cid)) != 0;
+    SetSubtitleHighlight(active);
+    LOG_INFO("group chat window: subtitle mode %s, group=%lld.", active ? "on" : "off", (long long)m_groupId);
+}
+
 balloonchatwnd::GroupSenderRender CBalloonGroupChatWindow::ResolveSender(int64_t userId) const
 {
     balloonchatwnd::GroupSenderRender found;
@@ -3648,9 +5405,28 @@ balloonchatwnd::GroupSenderRender CBalloonGroupChatWindow::ResolveSender(int64_t
                                               AvatarColorForUser(userId));
 }
 
+balloonchatwnd::GroupSenderRender CBalloonGroupChatWindow::ResolveSenderWithBotMark(int64_t userId, int64_t botId,
+                                                                                    const std::string& botNameUtf8) const
+{
+    balloonchatwnd::GroupSenderRender found;
+    bool hit = LookupSenderChain(const_cast<CBalloonGroupChatWindow*>(this), userId, found);
+    //三处都查不到、消息又带机器人标记：机器人已删除或不再用于本群，按标记里的名字显示
+    if (!hit)
+    {
+        hit = balloonchatwnd::SenderFromBotMark(botId, Utf8ToCString(botNameUtf8), found);
+    }
+    return balloonchatwnd::ResolveGroupSender(userId, hit ? &found : NULL,
+                                              AvatarColorForUser(userId));
+}
+
 bool CBalloonGroupChatWindow::LookupSenderChain(void* ctx, int64_t userId,
                                                 balloonchatwnd::GroupSenderRender& out)
 {
+    //机器人账号不在成员表里，先查本群机器人列表，免得落到通讯录查询、被缓存成「查不到」
+    if (LookupBotSender(ctx, userId, out))
+    {
+        return true;
+    }
     return balloonchatwnd::LookupGroupSenderChain(userId,
                                                   &CBalloonGroupChatWindow::LookupMemberSender, ctx,
                                                   &CBalloonGroupChatWindow::LookupContactSender, ctx,
@@ -3697,7 +5473,7 @@ bool CBalloonGroupChatWindow::LookupContactSender(void* ctx, int64_t userId,
         CString name = Utf8ToCString(query.m_nickname);
         if (name.IsEmpty())
         {
-            name.Format(_T("用户%lld"), (long long)userId);
+            name.Format(TR(L"用户%lld"), (long long)userId);
         }
         //头像解析与成员同一套：字形头像显示选定字形，真图命中缓存给路径、未命中入队下载
         //（下载完成后 OnAvatarDownloaded 按 m_customface 回填）
@@ -3715,6 +5491,125 @@ bool CBalloonGroupChatWindow::LookupContactSender(void* ctx, int64_t userId,
     LOG_INFO("group chat window: sender %lld not in member list, contact lookup found=%d, group=%lld.",
              (long long)userId, (int)query.m_found, (long long)self->m_groupId);
     return query.m_found;
+}
+
+bool CBalloonGroupChatWindow::LookupBotSender(void* ctx, int64_t userId, balloonchatwnd::GroupSenderRender& out)
+{
+    const CBalloonGroupChatWindow* self = static_cast<const CBalloonGroupChatWindow*>(ctx);
+    if (self == NULL || userId <= 0)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < self->m_groupBots.size(); ++i)
+    {
+        const net::GroupBotInfo& b = self->m_groupBots[i];
+        if (b.m_userId != userId)
+        {
+            continue;
+        }
+        out.m_name = Utf8ToCString(b.m_name);
+        out.m_glyph = balloonchatwnd::BotAvatarText(b).c_str();
+        //头像底色 "#RRGGBB"；没有设置或格式不对时按 userid 取默认色
+        out.m_color = balloonchatwnd::BotAvatarColor(b.m_color, AvatarColorForUser(userId));
+        out.m_imagePath.Empty();
+        out.m_isBot = true;
+        return true;
+    }
+    return false;
+}
+
+void CBalloonGroupChatWindow::RequestGroupBots()
+{
+    if (m_groupId == 0 || m_lpFMGClient == NULL || !m_lpFMGClient->m_UserMgr.m_bBotFeature)
+    {
+        return;
+    }
+    CIUSocket::GetInstance().SendGetGroupBots(m_groupId);
+}
+
+void CBalloonGroupChatWindow::OnGroupBotsArrived(const net::GroupBotsResult& result)
+{
+    if (result.m_code != 0)
+    {
+        LOG_WARNING("group chat window: group bots request failed, group=%lld, code=%d.", (long long)m_groupId,
+                    result.m_code);
+        return;
+    }
+    m_groupBots = result.m_bots;
+    m_groupBotCaps = result.m_caps;
+    m_groupBotsLoaded = true;
+    //先于机器人列表渲染出来的机器人消息：名字、头像与「机器人」徽章就地刷新
+    int refreshed = 0;
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* msgList = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (msgList != NULL)
+    {
+        refreshed = balloonchatwnd::ApplyGroupSendersToList(*msgList, &CBalloonGroupChatWindow::LookupSenderChain, this);
+    }
+    RefreshBotMemberSection();
+    LOG_INFO("group chat window: group bots arrived, group=%lld, bots=%u, owner=%d, refreshed=%d.", (long long)m_groupId,
+             (unsigned)m_groupBots.size(), m_groupBotCaps.m_isOwner ? 1 : 0, refreshed);
+}
+
+void CBalloonGroupChatWindow::OnGroupBotsChanged()
+{
+    //企业关闭了机器人：清空列表并隐藏机器人区域；已显示的气泡保留原样（历史消息的名字仍可从通讯录或「用户<id>」得到）
+    if (m_lpFMGClient == NULL || !m_lpFMGClient->m_UserMgr.m_bBotFeature)
+    {
+        m_groupBots.clear();
+        m_groupBotsLoaded = false;
+        RefreshBotMemberSection();
+        return;
+    }
+    RequestGroupBots();
+}
+
+const std::vector<net::GroupBotInfo>& CBalloonGroupChatWindow::GetGroupBots() const
+{
+    return m_groupBots;
+}
+
+void CBalloonGroupChatWindow::RefreshBotMemberSection()
+{
+    //这一栏只用来查看：群里有机器人时所有人都看得到；添加与管理在群管理窗口的「群机器人」页（2026-10-08 用户确认）
+    const bool botOn = (m_lpFMGClient != NULL) && m_lpFMGClient->m_UserMgr.m_bBotFeature;
+    balloonchatwnd::GroupBotSectionView view;
+    view.m_show = balloonchatwnd::ShouldShowBotSection(botOn, m_groupBotsLoaded, m_groupBots.size());
+    if (view.m_show)
+    {
+        view.m_title = TRF(L"机器人 {0}", (int)m_groupBots.size());
+        //最多 kGIdBotRowLast - kGIdBotRowFirst + 1 行，超出的不显示
+        const size_t maxRows = (size_t)(balloonchatwnd::kGIdBotRowLast - balloonchatwnd::kGIdBotRowFirst + 1);
+        view.m_rows = balloonchatwnd::BuildBotSectionRows(m_groupBots, balloonchatwnd::kGIdBotRowFirst, maxRows);
+    }
+    const bool applied = balloonchatwnd::ApplyGroupBotSection(GetClientContent(), view);
+    LOG_INFO("group chat window: bot section refreshed, group=%lld, show=%d, bots=%u, applied=%d.", (long long)m_groupId,
+             view.m_show ? 1 : 0, (unsigned)m_groupBots.size(), applied ? 1 : 0);
+}
+
+LRESULT CBalloonGroupChatWindow::OnGroupBotActionMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    switch ((int)wParam)
+    {
+    //点了某个机器人：弹出资料卡
+    case kGroupBotActionCard:
+    {
+        const size_t index = (size_t)lParam;
+        if (index >= m_groupBots.size())
+        {
+            break;
+        }
+        const net::GroupBotInfo& b = m_groupBots[index];
+        m_botCard.Open(m_hWnd, balloonchatwnd::MakeBotCardView(b, AvatarColorForUser(b.m_userId)));
+        break;
+    }
+    //不认识的操作
+    default:
+        break;
+    }
+    return 0;
 }
 
 bool CBalloonGroupChatWindow::LookupMemberSender(void* ctx, int64_t userId,
@@ -3912,6 +5807,42 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
 
     UINT selfId = (m_lpFMGClient != NULL) ? m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
 
+    // 本页里的语音消息：一次查出本地库记为已听的，供下面决定画不画红点。历史先显示后入库，
+    // 库里还没有的别人的语音按未听处理（与随后入库时写入的未听一致）
+    balloonchatwnd::VoicePlayedQuery voicePlayed;
+    voicePlayed.m_ctype = conversation_group;
+    voicePlayed.m_cid = m_groupId;
+    for (size_t k = 0; k < result.m_messages.size(); ++k)
+    {
+        const net::MessageNotify& vm = result.m_messages[k];
+        if (vm.m_msgtype == kMsgTypeVoice && !vm.m_recalled && vm.m_msgid > 0)
+        {
+            voicePlayed.m_msgids.push_back(vm.m_msgid);
+        }
+    }
+    if (!voicePlayed.m_msgids.empty())
+    {
+        balloonchatwnd::QueryVoicePlayed(m_hostPanel, voicePlayed);
+    }
+
+    // 本页里本人发出、本人撤回的消息：一次查出本机库里的撤回快照，撤回后 5 分钟内的提示行带「编辑」
+    //（docs/撤回后重新编辑方案.md §3.4）
+    balloonchatwnd::RecallDraftQuery recallDrafts;
+    recallDrafts.m_ctype = conversation_group;
+    recallDrafts.m_cid = m_groupId;
+    for (size_t k = 0; k < result.m_messages.size(); ++k)
+    {
+        const net::MessageNotify& rm = result.m_messages[k];
+        if (rm.m_recalled && rm.m_msgid > 0 && selfId != 0 && (UINT)rm.m_from == selfId
+            && balloonchatwnd::RecallOperatorOf(rm) == (int64_t)selfId)
+        {
+            recallDrafts.m_msgids.push_back(rm.m_msgid);
+        }
+    }
+    balloonchatwnd::QueryRecallDrafts(m_hostPanel, recallDrafts);
+    const long long recallNowMs = balloonchatwnd::RecallEditNowMs();
+    bool anyRecallEdit = false;
+
     // 服务端以 msgid 升序（时间正序、最旧在前）返回 —— 见 MessageManager.cpp 翻历史
     // 模式把 DESC 查询结果反转为升序（out.assign(rows.rbegin(), rows.rend())），
     // buildSyncMessagesResponse 再按该升序数组原样写 JSON。实测亦然：某群 22 条历史
@@ -3925,6 +5856,25 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
         const net::MessageNotify& m = result.m_messages[k];
         bool fromMe = (selfId != 0 && (UINT)m.m_from == selfId);
         PerfStopWatch itemWatch;
+
+        // 已撤回的消息：服务端拉历史时照样下发（带 recalled: true），这里换成撤回提示行，与在线收到
+        // 撤回推送时气泡就地改成的提示行相同；不拦下的话撤回的内容在重开窗口后又会显示出来
+        if (m.m_recalled)
+        {
+            //提示里写撤回者：群主 / 管理员撤回别人的消息时，撤回者不是发送人
+            const int64_t recaller = balloonchatwnd::RecallOperatorOf(m);
+            const bool recalledByMe = (selfId != 0 && recaller == (int64_t)selfId);
+            balloonchatwnd::ChatMessage tipRow =
+                balloonchatwnd::MakeRecalledTipRow(m, recalledByMe, ResolveSender(recaller).m_name);
+            //本人发出、本人撤回，本机库里有快照且尚未到期：提示行带「编辑」
+            if (recalledByMe && fromMe && balloonchatwnd::ApplyRecallDraft(tipRow, recallDrafts, recallNowMs))
+            {
+                anyRecallEdit = true;
+            }
+            list->AppendMessage(tipRow);
+            breakdown.Add(balloonchatwnd::kHistoryRenderText, itemWatch.ElapsedMs());
+            continue;
+        }
 
         // 图片消息：插"下载中"气泡并触发下载（历史里自己发的图也需下载，本端无原图）。
         if (m.m_msgtype == kMsgTypeImage)
@@ -3942,10 +5892,18 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
             continue;
         }
 
+        // 语音消息：与实时推送同一构造；本机没有这段语音就在后台下载。耗时计入「文字及其它」一类
+        if (m.m_msgtype == kMsgTypeVoice)
+        {
+            RenderIncomingGroupVoice(list, fromMe, m, voicePlayed);
+            breakdown.Add(balloonchatwnd::kHistoryRenderText, itemWatch.ElapsedMs());
+            continue;
+        }
+
         // 服务端生成的系统提示：居中提示行，与实时推送同一构造
         if (m.m_msgtype == kMsgTypeSystem)
         {
-            list->AppendMessage(MakeGroupSystemTip(m));
+            list->AppendMessage(balloonchatwnd::MakeSystemTipRow(m));
             breakdown.Add(balloonchatwnd::kHistoryRenderText, itemWatch.ElapsedMs());
             continue;
         }
@@ -3966,6 +5924,38 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
             // 合并转发的聊天记录：画成卡片，构造与实时推送共用 MakeGroupMergedMessage
             list->AppendMessage(MakeGroupMergedMessage(m, fromMe, list));
         }
+        else if (m.m_msgtype == kMsgTypeFileShare)
+        {
+            // 文件共享卡片：画成卡片，构造与实时推送共用 MakeGroupShareMessage
+            list->AppendMessage(MakeGroupShareMessage(m, fromMe, list));
+        }
+        else if (m.m_msgtype == kMsgTypeScreenShare)
+        {
+            // 屏幕共享卡片：画成卡片，构造与实时推送共用 MakeGroupScreenShareMessage
+            list->AppendMessage(MakeGroupScreenShareMessage(m, fromMe, list));
+        }
+        else if (m.m_msgtype == kMsgTypeAnnouncement || m.m_msgtype == kMsgTypeMemo)
+        {
+            // 群公告卡片、群备忘卡片：画成卡片，构造与实时推送共用 MakeGroupInfoCardMessage。公告被删除后
+            // 服务端已改写了卡片，这里拿到的就是已删除形态
+            list->AppendMessage(MakeGroupInfoCardMessage(m, fromMe, list));
+        }
+        else if (m.m_msgtype == kMsgTypeCloudRecord)
+        {
+            // 云端录像卡片：画成卡片，构造与实时推送共用 MakeGroupCloudRecordMessage
+            list->AppendMessage(MakeGroupCloudRecordMessage(m, fromMe, list));
+        }
+        else if (m.m_msgtype == kMsgTypeRtc)
+        {
+            // 群通话卡片：画成卡片，构造与实时推送共用 MakeGroupCallCardMessage
+            list->AppendMessage(MakeGroupCallCardMessage(m, fromMe, list));
+        }
+        else if (m.m_msgtype == kMsgTypeRelay)
+        {
+            // 群接龙卡片：画成卡片，构造与实时推送共用 MakeGroupRelayMessage。历史里的 content
+            // 已由服务端合并了名单与状态（见 docs/协议设计-v2.md §8.1）
+            list->AppendMessage(MakeGroupRelayMessage(m, fromMe, list));
+        }
         else if (selfId != 0 && (UINT)m.m_from == selfId)
         {
             // 自己发的：右侧本端气泡，构造与实时回显共用 MakeSelfTextMessage。
@@ -3975,9 +5965,11 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
         {
             // 对方发的：左侧气泡 + 真实发送人名/头像（取自群成员映射，查不到回退"用户<id>"）。
             // 成员与历史并行请求，历史先到时这里拿到的是备用信息，成员到达后再就地刷新。
-            const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+            const balloonchatwnd::GroupSenderRender sender = ResolveSenderWithBotMark(m.m_from, m.m_botId, m.m_botName);
             balloonchatwnd::ChatMessage msg = balloonchatwnd::MakeTextMessage(false, text);
             msg.font                  = m.m_font;
+            msg.isMarkdown            = (m.m_textFormat == net::text_format_markdown);
+            balloonchatwnd::ApplyCodeFields(msg, m.m_textFormat, m.m_codeLang, m.m_codeNotes, m.m_from);
             msg.msgid                 = m.m_msgid;
             msg.timestampMs           = m.m_timestamp;
             msg.senderName            = sender.m_name;
@@ -3985,6 +5977,7 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
             msg.senderAvatarText      = sender.m_glyph;
             msg.senderAvatarColor     = sender.m_color;
             msg.senderAvatarImagePath = sender.m_imagePath;
+            msg.senderIsBot           = sender.m_isBot;
             //@提醒还原，理由同上面自己发的那一支。isMe 按<u>当前</u>登录用户重新判定，
             //所以换个账号登录看同一条历史，高亮配色会随之变化，这是预期行为。
             msg.ats = balloonchatwnd::BuildRenderSpansForMessage(
@@ -3994,6 +5987,11 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
             list->AppendMessage(msg);
         }
         breakdown.Add(balloonchatwnd::kHistoryRenderText, itemWatch.ElapsedMs());
+    }
+    //本页有带「编辑」的撤回提示行：定好到期定时器
+    if (anyRecallEdit)
+    {
+        RefreshRecallEditTimer();
     }
     stageWatch.Restart();
     // 本批最早那条的 msgid，作为下一页的 before 锚点。服务端按时间正序返回，
@@ -4021,6 +6019,9 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
     {
         m_pendingLocateMsgid = 0;
     }
+    // 首屏渲染前发出的 Markdown 文档的卡片也被清掉了：它们都已确认入库时重新拉一次最新一页
+    m_mdEarlySends.OnFirstPageRendered();
+    ReloadIfMarkdownEarlySendsDone();
     // 一并记下首尾 msgid：服务端约定按 msgid 升序（最旧在前）返回，本函数据此正序
     // 渲染。这两个值就是该约定的现场凭据 —— 正常应有 first < last；哪天两边的顺序
     // 约定又对不上（历史上出现过：这里曾按"最新在前"倒序遍历，与服务端的升序叠成
@@ -4060,14 +6061,17 @@ void CBalloonGroupChatWindow::SwitchSideTab(UINT tabId)
         return;
     }
 
-    // 三个 Tab 中被点的设为选中，其余取消选中。
-    const UINT kTabIds[3] =
+    // 五个 Tab 中被点的设为选中，其余取消选中。
+    const int kSideTabCount = 5;
+    const UINT kTabIds[kSideTabCount] =
     {
         balloonchatwnd::kGIdTabMembers,
         balloonchatwnd::kGIdTabFiles,
         balloonchatwnd::kGIdTabNotice,
+        balloonchatwnd::kGIdTabMemo,
+        balloonchatwnd::kGIdTabQa,
     };
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < kSideTabCount; ++i)
     {
         balloonchatwnd::GroupSideTab* tab =
             dynamic_cast<balloonchatwnd::GroupSideTab*>(
@@ -4086,9 +6090,15 @@ void CBalloonGroupChatWindow::SwitchSideTab(UINT tabId)
         content->FindCtrlById(balloonchatwnd::kGIdFilesPanel);
     balloonwjui::DuiControl* noticePanel =
         content->FindCtrlById(balloonchatwnd::kGIdNoticePanel);
+    balloonwjui::DuiControl* memoPanel =
+        content->FindCtrlById(balloonchatwnd::kGIdMemoPanel);
+    balloonwjui::DuiControl* qaPanel =
+        content->FindCtrlById(balloonchatwnd::kGIdQaPanel);
     const bool showMembers = (tabId == balloonchatwnd::kGIdTabMembers);
     const bool showFiles   = (tabId == balloonchatwnd::kGIdTabFiles);
     const bool showNotice  = (tabId == balloonchatwnd::kGIdTabNotice);
+    const bool showMemo    = (tabId == balloonchatwnd::kGIdTabMemo);
+    const bool showQa      = (tabId == balloonchatwnd::kGIdTabQa);
 
     // 三个容器占边栏下部的同一槽位。切换前先抓住当前可见容器的矩形作槽位——
     // 成员容器一开始就可见、已布局过，矩形可靠；据此给切换后新显示的容器
@@ -4107,6 +6117,14 @@ void CBalloonGroupChatWindow::SwitchSideTab(UINT tabId)
     {
         slot = noticePanel->GetRect();
     }
+    else if (memoPanel != NULL && memoPanel->IsVisible())
+    {
+        slot = memoPanel->GetRect();
+    }
+    else if (qaPanel != NULL && qaPanel->IsVisible())
+    {
+        slot = qaPanel->GetRect();
+    }
 
     if (membersPanel != NULL)
     {
@@ -4119,6 +6137,14 @@ void CBalloonGroupChatWindow::SwitchSideTab(UINT tabId)
     if (noticePanel != NULL)
     {
         noticePanel->SetVisible(showNotice);
+    }
+    if (memoPanel != NULL)
+    {
+        memoPanel->SetVisible(showMemo);
+    }
+    if (qaPanel != NULL)
+    {
+        qaPanel->SetVisible(showQa);
     }
 
     // 用槽位矩形强制重排新显示的容器（其子控件随之就位）。槽位无效时退回整树重排兜底。
@@ -4134,6 +6160,14 @@ void CBalloonGroupChatWindow::SwitchSideTab(UINT tabId)
     else if (slotValid && showNotice && noticePanel != NULL)
     {
         noticePanel->ForceLayout(slot);
+    }
+    else if (slotValid && showMemo && memoPanel != NULL)
+    {
+        memoPanel->ForceLayout(slot);
+    }
+    else if (slotValid && showQa && qaPanel != NULL)
+    {
+        qaPanel->ForceLayout(slot);
     }
     else
     {
@@ -4164,6 +6198,28 @@ void CBalloonGroupChatWindow::SwitchSideTab(UINT tabId)
         }
         RenderNoticePanel();
     }
+
+    // 切到备忘 Tab：新到的群备忘计为已看过，角标清零；数据就在备忘中枢的备忘簿里，直接渲染
+    if (showMemo)
+    {
+        if (m_groupId != 0)
+        {
+            balloonmemo::CMemoCenter::Instance().MarkGroupSeen(m_groupId);
+        }
+        RenderMemoPanel();
+    }
+
+    // 切到问答 Tab：首次进来拉一次问答（懒加载），之后靠 1339 推送重拉。先画一次（「正在加载」），
+    // 数据到位后 OnGroupQaArrived 会重画
+    if (showQa)
+    {
+        if (!m_qaRequested)
+        {
+            RequestGroupQa();
+        }
+        RenderQaPanel();
+    }
+    RefreshMemoTabBadge();
 
     if (IsWindow())
     {
@@ -4242,6 +6298,13 @@ void CBalloonGroupChatWindow::OnAnnouncementsArrived(const net::GroupAnnouncemen
 
 void CBalloonGroupChatWindow::OnAnnouncementChanged(const net::GroupAnnouncementNotify& notify)
 {
+    //公告被删除：消息列表里那张公告卡片换成已删除形态（docs/群公告接入方案.md §13.3）。
+    //这一步与公告面板有没有打开过无关，放在下面的提前返回之前
+    if (m_groupId != 0 && notify.m_changetype == group_announcement_change_delete && notify.m_cardMsgId > 0)
+    {
+        ApplyAnnouncementCardDeleted(notify.m_cardMsgId, notify.m_cardContent);
+    }
+
     //公告面板还没打开过就什么都不做 —— 用户真去点那个 Tab 时自然会拉到最新的，
     //现在拉一次只是白费一个来回。
     if (m_groupId == 0 || !m_noticeLoaded)
@@ -4321,7 +6384,7 @@ void CBalloonGroupChatWindow::RenderNoticePanel()
     {
         empty->SetVisible(!hasNotice);
         //还没拉回来与"拉过了但确实没有公告"要分开说，否则用户会以为公告丢了
-        empty->SetText(m_noticeLoaded ? _T("本群还没有群公告") : _T("正在加载公告…"));
+        empty->SetText(m_noticeLoaded ? TR(L"本群还没有群公告") : TR(L"正在加载公告…"));
     }
 
     //翻页按钮：只有一条时两个都不可点
@@ -4341,7 +6404,7 @@ void CBalloonGroupChatWindow::RenderNoticePanel()
     if (count != NULL)
     {
         CString text;
-        text.Format(_T("群公告 · %d 条"), m_noticeTotal);
+        text.Format(TR(L"群公告 · %d 条"), m_noticeTotal);
         count->SetText(text);
     }
     if (index != NULL)
@@ -4410,7 +6473,7 @@ void CBalloonGroupChatWindow::RenderNoticePanel()
     }
 }
 
-void CBalloonGroupChatWindow::SetAnnouncementTitle(LPCTSTR title)
+void CBalloonGroupChatWindow::SetGroupIntro(LPCTSTR intro)
 {
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
@@ -4422,7 +6485,7 @@ void CBalloonGroupChatWindow::SetAnnouncementTitle(LPCTSTR title)
             content->FindCtrlById(balloonchatwnd::kGIdHeaderInfo));
     if (header != NULL)
     {
-        header->SetAnnouncementTitle(title);
+        header->SetGroupIntro(intro);
     }
 }
 
@@ -4431,22 +6494,6 @@ void CBalloonGroupChatWindow::ActivateNoticeTab()
     //复用与用户点 Tab 完全相同的那条路径：懒加载、面板显隐、ForceLayout 都在里面，
     //另写一份迟早会跟它走岔。
     SwitchSideTab(balloonchatwnd::kGIdTabNotice);
-}
-
-void CBalloonGroupChatWindow::SetHeaderMemberCount(int count)
-{
-    balloonwjui::DuiControl* content = GetClientContent();
-    if (content == NULL)
-    {
-        return;
-    }
-    balloonchatwnd::GroupChatHeaderInfo* header =
-        dynamic_cast<balloonchatwnd::GroupChatHeaderInfo*>(
-            content->FindCtrlById(balloonchatwnd::kGIdHeaderInfo));
-    if (header != NULL)
-    {
-        header->SetMemberCount(count);
-    }
 }
 
 void CBalloonGroupChatWindow::RenderFilePanel()
@@ -4505,7 +6552,7 @@ void CBalloonGroupChatWindow::RenderFilePanel()
         CString uploader;
         if (!selfIdStr.empty() && e.m_uploaderid == selfIdStr)
         {
-            uploader = _T("我");
+            uploader = TR(L"我");
         }
         else
         {
@@ -4541,6 +6588,11 @@ void CBalloonGroupChatWindow::RenderFilePanel()
         bool isOwnUpload = (!selfIdStr.empty() && e.m_uploaderid == selfIdStr);
         item->SetDeletable(
             balloonchatwnd::GroupFileLibrary::CanDeleteGroupFile(m_myRole, isOwnUpload));
+        // 主面板全局搜索定位到的那一行以淡黄底标出（见 ShowGroupFileEntry）。
+        if (!m_highlightEntryId.empty() && e.m_entryid == m_highlightEntryId)
+        {
+            item->SetHighlighted(true);
+        }
         // 若该条目正在下载（翻页 / 推送重渲染前已在途）：把"下载中"态补回这一新建行，
         // 保证进度条与百分比跨重渲染不丢。
         std::map<std::string, int>::const_iterator dlIt =
@@ -4587,7 +6639,7 @@ void CBalloonGroupChatWindow::RenderFilePanel()
     if (pageInfo != NULL)
     {
         CString text;
-        text.Format(_T("共 %d · 第 %d/%d 页"), total, curPage + 1, pageCount);
+        text.Format(TR(L"共 %d · 第 %d/%d 页"), total, curPage + 1, pageCount);
         pageInfo->SetText(text);
     }
 
@@ -4617,7 +6669,7 @@ void CBalloonGroupChatWindow::RefreshSideTabCounts()
     if (memberTab != NULL)
     {
         memberTab->SetText(
-            balloonchatwnd::MakeSideTabText(_T("成员"), memberCount).c_str());
+            balloonchatwnd::MakeSideTabText(TRC(L"群聊窗右侧页签", L"成员"), memberCount).c_str());
     }
 
     // 群文件数：取库里的全量条数（不受分类 chip / 搜索框影响）。库还没拉到手时按
@@ -4632,8 +6684,31 @@ void CBalloonGroupChatWindow::RefreshSideTabCounts()
     if (fileTab != NULL)
     {
         fileTab->SetText(
-            balloonchatwnd::MakeSideTabText(_T("群文件"), fileCount).c_str());
+            balloonchatwnd::MakeSideTabText(TRC(L"群聊窗右侧页签", L"群文件"), fileCount).c_str());
     }
+
+    //公告、备忘两个 Tab 不带数量。四个 Tab 的文字都用带上下文的 TRC：右栏只有 240 像素宽，
+    //译文可以取比别处更短的写法（多语言第 4 期）
+    balloonchatwnd::GroupSideTab* noticeTab =
+        dynamic_cast<balloonchatwnd::GroupSideTab*>(content->FindCtrlById(balloonchatwnd::kGIdTabNotice));
+    if (noticeTab != NULL)
+    {
+        noticeTab->SetText(TRC(L"群聊窗右侧页签", L"公告"));
+    }
+    balloonchatwnd::GroupSideTab* memoTab =
+        dynamic_cast<balloonchatwnd::GroupSideTab*>(content->FindCtrlById(balloonchatwnd::kGIdTabMemo));
+    if (memoTab != NULL)
+    {
+        memoTab->SetText(TRC(L"群聊窗右侧页签", L"备忘"));
+    }
+    balloonchatwnd::GroupSideTab* qaTab =
+        dynamic_cast<balloonchatwnd::GroupSideTab*>(content->FindCtrlById(balloonchatwnd::kGIdTabQa));
+    if (qaTab != NULL)
+    {
+        qaTab->SetText(TRC(L"群聊窗右侧页签", L"问答"));
+    }
+    //按各 Tab 文字的实际宽度重新分配右栏宽度（2026-10-07 起有五个 Tab，简体中文也按宽度分配）
+    balloonchatwnd::ApplyGroupSideTabWeights(content);
 
     if (IsWindow())
     {
@@ -4659,6 +6734,94 @@ void CBalloonGroupChatWindow::StartLoadGroupFiles()
     CIUSocket::GetInstance().RequestGroupFiles(
         m_groupId, group_file_type_all, 0, kGroupFileFetchPageSize);
     LOG_INFO("群文件拉全量已发起: group=%lld。", (long long)m_groupId);
+}
+
+void CBalloonGroupChatWindow::ShowGroupFileEntry(const std::string& entryId)
+{
+    LOG_INFO("group chat window: locate group file, group=%lld, entry=%s, loaded=%d.",
+             (long long)m_groupId, entryId.c_str(), m_fileLoaded ? 1 : 0);
+
+    // 先切到「群文件」Tab：库还没拉过时它会顺带发起拉取（见 SwitchSideTab）。
+    SwitchSideTab(balloonchatwnd::kGIdTabFiles);
+    if (entryId.empty())
+    {
+        return;
+    }
+
+    // 库拉全后才知道这个文件在第几页：没拉全就先记下，OnGroupFilesArrived 拉全后再定位。
+    m_pendingLocateEntryId = entryId;
+    if (m_fileLoaded)
+    {
+        ApplyPendingFileLocate();
+    }
+}
+
+void CBalloonGroupChatWindow::ApplyPendingFileLocate()
+{
+    if (m_pendingLocateEntryId.empty())
+    {
+        return;
+    }
+    const std::string entryId = m_pendingLocateEntryId;
+    m_pendingLocateEntryId.clear();
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+
+    // 1) 分类回到「全部」、清空文件名搜索，保证这个文件不会被当前的筛选条件挡住。
+    //    搜索框用不发通知的方式清空：文字变化通知会重置页码并重渲染，这里随后自己渲染。
+    balloonwjui::DuiEdit* search = dynamic_cast<balloonwjui::DuiEdit*>(
+        content->FindCtrlById(balloonchatwnd::kGIdFileSearch));
+    if (search != NULL && !search->GetText().IsEmpty())
+    {
+        search->SetTextNoNotify(_T(""));
+    }
+    m_fileSearch.clear();
+    ApplyFileChipSelection(balloonchatwnd::kGroupFileCatAll);
+
+    // 2) 翻到它所在的页；库里没有（已被删除）就停在第 1 页，不标高亮。
+    const int page = m_fileLibrary.PageOfEntry(balloonchatwnd::kGroupFileCatAll, std::string(),
+                                               entryId, kGroupFilePageSize);
+    if (page < 0)
+    {
+        LOG_WARNING("group chat window: group file %s not found in library, group=%lld.",
+                    entryId.c_str(), (long long)m_groupId);
+        m_filePage = 0;
+        RenderFilePanel();
+        return;
+    }
+    m_filePage         = page;
+    m_highlightEntryId = entryId;
+    RenderFilePanel();
+
+    // 3) RenderFilePanel 会把滚动位置归零；这一行在视口下方看不见时，滚到刚好露出它。
+    balloonchatwnd::GroupFileList* list = dynamic_cast<balloonchatwnd::GroupFileList*>(
+        content->FindCtrlById(balloonchatwnd::kGIdFileList));
+    balloonwjui::DuiScrollView* sv = dynamic_cast<balloonwjui::DuiScrollView*>(
+        content->FindCtrlById(balloonchatwnd::kGIdFileScroll));
+    if (list == NULL || sv == NULL)
+    {
+        return;
+    }
+    for (size_t i = 0; i < list->Children().size(); ++i)
+    {
+        balloonchatwnd::GroupFileItem* item =
+            dynamic_cast<balloonchatwnd::GroupFileItem*>(list->Children()[i].get());
+        if (item == NULL || CStringToUtf8(item->EntryId()) != entryId)
+        {
+            continue;
+        }
+        const int rowBottom  = item->GetRect().bottom - list->GetRect().top;
+        const int viewHeight = sv->GetRect().bottom - sv->GetRect().top;
+        if (viewHeight > 0 && rowBottom > viewHeight)
+        {
+            sv->SetScrollPos(rowBottom - viewHeight);
+        }
+        break;
+    }
 }
 
 void CBalloonGroupChatWindow::ApplyFileChipSelection(int category)
@@ -4711,6 +6874,7 @@ void CBalloonGroupChatWindow::OnGroupFilesArrived(const net::GetGroupFilesResult
         m_filePage    = 0;
         RenderFilePanel();
         RefreshSideTabCounts();
+        ApplyPendingFileLocate();
         return;
     }
 
@@ -4740,6 +6904,8 @@ void CBalloonGroupChatWindow::OnGroupFilesArrived(const net::GetGroupFilesResult
     RenderFilePanel();
     // 文件数到手 → 边栏「群文件」Tab 换成真实数量（"群文件 8"）。
     RefreshSideTabCounts();
+    // 开窗时就被要求定位某个文件（主面板全局搜索）：库拉全了，现在定位。
+    ApplyPendingFileLocate();
 }
 
 void CBalloonGroupChatWindow::OnGroupFilesChanged(const net::GroupFilesChangedNotify& notify)
@@ -4770,6 +6936,10 @@ void CBalloonGroupChatWindow::OnGroupFilesChanged(const net::GroupFilesChangedNo
 
 void CBalloonGroupChatWindow::OnGroupFileUploaded(const net::GroupFileUploadResult& result)
 {
+    // 宿主「发送到会话」登记过的上传：不论成败、取消，先取出登记（2026-10-05），成功时下面再发文件消息
+    balloonchatwnd::GroupFileChatPost post;
+    const bool postToChat = m_chatPoster.Take(result, post);
+
     // 取消与真失败的区分：用户取消时窗口已先把这一行从跟踪器移除（见 OnGroupFileUploadCancelMsg），
     // 故此处按 uploadId 查不到 → 判定为「已取消」，静默忽略（不弹失败框、不刷面板）。
     if (m_uploadTracker.Find(result.m_uploadid) == NULL)
@@ -4787,12 +6957,12 @@ void CBalloonGroupChatWindow::OnGroupFileUploaded(const net::GroupFileUploadResu
     {
         LOG_ERROR("群文件上传失败: group=%lld, uploadId=%d, code=%d, msg=%s。",
                   (long long)m_groupId, result.m_uploadid, result.m_errcode, result.m_errmsg.c_str());
-        // 给用户可见反馈（否则上传被拒后没动静、易困惑）。群文件已取消大小上限，
-        // 失败一般是网络 / 服务端原因，统一通用提示。
+        // 给用户可见反馈（否则上传被拒后没动静、易困惑）。文件名包含敏感词有专门的说法，
+        // 其余失败一般是网络 / 服务端原因，统一通用提示。
         if (IsWindow())
         {
-            ::MessageBoxW(m_hWnd, _T("文件上传失败，请稍后重试。"),
-                          _T("群文件上传"), MB_OK | MB_ICONWARNING);
+            ::MessageBoxW(m_hWnd, balloonchatwnd::GroupFileUploadFailureText(result.m_errcode).c_str(),
+                          TR(L"群文件上传"), MB_OK | MB_ICONWARNING);
         }
         return;
     }
@@ -4801,6 +6971,64 @@ void CBalloonGroupChatWindow::OnGroupFileUploaded(const net::GroupFileUploadResu
     CIUSocket::GetInstance().RequestAddGroupFile(m_groupId, result.m_fileid);
     LOG_INFO("群文件上传成功, 发起登记: group=%lld, uploadId=%d, fileid=%s, name=%s。",
              (long long)m_groupId, result.m_uploadid, result.m_fileid.c_str(), result.m_filename.c_str());
+    if (postToChat)
+        SendUploadedFileMessage(post);
+}
+
+void CBalloonGroupChatWindow::SendUploadedFileMessage(const balloonchatwnd::GroupFileChatPost& post)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL || m_groupId == 0)
+    {
+        return;
+    }
+    //本人的文件气泡：文件已在本机，点开直接打开本地文件；记下 fileid 与 md5 供被拒绝后重发；msgid 与时间待回执回填
+    const std::string clientMsgId = GenClientMsgId();
+    balloonchatwnd::ChatMessage echo = balloonchatwnd::MakeGroupFileEcho(post, clientMsgId);
+    FillSelfSenderAvatar(m_lpFMGClient, echo);
+    list->AppendMessage(echo);
+    SendGroupFileMessage(clientMsgId, post.m_fileid, post.m_filename, static_cast<long long>(post.m_size), post.m_md5);
+}
+
+void CBalloonGroupChatWindow::SendGroupFileMessage(const std::string& clientMsgId, const std::string& fileId,
+                                                   const std::string& fileNameUtf8, long long sizeBytes,
+                                                   const std::string& md5)
+{
+    CIUSocket::GetInstance().SendChatFileMessage(conversation_group, (int64_t)m_groupId, clientMsgId, fileId,
+                                                 fileNameUtf8, sizeBytes, md5);
+    LOG_INFO("group chat: file message sent, group=%lld, clientmsgid=%s, fileid=%s.", (long long)m_groupId,
+             clientMsgId.c_str(), fileId.c_str());
+    //登记待冒泡：回执成功后才把本会话冒泡到会话列表顶部、预览写「[文件]」
+    ConvSendBumpData bump;
+    bump.ctype   = conversation_group;
+    bump.cid     = (long long)m_groupId;
+    bump.msgType = kMsgTypeFile;
+    bump.digest  = net::MessageProtocolClient::digestForMsgType(kMsgTypeFile, std::string());
+    m_sendBumps.Add(clientMsgId, bump);
+}
+
+void CBalloonGroupChatWindow::ResendGroupFileMessage(const balloonchatwnd::ChatFileActionData& d)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL || m_groupId == 0)
+    {
+        return;
+    }
+    //气泡位置不变，清掉失败标记、回到已完成；不是本人发送失败的那条时不重发
+    if (!list->RestartFileMessageSendByClientMsgId(d.clientMsgId))
+    {
+        LOG_INFO("group chat: file message resend skipped, not a failed own message, clientmsgid=%s.",
+                 d.clientMsgId.c_str());
+        return;
+    }
+    LOG_INFO("group chat: file message resend, group=%lld, clientmsgid=%s.", (long long)m_groupId, d.clientMsgId.c_str());
+    SendGroupFileMessage(d.clientMsgId, d.fileId, CStringToUtf8(d.fileName), d.sizeBytes, d.md5);
 }
 
 void CBalloonGroupChatWindow::OnGroupFileDownloaded(const net::GroupFileDownloadResult& result)
@@ -4924,7 +7152,9 @@ LRESULT CBalloonGroupChatWindow::OnGroupFileDownloadMsg(UINT /*uMsg*/, WPARAM /*
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = m_hWnd;
-    ofn.lpstrFilter = L"所有文件\0*.*\0";
+    //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+    const std::wstring fileFilter = filedlg::MakeFilter(TR(L"所有文件"), L"*.*");
+    ofn.lpstrFilter = fileFilter.c_str();
     ofn.lpstrFile   = szFile;
     ofn.nMaxFile    = 1024;
     ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOREADONLYRETURN;
@@ -5069,7 +7299,7 @@ LRESULT CBalloonGroupChatWindow::OnChatDeleteRequest(UINT /*uMsg*/, WPARAM /*wPa
     //删除只对本人生效，群里其他成员不受影响，确认文案与单聊相同
     const int answer = ::MessageBox(m_hWnd,
         balloonchat::BuildDeleteMessagesConfirmText(msgids.size()),
-        _T("删除消息"), MB_OKCANCEL | MB_ICONQUESTION | MB_DEFBUTTON2);
+        TR(L"删除消息"), MB_OKCANCEL | MB_ICONQUESTION | MB_DEFBUTTON2);
     if (answer != IDOK)
     {
         return 0;
@@ -5100,6 +7330,8 @@ balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeSelfTextMessage(
     // 右侧本端气泡（群聊本端气泡不显示发送人名）。本端真实头像（字形 / 真图）。
     balloonchatwnd::ChatMessage mine = balloonchatwnd::MakeTextMessage(true, text);
     mine.font = m.m_font;
+    mine.isMarkdown = (m.m_textFormat == net::text_format_markdown);
+    balloonchatwnd::ApplyCodeFields(mine, m.m_textFormat, m.m_codeLang, m.m_codeNotes, m.m_from);
     //msgid 与时间：重开窗口后仍在两分钟内的消息应可撤回。
     mine.msgid = m.m_msgid;
     mine.timestampMs = m.m_timestamp;
@@ -5115,6 +7347,1636 @@ balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeSelfTextMessage(
     return mine;
 }
 
+balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupShareMessage(
+    const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
+{
+    balloonchatwnd::ChatMessage card;
+    CString ownerName;
+    if (fromMe)
+    {
+        // 本人发出的：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
+        card = MakeSelfTextMessage(m, TR(L"[共享]"), list);
+    }
+    else
+    {
+        // 别人发出的：左侧气泡 + 真实发送人名 / 头像（取自群成员映射，查不到回退"用户<id>"）；卡片由服务端以分享者
+        // 的名义发出，发送人就是分享者
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+        card = balloonchatwnd::MakeTextMessage(false, TR(L"[共享]"));
+        card.msgid                 = m.m_msgid;
+        card.timestampMs           = m.m_timestamp;
+        card.senderName            = sender.m_name;
+        card.senderUserId          = m.m_from;
+        card.senderAvatarText      = sender.m_glyph;
+        card.senderAvatarColor     = sender.m_color;
+        card.senderAvatarImagePath = sender.m_imagePath;
+        ownerName = sender.m_name;
+    }
+    balloonchatwnd::ApplyFileShareCard(card, m.m_shareContent, ownerName,
+                                       balloonchatwnd::MakeShareCardLiveState(m.m_shareContent));
+    return card;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenShare(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    //lParam 为堆上的共享 id，用完在这里释放
+    long long* pShareId = (long long*)lParam;
+    if (pShareId == NULL)
+    {
+        return 0;
+    }
+    const long long shareId = *pShareId;
+    delete pShareId;
+    //本人的共享在本机打开（文件就在本机上），别人的共享打开浏览窗口
+    const bool own = (wParam == kChatOpenShareOwn);
+    balloonfileshare::CFileShareHost& host = balloonfileshare::CFileShareHost::GetInstance();
+    const bool ok = own ? host.OpenOwnShareLocally(m_hWnd, (int64_t)shareId)
+                        : host.OpenShareFromCard(m_hWnd, (int64_t)shareId);
+    LOG_INFO("group chat window opens share from card, group=%lld, shareid=%lld, own=%d, ok=%d.", (long long)m_groupId,
+             shareId, own ? 1 : 0, ok ? 1 : 0);
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnDestroyMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled)
+{
+    bHandled = FALSE;
+    if (m_groupId != 0)
+    {
+        balloonfileshare::CFileShareHost::GetInstance().UnwatchConversationShares(conversation_group, m_groupId);
+    }
+    balloonmemo::CMemoCenter::Instance().UnregisterObserver(m_hWnd);
+    //点群公告卡片打开过的公告详情窗：宿主是本窗口，随本窗口一并销毁
+    if (m_announceCardDlg.IsWindow())
+    {
+        m_announceCardDlg.DestroyWindow();
+    }
+    //入群必读弹窗：宿主同样是本窗口
+    if (m_mustReadDlg.IsWindow())
+    {
+        m_mustReadDlg.DestroyWindow();
+    }
+    //问答编辑窗：关闭并恢复本窗口的可用状态（本窗口随即销毁，恢复与否已无影响，统一走关闭路径）
+    m_qaEditDlg.CloseDialog();
+    //机器人资料卡：宿主同样是本窗口
+    m_botCard.CloseCard();
+    return 0;
+}
+
+// ---------------- 边栏「备忘」页签 ----------------
+
+LRESULT CBalloonGroupChatWindow::OnMemoChanged(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    const int64_t groupid = (int64_t)wParam;
+    if (groupid != 0 && groupid != m_groupId)
+    {
+        return 0;
+    }
+    RenderMemoPanel();
+    RefreshMemoTabBadge();
+    //消息列表里的群备忘卡片：备忘被删除、本人被移出提醒对象之后转为失效，重新出现时恢复
+    RefreshMemoCardsAvailability();
+    return 0;
+}
+
+void CBalloonGroupChatWindow::RefreshMemoTabBadge()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || m_groupId == 0)
+    {
+        return;
+    }
+    balloonchatwnd::GroupSideTab* tab =
+        dynamic_cast<balloonchatwnd::GroupSideTab*>(content->FindCtrlById(balloonchatwnd::kGIdTabMemo));
+    if (tab == NULL)
+    {
+        return;
+    }
+    balloonmemo::CMemoCenter& center = balloonmemo::CMemoCenter::Instance();
+    if (tab->IsActive())
+    {
+        center.MarkGroupSeen(m_groupId);
+    }
+    //标题「备忘 N」：备忘簿还没拉到（或拉取超时）时数量未知，只写「备忘」，与「已拉到且为 0」区分开
+    int memoCount = balloonchatwnd::kSideTabCountUnknown;
+    if (center.Book().IsLoaded())
+    {
+        std::vector<net::MemoItem> memos;
+        center.Book().ListGroup(m_groupId, memos);
+        memoCount = (int)memos.size();
+    }
+    tab->SetText(balloonchatwnd::MakeSideTabText(TR(L"备忘"), memoCount).c_str());
+    tab->SetBadgeCount(center.Book().UnseenCount(m_groupId));
+    tab->Invalidate();
+}
+
+void CBalloonGroupChatWindow::RenderMemoPanel()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    //卡片外面的底色：边栏是聊天窗根控件的白底
+    const COLORREF kMemoListBg = RGB(0xFF, 0xFF, 0xFF);
+    balloonwjui::DuiScrollView* list =
+        dynamic_cast<balloonwjui::DuiScrollView*>(content->FindCtrlById(balloonchatwnd::kGIdMemoList));
+    balloonwjui::DuiLabel* empty = dynamic_cast<balloonwjui::DuiLabel*>(content->FindCtrlById(balloonchatwnd::kGIdMemoEmpty));
+    balloonwjui::DuiControl* add = content->FindCtrlById(balloonchatwnd::kGIdMemoAdd);
+    balloonwjui::DuiControl* panel = content->FindCtrlById(balloonchatwnd::kGIdMemoPanel);
+
+    const balloonmemo::CMemoCenter& center = balloonmemo::CMemoCenter::Instance();
+    std::vector<net::MemoItem> memos;
+    center.Book().ListGroup(m_groupId, memos);
+    const memo::LocalMinute now = memo::NowLocalMinute();
+    const bool canEdit = balloonmemo::CanEditGroupMemo(m_myRole);
+    std::vector<balloonmemo::MemoCardText> cards;
+    m_memoCardIds.clear();
+    for (size_t i = 0; i < memos.size(); ++i)
+    {
+        const net::MemoItem& item = memos[i];
+        //创建人按本群成员表解析（群名片优先），与接龙详情窗同一口径
+        const std::wstring creator((LPCTSTR)ResolveRelayMemberName(item.m_creator));
+        cards.push_back(balloonmemo::BuildGroupTabCard(item, now, creator,
+                                                       balloonmemo::CMemoCenter::CreatedAtOf(item), canEdit));
+        m_memoCardIds.push_back(item.m_memoid);
+    }
+    balloonmemo::SetMemoCards(list, cards, kMemoListBg);
+
+    //到了最早的那个提醒时刻，那张卡片的时间要换成下一次事件或「已结束」：安排一次重画
+    memo::LocalMinute earliest = 0;
+    for (size_t i = 0; i < cards.size(); ++i)
+    {
+        if (cards[i].m_remindAt > 0 && (earliest == 0 || cards[i].m_remindAt < earliest))
+        {
+            earliest = cards[i].m_remindAt;
+        }
+    }
+    if (IsWindow())
+    {
+        ::KillTimer(m_hWnd, kMemoPanelRefreshTimerId);
+        if (earliest > 0)
+        {
+            long long delay = memo::MillisUntilLocalMinute(earliest) + kMemoPanelRefreshSlackMs;
+            if (delay > kMemoPanelRefreshMaxDelayMs)
+            {
+                delay = kMemoPanelRefreshMaxDelayMs;
+            }
+            ::SetTimer(m_hWnd, kMemoPanelRefreshTimerId, (UINT)delay, NULL);
+        }
+    }
+
+    //空状态提示在卡片上方，只在没有卡片时显示；拉取超时时提示没有加载出来，并置灰新建
+    const bool timedOut = center.ListTimedOut();
+    if (empty != NULL)
+    {
+        empty->SetVisible(cards.empty());
+        if (timedOut)
+        {
+            empty->SetText(TR(L"备忘没有加载出来，服务器可能还不支持备忘"));
+        }
+        else
+        {
+            empty->SetText(center.Book().IsLoaded() ? TR(L"本群还没有群备忘") : TR(L"正在加载……"));
+        }
+    }
+    if (add != NULL)
+    {
+        add->SetVisible(m_groupId != 0 && canEdit);
+        add->SetEnabled(!timedOut);
+    }
+    //显隐变化之后对面板按它当前的矩形强制重排（开发约定文档 UI 约定第 5 条）
+    if (panel != NULL && panel->IsVisible())
+    {
+        panel->ForceLayout(panel->GetRect());
+    }
+    RefreshMemoHoverAtCursor();
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
+std::vector<net::ContactItem> CBalloonGroupChatWindow::BuildMemoCandidates() const
+{
+    std::vector<net::ContactItem> out;
+    const int64_t selfId = (m_lpFMGClient != NULL) ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    for (std::map<int64_t, MemberInfo>::const_iterator it = m_memberInfo.begin(); it != m_memberInfo.end(); ++it)
+    {
+        if (it->first == selfId)
+        {
+            continue;
+        }
+        net::ContactItem c;
+        c.m_userid = it->first;
+        //先转成 std::wstring：传 LPCTSTR 会选中返回堆内存 char* 的那个重载
+        c.m_nickname = EncodeUtil::UnicodeToUtf8(std::wstring((LPCTSTR)it->second.m_name));
+        c.m_facetype = it->second.m_facetype;
+        c.m_customface = it->second.m_customface;
+        out.push_back(c);
+    }
+    return out;
+}
+
+void CBalloonGroupChatWindow::OpenGroupMemoEditor(int64_t memoid)
+{
+    if (m_groupId == 0)
+    {
+        return;
+    }
+    balloonmemo::CMemoCenter& center = balloonmemo::CMemoCenter::Instance();
+    const bool canEdit = balloonmemo::CanEditGroupMemo(m_myRole);
+    if (memoid == 0)
+    {
+        if (!canEdit || center.ListTimedOut())
+        {
+            return;
+        }
+        const memo::LocalMinute now = memo::NowLocalMinute();
+        net::MemoItem item = balloonmemo::DefaultMemoForDay(now / memo::kMinutesPerDay, now, net::kMemoCtypeGroup, m_groupId);
+        item.m_targetAll = true;
+        center.OpenEditor(m_hWnd, item, balloonmemo::kMemoEditNew, BuildMemoCandidates());
+        return;
+    }
+    const net::MemoItem* item = center.Book().Find(memoid);
+    if (item == NULL)
+    {
+        return;
+    }
+    center.OpenEditor(m_hWnd, *item, canEdit ? balloonmemo::kMemoEditExisting : balloonmemo::kMemoEditReadOnly,
+                      BuildMemoCandidates());
+}
+
+void CBalloonGroupChatWindow::OpenGroupMemoEditorWithPrefill(const std::string& titleUtf8, const std::string& noteUtf8)
+{
+    if (m_groupId == 0)
+    {
+        return;
+    }
+    balloonmemo::CMemoCenter& center = balloonmemo::CMemoCenter::Instance();
+    //权限与备忘列表的检查与边栏「新建」相同：角色可能在菜单弹出之后才变化
+    if (!balloonmemo::CanEditGroupMemo(m_myRole) || center.ListTimedOut())
+    {
+        LOG_WARNING("group chat window: add to group memo ignored, group=%lld, role=%d.", (long long)m_groupId, m_myRole);
+        return;
+    }
+    const memo::LocalMinute now = memo::NowLocalMinute();
+    net::MemoItem item = balloonmemo::DefaultMemoForDay(now / memo::kMinutesPerDay, now, net::kMemoCtypeGroup, m_groupId);
+    item.m_targetAll = true;
+    item.m_title = titleUtf8;
+    item.m_note = noteUtf8;
+    center.OpenEditor(m_hWnd, item, balloonmemo::kMemoEditNew, BuildMemoCandidates());
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatAddToMemo(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    balloonchatwnd::ChatAddToMemoRequest* req = reinterpret_cast<balloonchatwnd::ChatAddToMemoRequest*>(lParam);
+    if (req == NULL)
+    {
+        return 0;
+    }
+    //来源：群名与发送人（本人发的写「我」）
+    balloonchatwnd::MemoPrefillSource src;
+    src.m_groupName = m_groupName;
+    src.m_senderName = req->m_msg.senderName;
+    src.m_fromMe = req->m_msg.fromMe;
+    src.m_timestampMs = req->m_msg.timestampMs;
+    const balloonchatwnd::MemoPrefill prefill = balloonchatwnd::BuildMemoPrefill(req->m_msg, src);
+    const int target = req->m_target;
+    LOG_INFO("group chat window: add to memo, group=%lld, msgid=%lld, target=%d, title bytes=%u, note bytes=%u.",
+             (long long)m_groupId, req->m_msg.msgid, target, (unsigned)prefill.m_title.size(),
+             (unsigned)prefill.m_note.size());
+    delete req;
+
+    if (target == balloonchatwnd::kMemoPrefillGroup)
+    {
+        OpenGroupMemoEditorWithPrefill(prefill.m_title, prefill.m_note);
+        return 0;
+    }
+    //本人备忘：与「备忘与提醒」窗口的「新建」相同，备忘列表还没取到时不打开
+    balloonmemo::CMemoCenter& center = balloonmemo::CMemoCenter::Instance();
+    if (center.ListTimedOut())
+    {
+        LOG_WARNING("group chat window: add to memo ignored, memo list not available, group=%lld.", (long long)m_groupId);
+        return 0;
+    }
+    const memo::LocalMinute now = memo::NowLocalMinute();
+    net::MemoItem item = balloonmemo::DefaultMemoForDay(now / memo::kMinutesPerDay, now, net::kMemoCtypePersonal, 0);
+    item.m_title = prefill.m_title;
+    item.m_note = prefill.m_note;
+    center.OpenEditor(m_hWnd, item, balloonmemo::kMemoEditNew, std::vector<net::ContactItem>());
+    return 0;
+}
+
+void CBalloonGroupChatWindow::ShowGroupMemoMenu(int64_t memoid)
+{
+    if (balloonmemo::CMemoCenter::Instance().Book().Find(memoid) == NULL)
+    {
+        return;
+    }
+    const bool canEdit = balloonmemo::CanEditGroupMemo(m_myRole);
+    //菜单命令 id
+    const UINT kMenuIdOpen = 1;
+    const UINT kMenuIdDelete = 2;
+    balloonwjui::DuiMenu menu;
+    menu.AppendItem(kMenuIdOpen, canEdit ? TR(L"修改") : TR(L"查看"));
+    if (canEdit)
+    {
+        menu.AppendSeparator();
+        menu.AppendItem(kMenuIdDelete, TR(L"删除"));
+    }
+    POINT pt;
+    ::GetCursorPos(&pt);
+    const UINT chosen = menu.TrackPopup(pt.x, pt.y, m_hWnd);
+    if (chosen == kMenuIdOpen)
+    {
+        OpenGroupMemoEditor(memoid);
+    }
+    else if (chosen == kMenuIdDelete)
+    {
+        balloonmemo::CMemoCenter::Instance().ConfirmAndDelete(m_hWnd, memoid);
+    }
+}
+
+void CBalloonGroupChatWindow::PostMemoCardAction(int action, int cardIndex)
+{
+    if (cardIndex < 0 || cardIndex >= (int)m_memoCardIds.size())
+    {
+        return;
+    }
+    m_pendingMemoCardId = m_memoCardIds[cardIndex];
+    PostMessage(kMemoCardActionMsg, (WPARAM)action, 0);
+}
+
+LRESULT CBalloonGroupChatWindow::OnMemoCardActionMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    const int64_t memoid = m_pendingMemoCardId;
+    m_pendingMemoCardId = 0;
+    if (memoid == 0)
+    {
+        return 0;
+    }
+    switch ((int)wParam)
+    {
+    //「修改」或双击
+    case kMemoCardActionOpen:
+        OpenGroupMemoEditor(memoid);
+        break;
+    //「删除」：只有群主、管理员的卡片上有这个按钮；中枢弹确认框，删除成功后备忘簿变化、面板随之重绘
+    case kMemoCardActionDelete:
+        if (balloonmemo::CanEditGroupMemo(m_myRole))
+        {
+            balloonmemo::CMemoCenter::Instance().ConfirmAndDelete(m_hWnd, memoid);
+        }
+        break;
+    //右键
+    case kMemoCardActionMenu:
+        ShowGroupMemoMenu(memoid);
+        break;
+    //未定义的操作：不会出现，忽略
+    default:
+        break;
+    }
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnMemoMouseMoveMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    //「备忘」面板隐藏时卡片视口自己的可见标志仍为 true，不判面板的话鼠标在成员列表上移动也会改卡片的悬停态
+    balloonwjui::DuiControl* memoPanel = (content != NULL) ? content->FindCtrlById(balloonchatwnd::kGIdMemoPanel) : NULL;
+    if (memoPanel != NULL && memoPanel->IsVisible())
+    {
+        POINT pt;
+        pt.x = GET_X_LPARAM(lParam);
+        pt.y = GET_Y_LPARAM(lParam);
+        balloonmemo::UpdateMemoCardHover(
+            dynamic_cast<balloonwjui::DuiScrollView*>(content->FindCtrlById(balloonchatwnd::kGIdMemoList)), pt);
+    }
+    bHandled = FALSE;
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnMemoMouseLeaveMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled)
+{
+    //鼠标离开整个窗口：撤掉全部悬停，否则会留一张卡片的按钮一直显示
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content != NULL)
+    {
+        POINT none;
+        none.x = -1;
+        none.y = -1;
+        balloonmemo::UpdateMemoCardHover(
+            dynamic_cast<balloonwjui::DuiScrollView*>(content->FindCtrlById(balloonchatwnd::kGIdMemoList)), none);
+    }
+    bHandled = FALSE;
+    return 0;
+}
+
+void CBalloonGroupChatWindow::RefreshMemoHoverAtCursor()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || !IsWindow())
+    {
+        return;
+    }
+    POINT screen;
+    ::GetCursorPos(&screen);
+    POINT pt = screen;
+    ScreenToClient(&pt);
+    //光标不在本窗口上（被别的窗口挡住、或在窗口外）时撤掉全部悬停
+    if (::WindowFromPoint(screen) != m_hWnd)
+    {
+        pt.x = -1;
+        pt.y = -1;
+    }
+    balloonmemo::UpdateMemoCardHover(
+        dynamic_cast<balloonwjui::DuiScrollView*>(content->FindCtrlById(balloonchatwnd::kGIdMemoList)), pt);
+}
+
+void CBalloonGroupChatWindow::SetShareBadgeCount(int count)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatIconButton* btn = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatIconButton*>(content->FindCtrlById(balloonchatwnd::kGIdHdrShare))
+        : NULL;
+    if (btn == NULL)
+    {
+        return;
+    }
+    btn->SetBadgeCount(count);
+}
+
+int CBalloonGroupChatWindow::GetShareBadgeCount()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatIconButton* btn = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatIconButton*>(content->FindCtrlById(balloonchatwnd::kGIdHdrShare))
+        : NULL;
+    return (btn != NULL) ? btn->GetBadgeCount() : 0;
+}
+
+void CBalloonGroupChatWindow::OpenConversationShares()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonwjui::DuiControl* btn = (content != NULL) ? content->FindCtrlById(balloonchatwnd::kGIdHdrShare) : NULL;
+    if (btn == NULL || m_groupId == 0)
+    {
+        return;
+    }
+    // 取按钮屏幕矩形作锚点（控件 rect 是 host 客户区坐标，转屏幕），做法同表情浮层
+    RECT rc = btn->GetRect();
+    POINT tl = { rc.left, rc.top };
+    POINT br = { rc.right, rc.bottom };
+    ::ClientToScreen(m_hWnd, &tl);
+    ::ClientToScreen(m_hWnd, &br);
+    RECT anchor = { tl.x, tl.y, br.x, br.y };
+    const bool ok = balloonfileshare::CFileShareHost::GetInstance().OpenConversationShares(
+        m_hWnd, conversation_group, (int64_t)m_groupId, &anchor);
+    LOG_INFO("group chat window opens conversation shares, group=%lld, ok=%d.", (long long)m_groupId, ok ? 1 : 0);
+}
+
+void CBalloonGroupChatWindow::ApplyShareButtonVisibility()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonwjui::DuiControl* btn = (content != NULL) ? content->FindCtrlById(balloonchatwnd::kGIdHdrShare) : NULL;
+    if (btn == NULL)
+    {
+        return;
+    }
+    const bool show = balloonfileshare::CFileShareHost::GetInstance().IsModuleReady();
+    if (btn->IsVisible() == show)
+    {
+        return;
+    }
+    btn->SetVisible(show);
+    balloonwjui::DuiControl* row = btn->GetParent();
+    if (row != NULL)
+    {
+        row->ForceLayout(row->GetRect());
+    }
+}
+
+balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupScreenShareMessage(
+    const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
+{
+    balloonchatwnd::ChatMessage card;
+    CString hostName;
+    if (fromMe)
+    {
+        // 本人发起的：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
+        card = MakeSelfTextMessage(m, TR(L"[屏幕共享]"), list);
+    }
+    else
+    {
+        // 别人发起的：左侧气泡 + 真实发送人名 / 头像；卡片由服务端以发起人的名义发出，发送人就是发起人
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+        card = balloonchatwnd::MakeTextMessage(false, TR(L"[屏幕共享]"));
+        card.msgid                 = m.m_msgid;
+        card.timestampMs           = m.m_timestamp;
+        card.senderName            = sender.m_name;
+        card.senderUserId          = m.m_from;
+        card.senderAvatarText      = sender.m_glyph;
+        card.senderAvatarColor     = sender.m_color;
+        card.senderAvatarImagePath = sender.m_imagePath;
+        hostName = sender.m_name;
+    }
+    const std::string roomId = balloonchatwnd::ScreenShareRoomIdOf(m.m_screenShareContent);
+    const int state = balloonscreenshare::CScreenShareHub::GetInstance().RoomState(
+        conversation_group, (int64_t)m_groupId, roomId);
+    balloonchatwnd::ApplyScreenShareCard(card, m.m_screenShareContent, hostName, state);
+    return card;
+}
+
+// ---------------- 群公告卡片与群备忘卡片（docs/群公告接入方案.md §13.4、docs/备忘与提醒方案.md §7.3） ----------------
+
+balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupInfoCardMessage(
+    const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
+{
+    const bool isAnnouncement = (m.m_msgtype == kMsgTypeAnnouncement);
+    const CString placeholder = isAnnouncement ? TR(L"[群公告]") : TR(L"[群备忘]");
+    balloonchatwnd::ChatMessage card;
+    if (fromMe)
+    {
+        // 本人发的（本人发布的公告、本人新建或修改的备忘）：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
+        card = MakeSelfTextMessage(m, placeholder, list);
+    }
+    else
+    {
+        // 别人发的：左侧气泡 + 真实发送人名 / 头像；卡片由服务端以操作人的名义发出，发送人就是操作人
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+        card = balloonchatwnd::MakeTextMessage(false, placeholder);
+        card.msgid                 = m.m_msgid;
+        card.timestampMs           = m.m_timestamp;
+        card.senderName            = sender.m_name;
+        card.senderUserId          = m.m_from;
+        card.senderAvatarText      = sender.m_glyph;
+        card.senderAvatarColor     = sender.m_color;
+        card.senderAvatarImagePath = sender.m_imagePath;
+    }
+
+    const CString actor = fromMe ? CString() : InfoCardActorName(m.m_from);
+    if (isAnnouncement)
+    {
+        balloonchatwnd::ApplyAnnouncementCard(card, m.m_announcementContent, actor);
+        //入群必读卡片（docs/群公告接入方案.md §14）：服务端以系统名义（发送者 0）发出，只有新成员本人看得到。
+        //发送人一栏显示「入群必读」，不按 userid 0 去查成员
+        balloonchatwnd::AnnouncementCardInfo info;
+        if (!fromMe && balloonchatwnd::ParseAnnouncementCard(m.m_announcementContent, info) && info.m_mustRead)
+        {
+            const CString name = balloonchatwnd::MustReadSenderName();
+            card.senderName            = name;
+            card.senderUserId          = 0;
+            card.senderAvatarText      = name.Left(1);
+            card.senderAvatarColor     = kMustReadAvatarColor;
+            card.senderAvatarImagePath.Empty();
+        }
+        return card;
+    }
+
+    balloonchatwnd::ApplyMemoCard(card, m.m_memoCardContent, actor, memo::NowLocalMinute());
+    //备忘簿里已经没有这一条（备忘被删除、或本人已不在提醒对象中）时转为失效
+    const memo::CMemoBook& book = balloonmemo::CMemoCenter::Instance().Book();
+    const bool inBook = (card.infoCardRefId > 0) && (book.Find(card.infoCardRefId) != NULL);
+    balloonchatwnd::SetMemoCardAvailable(card, balloonchatwnd::IsMemoCardAvailable(book.IsLoaded(), inBook));
+    return card;
+}
+
+balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupCloudRecordMessage(
+    const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
+{
+    const CString placeholder = TR(L"[云端录像]");
+    balloonchatwnd::ChatMessage card;
+    if (fromMe)
+    {
+        // 本人分享的：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
+        card = MakeSelfTextMessage(m, placeholder, list);
+    }
+    else
+    {
+        // 别人分享的：左侧气泡 + 真实发送人名 / 头像；卡片由服务端以开启者的名义发出，发送人就是开启者
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+        card = balloonchatwnd::MakeTextMessage(false, placeholder);
+        card.msgid                 = m.m_msgid;
+        card.timestampMs           = m.m_timestamp;
+        card.senderName            = sender.m_name;
+        card.senderUserId          = m.m_from;
+        card.senderAvatarText      = sender.m_glyph;
+        card.senderAvatarColor     = sender.m_color;
+        card.senderAvatarImagePath = sender.m_imagePath;
+    }
+    // 副标题里的名字：成员表或通讯录查得到时用那里的显示名；content 里没有服务端写的昵称，查不到时退回气泡上的发送人名
+    CString actor;
+    if (!fromMe)
+    {
+        actor = InfoCardActorName(m.m_from);
+        if (actor.IsEmpty())
+            actor = card.senderName;
+    }
+    balloonchatwnd::ApplyCloudRecordCard(card, m.m_cloudRecordContent, actor);
+    return card;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenCloudRecordCard(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                           BOOL& /*bHandled*/)
+{
+    balloonchatwnd::CloudRecordOpenRequest* pReq = (balloonchatwnd::CloudRecordOpenRequest*)lParam;
+    if (pReq == NULL)
+    {
+        return 0;
+    }
+    const int64_t recordId = (int64_t)pReq->m_recordId;
+    const std::wstring title((LPCWSTR)pReq->m_title);
+    delete pReq;
+    const bool ok = balloonscreenshare::CScreenShareHub::GetInstance().OpenCloudRecord(m_hWnd, recordId, title);
+    LOG_INFO("group chat window: cloud record card play, group=%lld, record=%lld, ok=%d.",
+             (long long)m_groupId, (long long)recordId, ok ? 1 : 0);
+    return 0;
+}
+
+CString CBalloonGroupChatWindow::InfoCardActorName(int64_t userId) const
+{
+    balloonchatwnd::GroupSenderRender found;
+    if (userId <= 0 || !LookupSenderChain(const_cast<CBalloonGroupChatWindow*>(this), userId, found))
+    {
+        return CString();
+    }
+    return found.m_name;
+}
+
+bool CBalloonGroupChatWindow::IsShowingAnyMessage(const std::vector<int64_t>& msgids)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < msgids.size(); ++i)
+    {
+        balloonchatwnd::ChatMessage msg;
+        if (msgids[i] > 0 && list->GetMessageByMsgid((long long)msgids[i], msg))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CBalloonGroupChatWindow::ApplyAnnouncementCardDeleted(int64_t cardMsgId, const std::string& cardContent)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    balloonchatwnd::ChatMessage msg;
+    if (list == NULL || cardContent.empty() || !list->GetMessageByMsgid((long long)cardMsgId, msg)
+        || !msg.screenShareIsAnnouncement)
+    {
+        return;
+    }
+    //副标题里的发布人名字沿用卡片上已经显示的那一个，不随删除改变
+    balloonchatwnd::ApplyAnnouncementCard(msg, cardContent, msg.fromMe ? CString() : msg.screenShareHostName);
+    list->SetMessageByMsgid((long long)cardMsgId, msg);
+    LOG_INFO("group chat window: announcement card rewritten as deleted, group=%lld, msgid=%lld.",
+             (long long)m_groupId, (long long)cardMsgId);
+}
+
+int CBalloonGroupChatWindow::RefreshMemoCardsAvailability()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return 0;
+    }
+    const memo::CMemoBook& book = balloonmemo::CMemoCenter::Instance().Book();
+    const std::vector<long long> msgids = list->GetMsgidsOfKind(balloonchatwnd::kMsgScreenShare);
+    int refreshed = 0;
+    for (size_t i = 0; i < msgids.size(); ++i)
+    {
+        balloonchatwnd::ChatMessage msg;
+        if (!list->GetMessageByMsgid(msgids[i], msg) || !msg.screenShareIsMemo || msg.infoCardRefId <= 0)
+        {
+            continue;
+        }
+        const bool inBook = (book.Find(msg.infoCardRefId) != NULL);
+        if (balloonchatwnd::SetMemoCardAvailable(msg, balloonchatwnd::IsMemoCardAvailable(book.IsLoaded(), inBook)))
+        {
+            list->SetMessageByMsgid(msgids[i], msg);
+            ++refreshed;
+        }
+    }
+    if (refreshed > 0)
+    {
+        LOG_INFO("group chat window: memo cards availability refreshed, group=%lld, cards=%d.",
+                 (long long)m_groupId, refreshed);
+    }
+    return refreshed;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenAnnouncementCard(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                            BOOL& /*bHandled*/)
+{
+    balloonchatwnd::InfoCardOpenRequest* pReq = (balloonchatwnd::InfoCardOpenRequest*)lParam;
+    if (pReq == NULL)
+    {
+        return 0;
+    }
+    const long long msgid = pReq->m_msgid;
+    delete pReq;
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    balloonchatwnd::ChatMessage msg;
+    if (list == NULL || !list->GetMessageByMsgid(msgid, msg) || !balloonchatwnd::IsAnnouncementCardOpenable(msg))
+    {
+        return 0;
+    }
+    balloonchatwnd::AnnouncementCardInfo info;
+    if (!balloonchatwnd::ParseAnnouncementCard(msg.screenShareContent, info) || info.m_deleted)
+    {
+        return 0;
+    }
+    //入群必读卡片、本人仍待确认：按入群必读模式弹出（带「我已阅读」），与输入区「点此阅读」是同一个弹窗
+    if (info.m_mustRead && m_mustReadPending && m_mustReadHasItem && info.m_announcementId == m_mustReadItem.m_id)
+    {
+        ShowMustReadPopup();
+        return 0;
+    }
+
+    //发布人：本人发的写本人昵称；别人发的取卡片上显示的那个名字
+    CString publisher = msg.fromMe ? CString() : msg.screenShareHostName;
+    if (publisher.IsEmpty())
+    {
+        publisher = info.m_publisherName;
+    }
+    //时间的写法与公告边栏相同（同一个 FormatAnnouncementTime、同一个取当前时间的函数）
+    const CString timeText = balloongroupmanage::FormatAnnouncementTime(info.m_publishTimeMs, NowMillisecondsForNotice());
+    //公告详情窗的宿主是本窗口：居中到本窗口，「查看全部」发回本窗口（FMG_MSG_OPEN_GROUP_ANNOUNCE）。
+    //从卡片点开的是一条已有的公告，标题写「群公告」，不沿用新公告提示的「新群公告」
+    m_announceCardDlg.SetCaption(TR(L"群公告"));
+    m_announceCardDlg.ShowAnnouncement(m_hWnd, (int64_t)m_groupId, m_groupName, info.m_title, info.m_body,
+                                       info.m_severity, publisher, timeText);
+    LOG_INFO("group chat window: announcement card opened, group=%lld, msgid=%lld, announcement=%lld.",
+             (long long)m_groupId, msgid, info.m_announcementId);
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenCodeViewer(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    balloonchatwnd::CodeViewerOpenRequest* pReq = (balloonchatwnd::CodeViewerOpenRequest*)lParam;
+    if (pReq == NULL)
+    {
+        return 0;
+    }
+    // 代码片段的发送者：本人发的取本人 userid，别人发的取消息上的发送者
+    const long long senderId = pReq->m_fromMe ? SelfUserIdForCode() : pReq->m_senderId;
+    // 打开代码查看窗，已发出的代码片段可以在查看窗里追加批注（docs/代码片段方案.md 第 12 节）；
+    // 聊天卡片右键「添加批注…」打开时展开批注栏
+    ShowCodeViewer(pReq->m_code, pReq->m_lang, pReq->m_notes, pReq->m_key, pReq->m_msgid, senderId, pReq->m_fromMe,
+                   pReq->m_action == balloonchatwnd::kCodeViewerActionAnnotate);
+    delete pReq;
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenMarkdownPreview(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    //lParam 为堆上的请求，用完在这里释放
+    std::unique_ptr<balloonchatwnd::MarkdownPreviewOpenRequest> req((balloonchatwnd::MarkdownPreviewOpenRequest*)lParam);
+    if (!req)
+    {
+        return 0;
+    }
+    const std::wstring sender = req->m_fromMe ? std::wstring(TR(L"我")) : req->m_sender;
+    balloonmd::MarkdownPreviewDoc doc;
+    doc.m_sourceUtf8 = req->m_sourceUtf8;
+    doc.m_title = req->m_title;
+    doc.m_meta = balloonmd::MarkdownPreviewMeta(sender, req->m_timestampMs);
+    doc.m_key = req->m_key;
+    balloonmd::CMarkdownEditorManager::GetInstance().OpenPreview(doc);
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenMemoCard(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    balloonchatwnd::InfoCardOpenRequest* pReq = (balloonchatwnd::InfoCardOpenRequest*)lParam;
+    if (pReq == NULL)
+    {
+        return 0;
+    }
+    const long long msgid = pReq->m_msgid;
+    const int64_t memoid = (int64_t)pReq->m_refId;
+    delete pReq;
+    if (memoid <= 0)
+    {
+        return 0;
+    }
+
+    //备忘簿里已经没有这一条：卡片转为失效、不打开。点的那一刻与最近一次刷新之间备忘簿可能刚刚变过
+    if (balloonmemo::CMemoCenter::Instance().Book().Find(memoid) == NULL)
+    {
+        RefreshMemoCardsAvailability();
+        LOG_INFO("group chat window: memo card no longer available, group=%lld, msgid=%lld, memoid=%lld.",
+                 (long long)m_groupId, msgid, (long long)memoid);
+        return 0;
+    }
+    //打开方式与「备忘」页签双击卡片相同：群主、管理员修改，其他人只读
+    OpenGroupMemoEditor(memoid);
+    LOG_INFO("group chat window: memo card opened, group=%lld, msgid=%lld, memoid=%lld.",
+             (long long)m_groupId, msgid, (long long)memoid);
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnOpenGroupAnnounceMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/,
+                                                        BOOL& /*bHandled*/)
+{
+    if ((int64_t)wParam != (int64_t)m_groupId)
+    {
+        return 0;
+    }
+    ActivateNoticeTab();
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatJoinScreenShare(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                       BOOL& /*bHandled*/)
+{
+    //lParam 为堆上的加入请求，用完在这里释放
+    std::unique_ptr<balloonchatwnd::ScreenShareJoinRequest> req((balloonchatwnd::ScreenShareJoinRequest*)lParam);
+    if (!req || m_groupId == 0)
+    {
+        return 0;
+    }
+    // 加入要走信令通道，离线时必然失败，在入口就拦住。
+    if (!CheckOnlineFor(balloonmain::kActionRealtimeCall))
+    {
+        return 0;
+    }
+    //群通话卡片复用屏幕共享卡片的版式与这条消息：加入的是群通话
+    if (req->m_groupCall)
+    {
+        balloongroupcall::CGroupCallHub::GetInstance().JoinCall((int64_t)m_groupId, m_groupName, req->m_roomId);
+        return 0;
+    }
+    balloonscreenshare::CScreenShareHub::GetInstance().JoinShare(conversation_group, (int64_t)m_groupId,
+                                                                 req->m_roomId, req->m_hostName, req->m_forced);
+    return 0;
+}
+
+//本账号的语音缓存目录 Users\<账号>\ChatVoice\（语音消息第 3b 步，见 docs/语音消息方案.md 第 7.3 节）
+static std::wstring CurrentUserVoiceDir()
+{
+    return net::UserCacheDir(g_szDataRoot, net::CurrentUserAccount(), L"ChatVoice");
+}
+
+void CBalloonGroupChatWindow::RenderIncomingGroupVoice(balloonchatwnd::ChatMessageList* list, bool fromMe,
+                                                       const net::MessageNotify& notify,
+                                                       const balloonchatwnd::VoicePlayedQuery& played)
+{
+    if (list == NULL)
+    {
+        return;
+    }
+    const std::wstring voiceDir = CurrentUserVoiceDir();
+    const bool isPlayed = balloonchatwnd::ResolveVoicePlayed(fromMe, played.m_storeReady,
+                                                             played.m_played.count(notify.m_msgid) > 0);
+    bool needDownload = false;
+    balloonchatwnd::ChatMessage msg =
+        balloonchatwnd::BuildReceivedVoiceMessage(fromMe, notify, isPlayed, voiceDir, &needDownload);
+    if (fromMe)
+    {
+        // 自己发的：本端真实头像（字形 / 真图），不显示发送人名
+        FillSelfSenderAvatar(m_lpFMGClient, msg);
+    }
+    else
+    {
+        // 别人发的：真实发送人名 / 头像（取自群成员映射，查不到回退"用户<id>"）
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(notify.m_from);
+        msg.senderName            = sender.m_name;
+        msg.senderUserId          = notify.m_from;
+        msg.senderAvatarText      = sender.m_glyph;
+        msg.senderAvatarColor     = sender.m_color;
+        msg.senderAvatarImagePath = sender.m_imagePath;
+    }
+    list->AppendMessage(msg);
+
+    // 本机没有这段语音：在后台下载到 ChatVoice\<md5>.ogg，结果按 md5 经主面板广播回来（OnVoiceDownloadResult）
+    if (needDownload)
+    {
+        net::FileTransfer::GetInstance().EnqueueVoiceDownload(
+            notify.m_voiceFileId, notify.m_voiceMd5, notify.m_voiceSize,
+            balloonvoice::VoiceCachePath(voiceDir, notify.m_voiceMd5));
+    }
+    LOG_INFO("group chat window: voice message shown, group=%lld, from=%lld, msgid=%lld, played=%d, download=%d.",
+             (long long)m_groupId, (long long)notify.m_from, (long long)notify.m_msgid, isPlayed ? 1 : 0,
+             needDownload ? 1 : 0);
+}
+
+void CBalloonGroupChatWindow::StartVoiceRecording()
+{
+    //已经有录音条在显示时录音会话直接忽略；失败时由它提示原因（经 ShowVoiceRecordToast）
+    m_voiceSession.Start(CurrentUserVoiceDir(), GenClientMsgId());
+}
+
+void CBalloonGroupChatWindow::SendRecordedVoice(const std::string& clientMsgId,
+                                                const balloonvoice::VoiceRecordOutput& out)
+{
+    LOG_INFO("group chat window: voice recorded, clientmsgid %s, %lld ms, %lld bytes.", clientMsgId.c_str(),
+             static_cast<long long>(out.m_durationMs), static_cast<long long>(out.m_fileBytes));
+
+    //录好的文件已在 ChatVoice\<md5>.ogg：先在列表末尾插一条发送中的语音气泡，再交给文件传输线程上传并发出
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessage msg = balloonchatwnd::MakeSendingVoiceMessage(
+        clientMsgId, out.m_durationMs, out.m_wave, out.m_path, out.m_md5, out.m_fileBytes);
+    // 自己发的：本端真实头像（字形 / 真图），不显示发送人名
+    FillSelfSenderAvatar(m_lpFMGClient, msg);
+    list->AppendMessage(msg);
+    StartVoiceUpload(msg);
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatVoiceAction(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    balloonchatwnd::VoiceActionRequest* req = reinterpret_cast<balloonchatwnd::VoiceActionRequest*>(lParam);
+    if (req == NULL)
+    {
+        return 0;
+    }
+    if ((int)wParam == balloonchatwnd::kVoiceActionResend)
+    {
+        ResendVoice(req->m_clientMsgId);
+    }
+    else
+    {
+        //点了气泡：播放、停止、提示正在下载或重新下载
+        HandleVoiceClick(req->m_msgid, req->m_clientMsgId);
+    }
+    delete req;
+    return 0;
+}
+
+void CBalloonGroupChatWindow::ResendVoice(const std::string& clientMsgId)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    balloonchatwnd::ChatMessage msg;
+    if (list == NULL || !balloonchatwnd::FindVoiceByClientMsgId(*list, clientMsgId, msg))
+    {
+        return;
+    }
+    if (!balloonchatwnd::CanResendVoice(msg))
+    {
+        //发送失败的本人语音仍不能重发，只剩一种情况：录音文件已被「清理缓存」删掉
+        if (msg.fromMe && msg.sendFailed)
+        {
+            ShowToast(balloonchatwnd::VoiceFileMissingHint().c_str());
+            LOG_INFO("group chat window: voice resend refused, file missing, clientmsgid=%s.", clientMsgId.c_str());
+        }
+        return;
+    }
+    //气泡位置不变、回到发送中并清掉失败原因，再用原 clientmsgid 重新上传（文件已在服务端时只重发 1503）
+    if (!list->RestartVoiceSendByClientMsgId(clientMsgId))
+    {
+        return;
+    }
+    LOG_INFO("group chat window: voice resend, clientmsgid=%s.", clientMsgId.c_str());
+    StartVoiceUpload(msg);
+}
+
+void CBalloonGroupChatWindow::StartVoiceUpload(const balloonchatwnd::ChatMessage& msg)
+{
+    //调试入口没有会话绑定，不真正发送
+    if (m_groupId == 0)
+    {
+        LOG_INFO("group chat window: voice upload skipped, no conversation bound, clientmsgid=%s.", msg.clientMsgId.c_str());
+        return;
+    }
+    net::FileTransfer::GetInstance().EnqueueSendVoice(conversation_group, (int64_t)m_groupId, msg.clientMsgId,
+                                                      std::wstring((LPCWSTR)msg.voiceLocalPath), msg.voiceDuration,
+                                                      net::EncodeVoiceWave(msg.voiceWave));
+    //登记待冒泡：发送回执成功后才把本会话冒泡到会话列表顶部、预览写「[语音]」，被服务端拒绝的消息不冒泡
+    ConvSendBumpData bump;
+    bump.ctype   = conversation_group;
+    bump.cid     = (long long)m_groupId;
+    bump.msgType = kMsgTypeVoice;
+    bump.digest  = net::MessageProtocolClient::digestForMsgType(kMsgTypeVoice, std::string());
+    m_sendBumps.Add(msg.clientMsgId, bump);
+}
+
+void CBalloonGroupChatWindow::HandleVoiceClick(long long msgid, const std::string& clientMsgId)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessage msg;
+    bool found = (msgid > 0 && list->GetMessageByMsgid(msgid, msg) && msg.kind == balloonchatwnd::kMsgVoice);
+    if (!found)
+    {
+        found = balloonchatwnd::FindVoiceByClientMsgId(*list, clientMsgId, msg);
+    }
+    if (!found)
+    {
+        return;
+    }
+    switch (balloonchatwnd::DecideVoiceClick(msg))
+    {
+    //就绪的语音（或本人发送中、发送失败的）：开始播放
+    case balloonchatwnd::kVoiceClickPlay:
+        StartVoicePlayback(msg);
+        break;
+    //正在播放：停止；语音中心通知本窗口播放结束，气泡在 OnVoicePlayEnded 里退出播放中
+    case balloonchatwnd::kVoiceClickStop:
+        balloonvoice::CVoiceHub::GetInstance().StopPlay();
+        break;
+    //文件还在下载：提示稍候
+    case balloonchatwnd::kVoiceClickWaitDownload:
+        ShowToast(balloonchatwnd::VoiceDownloadingHint().c_str());
+        break;
+    //文件不在本机（上次下载失败等）：重新下载，结果按 md5 经主面板广播回来（OnVoiceDownloadResult）
+    case balloonchatwnd::kVoiceClickRetryDownload:
+    {
+        const std::wstring voiceDir = CurrentUserVoiceDir();
+        if (msg.voiceFileId.empty() || msg.voiceMd5.empty() || voiceDir.empty())
+        {
+            ShowToast(balloonchatwnd::VoicePlayFailedHint().c_str());
+            break;
+        }
+        list->MarkVoiceDownloading(msg.voiceMd5);
+        net::FileTransfer::GetInstance().EnqueueVoiceDownload(msg.voiceFileId, msg.voiceMd5, msg.voiceSize,
+                                                              balloonvoice::VoiceCachePath(voiceDir, msg.voiceMd5));
+        LOG_INFO("group chat window: voice download retried, md5=%s.", msg.voiceMd5.c_str());
+        break;
+    }
+    //其它取值不会出现
+    default:
+        break;
+    }
+}
+
+void CBalloonGroupChatWindow::StartVoicePlayback(const balloonchatwnd::ChatMessage& msg)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return;
+    }
+    balloonvoice::VoicePlayKey key;
+    key.m_msgid = msg.msgid;
+    key.m_clientMsgId = msg.clientMsgId;
+    //正在播别的语音（本窗口或别的窗口）时，语音中心先通知原来的窗口播放结束，再开播这一条
+    if (!balloonvoice::CVoiceHub::GetInstance().StartPlay(this, key, std::wstring((LPCWSTR)msg.voiceLocalPath)))
+    {
+        ShowToast(balloonchatwnd::VoicePlayFailedHint().c_str());
+        LOG_WARNING("group chat window: voice play failed, msgid=%lld.", msg.msgid);
+        return;
+    }
+    list->SetVoicePlaying(msg.msgid, msg.clientMsgId, true);
+    //对方发来、还没听过：请主面板在本地库标为已听（红点只记在本机，方案 V7）
+    if (!msg.fromMe && !msg.voicePlayed && msg.msgid > 0 && ::IsWindow(m_hostPanel))
+    {
+        balloonchatwnd::VoicePlayedMark* mark = new balloonchatwnd::VoicePlayedMark();
+        mark->m_ctype = conversation_group;
+        mark->m_cid = (int64_t)m_groupId;
+        mark->m_msgid = msg.msgid;
+        if (!::PostMessage(m_hostPanel, FMG_MSG_VOICE_PLAYED, 0, (LPARAM)mark))
+        {
+            delete mark;
+        }
+    }
+}
+
+void CBalloonGroupChatWindow::OnVoicePlayProgress(const balloonvoice::VoicePlayKey& key, int64_t playedMs, int64_t totalMs)
+{
+    (void)totalMs;
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list != NULL)
+    {
+        list->SetVoicePlayFrame(key.m_msgid, key.m_clientMsgId, balloonchatwnd::VoicePlayFrame(playedMs));
+    }
+}
+
+void CBalloonGroupChatWindow::OnVoicePlayEnded(const balloonvoice::VoicePlayKey& key, int reason)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return;
+    }
+    list->SetVoicePlaying(key.m_msgid, key.m_clientMsgId, false);
+    //播到结尾：紧挨着的下一条是对方发来、未听、已下载好的语音时接着播（方案第 3.2 节）；被停止的不接着播
+    if (reason != balloonvoice::voice_play_end_finished)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessage next;
+    if (list->NextAutoPlayVoice(key.m_msgid, key.m_clientMsgId, next))
+    {
+        LOG_INFO("group chat window: voice auto-play next, msgid=%lld.", next.msgid);
+        StartVoicePlayback(next);
+    }
+}
+
+void CBalloonGroupChatWindow::ShowVoiceRecordToast(const std::wstring& text)
+{
+    ShowToast(text.c_str());
+}
+
+void CBalloonGroupChatWindow::ShowVoiceRecordBarUi(bool show)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiControl* input = content->FindCtrlById(balloonchatwnd::kGIdInputEdit);
+    balloonchatwnd::ShowVoiceRecordBar(input, content->FindCtrlById(balloonchatwnd::kGIdInputBottomRow),
+                                       content->FindCtrlById(balloonchatwnd::kGIdVoiceBar), show);
+    //录音时把焦点从（已隐藏的）输入框移开；收起后还给输入框
+    SetDuiFocus(show ? NULL : input);
+    InvalidateRect(NULL, FALSE);
+}
+
+void CBalloonGroupChatWindow::ApplyVoiceButtonVisibility()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    //「语音消息」的录音与播放都由 FlamingoMedia.dll 提供：模块没有加载时隐藏
+    balloonwjui::DuiControl* btn = content->FindCtrlById(balloonchatwnd::kGIdTbVoice);
+    const bool show = balloonvoice::CVoiceHub::GetInstance().IsModuleReady();
+    if (btn == NULL || btn->IsVisible() == show)
+    {
+        return;
+    }
+    btn->SetVisible(show);
+    //显隐变化后对按钮所在的那一行重排（开发约定文档「UI 约定」第 5 条）
+    balloonwjui::DuiControl* row = btn->GetParent();
+    if (row != NULL)
+    {
+        row->ForceLayout(row->GetRect());
+    }
+}
+
+void CBalloonGroupChatWindow::ApplyScreenShareButtonVisibility()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    //头部「共享屏幕」与工具栏「屏幕录制」都由 FlamingoMedia.dll 提供：模块没有加载（录屏另要求系统支持）时隐藏
+    const balloonscreenshare::CScreenShareHub& hub = balloonscreenshare::CScreenShareHub::GetInstance();
+    const UINT ids[] = { balloonchatwnd::kGIdHdrScreenShare, balloonchatwnd::kGIdTbRecord };
+    const bool shows[] = { hub.IsModuleReady(), hub.IsRecordSupported() };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        balloonwjui::DuiControl* btn = content->FindCtrlById(ids[i]);
+        if (btn == NULL || btn->IsVisible() == shows[i])
+        {
+            continue;
+        }
+        btn->SetVisible(shows[i]);
+        //显隐变化后对按钮所在的那一行重排（开发约定文档「UI 约定」第 5 条）
+        balloonwjui::DuiControl* row = btn->GetParent();
+        if (row != NULL)
+        {
+            row->ForceLayout(row->GetRect());
+        }
+    }
+}
+
+void CBalloonGroupChatWindow::RefreshScreenShareBanner()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonscreenshare::ScreenShareActiveInfo info;
+    std::wstring text;
+    m_shareBannerRoomId.clear();
+    m_shareBannerHostName.Empty();
+    m_shareBannerSelfHost = false;
+    m_shareBannerForced = false;
+    if (balloonscreenshare::CScreenShareHub::GetInstance().GetActive(conversation_group, (int64_t)m_groupId, info))
+    {
+        const int64_t selfId = (m_lpFMGClient != NULL)
+                               ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+        //查询应答不带发起人名：按群成员资料补上
+        CString hostName = info.m_hostName.c_str();
+        if (hostName.IsEmpty() && info.m_hostId > 0)
+        {
+            hostName = ResolveSender(info.m_hostId).m_name;
+        }
+        m_shareBannerRoomId = info.m_roomId;
+        m_shareBannerHostName = hostName;
+        m_shareBannerSelfHost = (selfId != 0 && info.m_hostId == selfId);
+        m_shareBannerForced = info.m_forced;
+        text = balloonchatwnd::MakeScreenShareBannerText(m_shareBannerSelfHost, std::wstring(hostName.GetString()),
+                                                         info.m_locked, info.m_forced, info.m_title);
+    }
+    //横幅显隐改变了消息区上方的占位高度：与 Pin 提示带同一处理，先整树重排，再请本窗把输入区块高度钉回
+    if (balloonchatwnd::UpdateScreenShareBanner(content, text))
+    {
+        content->ForceLayout(content->GetRect());
+        if (IsWindow())
+        {
+            ::PostMessage(m_hWnd, kRelayoutMsg, 0, 0);
+        }
+    }
+}
+
+bool CBalloonGroupChatWindow::OnScreenShareInfoChanged(int64_t msgid, const std::string& contentJson)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL || msgid <= 0)
+    {
+        return false;
+    }
+    balloonchatwnd::ChatMessage msg;
+    if (!list->GetMessageByMsgid(msgid, msg))
+    {
+        return false;
+    }
+    if (!balloonchatwnd::ApplyScreenShareInfo(msg, contentJson))
+    {
+        return false;
+    }
+    list->SetMessageByMsgid(msgid, msg);
+    LOG_INFO("group chat window: screen share card info refreshed, group=%lld, msgid=%lld.", (long long)m_groupId,
+             (long long)msgid);
+    return true;
+}
+
+int CBalloonGroupChatWindow::OnScreenShareStatusChanged()
+{
+    RefreshScreenShareBanner();
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return 0;
+    }
+    const balloonscreenshare::CScreenShareHub& hub = balloonscreenshare::CScreenShareHub::GetInstance();
+    const std::vector<long long> msgids = list->GetMsgidsOfKind(balloonchatwnd::kMsgScreenShare);
+    int refreshed = 0;
+    for (size_t i = 0; i < msgids.size(); ++i)
+    {
+        balloonchatwnd::ChatMessage msg;
+        //群通话卡片复用这种气泡，状态另由 OnGroupCallStatusChanged 刷新；群公告卡片、群备忘卡片、云端录像卡片同样复用
+        //这种气泡，没有房间，不参与屏幕共享状态的刷新
+        if (!list->GetMessageByMsgid(msgids[i], msg) || msg.screenShareIsGroupCall
+            || msg.screenShareIsAnnouncement || msg.screenShareIsMemo || msg.screenShareIsCloudRecord)
+        {
+            continue;
+        }
+        const int state = hub.RoomState(conversation_group, (int64_t)m_groupId, msg.screenShareRoomId);
+        if (state == msg.screenShareState)
+        {
+            continue;
+        }
+        balloonchatwnd::ApplyScreenShareState(msg, state);
+        list->SetMessageByMsgid(msgids[i], msg);
+        ++refreshed;
+    }
+    return refreshed;
+}
+
+balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupCallCardMessage(
+    const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
+{
+    balloonchatwnd::ChatMessage card;
+    CString initiatorName;
+    if (fromMe)
+    {
+        // 本人发起的：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
+        card = MakeSelfTextMessage(m, TR(L"[群语音通话]"), list);
+    }
+    else
+    {
+        // 别人发起的：左侧气泡 + 真实发送人名 / 头像；卡片由服务端以发起人的名义发出，发送人就是发起人
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+        card = balloonchatwnd::MakeTextMessage(false, TR(L"[群语音通话]"));
+        card.msgid                 = m.m_msgid;
+        card.timestampMs           = m.m_timestamp;
+        card.senderName            = sender.m_name;
+        card.senderUserId          = m.m_from;
+        card.senderAvatarText      = sender.m_glyph;
+        card.senderAvatarColor     = sender.m_color;
+        card.senderAvatarImagePath = sender.m_imagePath;
+        initiatorName = sender.m_name;
+    }
+    const balloongroupcall::CGroupCallHub& hub = balloongroupcall::CGroupCallHub::GetInstance();
+    const std::string roomId = balloonchatwnd::GroupCallRoomIdOf(m.m_groupCallContent);
+    const int state = hub.RoomState((int64_t)m_groupId, roomId);
+    //进行中的那一场取状态缓存里的人数，其余情况不显示人数
+    int count = 0;
+    balloongroupcall::GroupCallActiveInfo active;
+    if (state == balloongroupcall::kGroupCallRoomActive && hub.GetActive((int64_t)m_groupId, active))
+    {
+        count = active.m_count;
+    }
+    balloonchatwnd::ApplyGroupCallCard(card, m.m_groupCallContent, initiatorName, state, count);
+    return card;
+}
+
+void CBalloonGroupChatWindow::StartGroupCallFromHeader(int media)
+{
+    if (m_groupId == 0 || m_lpFMGClient == NULL || !CheckOnlineFor(balloonmain::kActionRealtimeCall))
+    {
+        return;
+    }
+    balloongroupcall::CGroupCallHub& hub = balloongroupcall::CGroupCallHub::GetInstance();
+    if (!hub.IsModuleReady())
+    {
+        ::MessageBox(m_hWnd, TR(L"群通话组件没有加载，暂时无法发起群通话。"), TR(L"群通话"), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    //本群已有进行中的群通话：不另起一场，直接加入那一场（一个群同时只有一场，docs/群音视频通话方案.md 第 2 节）
+    balloongroupcall::GroupCallActiveInfo active;
+    if (hub.GetActive((int64_t)m_groupId, active) && !active.m_roomId.empty())
+    {
+        LOG_INFO("group chat window: group call already active, join instead of start. group=%lld, room=%s.",
+                 (long long)m_groupId, active.m_roomId.c_str());
+        hub.JoinCall((int64_t)m_groupId, m_groupName, active.m_roomId);
+        return;
+    }
+    const std::vector<net::ContactItem> candidates = BuildMemoCandidates();
+    if (candidates.empty())
+    {
+        ::MessageBox(m_hWnd, TR(L"成员列表还没有加载，请稍后再试。"), TR(L"群通话"), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (!m_callPicker)
+    {
+        m_callPicker.reset(new CCreateGroupDlg(NULL));
+    }
+    if (!m_callPickSink)
+    {
+        m_callPickSink.reset(new GroupCallPickSink(this));
+    }
+    m_callPickMedia = media;
+    m_callPicker->SetPickSink(m_callPickSink.get());
+    m_callPicker->OpenForPick(m_hWnd, CCreateGroupDlg::kPurposeGroupCall, (int64_t)m_groupId,
+                              (UINT)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID, candidates,
+                              std::vector<net::DepartmentItem>());
+    LOG_INFO("group chat window: group call picker opened, group=%lld, media=%d, candidates=%u.",
+             (long long)m_groupId, media, (uint32_t)candidates.size());
+}
+
+void CBalloonGroupChatWindow::OpenGroupCallInvitePicker(const std::vector<int64_t>& exclude)
+{
+    if (m_groupId == 0 || m_lpFMGClient == NULL || !IsWindow())
+    {
+        return;
+    }
+    //成员表还没到（成员表里至少有本人，为空就是没加载）：记下请求，OnGroupMembersArrived 里补开
+    if (m_memberInfo.empty())
+    {
+        m_callInvitePending = true;
+        m_callInviteExclude = exclude;
+        LOG_INFO("group chat window: group call invite deferred until members arrive, group=%lld.",
+                 (long long)m_groupId);
+        return;
+    }
+    const std::vector<net::ContactItem> members = BuildMemoCandidates();
+    //候选：本群成员（不含自己）去掉已加入或振铃中的人
+    const std::set<int64_t> excluded(exclude.begin(), exclude.end());
+    std::vector<net::ContactItem> candidates;
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+        if (excluded.count(members[i].m_userid) == 0)
+        {
+            candidates.push_back(members[i]);
+        }
+    }
+    if (candidates.empty())
+    {
+        ::MessageBox(m_hWnd, TR(L"本群成员都已在通话中或正在被邀请。"), TR(L"群通话"), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (!m_callPicker)
+    {
+        m_callPicker.reset(new CCreateGroupDlg(NULL));
+    }
+    if (!m_callPickSink)
+    {
+        m_callPickSink.reset(new GroupCallPickSink(this));
+    }
+    //0 表示这一次是通话中追加邀请，不是发起
+    m_callPickMedia = 0;
+    m_callPicker->SetPickSink(m_callPickSink.get());
+    m_callPicker->OpenForPick(m_hWnd, CCreateGroupDlg::kPurposeGroupCallInvite, (int64_t)m_groupId,
+                              (UINT)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID, candidates,
+                              std::vector<net::DepartmentItem>());
+    LOG_INFO("group chat window: group call invite picker opened, group=%lld, excluded=%u, candidates=%u.",
+             (long long)m_groupId, (uint32_t)exclude.size(), (uint32_t)candidates.size());
+}
+
+void CBalloonGroupChatWindow::OnGroupCallMembersPicked(const std::vector<int64_t>& userIds)
+{
+    if (m_groupId == 0 || !IsWindow() || userIds.empty())
+    {
+        return;
+    }
+    if (userIds.size() > kGroupCallMaxInvitees)
+    {
+        //人数上限含本人，所以提示里的数是可邀请人数加一
+        const std::wstring tip = TRF(L"群通话最多 {0} 人，请少选几位成员。", (int)(kGroupCallMaxInvitees + 1));
+        ::MessageBox(m_hWnd, tip.c_str(), TR(L"群通话"), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    balloongroupcall::CGroupCallHub& hub = balloongroupcall::CGroupCallHub::GetInstance();
+    bool ok = false;
+    if (m_callPickMedia > 0)
+    {
+        ok = hub.StartCall((int64_t)m_groupId, m_groupName, m_callPickMedia, userIds);
+    }
+    else
+    {
+        ok = hub.InviteMembers((int64_t)m_groupId, userIds);
+    }
+    LOG_INFO("group chat window: group call members picked, group=%lld, media=%d, count=%u, ok=%d.",
+             (long long)m_groupId, m_callPickMedia, (uint32_t)userIds.size(), ok ? 1 : 0);
+}
+
+int CBalloonGroupChatWindow::OnGroupCallStatusChanged()
+{
+    RefreshGroupCallBanner();
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return 0;
+    }
+    const balloongroupcall::CGroupCallHub& hub = balloongroupcall::CGroupCallHub::GetInstance();
+    balloongroupcall::GroupCallActiveInfo active;
+    const bool hasActive = hub.GetActive((int64_t)m_groupId, active);
+    const std::vector<long long> msgids = list->GetMsgidsOfKind(balloonchatwnd::kMsgScreenShare);
+    int refreshed = 0;
+    for (size_t i = 0; i < msgids.size(); ++i)
+    {
+        balloonchatwnd::ChatMessage msg;
+        //屏幕共享卡片另由 OnScreenShareStatusChanged 刷新
+        if (!list->GetMessageByMsgid(msgids[i], msg) || !msg.screenShareIsGroupCall)
+        {
+            continue;
+        }
+        const int state = hub.RoomState((int64_t)m_groupId, msg.screenShareRoomId);
+        const int count = (state == balloongroupcall::kGroupCallRoomActive && hasActive) ? active.m_count : 0;
+        const int oldState = msg.screenShareState;
+        const CString oldStatus = msg.screenShareStatus;
+        const bool oldEnabled = msg.screenShareButtonEnabled;
+        balloonchatwnd::ApplyGroupCallState(msg, state, count);
+        //状态、状态文字（含人数）与按钮都没变时不重画
+        if (oldState == msg.screenShareState && oldStatus == msg.screenShareStatus
+            && oldEnabled == msg.screenShareButtonEnabled)
+        {
+            continue;
+        }
+        list->SetMessageByMsgid(msgids[i], msg);
+        ++refreshed;
+    }
+    return refreshed;
+}
+
+bool CBalloonGroupChatWindow::OnGroupCallCardChanged(int64_t msgid, const std::string& contentJson)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL || msgid <= 0)
+    {
+        return false;
+    }
+    balloonchatwnd::ChatMessage msg;
+    if (!list->GetMessageByMsgid(msgid, msg) || !msg.screenShareIsGroupCall)
+    {
+        return false;
+    }
+    //改写后的卡片带了时长，ApplyGroupCallCard 把它画成已结束、去掉按钮；发起人名沿用构造卡片时按群成员资料取到的那个
+    const int state = balloongroupcall::CGroupCallHub::GetInstance().RoomState((int64_t)m_groupId,
+                                                                               msg.screenShareRoomId);
+    balloonchatwnd::ApplyGroupCallCard(msg, contentJson, msg.fromMe ? CString() : msg.screenShareHostName, state, 0);
+    list->SetMessageByMsgid(msgid, msg);
+    LOG_INFO("group chat window: group call card rewritten, group=%lld, msgid=%lld.", (long long)m_groupId,
+             (long long)msgid);
+    return true;
+}
+
+void CBalloonGroupChatWindow::RefreshGroupCallBanner()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    std::wstring text;
+    m_callBannerRoomId.clear();
+    balloongroupcall::GroupCallActiveInfo info;
+    if (balloongroupcall::CGroupCallHub::GetInstance().GetActive((int64_t)m_groupId, info))
+    {
+        m_callBannerRoomId = info.m_roomId;
+        //本人是否已在通话里只有 FlamingoMedia.dll 知道：横幅一律写「点击加入」，已在通话里时点横幅由 DLL 把通话窗提到前面
+        text = balloonchatwnd::MakeGroupCallBannerText(false, info.m_media == balloongroupcall::kGroupCallVideo,
+                                                       info.m_count);
+    }
+    //横幅显隐改变了消息区上方的占位高度：与屏幕共享横幅同样处理，先整树重排，再请本窗把输入区块高度钉回
+    if (balloonchatwnd::UpdateGroupCallBanner(content, text))
+    {
+        content->ForceLayout(content->GetRect());
+        if (IsWindow())
+        {
+            ::PostMessage(m_hWnd, kRelayoutMsg, 0, 0);
+        }
+    }
+}
+
+int CBalloonGroupChatWindow::GetMemberRole(int64_t userId) const
+{
+    std::map<int64_t, MemberInfo>::const_iterator it = m_memberInfo.find(userId);
+    if (it == m_memberInfo.end())
+    {
+        return -1;
+    }
+    return it->second.m_role;
+}
+
+void CBalloonGroupChatWindow::ApplyGroupCallButtonVisibility()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    //头部「语音通话」「视频通话」由 FlamingoMedia.dll 提供，另受本企业的群通话功能开关控制
+    const bool show = balloongroupcall::CGroupCallHub::GetInstance().IsModuleReady()
+                      && m_lpFMGClient != NULL && m_lpFMGClient->m_UserMgr.m_bGroupCallFeature;
+    const UINT ids[] = { balloonchatwnd::kGIdHdrVoice, balloonchatwnd::kGIdHdrVideo };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        balloonwjui::DuiControl* btn = content->FindCtrlById(ids[i]);
+        if (btn == NULL || btn->IsVisible() == show)
+        {
+            continue;
+        }
+        btn->SetVisible(show);
+        //显隐变化后对按钮所在的那一行重排（开发约定文档「UI 约定」第 5 条）
+        balloonwjui::DuiControl* row = btn->GetParent();
+        if (row != NULL)
+        {
+            row->ForceLayout(row->GetRect());
+        }
+    }
+}
+
+int CBalloonGroupChatWindow::OnShareCardStateChanged(long long shareId, int state, int reason)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    return balloonchatwnd::RefreshShareCardsInList(list, shareId, state, reason);
+}
+
 balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupMergedMessage(
     const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
 {
@@ -5122,13 +8984,13 @@ balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupMergedMessage(
     if (fromMe)
     {
         // 本人发出的：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
-        card = MakeSelfTextMessage(m, _T("[聊天记录]"), list);
+        card = MakeSelfTextMessage(m, TR(L"[聊天记录]"), list);
     }
     else
     {
         // 别人发出的：左侧气泡 + 真实发送人名 / 头像（取自群成员映射，查不到回退"用户<id>"）
         const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
-        card = balloonchatwnd::MakeTextMessage(false, _T("[聊天记录]"));
+        card = balloonchatwnd::MakeTextMessage(false, TR(L"[聊天记录]"));
         card.msgid                 = m.m_msgid;
         card.timestampMs           = m.m_timestamp;
         card.senderName            = sender.m_name;
@@ -5139,6 +9001,259 @@ balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupMergedMessage(
     }
     balloonchatwnd::ApplyMergedCard(card, m.m_mergedContent);
     return card;
+}
+
+balloonchatwnd::ChatMessage CBalloonGroupChatWindow::MakeGroupRelayMessage(
+    const net::MessageNotify& m, bool fromMe, balloonchatwnd::ChatMessageList* list)
+{
+    balloonchatwnd::ChatMessage card;
+    if (fromMe)
+    {
+        // 本人发起的：右侧本端气泡，头像与 msgid 的填法与本人文字气泡相同
+        card = MakeSelfTextMessage(m, TR(L"[接龙]"), list);
+    }
+    else
+    {
+        // 别人发起的：左侧气泡 + 真实发送人名 / 头像（取自群成员映射，查不到回退"用户<id>"）
+        const balloonchatwnd::GroupSenderRender sender = ResolveSender(m.m_from);
+        card = balloonchatwnd::MakeTextMessage(false, TR(L"[接龙]"));
+        card.msgid                 = m.m_msgid;
+        card.timestampMs           = m.m_timestamp;
+        card.senderName            = sender.m_name;
+        card.senderUserId          = m.m_from;
+        card.senderAvatarText      = sender.m_glyph;
+        card.senderAvatarColor     = sender.m_color;
+        card.senderAvatarImagePath = sender.m_imagePath;
+    }
+    const int64_t selfId = (m_lpFMGClient != NULL)
+                           ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    const RelayNameResolver names(*this);
+    balloonchatwnd::ApplyRelayCard(card, m.m_relayContent, selfId, kRelaySelfMutedUnknown,
+                                   NowMillisecondsForRelay(), names);
+    TrackRelayDeadline(card);
+    return card;
+}
+
+bool CBalloonGroupChatWindow::OnRelayChanged(const net::RelayChangedNotify& notify)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+              content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    balloonchatwnd::ChatMessage card;
+    if (list == NULL || !list->GetMessageByMsgid((long long)notify.m_msgid, card))
+    {
+        LOG_INFO("group chat window: relay changed notify, card not in view, group=%lld, msgid=%lld.",
+                 (long long)m_groupId, (long long)notify.m_msgid);
+        return false;
+    }
+
+    const int64_t selfId = (m_lpFMGClient != NULL)
+                           ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    const RelayNameResolver names(*this);
+    if (!balloonchatwnd::ApplyRelayNotifyToMessage(card, notify, selfId, kRelaySelfMutedUnknown,
+                                                   NowMillisecondsForRelay(), names))
+    {
+        //列表里这一行已经不是接龙卡片（卡片被撤回、变成了提示行）
+        LOG_INFO("group chat window: relay changed notify ignored, row is not a relay card, group=%lld, msgid=%lld.",
+                 (long long)m_groupId, (long long)notify.m_msgid);
+        return false;
+    }
+    list->SetMessageByMsgid((long long)notify.m_msgid, card);
+    TrackRelayDeadline(card);
+    LOG_INFO("group chat window: relay card refreshed, group=%lld, msgid=%lld, items=%d, state=%d.",
+             (long long)m_groupId, (long long)notify.m_msgid, card.relayCount, card.relayState);
+    return true;
+}
+
+CString CBalloonGroupChatWindow::ResolveRelayMemberName(int64_t userid) const
+{
+    return ResolveSender(userid).m_name;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatRelayAction(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& /*bHandled*/)
+{
+    //lParam 为气泡堆分配的卡片 msgid，无论成败都在这里释放
+    std::unique_ptr<long long> pMsgid((long long*)lParam);
+    if (!pMsgid || *pMsgid <= 0)
+    {
+        return 0;
+    }
+    const long long msgid = *pMsgid;
+
+    std::unique_ptr<ballooncard::RelayDetailRequest> request(new ballooncard::RelayDetailRequest());
+    request->m_ctype      = conversation_group;
+    request->m_cid        = m_groupId;
+    request->m_msgid      = msgid;
+    request->m_selfRole   = m_myRole;
+    request->m_focusInput = ((int)wParam == balloonchatwnd::kChatRelayActionJoin);
+    //详情窗是本群聊窗的模态窗口：以本窗口为 owner，打开期间本窗口不可操作
+    request->m_ownerHwnd  = m_hWnd;
+
+    //卡片在当前视图里：带上它的内容（已合并收到过的推送）与发起人
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+              content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    balloonchatwnd::ChatMessage card;
+    if (list != NULL && list->GetMessageByMsgid(msgid, card))
+    {
+        //列表里那一行已经不是卡片：卡片被撤回了，方案 §3.4 约定点击提示行无反应
+        if (card.kind != balloonchatwnd::kMsgRelay)
+        {
+            LOG_INFO("group chat window: relay action ignored, card recalled, group=%lld, msgid=%lld.",
+                     (long long)m_groupId, msgid);
+            return 0;
+        }
+        const int64_t selfId = (m_lpFMGClient != NULL)
+                               ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+        request->m_contentJson = card.relayContent;
+        request->m_creatorId   = card.fromMe ? selfId : card.senderUserId;
+    }
+
+    //调试入口没有主面板，详情窗由主面板持有，这里无处可投
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+    {
+        LOG_INFO("group chat window: relay action dropped, no host panel, msgid=%lld.", msgid);
+        return 0;
+    }
+    if (::PostMessage(m_hostPanel, FMG_MSG_OPEN_RELAY_DETAIL, 0, (LPARAM)request.get()))
+    {
+        request.release();   //投递成功，所有权交给主面板
+    }
+    LOG_INFO("group chat window: open relay detail requested, group=%lld, msgid=%lld, focus=%d, inView=%d.",
+             (long long)m_groupId, msgid, (int)wParam, card.kind == balloonchatwnd::kMsgRelay ? 1 : 0);
+    return 0;
+}
+
+void CBalloonGroupChatWindow::TrackRelayDeadline(const balloonchatwnd::ChatMessage& card)
+{
+    if (card.kind != balloonchatwnd::kMsgRelay || card.msgid <= 0)
+    {
+        return;
+    }
+    //还在进行中且有截止时间才需要定时重画；已结束、已截止、不限时的卡片从登记表里去掉
+    if (card.relayState == relay_state_open && card.relayDeadline > 0)
+    {
+        m_relayDeadlines[card.msgid] = card.relayDeadline;
+    }
+    else
+    {
+        m_relayDeadlines.erase(card.msgid);
+    }
+    ScheduleRelayExpiryTimer();
+}
+
+void CBalloonGroupChatWindow::ScheduleRelayExpiryTimer()
+{
+    if (!::IsWindow(m_hWnd))
+    {
+        return;
+    }
+    if (m_relayDeadlines.empty())
+    {
+        ::KillTimer(m_hWnd, kRelayExpiryTimerId);
+        return;
+    }
+
+    long long earliest = 0;
+    for (std::map<long long, long long>::const_iterator it = m_relayDeadlines.begin();
+         it != m_relayDeadlines.end(); ++it)
+    {
+        if (earliest == 0 || it->second < earliest)
+        {
+            earliest = it->second;
+        }
+    }
+    long long delay = earliest - (long long)NowMillisecondsForRelay();
+    if (delay < kRelayExpiryMinDelayMs)
+    {
+        delay = kRelayExpiryMinDelayMs;
+    }
+    if (delay > kRelayExpiryMaxDelayMs)
+    {
+        delay = kRelayExpiryMaxDelayMs;
+    }
+    //同一个 id 再次 SetTimer 会替换原来的定时器，不会叠加
+    ::SetTimer(m_hWnd, kRelayExpiryTimerId, (UINT)delay, NULL);
+}
+
+void CBalloonGroupChatWindow::OnRelayExpiryTimer()
+{
+    ::KillTimer(m_hWnd, kRelayExpiryTimerId);
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+              content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    const int64_t nowMs = NowMillisecondsForRelay();
+    const int64_t selfId = (m_lpFMGClient != NULL)
+                           ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    const RelayNameResolver names(*this);
+
+    //先挑出到期的再逐个处理：处理过程中会改动登记表
+    std::vector<long long> due;
+    for (std::map<long long, long long>::const_iterator it = m_relayDeadlines.begin();
+         it != m_relayDeadlines.end(); ++it)
+    {
+        if (nowMs >= it->second)
+        {
+            due.push_back(it->first);
+        }
+    }
+    for (size_t i = 0; i < due.size(); ++i)
+    {
+        m_relayDeadlines.erase(due[i]);
+        balloonchatwnd::ChatMessage card;
+        if (list == NULL || !list->GetMessageByMsgid(due[i], card)
+            || !balloonchatwnd::RelayCardDueForExpiry(card, nowMs))
+        {
+            continue;   //卡片已不在列表里，或已被推送改成了别的状态
+        }
+        balloonchatwnd::RefreshRelayCard(card, selfId, kRelaySelfMutedUnknown, nowMs, names);
+        list->SetMessageByMsgid(due[i], card);
+        LOG_INFO("group chat window: relay card expired, group=%lld, msgid=%lld.",
+                 (long long)m_groupId, due[i]);
+    }
+    ScheduleRelayExpiryTimer();
+}
+
+void CBalloonGroupChatWindow::RefreshAllRelayCards()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+              content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return;
+    }
+    const std::vector<long long> msgids = list->GetMsgidsOfKind(balloonchatwnd::kMsgRelay);
+    if (msgids.empty())
+    {
+        return;
+    }
+    const int64_t nowMs = NowMillisecondsForRelay();
+    const int64_t selfId = (m_lpFMGClient != NULL)
+                           ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    const RelayNameResolver names(*this);
+    for (size_t i = 0; i < msgids.size(); ++i)
+    {
+        balloonchatwnd::ChatMessage card;
+        if (!list->GetMessageByMsgid(msgids[i], card))
+        {
+            continue;
+        }
+        balloonchatwnd::RefreshRelayCard(card, selfId, kRelaySelfMutedUnknown, nowMs, names);
+        list->SetMessageByMsgid(msgids[i], card);
+        TrackRelayDeadline(card);
+    }
+    LOG_INFO("group chat window: %u relay card(s) refreshed after members arrived, group=%lld.",
+             (unsigned)msgids.size(), (long long)m_groupId);
 }
 
 void CBalloonGroupChatWindow::ShowToast(LPCTSTR text)
@@ -5233,7 +9348,7 @@ static bool PrevCharIsWhitespace(balloonchatwnd::ChatInputRichEdit* edit, int po
     return buf[0] == L' ' || buf[0] == L'\t' || buf[0] == L'\r' || buf[0] == L'\n';
 }
 
-// 把一段文字放进剪贴板。@ 菜单的「复制 TA 的昵称」用。
+// 把一段文字放进剪贴板。@ 菜单的「复制名字」用。
 //   hOwner：剪贴板属主窗口。
 //   text：  待复制的文字；空串直接返回，不清空用户原有的剪贴板内容。
 static void PutMentionNameToClipboard(HWND hOwner, const CString& text)
@@ -5285,6 +9400,21 @@ bool CBalloonGroupChatWindow::StarredThunk(void* userdata, long long uid)
     //不会阻塞；用 PostMessage 则既拿不到返回值，&uid 指向的栈变量也早没了。
     const int64_t target = (int64_t)uid;
     return ::SendMessage(self->m_hostPanel, FMG_MSG_QUERY_STARRED, 0, (LPARAM)&target) != 0;
+}
+
+bool CBalloonGroupChatWindow::GroupFollowThunk(void* userdata, long long uid)
+{
+    CBalloonGroupChatWindow* self = static_cast<CBalloonGroupChatWindow*>(userdata);
+    if (self == NULL || self->m_hostPanel == NULL || !::IsWindow(self->m_hostPanel))
+    {
+        return false;   // 拿不到主面板（调试入口）：按"未关注"处理
+    }
+
+    //同步问主面板：两者都在 UI 线程上，负载放在本函数的栈上即可
+    balloonchatwnd::GroupFollowTarget target;
+    target.m_groupId = self->m_groupId;
+    target.m_userId  = (int64_t)uid;
+    return ::SendMessage(self->m_hostPanel, FMG_MSG_QUERY_GROUP_FOLLOW, 0, (LPARAM)&target) != 0;
 }
 
 int CBalloonGroupChatWindow::MemberRoleThunk(void* userdata, long long uid)
@@ -5476,7 +9606,7 @@ LRESULT CBalloonGroupChatWindow::OnChatReplyRequest(UINT /*uMsg*/, WPARAM /*wPar
     }
     if (senderName.IsEmpty())
     {
-        senderName.Format(_T("用户%lld"), (long long)src.senderUserId);
+        senderName.Format(TR(L"用户%lld"), (long long)src.senderUserId);
     }
 
     // 被引用的若是图片，把原图的 fileid / md5 一并带上 —— 收方据此在引用块里画
@@ -5523,6 +9653,12 @@ LRESULT CBalloonGroupChatWindow::OnChatImageAction(UINT /*uMsg*/, WPARAM /*wPara
         SendImageFile(d->imagePath);
         break;
 
+    //图片文字识别：前置判断（系统不支持、没有识别语言时提示）后打开识别结果窗口
+    case balloonchatwnd::kChatMsgMenuOcr:
+        LOG_INFO("group chat window: ocr requested for an image, group=%lld.", (long long)m_groupId);
+        ocr::LaunchOcrForFile(m_hWnd, d->imagePath, 0);
+        break;
+
     default:
         LOG_ERROR("群聊窗收到未知的图片菜单动作: action=%d.", (int)d->id);
         break;
@@ -5557,11 +9693,28 @@ LRESULT CBalloonGroupChatWindow::OnChatFileAction(UINT /*uMsg*/, WPARAM /*wParam
 
     switch (d->action)
     {
-    //「下载」与失败 / 取消后的「重新下载」：都是从服务器取文件。群里没有接收回执要发
+    //「下载」与失败 / 取消后的「重新下载」：从服务器取文件，群里没有接收回执要发。本人发出、被服务端拒绝的文件消息
+    //（2026-10-05 起，经「发送到会话」发出的录像等）点「重新发送」时重发文件消息，不走下载
     case balloonchatwnd::kChatFileAccept:
     case balloonchatwnd::kChatFileRetry:
-        balloonchatwnd::StartChatFileDownload(*d, list);
+    {
+        const balloonchatwnd::GroupFileRetryKind kind =
+            balloonchatwnd::ChooseGroupFileRetry(d->fromMe, (long long)d->msgid, d->fileId);
+        if (kind == balloonchatwnd::group_file_retry_resend)
+        {
+            ResendGroupFileMessage(*d);
+        }
+        else if (kind == balloonchatwnd::group_file_retry_download)
+        {
+            balloonchatwnd::StartChatFileDownload(*d, list);
+        }
+        else
+        {
+            LOG_INFO("group chat window: file retry ignored, group=%lld, fromme=%d, msgid=%lld.", (long long)m_groupId,
+                     d->fromMe ? 1 : 0, (long long)d->msgid);
+        }
         break;
+    }
 
     //取消下载：只置位取消标志，气泡等 FileTransfer 回投结果后再置「已取消」态，
     //避免这里先改状态、传输线程稍后又回投一个失败态覆盖掉
@@ -5634,6 +9787,20 @@ LRESULT CBalloonGroupChatWindow::OnChatMentionAction(UINT /*uMsg*/, WPARAM /*wPa
             ::PostMessage(m_hostPanel, FMG_MSG_TOGGLE_STARRED, (WPARAM)uid, 0);
         }
         break;
+    //关注 / 取消关注 TA 在本群的发言：名单在主面板手上，由它按现状取反后发 cmd_set_group_follow
+    //（docs/消息提醒模式与消息盒子方案.md §12）
+    case balloonchatwnd::kMentionMenuGroupFollow:
+        if (m_hostPanel != NULL && ::IsWindow(m_hostPanel))
+        {
+            balloonchatwnd::GroupFollowTarget* pTarget = new balloonchatwnd::GroupFollowTarget();
+            pTarget->m_groupId = m_groupId;
+            pTarget->m_userId  = (int64_t)uid;
+            if (!::PostMessage(m_hostPanel, FMG_MSG_TOGGLE_GROUP_FOLLOW, 0, (LPARAM)pTarget))
+            {
+                delete pTarget;
+            }
+        }
+        break;
     case balloonchatwnd::kMentionMenuSetAdmin:
         //设为管理员。菜单只对群主出现，服务端还会再校验一次（仅群主可设），
         //本端不预改界面 —— 等 cmd_group_member_changed_notify 推回来统一刷新。
@@ -5651,7 +9818,7 @@ LRESULT CBalloonGroupChatWindow::OnChatMentionAction(UINT /*uMsg*/, WPARAM /*wPa
     case balloonchatwnd::kMentionMenuTransferOwner:
     {
         const std::wstring tip = balloonmain::BuildTransferConfirmText((LPCTSTR)name, false);
-        if (::MessageBox(m_hWnd, tip.c_str(), _T("转让群主"),
+        if (::MessageBox(m_hWnd, tip.c_str(), TR(L"转让群主"),
                          MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
         {
             break;
@@ -5682,9 +9849,9 @@ LRESULT CBalloonGroupChatWindow::OnChatMentionAction(UINT /*uMsg*/, WPARAM /*wPa
     {
         //移出不可撤销，先确认。文案与群管理窗的「移出成员」保持一致。
         CString tip;
-        tip.Format(_T("确定把「%s」移出本群吗？\n\n移出后该成员将无法再看到本群消息。"),
+        tip.Format(TR(L"确定把「%s」移出本群吗？\n\n移出后该成员将无法再看到本群消息。"),
                    (LPCTSTR)name);
-        if (::MessageBox(m_hWnd, tip, _T("移出成员"),
+        if (::MessageBox(m_hWnd, tip, TR(L"移出成员"),
                          MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
         {
             break;
@@ -5705,6 +9872,13 @@ LRESULT CBalloonGroupChatWindow::OnChatMentionAction(UINT /*uMsg*/, WPARAM /*wPa
 void CBalloonGroupChatWindow::OnSendChatAckBackfill(const std::string& clientMsgId, long long msgid,
                                                     long long timestampMs)
 {
+    //发送成功：此时才把群会话冒泡到顶部
+    ConvSendBumpData bump;
+    if (m_sendBumps.TakeOnSuccess(clientMsgId, bump))
+    {
+        PostSendBump(bump);
+    }
+
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
     {
@@ -5720,25 +9894,210 @@ void CBalloonGroupChatWindow::OnSendChatAckBackfill(const std::string& clientMsg
 
     //本窗口没有该 clientMsgId（是别的会话发出的）时安静忽略。
     list->BackfillSentMessage(clientMsgId, msgid, timestampMs);
+
+    //「发起接龙」窗口发出的卡片：交给它补发「我的接龙」并关闭窗口。卡片本身没有乐观气泡，
+    //靠服务端回显显示
+    if (m_relayComposeDlg)
+    {
+        m_relayComposeDlg->OnSendAck(clientMsgId, 0, (int64_t)msgid);
+    }
+
+    //首屏渲染前发出的 Markdown 文档已入库：条件满足时重新拉最新一页，把被首屏冲掉的卡片显示出来
+    if (m_mdEarlySends.OnAck(clientMsgId, true))
+    {
+        ReloadIfMarkdownEarlySendsDone();
+    }
 }
 
-void CBalloonGroupChatWindow::OnMessageRecalled(long long msgid, const CString& tipText)
+void CBalloonGroupChatWindow::ReloadIfMarkdownEarlySendsDone()
 {
+    if (!m_mdEarlySends.TakeReloadNeeded())
+    {
+        return;
+    }
+    LOG_INFO("group chat window: reload latest history to show markdown documents sent before the first page, "
+             "group=%lld.", (long long)m_groupId);
+    ReloadLatestMessages();
+}
+
+bool CBalloonGroupChatWindow::OnSendChatAckFailed(const std::string& clientMsgId, int code)
+{
+    //被拒绝的消息不冒泡
+    m_sendBumps.Drop(clientMsgId);
+
+    //首屏渲染前发出、被拒绝的 Markdown 文档没有入库，不再等它；其余已成功的可能因此满足重新拉取的条件
+    if (m_mdEarlySends.OnAck(clientMsgId, false))
+    {
+        ReloadIfMarkdownEarlySendsDone();
+    }
+
+    //先问「发起接龙」窗口：它发出的卡片没有乐观气泡，由它在窗口里提示原因并保持打开
+    if (m_relayComposeDlg && m_relayComposeDlg->OnSendAck(clientMsgId, code, 0))
+    {
+        return true;
+    }
+
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
     {
-        return;
+        return false;
     }
     balloonchatwnd::ChatMessageList* list =
         dynamic_cast<balloonchatwnd::ChatMessageList*>(
             content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
     if (list == NULL)
     {
+        return false;
+    }
+    //本窗口没有该 clientMsgId（是别的会话发出的）时返回 false，主面板接着问别的窗口
+    const bool marked = list->MarkSendFailed(clientMsgId,
+                                             CString(balloonchatwnd::SendFailureText(code, IsNotifyOnlyForMe()).c_str()));
+    if (marked)
+    {
+        LOG_INFO("group chat window: send rejected, marked bubble failed, group=%lld, code=%d, clientmsgid=%s.",
+                 (long long)m_groupId, code, clientMsgId.c_str());
+    }
+    return marked;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatReeditRequest(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam,
+                                                     BOOL& /*bHandled*/)
+{
+    balloonchatwnd::ChatReeditData* data = reinterpret_cast<balloonchatwnd::ChatReeditData*>(lParam);
+    if (data == NULL)
+    {
+        return 0;
+    }
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatInputRichEdit* input = (content == NULL) ? NULL
+        : dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
+    // 代码片段：打开发送代码窗口并预填原文与语言，不放回输入框（docs/代码片段方案.md 第 3.1 节）
+    if (data->m_isCode)
+    {
+        // 追加批注的消息（批注里有标「新」的、且引用了原消息）：打开原消息的代码查看窗并放回批注（docs/代码片段方案.md
+        // 第 12 节）。原消息还在列表里时以它的批注为底，否则以这条消息里没有标「新」的批注代替
+        if (data->m_codeQuoteMsgid > 0 && codesnippet::CountNewCodeNotes(data->m_codeNotes) > 0)
+        {
+            balloonchatwnd::ChatMessageList* codeList = (content == NULL) ? NULL
+                : dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+            balloonchatwnd::ChatMessage base;
+            if (codeList != NULL && codeList->GetMessageByMsgid(data->m_codeQuoteMsgid, base) && base.isCode)
+            {
+                const long long baseSenderId = base.fromMe ? SelfUserIdForCode() : (long long)base.senderUserId;
+                ShowCodeViewer(data->m_code, data->m_codeLang, base.codeNotes, std::to_string(data->m_codeQuoteMsgid),
+                               data->m_codeQuoteMsgid, baseSenderId, base.fromMe, true, data->m_codeNotes);
+            }
+            else
+            {
+                ShowCodeViewer(data->m_code, data->m_codeLang, balloonchatwnd::BaselineNotesForReedit(data->m_codeNotes),
+                               std::to_string(data->m_codeQuoteMsgid), data->m_codeQuoteMsgid, data->m_codeQuoteFrom,
+                               data->m_codeQuoteFrom == SelfUserIdForCode(), true, data->m_codeNotes);
+            }
+            LOG_INFO("reedit: annotated code snippet goes back to the code viewer, base msgid=%lld, notes=%u.",
+                     data->m_codeQuoteMsgid, (unsigned)data->m_codeNotes.size());
+            delete data;
+            return 0;
+        }
+        OpenCodeCompose(data->m_code, codesnippet::CodeLanguageId(data->m_codeLang), data->m_codeNotes);
+        LOG_INFO("group chat window: reedit code snippet, group=%lld, chars=%u, notes=%u.", (long long)m_groupId,
+                 (unsigned)data->m_code.size(), (unsigned)data->m_codeNotes.size());
+        delete data;
+        return 0;
+    }
+    // Markdown：打开 Markdown 编辑器并预填源文本，发送对象预选本群，不放回输入框（docs/Markdown消息方案.md 第 11.3 节）
+    if (data->m_isMarkdown)
+    {
+        OpenMarkdownEditor(data->m_markdownSource);
+        LOG_INFO("group chat window: reedit markdown in editor, group=%lld, bytes=%u.", (long long)m_groupId,
+                 (unsigned)data->m_markdownSource.size());
+        delete data;
+        return 0;
+    }
+    if (input != NULL)
+    {
+        //正文里的 @ 重新登记为待发候选，发送时照常按最终文本重扫
+        balloonchatwnd::ApplyReeditToInput(*data, input, &m_pendingMentions);
+        input->SetFocus();
+        LOG_INFO("group chat window: reedit applied, group=%lld, segments=%u, mentions=%u.",
+                 (long long)m_groupId, (unsigned)data->m_segments.size(), (unsigned)data->m_mentions.size());
+    }
+    delete data;
+    return 0;
+}
+
+void CBalloonGroupChatWindow::PostSendBump(const ConvSendBumpData& data)
+{
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+    {
         return;
+    }
+    ConvSendBumpData* pBump = new ConvSendBumpData(data);
+    if (!::PostMessage(m_hostPanel, FMG_MSG_CONV_SEND_BUMP, 0, (LPARAM)pBump))
+    {
+        delete pBump;   //投递失败（主面板已销毁）自行回收
+    }
+}
+
+void CBalloonGroupChatWindow::OpenRelayCompose()
+{
+    if (m_groupId <= 0)
+    {
+        LOG_INFO("group chat window: relay compose not available in debug entry.");
+        return;
+    }
+    if (!m_relayComposeDlg)
+    {
+        m_relayComposeDlg.reset(new CRelayComposeDlg());
+    }
+    m_relayComposeDlg->Open(m_hWnd, m_groupId);
+}
+
+std::string CBalloonGroupChatWindow::OnMessageRecalled(long long msgid, const CString& tipText, bool recalledByMe,
+                                                       long long nowMs)
+{
+    // 桌面字幕上的撤回提示由主面板直接交给字幕（字幕由主面板持有），这里只处理本窗口的消息列表
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return std::string();
+    }
+    balloonchatwnd::ChatMessageList* list =
+        dynamic_cast<balloonchatwnd::ChatMessageList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (list == NULL)
+    {
+        return std::string();
     }
 
     //列表里没有该条（消息尚未加载进当前视图）时安静忽略。
-    list->RecallMessageByMsgid(msgid, tipText);
+    std::string draftJson;
+    list->RecallMessageByMsgid(msgid, tipText, recalledByMe, nowMs, &draftJson);
+    if (!draftJson.empty())
+    {
+        //提示行带上了「编辑」：定好到期定时器，5 分钟到点时让它自动消失
+        RefreshRecallEditTimer();
+    }
+    return draftJson;
+}
+
+void CBalloonGroupChatWindow::RefreshRecallEditTimer()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonchatwnd::ChatMessageList* list = (content != NULL)
+        ? dynamic_cast<balloonchatwnd::ChatMessageList*>(content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+        : NULL;
+    if (list == NULL)
+    {
+        return;
+    }
+    const long long nowMs = balloonchatwnd::RecallEditNowMs();
+    const long long next = list->ExpireRecallEdits(nowMs);
+    balloonchatwnd::RescheduleRecallEditTimer(m_hWnd, kRecallEditTimerId, next, nowMs);
+}
+
+void CBalloonGroupChatWindow::OnSendModeChanged()
+{
+    RefreshSendModeUi();
 }
 
 void CBalloonGroupChatWindow::OnMessagesDeleted(const std::vector<long long>& msgids)
@@ -5762,6 +10121,8 @@ void CBalloonGroupChatWindow::OnMessagesDeleted(const std::vector<long long>& ms
              (long long)m_groupId, (unsigned)msgids.size(), removed);
 }
 
+//调用方：主面板（服务端删除了本会话的消息之后），以及本窗口的 ReloadIfMarkdownEarlySendsDone
+//（首屏渲染前发出的 Markdown 文档被首屏清掉之后）
 void CBalloonGroupChatWindow::ReloadLatestMessages()
 {
     //调试入口没有群，也没有服务端可问
@@ -5773,9 +10134,11 @@ void CBalloonGroupChatWindow::ReloadLatestMessages()
     //翻页状态回到"首屏还没到位"：应答到达时 OnHistoryMessages 据 m_loading 为假按首屏
     //处理，先清空列表再按服务端快照重新渲染；翻页锚点清零，首屏到达前不允许往上翻
     m_paging = balloonchatwnd::HistoryPagingState();
+    //在新快照渲染之前发出的 Markdown 文档同样会被清掉，重新开始记录
+    m_mdEarlySends.OnReloadRequested();
     CIUSocket::GetInstance().RequestSyncMessages(
         2, m_groupId, 0, balloonchatwnd::kHistoryPageSize);
-    LOG_INFO("Group chat window reloads latest history after range clear, group=%lld.",
+    LOG_INFO("Group chat window reloads latest history (after a server-side delete, or to show markdown documents sent before the first page), group=%lld.",
              (long long)m_groupId);
 }
 
@@ -5899,8 +10262,8 @@ LRESULT CBalloonGroupChatWindow::OnGroupFileDeleteMsg(UINT /*uMsg*/, WPARAM /*wP
     // 确认（删除是破坏性且影响全群，必弹确认框）。
     CString name = Utf8ToCString(e->m_name);
     CString prompt;
-    prompt.Format(_T("确定删除群文件「%s」吗？\n删除后全群成员都将看不到此文件。"), (LPCTSTR)name);
-    if (::MessageBoxW(m_hWnd, prompt, _T("删除群文件"), MB_YESNO | MB_ICONWARNING) != IDYES)
+    prompt.Format(TR(L"确定删除群文件「%s」吗？\n删除后全群成员都将看不到此文件。"), (LPCTSTR)name);
+    if (::MessageBoxW(m_hWnd, prompt, TR(L"删除群文件"), MB_YESNO | MB_ICONWARNING) != IDYES)
     {
         return 0;
     }
@@ -5910,6 +10273,25 @@ LRESULT CBalloonGroupChatWindow::OnGroupFileDeleteMsg(UINT /*uMsg*/, WPARAM /*wP
     LOG_INFO("群文件删除已发起: group=%lld, entryid=%s, name=%s。",
              (long long)m_groupId, entryid.c_str(), e->m_name.c_str());
     return 0;
+}
+
+void CBalloonGroupChatWindow::SendLocalImage(const std::wstring& path)
+{
+    LOG_INFO("group chat: send local image requested by host, group=%lld.", static_cast<long long>(m_groupId));
+    SendImageFile(path);
+}
+
+void CBalloonGroupChatWindow::SendLocalFile(const std::wstring& path)
+{
+    if (!CheckOnlineFor(balloonmain::kActionTransferFile) || m_groupId == 0 || path.empty())
+    {
+        return;
+    }
+    LOG_INFO("group chat: upload local file to group files requested by host, group=%lld.", (long long)m_groupId);
+    //上传成功后还要在群里发一条文件消息，聊天里才看得到（2026-10-05 用户反馈录完屏「发送」看不到效果）
+    int uploadId = 0;
+    if (UploadGroupFile(path, &uploadId))
+        m_chatPoster.Mark(uploadId, path);
 }
 
 bool CBalloonGroupChatWindow::PickAndUploadGroupFile()
@@ -5927,7 +10309,9 @@ bool CBalloonGroupChatWindow::PickAndUploadGroupFile()
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = m_hWnd;
-    ofn.lpstrFilter = L"所有文件\0*.*\0";
+    //文件类型过滤串：说明文字按界面语言翻译后再拼成带 \0 的过滤串，须活到对话框关闭
+    const std::wstring fileFilter = filedlg::MakeFilter(TR(L"所有文件"), L"*.*");
+    ofn.lpstrFilter = fileFilter.c_str();
     ofn.lpstrFile   = szFile;
     ofn.nMaxFile    = MAX_PATH;
     ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
@@ -5939,7 +10323,7 @@ bool CBalloonGroupChatWindow::PickAndUploadGroupFile()
     return UploadGroupFile(szFile);
 }
 
-bool CBalloonGroupChatWindow::UploadGroupFile(const std::wstring& path)
+bool CBalloonGroupChatWindow::UploadGroupFile(const std::wstring& path, int* uploadIdOut)
 {
     // 调试入口（无群绑定）无服务器，不支持真实上传。
     if (m_groupId == 0 || path.empty())
@@ -5951,6 +10335,8 @@ bool CBalloonGroupChatWindow::UploadGroupFile(const std::wstring& path)
                      ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
     // 入队上传，拿回客户端分配的 uploadId（可多笔并发，每笔一个 id）。
     int uploadId = net::FileTransfer::GetInstance().EnqueueGroupFileUpload(m_groupId, path, selfId);
+    if (uploadIdOut != NULL)
+        *uploadIdOut = uploadId;
 
     // 从路径拆出文件名与扩展名，登记进上传跟踪器，使面板顶部立刻冒出一行「上传中 0%」。
     size_t slash = path.find_last_of(L"\\/");
@@ -6014,6 +10400,17 @@ LRESULT CBalloonGroupChatWindow::OnRelayout(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (msgArea != NULL)
     {
         msgArea->ForceLayout(msgArea->GetRect());
+    }
+
+    // 「问答」面板开着且宽度变了：卡片高度随宽度变化，按新宽度重建
+    balloonwjui::DuiControl* qaList = content->FindCtrlById(balloonchatwnd::kGIdQaList);
+    if (qaList != NULL && qaList->IsVisible())
+    {
+        const RECT rcQa = qaList->GetRect();
+        if (rcQa.right - rcQa.left != m_qaRenderedWidth)
+        {
+            RenderQaPanel();
+        }
     }
     if (IsWindow())
     {

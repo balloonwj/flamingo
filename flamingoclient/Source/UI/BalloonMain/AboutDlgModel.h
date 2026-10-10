@@ -29,8 +29,9 @@ namespace balloonmain {
 // 说明：均为宽字符串字面量常量。namespace 作用域下 const/constexpr 变量默认内部
 // 链接，故放在头文件里每个翻译单元各持一份、无 ODR 冲突。
 
-// 应用名（品牌区主标题，同时用于标题栏"关于 <应用名> [pid]"）。
-constexpr const wchar_t* kAboutAppName = L"FlamingoIM";
+// 应用名（品牌区主标题）、标语与页脚版权文字不在本文件定义：三者分别取 flamingo.ini 的
+// [ui] apptitle / slogan / copyrighttext（全局变量 g_strAppTitle / g_strAppSlogan /
+// g_strAppCopyright，缺省值见 App/BrandText.h）。
 
 // 版本号。此处曾写死 2.0.0（当时确认不取设计稿的 3.2.1），
 // 接入自动更新后改为取自 ClientVersion.h：服务端是拿登录上报的
@@ -53,12 +54,6 @@ const wchar_t* AboutBuildStamp();
 // 关于页显示的版本必须与登录上报的一致，否则升级完用户看到的还是旧号。
 std::wstring AboutVersionLine();
 
-// 品牌区标语（设计稿原文）。
-constexpr const wchar_t* kAboutSlogan = L"让沟通像火烈鸟一样优雅";
-
-// 页脚版权串（设计稿原文）。
-constexpr const wchar_t* kAboutCopyright = L"© 2024-2026 FlamingoIM Team · All Rights Reserved";
-
 // "官方网站"行的<u>默认</u> URL。实际取值改为运行期从 flamingo.ini 的
 // [ui] websiteurl 读取（见 CBalloonAboutDlg::LoadWebsiteUrlFromIni），本常量只在
 // 配置文件缺该键 / 读不到时兜底，同时也是随包发布的 ini 里写的值。
@@ -66,16 +61,26 @@ constexpr const wchar_t* kAboutCopyright = L"© 2024-2026 FlamingoIM Team · All
 constexpr const wchar_t* kAboutWebsiteUrl = L"https://github.com/balloonwj/flamingo";
 
 /**
+ *  拼装「关于 <产品名称>」—— 系统菜单的「关于」项与关于对话框内提示框的标题都用它。
+ *
+ *    appName：产品名称（调用方传 g_strAppTitle）；NULL 或空串时按 FlamingoIM 处理。
+ *
+ *  @return 例：appName=L"FlamingoIM" → L"关于 FlamingoIM"。纯函数、无副作用，可直接单测。
+ */
+std::wstring BuildAboutCaption(const wchar_t* appName);
+
+/**
  *  拼装"关于"对话框的标题栏标题 —— 形如「关于 FlamingoIM [12345]」，方括号内是
  *  当前进程 id（用户要求标题栏带上进程 id，便于多开 / 排障时区分实例）。
  *
+ *    appName：  产品名称（调用方传 g_strAppTitle）；NULL 或空串时按 FlamingoIM 处理。
  *    processId：当前进程 id（调用方传 ::GetCurrentProcessId() 的结果；类型与
  *               Win32 DWORD 一致，这里用 unsigned long 避免在纯单元里依赖 windows.h）。
  *
- *  @return 标题字符串，例：processId=12345 → L"关于 FlamingoIM [12345]"。
+ *  @return 标题字符串，例：appName=L"FlamingoIM"、processId=12345 → L"关于 FlamingoIM [12345]"。
  *          纯函数、无副作用，可直接单测。
  */
-std::wstring BuildAboutTitle(unsigned long processId);
+std::wstring BuildAboutTitle(const wchar_t* appName, unsigned long processId);
 
 /**
  *  算功能行（用户协议 / 隐私政策 / 开源许可 / 官方网站）右侧那个链接式按钮该多宽。

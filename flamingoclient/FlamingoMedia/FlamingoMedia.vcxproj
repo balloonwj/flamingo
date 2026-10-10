@@ -1,0 +1,685 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoMedia.vcxproj — 客户端音视频与屏幕类功能的 DLL 工程
+  balloonwj@qq.com   2026-10-02
+
+  产出 FlamingoMedia.dll，由 Flamingo.exe 在启动时用 LoadLibrary 动态加载（不链接导入库）。
+  接口约定见 Api/FlamingoMediaApi.h，方案见 docs/屏幕共享与录制方案.md。
+
+  关键约束：
+   · CharacterSet=Unicode、CRT 静态（Debug /MTd、Release /MT），与 Flamingo.exe 及
+     balloonui_static 一致。exe 与 DLL 因此各有独立的堆，接口只用纯虚类与基本类型。
+   · 四个配置的 OutDir 与 Flamingo.exe 相同：Debug|x64 输出到资源齐全的 ..\Debug\，
+     其余三个分别输出到 ..\Release\、..\Debug_Win32\、..\Release_Win32\。
+   · 导出名由 FlamingoMedia.def 固定；导入库与 .exp 放进中间目录，不污染输出目录。
+   · 所有配置都带 /utf-8：源文件为 UTF-8 无 BOM。
+   · 与 exe 共用的公共代码（Source/net 的帧编解码与加密握手、ZlibUtil、zlib、jsoncpp）直接列在
+     本工程里，与 exe 编译同一份源文件（2026-10-02 与用户确认）。这些文件里的 #include "stdafx.h"
+     借助包含路径里的 $(ProjectDir) 找到本工程的 stdafx.h。
+   · 日志：DLL 不编译 exe 的 IULog.cpp，由 Host/IULogBridge.cpp 实现 CIULog::Log，经宿主写日志。
+   · 第 1c 步迁入一对一通话（Call\ 目录，含通话窗），与 exe 一样静态链接 balloonui_static、
+     opus_static、speexdsp_static；DLL 有自己的一份 _Module（见 DllMain.cpp）。
+   · 第 1d 步迁入远程桌面（RemoteDesktop\ 目录，含会话对话框、观看窗、受控提示条）。图标资源仍在 exe 里，
+     DLL 内的代码一律用 GetModuleHandle(NULL) 从 exe 模块加载。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{4F46E4F4-5A27-4D82-9888-25812A9F4B48}</ProjectGuid>
+    <RootNamespace>FlamingoMedia</RootNamespace>
+    <ProjectName>FlamingoMedia</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\Debug_Win32\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <TargetName>FlamingoMedia</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\Release_Win32\</OutDir>
+    <IntDir>Release\</IntDir>
+    <TargetName>FlamingoMedia</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\Debug\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <TargetName>FlamingoMedia</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\Release\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <TargetName>FlamingoMedia</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoMedia.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;version.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoMedia.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;version.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoMedia.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;version.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoMedia.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\$(Platform)\$(Configuration)\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;version.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="Api\FlamingoMediaApi.h" />
+    <ClInclude Include="Common\OsVersionPolicy.h" />
+    <ClInclude Include="Host\LogFormat.h" />
+    <ClInclude Include="Host\MediaLog.h" />
+    <ClInclude Include="Host\MediaModule.h" />
+    <ClInclude Include="Host\MediaLockState.h" />
+    <ClInclude Include="..\Source\net\Protocol.h" />
+    <ClInclude Include="..\Source\net\FrameCodec.h" />
+    <ClInclude Include="..\Source\net\FrameCrypto.h" />
+    <ClInclude Include="..\Source\net\FramePayload.h" />
+    <ClInclude Include="..\Source\net\HandshakeRunner.h" />
+    <ClInclude Include="..\Source\Common\Util\ZlibUtil.h" />
+    <ClInclude Include="..\Source\Common\Util\Path.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\NotificationSound.h" />
+    <ClInclude Include="..\Source\UI\BalloonChatWnd\ChatIcons.h" />
+    <ClInclude Include="..\Source\Common\Util\MD5Core.h" />
+    <ClInclude Include="..\Source\UI\BalloonChatWnd\ChatMarkdownIcons.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\CornerPopupPlacement.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\CornerPopupCountdown.h" />
+    <ClInclude Include="..\Source\Common\I18n\I18n.h" />
+    <ClInclude Include="..\FlamingoLang\FlamingoLangApi.h" />
+    <ClInclude Include="..\Source\Feature\P2P\P2PLinkBroker.h" />
+    <ClInclude Include="..\FlamingoP2P\FlamingoP2PApi.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\P2PBadge.h" />
+    <ClInclude Include="Common\MediaAvatar.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelAvatar.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarGlyph.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelIcons.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\PresenceBadge.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarImageUtil.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\AvatarBitmapCache.h" />
+    <ClInclude Include="Common\WindowPin.h" />
+    <ClInclude Include="Common\IncomingCallLayout.h" />
+    <ClInclude Include="..\Source\Common\Graphics\CompositionLayer.h" />
+    <ClInclude Include="Common\MediaToast.h" />
+    <ClInclude Include="Call\AudioLoopback.h" />
+    <ClInclude Include="Call\AudioPcmUtils.h" />
+    <ClInclude Include="Call\AudioStreamMixer.h" />
+    <ClInclude Include="Call\AvSyncScheduler.h" />
+    <ClInclude Include="Call\BalloonCallDlg.h" />
+    <ClInclude Include="Call\CallActionBarModel.h" />
+    <ClInclude Include="Call\CallAudioEngine.h" />
+    <ClInclude Include="Call\CallBarAutoHide.h" />
+    <ClInclude Include="Call\CallButtonArt.h" />
+    <ClInclude Include="Call\CallController.h" />
+    <ClInclude Include="Call\CallDebugEntries.h" />
+    <ClInclude Include="Call\CallDialogActions.h" />
+    <ClInclude Include="Call\CallDlgLayout.h" />
+    <ClInclude Include="Call\CallEchoReference.h" />
+    <ClInclude Include="Call\CallJitterBuffer.h" />
+    <ClInclude Include="Call\CallMediaFraming.h" />
+    <ClInclude Include="Call\CallMediaSession.h" />
+    <ClInclude Include="Call\CallMessages.h" />
+    <ClInclude Include="Call\CallNetQuality.h" />
+    <ClInclude Include="Call\CallNetStats.h" />
+    <ClInclude Include="Call\CallOverlayBar.h" />
+    <ClInclude Include="Call\CallP2PFraming.h" />
+    <ClInclude Include="Call\CallProtocolClient.h" />
+    <ClInclude Include="Call\CallRelayClient.h" />
+    <ClInclude Include="Call\CallRelaySelfTest.h" />
+    <ClInclude Include="Call\CallRelayTestFrame.h" />
+    <ClInclude Include="Call\CallShareLink.h" />
+    <ClInclude Include="Call\CallSignalArt.h" />
+    <ClInclude Include="Call\CallSystemAudioSender.h" />
+    <ClInclude Include="Call\CallVideoCanvas.h" />
+    <ClInclude Include="Call\CallVideoDisplaySink.h" />
+    <ClInclude Include="Call\CallVideoEngine.h" />
+    <ClInclude Include="Call\CallVideoUiDebug.h" />
+    <ClInclude Include="Call\CallingLayout.h" />
+    <ClInclude Include="Call\CameraDisplayTest.h" />
+    <ClInclude Include="Call\CameraPreviewDebug.h" />
+    <ClInclude Include="Call\H264SelfTest.h" />
+    <ClInclude Include="Call\MfCameraCapture.h" />
+    <ClInclude Include="Call\MfH264Codec.h" />
+    <ClInclude Include="Call\OpusAudioCodec.h" />
+    <ClInclude Include="Call\SpeexAudioProcessor.h" />
+    <ClInclude Include="Call\SpeexResampler.h" />
+    <ClInclude Include="Call\SystemAudioExclusive.h" />
+    <ClInclude Include="Call\VideoFrameConvert.h" />
+    <ClInclude Include="Call\VideoLoopbackDebug.h" />
+    <ClInclude Include="Call\WasapiAudioIo.h" />
+    <ClInclude Include="RemoteDesktop\BalloonRemoteDesktopDlg.h" />
+    <ClInclude Include="RemoteDesktop\CaptureFallbackPolicy.h" />
+    <ClInclude Include="RemoteDesktop\CursorInfo.h" />
+    <ClInclude Include="RemoteDesktop\DxgiScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\GdiScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\IScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\RdCaptureTypes.h" />
+    <ClInclude Include="RemoteDesktop\RdControlledBar.h" />
+    <ClInclude Include="RemoteDesktop\RdControlledStreamer.h" />
+    <ClInclude Include="RemoteDesktop\RdController.h" />
+    <ClInclude Include="RemoteDesktop\RdDebugEntries.h" />
+    <ClInclude Include="RemoteDesktop\RdDialogLayout.h" />
+    <ClInclude Include="RemoteDesktop\RdEngineDef.h" />
+    <ClInclude Include="RemoteDesktop\RdInputDef.h" />
+    <ClInclude Include="RemoteDesktop\RdInputEncoder.h" />
+    <ClInclude Include="RemoteDesktop\RdInputInjector.h" />
+    <ClInclude Include="RemoteDesktop\RdMessages.h" />
+    <ClInclude Include="RemoteDesktop\RdRelayClient.h" />
+    <ClInclude Include="RemoteDesktop\RdRelayFraming.h" />
+    <ClInclude Include="RemoteDesktop\RdRelaySelfTest.h" />
+    <ClInclude Include="RemoteDesktop\RdScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\RdScreenDecoder.h" />
+    <ClInclude Include="RemoteDesktop\RdSelfTestWindow.h" />
+    <ClInclude Include="RemoteDesktop\RdSessionActions.h" />
+    <ClInclude Include="RemoteDesktop\RdTransport.h" />
+    <ClInclude Include="RemoteDesktop\RdViewerToolbar.h" />
+    <ClInclude Include="RemoteDesktop\RdViewerWindow.h" />
+    <ClInclude Include="RemoteDesktop\RemoteDesktopProtocolClient.h" />
+    <ClInclude Include="RemoteDesktop\ScreenFrameEncoder.h" />
+    <ClInclude Include="RemoteDesktop\until.h" />
+    <ClInclude Include="Share\ShareAnnotModePolicy.h" />
+    <ClInclude Include="Share\ShareAnnotation.h" />
+    <ClInclude Include="Share\ShareAnnotationBar.h" />
+    <ClInclude Include="Share\ShareAnnotationGeometry.h" />
+    <ClInclude Include="Share\ShareAnnotationIcons.h" />
+    <ClInclude Include="Share\ShareAnnotationMenuIcons.h" />
+    <ClInclude Include="Share\ShareAnnotationMenus.h" />
+    <ClInclude Include="Share\ShareAnnotationObjects.h" />
+    <ClInclude Include="Share\ShareAnnotationOverlay.h" />
+    <ClInclude Include="Share\ShareAnnotationRender.h" />
+    <ClInclude Include="Share\ShareAnnotationSession.h" />
+    <ClInclude Include="Share\ShareAudioSession.h" />
+    <ClInclude Include="Share\ShareAudioTransport.h" />
+    <ClInclude Include="Share\ShareBarButtonArt.h" />
+    <ClInclude Include="Share\ShareBarPopupGuard.h" />
+    <ClInclude Include="Share\ShareBitrateController.h" />
+    <ClInclude Include="Share\ShareBorderWindow.h" />
+    <ClInclude Include="Share\ShareCallPolicy.h" />
+    <ClInclude Include="Share\ShareCameraPanel.h" />
+    <ClInclude Include="Share\ShareCameraReceiver.h" />
+    <ClInclude Include="Share\ShareCameraSender.h" />
+    <ClInclude Include="Share\ShareCameraWindow.h" />
+    <ClInclude Include="Share\ShareCapturer.h" />
+    <ClInclude Include="Share\ShareCompositionLayer.h" />
+    <ClInclude Include="Share\ShareConfirmDialog.h" />
+    <ClInclude Include="Share\ShareControlBar.h" />
+    <ClInclude Include="Share\ShareController.h" />
+    <ClInclude Include="Share\ShareCornerToast.h" />
+    <ClInclude Include="Share\ShareCursorSampler.h" />
+    <ClInclude Include="Share\ShareDebugEntries.h" />
+    <ClInclude Include="Share\ShareEndedSummary.h" />
+    <ClInclude Include="Share\ShareEndedToast.h" />
+    <ClInclude Include="Share\ShareFraming.h" />
+    <ClInclude Include="Share\ShareHostStreamer.h" />
+    <ClInclude Include="Share\ShareHwH264Encoder.h" />
+    <ClInclude Include="Share\ShareImageExport.h" />
+    <ClInclude Include="Share\ShareInfoEditDialog.h" />
+    <ClInclude Include="Share\ShareInfoPopup.h" />
+    <ClInclude Include="Share\ShareLinkInvite.h" />
+    <ClInclude Include="Share\ShareLocalAnnotator.h" />
+    <ClInclude Include="Share\ShareMessages.h" />
+    <ClInclude Include="Share\ShareMouseEffectMenu.h" />
+    <ClInclude Include="Share\ShareMouseEffects.h" />
+    <ClInclude Include="Share\ShareP2PRoute.h" />
+    <ClInclude Include="Share\SharePickerDialog.h" />
+    <ClInclude Include="Share\SharePickerPolicy.h" />
+    <ClInclude Include="Share\ShareProtocolClient.h" />
+    <ClInclude Include="Share\ShareRecordMutex.h" />
+    <ClInclude Include="Share\ShareRelayClient.h" />
+    <ClInclude Include="Share\ShareRemoteControl.h" />
+    <ClInclude Include="Share\ShareRoomPolicy.h" />
+    <ClInclude Include="Share\ShareScreenDecoders.h" />
+    <ClInclude Include="Share\ShareScreenFeed.h" />
+    <ClInclude Include="Share\ShareScreens.h" />
+    <ClInclude Include="Share\ShareScreensWindow.h" />
+    <ClInclude Include="Share\ShareSharerBar.h" />
+    <ClInclude Include="Share\ShareSourcePolicy.h" />
+    <ClInclude Include="Share\ShareSources.h" />
+    <ClInclude Include="Share\ShareSystemAudioCapture.h" />
+    <ClInclude Include="Share\ShareTextInputDialog.h" />
+    <ClInclude Include="Share\ShareTopBarCollapse.h" />
+    <ClInclude Include="Share\ShareVideoEncoder.h" />
+    <ClInclude Include="Share\ShareVideoPolicy.h" />
+    <ClInclude Include="Share\ShareViewerListPanel.h" />
+    <ClInclude Include="Share\ShareViewerReceiver.h" />
+    <ClInclude Include="Share\ShareViewerWindow.h" />
+    <ClInclude Include="Share\ShareWhiteboard.h" />
+    <ClInclude Include="Share\ShareWhiteboardWindow.h" />
+    <ClInclude Include="Record\CloudExitDialog.h" />
+    <ClInclude Include="Record\CloudRecordCenter.h" />
+    <ClInclude Include="Record\CloudRecordCompose.h" />
+    <ClInclude Include="Record\CloudRecordComposer.h" />
+    <ClInclude Include="Record\CloudRecordManagerModel.h" />
+    <ClInclude Include="Record\CloudRecordProtocolClient.h" />
+    <ClInclude Include="Record\CloudRecordReader.h" />
+    <ClInclude Include="Record\RecordAudioMixer.h" />
+    <ClInclude Include="Record\RecordBar.h" />
+    <ClInclude Include="Record\RecordCameraWindow.h" />
+    <ClInclude Include="Record\RecordController.h" />
+    <ClInclude Include="Record\RecordDoneToast.h" />
+    <ClInclude Include="Record\RecordFrameComposer.h" />
+    <ClInclude Include="Record\RecordManagerLayout.h" />
+    <ClInclude Include="Record\RecordManagerList.h" />
+    <ClInclude Include="Record\RecordManagerModel.h" />
+    <ClInclude Include="Record\RecordManagerWindow.h" />
+    <ClInclude Include="Record\RecordMessages.h" />
+    <ClInclude Include="Record\RecordMouseEffects.h" />
+    <ClInclude Include="Record\RecordMp4Writer.h" />
+    <ClInclude Include="Record\RecordPolicy.h" />
+    <ClInclude Include="Record\RecordRegionSelector.h" />
+    <ClInclude Include="Record\RecordSession.h" />
+    <ClInclude Include="Record\RecordSources.h" />
+    <ClInclude Include="Voice\VoiceController.h" />
+    <ClInclude Include="Voice\VoiceOggFile.h" />
+    <ClInclude Include="Voice\VoicePlayer.h" />
+    <ClInclude Include="Voice\VoiceRecorder.h" />
+    <ClInclude Include="GroupCall\GroupCallController.h" />
+    <ClInclude Include="GroupCall\GroupCallIncomingDlg.h" />
+    <ClInclude Include="GroupCall\GroupCallLayout.h" />
+    <ClInclude Include="GroupCall\GroupCallMediaSession.h" />
+    <ClInclude Include="GroupCall\GroupCallMessages.h" />
+    <ClInclude Include="GroupCall\GroupCallProtocolClient.h" />
+    <ClInclude Include="GroupCall\GroupCallWindow.h" />
+    <ClInclude Include="Caption\MediaCaptionBridge.h" />
+    <ClInclude Include="Caption\RecordCaptionLive.h" />
+    <ClInclude Include="Caption\RecordCaptionLiveRules.h" />
+    <ClInclude Include="Caption\RecordCaptionTap.h" />
+    <ClInclude Include="Caption\ShareCaptionBoard.h" />
+    <ClInclude Include="Caption\ShareCaptionController.h" />
+    <ClInclude Include="Caption\ShareCaptionFrame.h" />
+    <ClInclude Include="Caption\ShareCaptionOverlay.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="Common\OsVersionPolicy.cpp" />
+    <ClCompile Include="Host\IULogBridge.cpp" />
+    <ClCompile Include="Host\LogFormat.cpp" />
+    <ClCompile Include="Host\MediaLog.cpp" />
+    <ClCompile Include="Host\MediaModule.cpp" />
+    <ClCompile Include="Host\MediaLockState.cpp" />
+    <ClCompile Include="..\Source\net\FrameCodec.cpp" />
+    <ClCompile Include="..\Source\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\Source\net\FramePayload.cpp" />
+    <ClCompile Include="..\Source\net\HandshakeRunner.cpp" />
+    <ClCompile Include="..\Source\Common\Util\ZlibUtil.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="..\Source\Common\Util\Path.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\NotificationSound.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\NotificationSoundPlayer.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonChatWnd\ChatIcons.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonChatWnd\ChatMarkdownIcons.cpp" />
+    <ClCompile Include="..\Source\Common\Util\MD5Sum.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\CornerPopupPlacement.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\CornerPopupCountdown.cpp" />
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp" />
+    <ClCompile Include="..\Source\Feature\P2P\P2PLinkBroker.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\P2PBadge.cpp" />
+    <ClCompile Include="Common\MediaAvatar.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelAvatar.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarGlyph.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelIcons.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\PresenceBadge.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\MainPanelStatusMenu.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarImageUtil.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\AvatarBitmapCache.cpp" />
+    <ClCompile Include="Common\WindowPin.cpp" />
+    <ClCompile Include="Common\IncomingCallLayout.cpp" />
+    <ClCompile Include="..\Source\Common\Graphics\CompositionLayer.cpp" />
+    <ClCompile Include="Common\MediaToast.cpp" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\compress.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\deflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzclose.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzlib.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\infback.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\trees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\uncompr.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c" />
+    <ClCompile Include="Call\AudioLoopback.cpp" />
+    <ClCompile Include="Call\AudioPcmUtils.cpp" />
+    <ClCompile Include="Call\AudioStreamMixer.cpp" />
+    <ClCompile Include="Call\BalloonCallDlg.cpp" />
+    <ClCompile Include="Call\CallAudioEngine.cpp" />
+    <ClCompile Include="Call\CallBarAutoHide.cpp" />
+    <ClCompile Include="Call\CallButtonArt.cpp" />
+    <ClCompile Include="Call\CallController.cpp" />
+    <ClCompile Include="Call\CallDebugEntries.cpp" />
+    <ClCompile Include="Call\CallDlgLayout.cpp" />
+    <ClCompile Include="Call\CallEchoReference.cpp" />
+    <ClCompile Include="Call\CallJitterBuffer.cpp" />
+    <ClCompile Include="Call\CallMediaFraming.cpp" />
+    <ClCompile Include="Call\CallMediaSession.cpp" />
+    <ClCompile Include="Call\CallNetQuality.cpp" />
+    <ClCompile Include="Call\CallNetStats.cpp" />
+    <ClCompile Include="Call\CallOverlayBar.cpp" />
+    <ClCompile Include="Call\CallP2PFraming.cpp" />
+    <ClCompile Include="Call\CallProtocolClient.cpp" />
+    <ClCompile Include="Call\CallRelayClient.cpp" />
+    <ClCompile Include="Call\CallRelaySelfTest.cpp" />
+    <ClCompile Include="Call\CallRelayTestFrame.cpp" />
+    <ClCompile Include="Call\CallSignalArt.cpp" />
+    <ClCompile Include="Call\CallSystemAudioSender.cpp" />
+    <ClCompile Include="Call\CallVideoCanvas.cpp" />
+    <ClCompile Include="Call\CallVideoEngine.cpp" />
+    <ClCompile Include="Call\CallVideoUiDebug.cpp" />
+    <ClCompile Include="Call\CallingLayout.cpp" />
+    <ClCompile Include="Call\CameraDisplayTest.cpp" />
+    <ClCompile Include="Call\CameraPreviewDebug.cpp" />
+    <ClCompile Include="Call\H264SelfTest.cpp" />
+    <ClCompile Include="Call\MfCameraCapture.cpp" />
+    <ClCompile Include="Call\MfH264Codec.cpp" />
+    <ClCompile Include="Call\OpusAudioCodec.cpp" />
+    <ClCompile Include="Call\SpeexAudioProcessor.cpp" />
+    <ClCompile Include="Call\SpeexResampler.cpp" />
+    <ClCompile Include="Call\SystemAudioExclusive.cpp" />
+    <ClCompile Include="Call\VideoFrameConvert.cpp" />
+    <ClCompile Include="Call\VideoLoopbackDebug.cpp" />
+    <ClCompile Include="Call\WasapiAudioIo.cpp" />
+    <ClCompile Include="RemoteDesktop\BalloonRemoteDesktopDlg.cpp" />
+    <ClCompile Include="RemoteDesktop\CaptureFallbackPolicy.cpp" />
+    <ClCompile Include="RemoteDesktop\DxgiScreenCapturer.cpp" />
+    <ClCompile Include="RemoteDesktop\GdiScreenCapturer.cpp" />
+    <ClCompile Include="RemoteDesktop\RdControlledBar.cpp" />
+    <ClCompile Include="RemoteDesktop\RdControlledStreamer.cpp" />
+    <ClCompile Include="RemoteDesktop\RdController.cpp" />
+    <ClCompile Include="RemoteDesktop\RdDebugEntries.cpp" />
+    <ClCompile Include="RemoteDesktop\RdDialogLayout.cpp" />
+    <ClCompile Include="RemoteDesktop\RdInputEncoder.cpp" />
+    <ClCompile Include="RemoteDesktop\RdInputInjector.cpp" />
+    <ClCompile Include="RemoteDesktop\RdRelayClient.cpp" />
+    <ClCompile Include="RemoteDesktop\RdRelayFraming.cpp" />
+    <ClCompile Include="RemoteDesktop\RdRelaySelfTest.cpp" />
+    <ClCompile Include="RemoteDesktop\RdScreenCapturer.cpp" />
+    <ClCompile Include="RemoteDesktop\RdScreenDecoder.cpp" />
+    <ClCompile Include="RemoteDesktop\RdSelfTestWindow.cpp" />
+    <ClCompile Include="RemoteDesktop\RdTransport.cpp" />
+    <ClCompile Include="RemoteDesktop\RdViewerToolbar.cpp" />
+    <ClCompile Include="RemoteDesktop\RdViewerWindow.cpp" />
+    <ClCompile Include="RemoteDesktop\RemoteDesktopProtocolClient.cpp" />
+    <ClCompile Include="RemoteDesktop\ScreenFrameEncoder.cpp" />
+    <ClCompile Include="RemoteDesktop\until.cpp" />
+    <ClCompile Include="Share\DxgiOutputCapturer.cpp" />
+    <ClCompile Include="Share\ShareAnnotModePolicy.cpp" />
+    <ClCompile Include="Share\ShareAnnotation.cpp" />
+    <ClCompile Include="Share\ShareAnnotationBar.cpp" />
+    <ClCompile Include="Share\ShareAnnotationGeometry.cpp" />
+    <ClCompile Include="Share\ShareAnnotationIcons.cpp" />
+    <ClCompile Include="Share\ShareAnnotationMenuIcons.cpp" />
+    <ClCompile Include="Share\ShareAnnotationMenus.cpp" />
+    <ClCompile Include="Share\ShareAnnotationObjects.cpp" />
+    <ClCompile Include="Share\ShareAnnotationOverlay.cpp" />
+    <ClCompile Include="Share\ShareAnnotationRender.cpp" />
+    <ClCompile Include="Share\ShareAnnotationSession.cpp" />
+    <ClCompile Include="Share\ShareAnnotationSessionSelect.cpp" />
+    <ClCompile Include="Share\ShareAudioSession.cpp" />
+    <ClCompile Include="Share\ShareBarButtonArt.cpp" />
+    <ClCompile Include="Share\ShareBarPopupGuard.cpp" />
+    <ClCompile Include="Share\ShareBitrateController.cpp" />
+    <ClCompile Include="Share\ShareBorderWindow.cpp" />
+    <ClCompile Include="Share\ShareCameraPanel.cpp" />
+    <ClCompile Include="Share\ShareCameraReceiver.cpp" />
+    <ClCompile Include="Share\ShareCameraSender.cpp" />
+    <ClCompile Include="Share\ShareCameraWindow.cpp" />
+    <ClCompile Include="Share\ShareConfirmDialog.cpp" />
+    <ClCompile Include="Share\ShareControlBar.cpp" />
+    <ClCompile Include="Share\ShareController.cpp" />
+    <ClCompile Include="Share\ShareControllerBoard.cpp" />
+    <ClCompile Include="Share\ShareControllerControl.cpp" />
+    <ClCompile Include="Share\ShareControllerMulti.cpp" />
+    <ClCompile Include="Share\ShareCornerToast.cpp" />
+    <ClCompile Include="Share\ShareCursorSampler.cpp" />
+    <ClCompile Include="Share\ShareDebugEntries.cpp" />
+    <ClCompile Include="Share\ShareEndedSummary.cpp" />
+    <ClCompile Include="Share\ShareEndedToast.cpp" />
+    <ClCompile Include="Share\ShareFraming.cpp" />
+    <ClCompile Include="Share\ShareHostStreamer.cpp" />
+    <ClCompile Include="Share\ShareHwH264Encoder.cpp" />
+    <ClCompile Include="Share\ShareImageExport.cpp" />
+    <ClCompile Include="Share\ShareInfoEditDialog.cpp" />
+    <ClCompile Include="Share\ShareInfoPopup.cpp" />
+    <ClCompile Include="Share\ShareLinkInvite.cpp" />
+    <ClCompile Include="Share\ShareLocalAnnotator.cpp" />
+    <ClCompile Include="Share\ShareMouseEffectMenu.cpp" />
+    <ClCompile Include="Share\ShareMouseEffects.cpp" />
+    <ClCompile Include="Share\ShareP2PRoute.cpp" />
+    <ClCompile Include="Share\SharePickerDialog.cpp" />
+    <ClCompile Include="Share\SharePickerPolicy.cpp" />
+    <ClCompile Include="Share\ShareProtocolClient.cpp" />
+    <ClCompile Include="Share\ShareRecordMutex.cpp" />
+    <ClCompile Include="Share\ShareRelayClient.cpp" />
+    <ClCompile Include="Share\ShareRemoteControl.cpp" />
+    <ClCompile Include="Share\ShareRoomPolicy.cpp" />
+    <ClCompile Include="Share\ShareScreenDecoders.cpp" />
+    <ClCompile Include="Share\ShareScreens.cpp" />
+    <ClCompile Include="Share\ShareScreensWindow.cpp" />
+    <ClCompile Include="Share\ShareSharerBar.cpp" />
+    <ClCompile Include="Share\ShareSourcePolicy.cpp" />
+    <ClCompile Include="Share\ShareSources.cpp" />
+    <ClCompile Include="Share\ShareSystemAudioCapture.cpp" />
+    <ClCompile Include="Share\ShareTextInputDialog.cpp" />
+    <ClCompile Include="Share\ShareTopBarCollapse.cpp" />
+    <ClCompile Include="Share\ShareVideoEncoder.cpp" />
+    <ClCompile Include="Share\ShareVideoPolicy.cpp" />
+    <ClCompile Include="Share\ShareViewerListPanel.cpp" />
+    <ClCompile Include="Share\ShareViewerReceiver.cpp" />
+    <ClCompile Include="Share\ShareViewerWindow.cpp" />
+    <ClCompile Include="Share\ShareWhiteboard.cpp" />
+    <ClCompile Include="Share\ShareWhiteboardWindow.cpp" />
+    <ClCompile Include="Share\WgcWindowCapturer.cpp" />
+    <ClCompile Include="Record\CloudExitDialog.cpp" />
+    <ClCompile Include="Record\CloudRecordCenter.cpp" />
+    <ClCompile Include="Record\CloudRecordCompose.cpp" />
+    <ClCompile Include="Record\CloudRecordComposer.cpp" />
+    <ClCompile Include="Record\CloudRecordManagerModel.cpp" />
+    <ClCompile Include="Record\CloudRecordProtocolClient.cpp" />
+    <ClCompile Include="Record\CloudRecordReader.cpp" />
+    <ClCompile Include="Record\RecordAudioMixer.cpp" />
+    <ClCompile Include="Record\RecordBar.cpp" />
+    <ClCompile Include="Record\RecordCameraWindow.cpp" />
+    <ClCompile Include="Record\RecordController.cpp" />
+    <ClCompile Include="Record\RecordDoneToast.cpp" />
+    <ClCompile Include="Record\RecordFrameComposer.cpp" />
+    <ClCompile Include="Record\RecordManagerLayout.cpp" />
+    <ClCompile Include="Record\RecordManagerList.cpp" />
+    <ClCompile Include="Record\RecordManagerModel.cpp" />
+    <ClCompile Include="Record\RecordManagerWindow.cpp" />
+    <ClCompile Include="Record\RecordMouseEffects.cpp" />
+    <ClCompile Include="Record\RecordMp4Writer.cpp" />
+    <ClCompile Include="Record\RecordPolicy.cpp" />
+    <ClCompile Include="Record\RecordRegionSelector.cpp" />
+    <ClCompile Include="Record\RecordSession.cpp" />
+    <ClCompile Include="Record\RecordSources.cpp" />
+    <ClCompile Include="Voice\VoiceController.cpp" />
+    <ClCompile Include="Voice\VoiceOggFile.cpp" />
+    <ClCompile Include="Voice\VoicePlayer.cpp" />
+    <ClCompile Include="Voice\VoiceRecorder.cpp" />
+    <ClCompile Include="GroupCall\GroupCallController.cpp" />
+    <ClCompile Include="GroupCall\GroupCallIncomingDlg.cpp" />
+    <ClCompile Include="GroupCall\GroupCallLayout.cpp" />
+    <ClCompile Include="GroupCall\GroupCallMediaSession.cpp" />
+    <ClCompile Include="GroupCall\GroupCallProtocolClient.cpp" />
+    <ClCompile Include="GroupCall\GroupCallWindow.cpp" />
+    <ClCompile Include="Caption\MediaCaptionBridge.cpp" />
+    <ClCompile Include="Caption\RecordCaptionLive.cpp" />
+    <ClCompile Include="Caption\RecordCaptionLiveRules.cpp" />
+    <ClCompile Include="Caption\RecordCaptionTap.cpp" />
+    <ClCompile Include="Caption\ShareCaptionBoard.cpp" />
+    <ClCompile Include="Caption\ShareCaptionController.cpp" />
+    <ClCompile Include="Caption\ShareCaptionFrame.cpp" />
+    <ClCompile Include="Caption\ShareCaptionOverlay.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj">
+      <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\third-party\opus-1.5.2\opus_static.vcxproj">
+      <Project>{b1e2c3d4-0a1b-4c2d-9e3f-0a1b2c3d4e5f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\third-party\speexdsp-1.2.1\speexdsp_static.vcxproj">
+      <Project>{c2d3e4f5-1b2c-4d3e-af40-1b2c3d4e5f60}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoMedia.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 版本信息（文件说明、版权）：UTF-8 编码，单独按 /c65001 编译；由 tools/version_rc.py 生成 -->
+    <ResourceCompile Include="FlamingoMediaVersion.rc">
+      <AdditionalOptions>/c65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

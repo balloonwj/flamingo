@@ -4,11 +4,57 @@
  */
 #include "stdafx.h"
 #include "ChatTitleIcon.h"
+#include "../BalloonMain/AvatarGlyph.h"   // DrawCenteredGlyphGdi：头像字居中
 
 #include <vector>
 #include <gdiplus.h>   // 真图头像标题栏图标：解码本地图片 + 裁圆绘制
 
 namespace balloonchatwnd {
+
+namespace {
+
+// Rec.601 亮度权重，与 balloonmain::MakeGrayColor（AvatarGray.cpp）相同，标题栏的灰度头像与
+// 通讯录、气泡里的灰度头像亮度一致。
+const Gdiplus::REAL kLumaWeightRed   = 0.299f;
+const Gdiplus::REAL kLumaWeightGreen = 0.587f;
+const Gdiplus::REAL kLumaWeightBlue  = 0.114f;
+
+// 圆形图标的圆往里收的距离（像素）：配合 PixelOffsetModeHalf，抗锯齿的边缘整圈落在位图之内。
+const Gdiplus::REAL kCircleInset = 0.5f;
+
+// GDI+ 颜色矩阵的阶数（R、G、B、A 四个分量加一行平移）。
+const int kColorMatrixOrder = 5;
+
+// 颜色矩阵里 R、G、B、A 与平移各自所在的行 / 列下标。
+const int kMatrixRed   = 0;
+const int kMatrixGreen = 1;
+const int kMatrixBlue  = 2;
+const int kMatrixAlpha = 3;
+const int kMatrixShift = 4;
+
+// 填一个把图像画成灰度的颜色矩阵：输出的 R、G、B 三个分量都等于输入按亮度权重的加权和，
+// 透明度原样保留。GDI+ 的颜色矩阵按「行向量 × 矩阵」相乘，故第 i 行是输入分量 i 对各输出分量的贡献。
+void FillGrayColorMatrix(Gdiplus::ColorMatrix& m)
+{
+    for (int r = 0; r < kColorMatrixOrder; ++r)
+    {
+        for (int c = 0; c < kColorMatrixOrder; ++c)
+        {
+            m.m[r][c] = 0.0f;
+        }
+    }
+    const int outChannels[3] = { kMatrixRed, kMatrixGreen, kMatrixBlue };
+    for (int i = 0; i < 3; ++i)
+    {
+        m.m[kMatrixRed][outChannels[i]]   = kLumaWeightRed;
+        m.m[kMatrixGreen][outChannels[i]] = kLumaWeightGreen;
+        m.m[kMatrixBlue][outChannels[i]]  = kLumaWeightBlue;
+    }
+    m.m[kMatrixAlpha][kMatrixAlpha] = 1.0f;
+    m.m[kMatrixShift][kMatrixShift] = 1.0f;
+}
+
+} // anonymous namespace
 
 HICON IconFromBitmap(HBITMAP hbmColor)
 {
@@ -71,38 +117,32 @@ HBITMAP MakeRoundTitleIcon(LPCTSTR glyph, COLORREF avatarColor,
     ::FillRect(hdc, &rc, bgBrush);
     ::DeleteObject(bgBrush);
 
-    // 实心圆（头像底色）；用同色画笔，避免 GDI 默认黑笔在圆周描出黑边。
-    HBRUSH avBrush = ::CreateSolidBrush(avatarColor);
-    HPEN   avPen   = ::CreatePen(PS_SOLID, 1, avatarColor);
-    HBRUSH oldBr   = (HBRUSH)::SelectObject(hdc, avBrush);
-    HPEN   oldPen  = (HPEN)::SelectObject(hdc, avPen);
-    ::Ellipse(hdc, 0, 0, sizePx, sizePx);
-    ::SelectObject(hdc, oldBr);
-    ::SelectObject(hdc, oldPen);
-    ::DeleteObject(avBrush);
-    ::DeleteObject(avPen);
+    // 实心圆（头像底色），用 GDI+ 抗锯齿填充，圆外是上面填好的标题栏底色。原先用 GDI 的 Ellipse，
+    // 没有抗锯齿，圆周是台阶状的锯齿（2026-10-03 实测）。PixelOffsetModeHalf 加上往里收 0.5 像素，
+    // 让圆与位图的像素格对齐、整圆落在位图内。GDI+ 对象放在作用域内，析构后再用 GDI 画字
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        Gdiplus::SolidBrush avBrush(Gdiplus::Color(255, GetRValue(avatarColor), GetGValue(avatarColor),
+                                                   GetBValue(avatarColor)));
+        g.FillEllipse(&avBrush, kCircleInset, kCircleInset,
+                      (Gdiplus::REAL)sizePx - 2.0f * kCircleInset, (Gdiplus::REAL)sizePx - 2.0f * kCircleInset);
+    }
 
     // 首字：按头像底色亮度取白字或深字。
     int lum = (GetRValue(avatarColor) * 299 + GetGValue(avatarColor) * 587
                + GetBValue(avatarColor) * 114) / 1000;
     COLORREF txtColor = (lum > 150) ? RGB(0x4A, 0x4A, 0x4A) : RGB(0xFF, 0xFF, 0xFF);
-    HFONT hFont = ::CreateFontW(
-        -(int)(sizePx * 0.5), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-    HFONT oldFont = (HFONT)::SelectObject(hdc, hFont);
-    ::SetBkMode(hdc, TRANSPARENT);
-    ::SetTextColor(hdc, txtColor);
-    ::DrawTextW(hdc, (LPCWSTR)glyph, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-    ::SelectObject(hdc, oldFont);
-    ::DeleteObject(hFont);
+    // 字号为边长的一半、加粗；按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低
+    balloonmain::DrawCenteredGlyphGdi(hdc, (LPCWSTR)glyph, rc, sizePx / 2, true, txtColor);
 
     ::SelectObject(hdc, oldBmp);
     ::DeleteDC(hdc);
     return hbm;
 }
 
-HBITMAP MakeRoundTitleIconFromImage(LPCWSTR imagePath, COLORREF barBg, int sizePx)
+HBITMAP MakeRoundTitleIconFromImage(LPCWSTR imagePath, COLORREF barBg, int sizePx, bool gray)
 {
     if (imagePath == NULL || imagePath[0] == L'\0' || sizePx <= 0)
     {
@@ -143,16 +183,37 @@ HBITMAP MakeRoundTitleIconFromImage(LPCWSTR imagePath, COLORREF barBg, int sizeP
     ::FillRect(hdc, &rc, bgBrush);
     ::DeleteObject(bgBrush);
 
-    // 把真图裁成圆形、高质量缩放绘制到整个图标区域。
+    // 先把真图高质量缩放到图标尺寸、画进一张中间位图，再拿它作纹理画刷按抗锯齿填充圆形；圆外仍是
+    // 前面填好的标题栏底色。不用「SetClip 到圆形再 DrawImage」：GDI+ 的裁剪区按整像素划分，抗锯齿
+    // 设置对它不起作用，圆周是台阶状的锯齿（2026-10-03 实测）。
     {
+        Gdiplus::Bitmap scaled(sizePx, sizePx, PixelFormat32bppPARGB);
+        {
+            Gdiplus::Graphics gs(&scaled);
+            gs.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            gs.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+            // 镜像平铺取样：插值取到图片边界之外时用边缘像素的镜像，而不是透明，图片四边不会变淡
+            Gdiplus::ImageAttributes attrs;
+            attrs.SetWrapMode(Gdiplus::WrapModeTileFlipXY);
+            Gdiplus::ColorMatrix cm;
+            if (gray)
+            {
+                // 灰度只作用于图片本身；圆外是标题栏底色，不经过颜色矩阵，保持原色
+                FillGrayColorMatrix(cm);
+                attrs.SetColorMatrix(&cm);
+            }
+            gs.DrawImage(bmp, Gdiplus::Rect(0, 0, sizePx, sizePx),
+                         0, 0, (INT)bmp->GetWidth(), (INT)bmp->GetHeight(),
+                         Gdiplus::UnitPixel, &attrs);
+        }
+
+        // 纹理画刷不做变换：中间位图与图标同尺寸、左上角对齐，两边都用 PixelOffsetModeHalf，像素一一对应
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        Gdiplus::GraphicsPath circle;
-        circle.AddEllipse(0, 0, sizePx, sizePx);
-        g.SetClip(&circle);
-        g.DrawImage(bmp, Gdiplus::Rect(0, 0, sizePx, sizePx));
-        g.ResetClip();
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        Gdiplus::TextureBrush brush(&scaled);
+        g.FillEllipse(&brush, kCircleInset, kCircleInset,
+                      (Gdiplus::REAL)sizePx - 2.0f * kCircleInset, (Gdiplus::REAL)sizePx - 2.0f * kCircleInset);
     }
 
     delete bmp;

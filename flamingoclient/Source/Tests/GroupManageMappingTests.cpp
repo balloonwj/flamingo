@@ -420,7 +420,7 @@ TEST_CASE("GM25 相对时间取最大的合适单位", "[groupmanage][reltime]")
 // 协议结构 → 界面模型
 // =====================================================================
 
-TEST_CASE("GM26 群资料映射：七项群设置逐个对上", "[groupmanage][mapping]")
+TEST_CASE("GM26 群资料映射：六项群设置逐个对上", "[groupmanage][mapping]")
 {
     net::GroupInfoResult info;
     info.m_code = 0;
@@ -434,7 +434,6 @@ TEST_CASE("GM26 群资料映射：七项群设置逐个对上", "[groupmanage][m
     info.m_newseehistory = 0;
     info.m_memberinvite = 1;
     info.m_welcomeon = 1;
-    info.m_sensitiveon = 1;
 
     GroupManageModel model;
     ApplyGroupInfo(info, model);
@@ -447,7 +446,6 @@ TEST_CASE("GM26 群资料映射：七项群设置逐个对上", "[groupmanage][m
     CHECK_FALSE(model.m_perms.newMemberSeeHistory);
     CHECK(model.m_perms.memberInviteFriend);
     CHECK(model.m_perms.welcomeMessage);
-    CHECK(model.m_perms.sensitiveWordFilter);
 }
 
 TEST_CASE("GM27 成员映射：群名片优先于账号昵称", "[groupmanage][mapping]")
@@ -707,121 +705,21 @@ TEST_CASE("GM35 没有对应条目时附上服务端原文", "[groupmanage][fail
 }
 
 // =====================================================================
-// 敏感词库映射
+// 已删除的管理词库页
 // =====================================================================
 
-TEST_CASE("GM36 敏感词映射：正常词条与相对时间", "[groupmanage][sensitive]")
+TEST_CASE("GM40 已删除的管理词库页（1007）对任何角色都不可见", "[groupmanage][pagegate]")
 {
-    net::SensitiveWordsResult words;
-    words.m_code = 0;
-    words.m_groupid = 10000000001LL;
-
-    net::SensitiveWordItem w1;
-    w1.m_id = 1;
-    w1.m_word = "badword";
-    w1.m_timestamp = kNow - 3 * kOneDay;
-    words.m_words.push_back(w1);
-
-    net::SensitiveWordItem w2;
-    w2.m_id = 2;
-    w2.m_word = "another";
-    w2.m_timestamp = kNow - 20 * kOneMinute;
-    words.m_words.push_back(w2);
-
-    GroupManageModel model;
-    ApplySensitiveWords(words, kNow, model);
-
-    REQUIRE(model.m_sensitiveWords.size() == 2);
-    CHECK(model.m_sensitiveWords[0].id == 1);
-    CHECK(model.m_sensitiveWords[0].word == CString(_T("badword")));
-    CHECK(model.m_sensitiveWords[0].timeText == CString(_T("3 天前")));
-    CHECK(model.m_sensitiveWords[1].timeText == CString(_T("20 分钟前")));
-}
-
-TEST_CASE("GM37 敏感词映射：拉过但为空要与还没拉区分开", "[groupmanage][sensitive]")
-{
-    // 界面靠这个标志决定显示"加载中"还是"还没有敏感词"，两者不能混
-    GroupManageModel model;
-    CHECK_FALSE(model.m_sensitiveWordsLoaded);   // 初始：还没拉
-
-    net::SensitiveWordsResult empty;
-    empty.m_code = 0;
-    ApplySensitiveWords(empty, kNow, model);
-
-    CHECK(model.m_sensitiveWords.empty());
-    CHECK(model.m_sensitiveWordsLoaded);          // 拉过了，只是没有词
-}
-
-TEST_CASE("GM38 敏感词映射：没有词条ID或空词的脏数据跳过", "[groupmanage][sensitive]")
-{
-    net::SensitiveWordsResult words;
-    words.m_code = 0;
-
-    net::SensitiveWordItem noId;       // 没有 id → 删不掉，留着只会让人点了没反应
-    noId.m_id = 0;
-    noId.m_word = "orphan";
-    words.m_words.push_back(noId);
-
-    net::SensitiveWordItem emptyWord;  // 空词 → 界面上就是一行空白
-    emptyWord.m_id = 5;
-    emptyWord.m_word = "";
-    words.m_words.push_back(emptyWord);
-
-    net::SensitiveWordItem good;
-    good.m_id = 6;
-    good.m_word = "ok";
-    words.m_words.push_back(good);
-
-    GroupManageModel model;
-    ApplySensitiveWords(words, kNow, model);
-
-    REQUIRE(model.m_sensitiveWords.size() == 1);
-    CHECK(model.m_sensitiveWords[0].id == 6);
-}
-
-TEST_CASE("GM39 敏感词映射：重复调用整体替换而不是累加", "[groupmanage][sensitive]")
-{
-    // 增删之后会重拉一次，第二次的结果必须整体替换第一次的
-    net::SensitiveWordsResult first;
-    first.m_code = 0;
-    net::SensitiveWordItem a;
-    a.m_id = 1;
-    a.m_word = "a";
-    first.m_words.push_back(a);
-
-    GroupManageModel model;
-    ApplySensitiveWords(first, kNow, model);
-    REQUIRE(model.m_sensitiveWords.size() == 1);
-
-    net::SensitiveWordsResult second;
-    second.m_code = 0;
-    net::SensitiveWordItem b;
-    b.m_id = 2;
-    b.m_word = "b";
-    second.m_words.push_back(b);
-
-    ApplySensitiveWords(second, kNow, model);
-    REQUIRE(model.m_sensitiveWords.size() == 1);
-    CHECK(model.m_sensitiveWords[0].id == 2);
-}
-
-TEST_CASE("GM40 管理词库页的可见性与群权限页一致", "[groupmanage][pagegate]")
-{
-    // 它是群权限页的二级界面，能进群权限就该能进词库，反之亦然
-    const int kPagePerms = 1005;
-    const int kPageSensitive = 1007;
+    // 群级敏感词已于 2026-10-02 删除，「管理词库」二级界面随之去掉，页面编号 1007
+    // 作废不复用。可见性判定对它须一律返回 false，防止残留的跳转把用户带到一个
+    // 已经不存在的页面上。
+    const int kRetiredSensitivePage = 1007;
 
     const int roles[] = { kRoleOwner, kRoleAdmin, kRoleMember };
     for (int i = 0; i < 3; ++i)
     {
-        CHECK(IsPageVisibleForRole(kPageSensitive, roles[i])
-              == IsPageVisibleForRole(kPagePerms, roles[i]));
+        CHECK_FALSE(IsPageVisibleForRole(kRetiredSensitivePage, roles[i]));
     }
-
-    // 具体到取值：群主与管理员可见，普通成员不可见
-    CHECK(IsPageVisibleForRole(kPageSensitive, kRoleOwner));
-    CHECK(IsPageVisibleForRole(kPageSensitive, kRoleAdmin));
-    CHECK_FALSE(IsPageVisibleForRole(kPageSensitive, kRoleMember));
 }
 
 // =====================================================================
@@ -844,7 +742,7 @@ static std::string MakeInfoChangedNotifyBody()
         "\"customface\":\"\",\"announcement\":\"hello\",\"ownerid\":\"100001\","
         "\"joinmode\":1,\"muteall\":0,\"membercount\":5,\"intro\":\"\","
         "\"atallscope\":0,\"newseehistory\":1,\"memberinvite\":0,\"welcomeon\":0,"
-        "\"welcometext\":\"\",\"sensitiveon\":0,\"changetype\":1}");
+        "\"welcometext\":\"\",\"changetype\":1}");
 }
 
 TEST_CASE("GM41 群资料变更推送不带 myrole，映射后本人角色须原样保留",
@@ -1540,7 +1438,7 @@ TEST_CASE("LS8 示例数据的两项状态都是已加载", "[groupmanage][loads
 
 TEST_CASE("LS9 新建的模型与只写入群上下文的模型，群资料状态都是未加载", "[groupmanage][loadstate]")
 {
-    //群简介、欢迎语、七项群权限、全员禁言都来自群资料应答；应答到达之前模型里只有
+    //群简介、欢迎语、六项群权限、全员禁言都来自群资料应答；应答到达之前模型里只有
     //构造时的默认值，界面不能把它们当成真实设置显示（2026-10-01 修复前正是如此）
     GroupManageModel fresh;
     CHECK(fresh.m_groupInfoState == kLoadPending);

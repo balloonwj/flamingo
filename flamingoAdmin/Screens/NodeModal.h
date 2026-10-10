@@ -3,7 +3,7 @@
  *
  *  企业详情屏「组织架构」tab 里点「新增子部门 / 新增员工」时弹出。两种模式各自
  *  一套字段：
- *    · AddDept —— 部门名称 + 部门负责人；
+ *    · AddDept —— 部门名称 + 部门负责人（从本企业员工里选，可输入姓名筛选）；
  *    · AddUser —— 姓名 + 职位 + 邮箱 + 手机号 + 性别。
  *
  *  【为什么是独立顶层窗口而不是 overlay】
@@ -30,6 +30,9 @@
 #pragma once
 
 #include "Controls/Window/DuiFrameWindow.h"
+#include "Util/OrgTreeBuilder.h"   // orgtree::LeaderCandidate：负责人下拉框的候选人
+
+#include <vector>
 
 namespace balloonwjui
 {
@@ -73,6 +76,13 @@ public:
      */
     bool CreateAndShow();
 
+    /**
+     *  设置部门负责人下拉框的候选人（本企业全体员工）。须在 CreateAndShow 之前调用，
+     *  仅 AddDept 模式用到；不调用时下拉框里只有「不设置」一项。
+     *  @param candidates 由 orgtree::CollectLeaderCandidates 从组织树收集，按值复制保存。
+     */
+    void SetLeaderCandidates(const std::vector<orgtree::LeaderCandidate>& candidates);
+
     // 关闭对话框（供 AdminFrame 在 HTTP 提交成功后调用）。等价于 PostMessage
     // WM_CLOSE —— 走 OnCloseMsg → DestroyWindow → OnDestroyMsg（恢复主窗口
     // Enable + 通知 AdminFrame 清指针）。
@@ -81,18 +91,21 @@ public:
     // 当前模式（AdminFrame 提交时据此决定调建部门还是建员工的接口）。
     Mode GetMode() const { return m_mode; }
 
-    // 校验必填项：部门模式要求部门名非空；员工模式要求姓名与邮箱非空。
+    // 校验必填项：部门模式要求部门名非空、负责人能确定为某一名员工或不设置；员工模式
+    // 要求姓名与邮箱非空、手机号为 11 位以 1 开头的数字（2026-10-06 起手机号必填，可用于登录）。
     bool Validate() const;
 
     // ---- 表单字段读取（供 AdminFrame 提交时取数据）----
     // 字段不属于当前模式时返回空串（该模式下这些控件根本没建）。
     CString GetDeptName() const;     // 部门名称
-    CString GetDeptLeader() const;   // 部门负责人
+    // 部门负责人的员工 ID：0 表示不设置；orgtree::kLeaderInvalid 表示下拉框里的文字
+    // 无法确定为某一名员工（手输的姓名对不上或有重名），Validate 会因此不通过。
+    long long GetDeptLeaderUserId() const;
     CString GetUserName() const;     // 员工姓名
     CString GetUserTitle() const;    // 员工职位
     CString GetUserEmail() const;    // 员工邮箱
-    CString GetUserPhone() const;    // 员工手机号
-    CString GetUserGender() const;   // 员工性别
+    CString GetUserPhone() const;    // 员工手机号（已去掉首尾空白）
+    int     GetUserGenderCode() const;   // 员工性别编码：0 保密 / 1 男 / 2 女
 
     /**
      *  切换「提交中」状态。提交 HTTP 期间把「创建」按钮置灰、文字改为「创建中…」，
@@ -103,6 +116,7 @@ public:
     void SetBusy(bool busy);
 
     BEGIN_MSG_MAP(NodeModal)
+        MESSAGE_HANDLER(WM_KEYDOWN,    OnKeyDownMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_CLOSE,      OnCloseMsg)
         MESSAGE_HANDLER(WM_DESTROY,    OnDestroyMsg)
@@ -124,6 +138,9 @@ private:
     // WM_CLOSE：用户点标题栏关闭按钮（或调 RequestClose）→ DestroyWindow。
     LRESULT OnCloseMsg(UINT, WPARAM, LPARAM, BOOL& bHandled);
 
+    // WM_KEYDOWN：Esc 等同点关闭按钮（不提交）；其余按键不处理，交给基类派发给获得焦点的控件。
+    LRESULT OnKeyDownMsg(UINT, WPARAM wParam, LPARAM, BOOL& bHandled);
+
     // WM_DESTROY：无论怎么关，都在此恢复主窗口 Enable + 通知 AdminFrame 清指针。
     // 是真模态语义解除的唯一收口。
     LRESULT OnDestroyMsg(UINT, WPARAM, LPARAM, BOOL& bHandled);
@@ -138,7 +155,7 @@ private:
     // 输入控件裸指针。所有权在控件树里（SetClientContent 接管），本类只借用；
     // 只有当前模式用到的那几个非空，另一组恒为 nullptr。
     balloonwjui::DuiEdit* m_editDeptName;    // 部门名称 *（AddDept）
-    balloonwjui::DuiEdit* m_editDeptLeader;  // 部门负责人（AddDept）
+    balloonwjui::DuiComboBox* m_cbDeptLeader;    // 部门负责人（AddDept）：可输入、按子串筛选的下拉框
     balloonwjui::DuiEdit* m_editUserName;    // 姓名 *（AddUser）
     balloonwjui::DuiEdit* m_editUserTitle;   // 职位（AddUser）
     balloonwjui::DuiEdit* m_editUserEmail;   // 邮箱 *（AddUser）
@@ -146,6 +163,10 @@ private:
     balloonwjui::DuiComboBox* m_cbUserGender;    // 性别（AddUser）
 
     balloonwjui::DuiControl*  m_btnSubmit;       // 「创建」按钮（busy 时改文字并置灰）
+
+    // 负责人下拉框的候选人。下拉框第 0 项是「不设置」，第 i + 1 项对应本表第 i 项；
+    // 由 SetLeaderCandidates 在 CreateAndShow 之前填入，之后只读。
+    std::vector<orgtree::LeaderCandidate> m_leaderCandidates;
 };
 
 } // namespace flamingoadmin

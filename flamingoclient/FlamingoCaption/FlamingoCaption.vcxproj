@@ -1,0 +1,328 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoCaption.vcxproj — 语音字幕功能 DLL 工程（由 flamingoclient/tools/gen_caption_vcxproj.py 生成，不要手改）
+  balloonwj@qq.com   2026-10-06
+
+  产出 FlamingoCaption.dll，由 FlamingoMedia.dll 在第一次用到字幕时用 LoadLibrary 动态加载（不链接导入库）。
+  接口约定见 CaptionApi.h，方案见 docs/语音字幕方案.md。
+
+  关键约束：
+   · CharacterSet=Unicode。四个配置都用静态 CRT 的 Release 版（/MT），Debug 配置只是不优化、带调试信息、
+     不定义 _DEBUG；balloonui 也一律链接它的 Release 配置。原因：sherpa-onnx 只有 Release 版静态库。
+   · balloonui 不用 ProjectReference 引用，由文件末尾的 CaptionLinkReleaseBalloonUi 目标编出并链接它的 Release 配置，
+     原因见该目标前的注释。
+   · 四种配置都定义 WIN32（仓库代码判断的是它而不是 _WIN32）。
+   · sherpa-onnx 静态库存在时（deps\sherpa-onnx\lib\<平台>\onnxruntime.lib）才定义 CAPTION_HAS_ENGINE 并链接，
+     否则照常编译、识别引擎报不可用。
+   · 四种配置的 OutDir 与 Flamingo.exe 相同：Debug|x64 输出到资源齐全的 ..\Debug\，其余三个分别输出到 ..\Release\、..\Debug_Win32\、..\Release_Win32\。
+   · 导出名由 FlamingoCaption.def 固定；导入库与 .exp 放进中间目录，不污染输出目录。
+   · 所有配置都带 /utf-8：源文件为 UTF-8 无 BOM。
+   · 日志：DLL 不编译 exe 的 IULog.cpp，由 Host\IULogBridge.cpp 实现 CIULog::Log，经宿主写日志。
+   · 不增量链接、打开 /OPT:REF /OPT:ICF：onnxruntime 静态链接，增量链接时 DLL 体积约为 3 倍（方案 14.2）。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6C1F7E2A-9B3D-4E5F-A812-3D4C5B6A7E81}</ProjectGuid>
+    <RootNamespace>FlamingoCaption</RootNamespace>
+    <ProjectName>FlamingoCaption</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\Debug_Win32\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <TargetName>FlamingoCaption</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\Release_Win32\</OutDir>
+    <IntDir>Release\</IntDir>
+    <TargetName>FlamingoCaption</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\Debug\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <TargetName>FlamingoCaption</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\Release\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <TargetName>FlamingoCaption</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup>
+    <CaptionSherpaLibDir>$(MSBuildThisFileDirectory)..\deps\sherpa-onnx\lib\$(Platform)\</CaptionSherpaLibDir>
+    <CaptionHasEngine Condition="Exists('$(CaptionSherpaLibDir)onnxruntime.lib')">true</CaptionHasEngine>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\deps\sherpa-onnx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoCaption.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;version.lib;IMM32.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\deps\sherpa-onnx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoCaption.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;version.lib;IMM32.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\deps\sherpa-onnx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoCaption.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;version.lib;IMM32.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\Source\third-party\wtl10.1;..\..\third-party\balloonui\balloonui;..\deps\sherpa-onnx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>FlamingoCaption.def</ModuleDefinitionFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;version.lib;IMM32.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(CaptionHasEngine)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>CAPTION_HAS_ENGINE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(CaptionSherpaLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sherpa-onnx-c-api.lib;sherpa-onnx-core.lib;sherpa-onnx-fstfar.lib;sherpa-onnx-fst.lib;sherpa-onnx-kaldifst-core.lib;kaldi-decoder-core.lib;kaldi-native-fbank-core.lib;ssentencepiece_core.lib;kissfft-float.lib;onnxruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="CaptionApi.h" />
+    <ClInclude Include="..\Source\Common\Log\IULog.h" />
+    <ClInclude Include="..\FlamingoMedia\Host\LogFormat.h" />
+    <ClInclude Include="..\Source\Common\I18n\I18n.h" />
+    <ClInclude Include="..\Source\Common\Util\QuietLoadLibrary.h" />
+    <ClInclude Include="..\FlamingoLang\FlamingoLangApi.h" />
+    <ClInclude Include="..\Source\UI\BalloonMain\TitleBarIcon.h" />
+    <ClInclude Include="..\deps\sherpa-onnx\include\sherpa-onnx\c-api\c-api.h" />
+    <ClInclude Include="Model\CaptionCue.h" />
+    <ClInclude Include="Model\CaptionDraft.h" />
+    <ClInclude Include="Model\CaptionFiles.h" />
+    <ClInclude Include="Model\CaptionJson.h" />
+    <ClInclude Include="Model\CaptionLayout.h" />
+    <ClInclude Include="Model\CaptionSegmenter.h" />
+    <ClInclude Include="Model\CaptionSettings.h" />
+    <ClInclude Include="Model\CaptionText.h" />
+    <ClInclude Include="Model\CaptionTime.h" />
+    <ClInclude Include="Model\CaptionTrack.h" />
+    <ClInclude Include="Engine\CaptionAudio.h" />
+    <ClInclude Include="Engine\CaptionEngine.h" />
+    <ClInclude Include="Engine\CaptionModelRes.h" />
+    <ClInclude Include="Engine\CaptionWorker.h" />
+    <ClInclude Include="Record\CaptionRecording.h" />
+    <ClInclude Include="Render\CaptionRenderer.h" />
+    <ClInclude Include="Host\CaptionLog.h" />
+    <ClInclude Include="Host\CaptionModule.h" />
+    <ClInclude Include="Editor\CaptionEditorMessages.h" />
+    <ClInclude Include="Editor\CaptionEditorModel.h" />
+    <ClInclude Include="Editor\CaptionEditorWindow.h" />
+    <ClInclude Include="Editor\CaptionExportDialog.h" />
+    <ClInclude Include="Editor\CaptionFormDialog.h" />
+    <ClInclude Include="Editor\CaptionPostRecognizer.h" />
+    <ClInclude Include="Editor\CaptionPreviewView.h" />
+    <ClInclude Include="Editor\CaptionReplaceDialog.h" />
+    <ClInclude Include="Editor\CaptionTimelineMath.h" />
+    <ClInclude Include="Editor\CaptionTimelineView.h" />
+    <ClInclude Include="Editor\CaptionVideoPlayer.h" />
+    <ClInclude Include="Export\CaptionExportJob.h" />
+    <ClInclude Include="Export\CaptionMediaIo.h" />
+    <ClInclude Include="Export\CaptionTimedText.h" />
+    <ClInclude Include="Export\Mp4TextTrack.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DllMain.cpp" />
+    <ClCompile Include="..\FlamingoMedia\Host\LogFormat.cpp" />
+    <ClCompile Include="..\Source\Common\I18n\I18n.cpp" />
+    <ClCompile Include="..\Source\UI\BalloonMain\TitleBarIcon.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\Source\third-party\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="Model\CaptionDraft.cpp" />
+    <ClCompile Include="Model\CaptionFiles.cpp" />
+    <ClCompile Include="Model\CaptionJson.cpp" />
+    <ClCompile Include="Model\CaptionLayout.cpp" />
+    <ClCompile Include="Model\CaptionSegmenter.cpp" />
+    <ClCompile Include="Model\CaptionSettings.cpp" />
+    <ClCompile Include="Model\CaptionText.cpp" />
+    <ClCompile Include="Model\CaptionTime.cpp" />
+    <ClCompile Include="Model\CaptionTrack.cpp" />
+    <ClCompile Include="Engine\CaptionAudio.cpp" />
+    <ClCompile Include="Engine\CaptionEngine.cpp" />
+    <ClCompile Include="Engine\CaptionWorker.cpp" />
+    <ClCompile Include="Record\CaptionRecording.cpp" />
+    <ClCompile Include="Render\CaptionRenderer.cpp" />
+    <ClCompile Include="Host\CaptionLog.cpp" />
+    <ClCompile Include="Host\CaptionModule.cpp" />
+    <ClCompile Include="Host\IULogBridge.cpp" />
+    <ClCompile Include="Editor\CaptionEditorModel.cpp" />
+    <ClCompile Include="Editor\CaptionEditorWindow.cpp" />
+    <ClCompile Include="Editor\CaptionExportDialog.cpp" />
+    <ClCompile Include="Editor\CaptionFormDialog.cpp" />
+    <ClCompile Include="Editor\CaptionPostRecognizer.cpp" />
+    <ClCompile Include="Editor\CaptionPreviewView.cpp" />
+    <ClCompile Include="Editor\CaptionReplaceDialog.cpp" />
+    <ClCompile Include="Editor\CaptionTimelineMath.cpp" />
+    <ClCompile Include="Editor\CaptionTimelineView.cpp" />
+    <ClCompile Include="Editor\CaptionVideoPlayer.cpp" />
+    <ClCompile Include="Export\CaptionExportJob.cpp" />
+    <ClCompile Include="Export\CaptionMediaIo.cpp" />
+    <ClCompile Include="Export\CaptionTimedText.cpp" />
+    <ClCompile Include="Export\Mp4TextTrack.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FlamingoCaption.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 版本信息（文件说明、版权）：UTF-8 编码，单独按 /c65001 编译；由 tools/version_rc.py 生成 -->
+    <ResourceCompile Include="FlamingoCaptionVersion.rc">
+      <AdditionalOptions>/c65001 %(AdditionalOptions)</AdditionalOptions>
+    </ResourceCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+  <!-- balloonui：四个配置一律链接它的 Release 配置（原因见文件头）。不用 ProjectReference 的 SetConfiguration：
+       通过解决方案编译时，MSBuild 按解决方案的配置给被引用工程指定配置，SetConfiguration 不生效，Debug 解决方案
+       因此链接到 balloonui 的 Debug 版而报 LNK2038（2026-10-09 实测）。本目标在链接之前用 MSBuild 任务编出 balloonui
+       的 Release 配置，再把它产出的静态库加入链接输入，单独编译本工程与通过解决方案编译链接的都是这一份。
+       Release 解决方案里，这次调用与解决方案自身编译 balloonui 时的全局属性相同，MSBuild 只编一次。 -->
+  <PropertyGroup>
+    <CaptionBalloonUiProject>$(MSBuildThisFileDirectory)..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj</CaptionBalloonUiProject>
+  </PropertyGroup>
+  <!-- 原生 C++ 工程的 Build 目标不返回产物路径（2026-10-09 实测为空），库路径取自紧接着调用的 GetTargetPath 目标。 -->
+  <Target Name="CaptionLinkReleaseBalloonUi" BeforeTargets="Link">
+    <MSBuild Projects="$(CaptionBalloonUiProject)" Targets="Build;GetTargetPath" Properties="Configuration=Release;Platform=$(Platform)">
+      <Output TaskParameter="TargetOutputs" ItemName="CaptionBalloonUiLib" />
+    </MSBuild>
+    <ItemGroup>
+      <Link Include="@(CaptionBalloonUiLib)" />
+    </ItemGroup>
+    <Message Importance="high" Text="FlamingoCaption links balloonui (Release): @(CaptionBalloonUiLib)" />
+  </Target>
+</Project>

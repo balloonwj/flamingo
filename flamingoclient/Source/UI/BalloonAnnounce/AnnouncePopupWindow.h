@@ -24,6 +24,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "../BalloonMain/TitleBarIcon.h"   // ProgramWindowIcons（任务栏按钮的程序图标，第 15 期）
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
@@ -49,10 +50,10 @@ public:
     /**
      *  弹出一条公告（已弹着则换成这一条并前置）。
      *
-     *    ownerPanel：    主面板窗口句柄；点「查看全部」时经它打开消息盒子。
-     *    announcementId：公告ID，「查看全部」据它在消息盒子里定位到这一条。
+     *    ownerPanel：    主面板窗口句柄；点「查看全部」时经它打开公告中心。
+     *    announcementId：公告ID，「查看全部」据它在公告中心里定位到这一条。
      *    title：         公告标题。
-     *    body：          公告正文（过长时窗口内只显示得下一部分，看全文去消息盒子）。
+     *    body：          公告正文（过长时窗口内只显示得下一部分，看全文去公告中心）。
      *    severity：      级别，取值见 net/Protocol.h 的 announcement_severity；
      *                    决定右上角徽章的文字与颜色。
      *    senderName：    发布者名称；空串时底部只显示时间。
@@ -105,4 +106,7 @@ private:
 
     //标题栏图标位图（程序图标合成到标题栏底色上）。SetIcon 仅借用，本类持有、析构时释放。
     HBITMAP m_titleIconBmp;
+
+    //任务栏按钮的程序图标（第 15 期：本窗口可以最小化到任务栏）。本对象持有，窗口先于它销毁。
+    balloonmain::ProgramWindowIcons m_taskIcons;
 };

@@ -1,5 +1,5 @@
 /**
- *  「消息盒子」公告列表行实现，AnnounceRow.cpp
+ *  「公告中心」公告列表行实现，AnnounceRow.cpp
  *  设计与约定见 AnnounceRow.h。
  *  balloonwj@qq.com   2026-08-05
  */

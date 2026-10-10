@@ -50,15 +50,16 @@ const int kBtnH       = 34;  // 底部按钮高度
 
 // 目标选择器列表内容上 / 下内边距（可视高度 = kPickerH - 2×该值）。
 const int kPickerInnerPadV = 4;
-// 悬浮滚动条距投放目标面板右内缘的间距。
-const int kPickerSbInset = 3;
+// 悬浮滚动条距投放目标面板右内缘的间距（像素）。0：命中带贴区域右缘，滑块离右缘 2 像素由 DuiScrollBar 决定，与 PC 客户端一致。
+const int kPickerSbInset = 0;
 
 const int kBackdropAlpha = 112;  // 遮罩不透明度
 const int kModalTitlePt  = 14;   // 弹窗标题字号（磅）
 
 // 严重等级选项（下标即服务端 severity 编码：0 普通 / 1 提醒 / 2 警告）。
-const TCHAR* const kSevLabels[] = { _T("普通"), _T("提醒"), _T("警告") };
-const int kSevCount = 3;
+// 级别选项与公告列表、详情、导出共用一套名称，下标即服务端级别编号。
+const TCHAR* const* const kSevLabels = adminapi::kAnnSeverityLabels;
+const int kSevCount = adminapi::kAnnSeverityLabelCount;
 
 // 受众类型选项（下标即服务端 audienceType 编码）。
 const TCHAR* const kAudLabels[] =
@@ -216,7 +217,8 @@ void ComposeModal::Reset()
 
 void ComposeModal::LoadForEdit(long long announcementId, const CString& title,
                                const CString& body, int severity, int audienceType,
-                               bool pinned, const std::vector<AnnTarget>& targets)
+                               bool pinned, const std::vector<AnnTarget>& targets,
+                               bool scheduled, const CString& scheduledTime)
 {
     Reset();   // 先复位，确保不残留上一次状态
     m_editAnnId = announcementId;
@@ -226,8 +228,86 @@ void ComposeModal::LoadForEdit(long long announcementId, const CString& title,
     m_audience = audienceType;
     m_pinned   = pinned;
     m_targets  = targets;
+    if (scheduled)
+    {
+        // 回填「定时」：与用户点选「定时发送」时的处理一致（显示时间框、改提交按钮文字）。
+        m_sendMode = 1;
+        m_editSchedule->SetVisible(true);
+        const CString normalized = NormalizeScheduleText(scheduledTime);
+        if (!normalized.IsEmpty())
+        {
+            m_editSchedule->SetText(normalized);
+        }
+        DuiButton* submit = static_cast<DuiButton*>(m_children.back().get());
+        submit->SetText(_T("计划发送"));
+    }
     RecomputeLayout();
     Invalidate();
+}
+
+void ComposeModal::LoadForCopy(const CString& title, const CString& body, int severity,
+                               int audienceType, bool pinned,
+                               const std::vector<AnnTarget>& targets)
+{
+    // 复制即「用原内容新建一条」：编辑 ID 传 0，定时状态不沿用（发送方式为立即）。
+    LoadForEdit(0, title, body, severity, audienceType, pinned, targets, false, CString());
+}
+
+void ComposeModal::PresetEnterpriseAudience(long long enterpriseId)
+{
+    Reset();
+    if (enterpriseId > 0)
+    {
+        // 受众「指定企业」的编码与目标类型「企业」的编码相同，都是 kTargetEnterprise。
+        m_audience = kTargetEnterprise;
+        m_targets.push_back(AnnTarget(kTargetEnterprise, enterpriseId));
+    }
+    RecomputeLayout();
+    Invalidate();
+}
+
+CString ComposeModal::NormalizeScheduleText(const CString& serverTime)
+{
+    // 「YYYY-MM-DD HH:MM」共 16 个字符；各位置上的分隔符依次在下列下标处。
+    const int kMinuteTextLen = 16;
+    const int kDash1 = 4;
+    const int kDash2 = 7;
+    const int kSpace = 10;
+    const int kColon = 13;
+
+    CString text = serverTime;
+    text.Trim();
+    if (text.GetLength() < kMinuteTextLen)
+    {
+        return CString();
+    }
+    text = text.Left(kMinuteTextLen);
+    for (int i = 0; i < kMinuteTextLen; ++i)
+    {
+        const TCHAR ch = text[i];
+        bool ok = false;
+        if (i == kDash1 || i == kDash2)
+        {
+            ok = (ch == _T('-'));
+        }
+        else if (i == kSpace)
+        {
+            ok = (ch == _T(' '));
+        }
+        else if (i == kColon)
+        {
+            ok = (ch == _T(':'));
+        }
+        else
+        {
+            ok = (ch >= _T('0') && ch <= _T('9'));
+        }
+        if (!ok)
+        {
+            return CString();
+        }
+    }
+    return text;
 }
 
 bool ComposeModal::Validate() const
