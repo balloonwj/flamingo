@@ -221,11 +221,21 @@ chatserver 首次启动时会自动建库建表，并创建：
 
 ### Linux 下编译
 
-需要支持 C++11 的 g++ 与 CMake 3.12 以上。推荐像上面那样在 `build-linux/` 里做 out-of-source 构建，避免 CMake 的生成物与 `windowsproj/` 下的 Visual Studio 工程混在一起。
+需要支持 C++11 的 g++（CentOS / RHEL 7 自带的 gcc 4.8.5 即可）、CMake 3.12 以上与 Perl。CentOS / RHEL 7 自带的 CMake 是 2.8：7.7 及以上可以从 EPEL 装 `cmake3`；7.6 及以下装不上（它依赖 7.7 才有的 python3），可以下载 CMake 官方的 Linux 预编译包（`cmake-<版本>-linux-x86_64.tar.gz`，解压即用，4.4.4 在 glibc 2.17 上实测可用）。推荐像上面那样在 `build-linux/` 里做 out-of-source 构建，避免 CMake 的生成物与 `windowsproj/` 下的 Visual Studio 工程混在一起。
 
-- `WITH_MYSQL`：MySQL 后端的编译开关，默认 `ON`。置为 `OFF` 时不编译 MySQL 客户端，只支持 `dbtype=sqlite`。需要连接 MySQL 时去掉该选项即可：MySQL 客户端（MariaDB Connector/C 3.4.9）随仓库以源码提供、编译时一并编出，只需安装 OpenSSL 的开发包（`libssl-dev` 或 `openssl-devel`）。
+用到的第三方库全部随仓库以源码提供：libsodium 1.0.22 与 OpenSSL 3.5.9 在第一次运行 cmake 时于配置阶段编出（多核机器上约一分钟，单核约三分钟，之后再运行 cmake 不会重编），MySQL 客户端在 make 时一并编出，不需要安装 OpenSSL 的开发包。编译 OpenSSL 需要 Perl 及几个模块，缺少时 cmake 会报错并给出安装命令：
+
+| 系统 | 安装命令 |
+| --- | --- |
+| Debian / Ubuntu | `apt install perl` |
+| CentOS / RHEL 7 | `yum install perl perl-IPC-Cmd perl-Time-Piece` |
+| RHEL / Rocky / Alma 8、9 | `dnf install perl` |
+
+- `WITH_MYSQL`：MySQL 后端的编译开关，默认 `ON`。置为 `OFF` 时不编译 MySQL 客户端（MariaDB Connector/C 3.4.9），只支持 `dbtype=sqlite`。
+- `WITH_SYSTEM_OPENSSL`：默认 `OFF`。置为 `ON` 时改用系统的 OpenSSL（需要 `libssl-dev` 或 `openssl-devel`，1.0.2 及以上），可以跟随发行版的安全更新，也就不需要 Perl；此时找不到 OpenSSL 的话，机器人调用外部服务只支持 HTTP。
 - `CMAKE_BUILD_TYPE`：默认是不优化的调试构建（`-O0 -g`），`Release` 为 `-O2 -g`。数据库操作多的请求两者相差可达十倍，部署时请用 `Release`。
-- 机器上装有 OpenSSL 开发包时，机器人调用外部服务支持 HTTPS；没有时只支持 HTTP。
+
+使用自带的 OpenSSL 时，机器人访问 HTTPS 服务所需的根证书取自系统的证书包（按 Debian、RHEL、openSUSE、Alpine 等发行版的常见位置查找）；证书包不在这些位置时，用环境变量 `SSL_CERT_FILE` 指定。
 
 产物为 `build-linux/` 下的 `chatserver`、`fileserver`、`imgserver` 与测试程序 `flamingo_tests`（`WITH_MYSQL=ON` 时另有 `flamingo_tests_mysql`）。
 

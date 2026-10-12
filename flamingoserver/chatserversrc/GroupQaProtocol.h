@@ -6,7 +6,7 @@
  *  企业问答在后，企业问答与本群问答的问题相同（去掉首尾空白、ASCII 不分大小写后相同）时只留本群的。
  *
  *  本模块只依赖 jsoncpp，不碰网络与数据库，见 tests/test_groupqa.cpp。存取在 GroupQaManager，会话层在
- *  ChatSession（1336~1339）与 HttpSession（/admin/qa/*.do）。
+ *  ChatSession（1336~1339）与 HttpSession（/admin/qa/ 下的各个 .do 接口）。
  *
  *  典型用法：
  *      std::vector<GroupQaRecord> merged = GroupQaProtocol::mergeForGroup(groupItems, enterpriseItems);

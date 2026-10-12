@@ -31,20 +31,72 @@ link_directories(
 # MySQL 后端的编译开关。默认编进去，运行时由 etc/chatserver.conf 的 dbtype 决定用哪种后端，
 # 一个二进制同时支持 mysql 与 sqlite 两种模式。
 # 关掉它（cmake -DWITH_MYSQL=OFF .）可以编出一份不含 MySQL 客户端的纯本地版本，适合只跑
-# dbtype=sqlite 的部署：不编译 MariaDB 连接器的源码，机器上也不需要 OpenSSL 的开发包。
+# dbtype=sqlite 的部署：不编译 MariaDB 连接器的源码。OpenSSL 与它无关（机器人的 HTTPS 也要用），见下文。
 #
 # 没有对应的 WITH_SQLITE 开关：SQLite 是随仓库自带的单文件 amalgamation，不依赖任何外部库，
 # 关掉它省不下依赖、只省一点二进制体积，却要在 DbFactory / SqlDialect / main 等处
 # 到处加条件编译，不划算。
 option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 
+# gcc 5 以前默认按 gnu90 编译 C 代码，CentOS 7 自带的 gcc 4.8.5 就是这样，要显式指定 C99（CMake 换算成 -std=gnu99）：
+# 连接器源码用了 C99 的写法（如在 for 语句里声明循环变量，libmariadb/ma_default.c），按 gnu90 编译直接报错；
+# zlib 1.3.2 在 C89 模式下认为没有 vsnprintf，gzprintf 只编成返回错误的空实现，并打出两条 #warning（gzwrite.c）。
+# gcc 5 起默认就是 gnu11 或更高，不设置这个变量，编译参数保持原样。作用于之后定义的全部目标里的 C 源文件
+# （连接器、flamingo_zlib、sqlite3.c），三者都能按 C99 编译（2026-10-12 在 CentOS 7 容器里实测）
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS 5.0)
+    set(CMAKE_C_STANDARD 99)
+endif()
+
 # 协议加密依赖 libsodium（net/FrameCrypto.cpp），三个服务与单元测试都要链它。
-# 头文件与静态库都随仓库提供，放在 deps/libsodium 下：源码包在 ../third-party，
-# 编译产物统一收在这里，Windows 四个变体与 Linux 各一份，见 deps/libsodium/README.txt。
+# 2026-10-10 起在 cmake 配置阶段从随仓库提交的源码（libsodium-1.0.22，官方发布包裁剪而来，未做改动）
+# 编出静态库，不再链接 deps/libsodium 下的预编译库：那份库在 Ubuntu 24.04 上编出，要求 glibc 2.25 以上，
+# CentOS 7（glibc 2.17）上链接失败。Windows 仍用 deps/libsodium 下的预编译库与头文件。
+# 编译方式见 cmake/FlamingoDeps.cmake 与 docs/服务端依赖库源码编译方案.md 第 11 节。
 # 用完整路径链静态库而不是写库名，是为了避免链接器在系统目录里找到另一份 libsodium。
-set(LIBSODIUM_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/deps/libsodium/include)
-set(LIBSODIUM_LIB ${PROJECT_SOURCE_DIR}/deps/libsodium/lib/linux/libsodium.a)
+include(${PROJECT_SOURCE_DIR}/cmake/FlamingoDeps.cmake)
+flamingo_build_libsodium(${PROJECT_SOURCE_DIR}/libsodium-1.0.22 1.0.22)
 include_directories(${LIBSODIUM_INCLUDE_DIR})
+
+# OpenSSL 有两个用户：机器人呼叫外部服务的 HTTPS（utils/HttpsClient.cpp，docs/机器人方案.md 第 10 节 1k）与
+# MariaDB 连接器的 TLS。2026-10-10 起默认在 cmake 配置阶段从随仓库提交的源码（openssl-3.5.9，官方发布包裁剪而来，
+# 未做改动）编出静态库，编译机不再需要 OpenSSL 的开发包，老系统（CentOS 7 只有 1.0.2k）上也是同一个版本；
+# 编译 OpenSSL 需要 Perl 及几个模块，缺失时 cmake 报错并给出安装命令（cmake/FlamingoDeps.cmake）。
+# 这一段必须放在 WITH_MYSQL 一段之前：连接器在 OPENSSL_FOUND 已为真时不再自己查找（上游 CMakeLists.txt:306）。
+# 需要跟随发行版的安全更新时用 -DWITH_SYSTEM_OPENSSL=ON 改用系统 OpenSSL：行为与 2026-10-10 之前相同，找得到就
+# 启用 https，找不到时只支持 http。方案见 docs/服务端依赖库源码编译方案.md 第 10、11 节。
+option(WITH_SYSTEM_OPENSSL "使用系统的 OpenSSL，而不是随仓库源码编出的 OpenSSL 3.5.9" OFF)
+if (WITH_SYSTEM_OPENSSL)
+    # 之前用自带 OpenSSL 配置过的构建目录，缓存里还留着指向 deps-install 的路径，FindOpenSSL 会直接沿用；
+    # 先清掉这些缓存，让它重新到系统目录里查找
+    string(FIND "${OPENSSL_INCLUDE_DIR}" "${FLAMINGO_DEPS_INSTALL_ROOT}" bundled_pos)
+    if (bundled_pos EQUAL 0)
+        unset(OPENSSL_INCLUDE_DIR CACHE)
+        unset(OPENSSL_SSL_LIBRARY CACHE)
+        unset(OPENSSL_CRYPTO_LIBRARY CACHE)
+    endif()
+    find_package(OpenSSL QUIET)
+else()
+    flamingo_check_perl_for_openssl()
+    flamingo_build_openssl(${PROJECT_SOURCE_DIR}/openssl-3.5.9 3.5.9)
+    # 预先把 FindOpenSSL 的三个结果变量写进缓存：find_path / find_library 发现缓存变量已有值就不再查找，
+    # 于是 find_package 直接采用自带的这份，不会找到系统里的 OpenSSL（CentOS 7 装了 openssl-devel 时就有一份 1.0.2k）
+    set(OPENSSL_INCLUDE_DIR ${FLAMINGO_OPENSSL_INCLUDE_DIR} CACHE PATH "OpenSSL include directory" FORCE)
+    set(OPENSSL_SSL_LIBRARY ${FLAMINGO_OPENSSL_SSL_LIB} CACHE FILEPATH "OpenSSL ssl library" FORCE)
+    set(OPENSSL_CRYPTO_LIBRARY ${FLAMINGO_OPENSSL_CRYPTO_LIB} CACHE FILEPATH "OpenSSL crypto library" FORCE)
+    find_package(OpenSSL REQUIRED)
+    # FLAMINGO_BUNDLED_OPENSSL：HttpsClient 据此探测系统根证书包（utils/CaBundleLocator.h）；
+    # FLAMINGO_OPENSSL_DIR：编进库里的 OPENSSLDIR，守卫用例 OSL2 用它核对（tests/test_bundleddeps.cpp）
+    add_compile_definitions(FLAMINGO_BUNDLED_OPENSSL FLAMINGO_OPENSSL_DIR="${FLAMINGO_OPENSSL_DIR}")
+endif()
+if (OPENSSL_FOUND)
+    add_definitions(-DFLAMINGO_HAS_OPENSSL)
+    include_directories(${OPENSSL_INCLUDE_DIR})
+    set(HTTPS_LIB ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
+    MESSAGE(STATUS "OpenSSL ${OPENSSL_VERSION} (${OPENSSL_SSL_LIBRARY}): bot external calls support https")
+else()
+    set(HTTPS_LIB "")
+    MESSAGE(STATUS "OpenSSL not found: bot external calls support http only")
+endif()
 
 if (WITH_MYSQL)
     # MySQL 客户端用随仓库提交的 MariaDB Connector/C 3.4.9 源码现场编译（2026-10-09 起；此前链接的是
@@ -52,8 +104,8 @@ if (WITH_MYSQL)
     # 方案见 docs/服务端依赖库源码编译方案.md。上游 CMake 以子目录方式引入，EXCLUDE_FROM_ALL 使它只在
     # 被链接时编出 mariadbclient 静态库，动态库 libmariadb、工具 mariadb_config 等其余目标都不编。
     #
-    # 编译开关与原预编译库相同：TLS 后端用 OpenSSL（连接器不接受 WITH_SSL=OFF，编译机要装 libssl-dev
-    # 或 openssl-devel），四个认证插件编成静态，不编单元测试、不用 curl。开关写进缓存并用 FORCE 固定，
+    # 编译开关与原预编译库相同：TLS 后端用 OpenSSL（连接器不接受 WITH_SSL=OFF；默认用上文自带的 OpenSSL，
+    # WITH_SYSTEM_OPENSSL=ON 时编译机要装 libssl-dev 或 openssl-devel），四个认证插件编成静态，不编单元测试、不用 curl。开关写进缓存并用 FORCE 固定，
     # 避免沿用旧构建目录里残留的其它取值（上游自己把策略 CMP0077 设成了新行为，普通变量其实也能生效，
     # 用缓存只是为了在 CMakeCache.txt 里看得到实际取值）。
     set(WITH_SSL OPENSSL CACHE STRING "MariaDB Connector/C TLS backend" FORCE)
@@ -97,19 +149,6 @@ else()
     # 默认路径上也不存在「忘了定义宏导致两个后端都没编进去」这种失败模式
     add_definitions(-DFLAMINGO_NO_MYSQL)
     MESSAGE(STATUS "WITH_MYSQL=OFF: chatserver 将只支持 dbtype=sqlite")
-endif()
-
-# 机器人呼叫外部服务的 HTTPS（utils/HttpsClient.cpp，docs/机器人方案.md 第 10 节 1k）。找得到 OpenSSL 就启用 https、
-# 校验证书链与主机名；找不到时只支持 http，编译不会失败。WITH_MYSQL 打开时 MariaDB 连接器本来就链接了 ssl / crypto
-find_package(OpenSSL QUIET)
-if (OPENSSL_FOUND)
-    add_definitions(-DFLAMINGO_HAS_OPENSSL)
-    include_directories(${OPENSSL_INCLUDE_DIR})
-    set(HTTPS_LIB ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
-    MESSAGE(STATUS "OpenSSL found: bot external calls support https")
-else()
-    set(HTTPS_LIB "")
-    MESSAGE(STATUS "OpenSSL not found: bot external calls support http only")
 endif()
 
 set(net_srcs 
@@ -287,6 +326,7 @@ chatserversrc/BotServerEnv.cpp
 chatserversrc/ChatSessionBot.cpp
 chatserversrc/HttpRequestParse.cpp
 utils/HttpsClient.cpp
+utils/CaBundleLocator.cpp
 chatserversrc/GroupInviteProtocol.cpp
 chatserversrc/GroupInviteManager.cpp
 chatserversrc/GroupAutoName.cpp
@@ -407,6 +447,10 @@ tests/test_defaultenterprise.cpp
 # DepartmentManager 与 EmployeeManager，两者的实现已在下方清单中
 tests/test_orgaccountstatus.cpp
 tests/test_apppath.cpp
+# 系统根证书包探测（Suite CAB，utils/CaBundleLocator.cpp 在下方的实现清单中）与随仓库源码编译的
+# libsodium / OpenSSL 的守卫用例（Suite SOD / OSL），docs/服务端依赖库源码编译方案.md 第 12 节
+tests/test_cabundle.cpp
+tests/test_bundleddeps.cpp
 # 两份 v2 协议头（服务端 chatserversrc/Protocol.h 与客户端 Source/net/Protocol.h）
 # 的一致性守卫（Suite PP）。它把两个头文件当纯文本读进来比对，不链接任何实现文件，
 # 只用到 utils/AppPath.cpp 里的路径工具，而后者已在下方的实现清单中
@@ -589,6 +633,7 @@ chatserversrc/BotEngine.cpp
 chatserversrc/BotProtocol.cpp
 chatserversrc/HttpRequestParse.cpp
 utils/HttpsClient.cpp
+utils/CaBundleLocator.cpp
 # tests/test_groupinvite.cpp 用到的入群邀请卡片纯逻辑与 t_group_invite 读写（docs/邀请入群方案.md 第 3 期）
 chatserversrc/GroupInviteProtocol.cpp
 chatserversrc/GroupInviteManager.cpp

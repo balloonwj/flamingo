@@ -1,5 +1,5 @@
 ﻿/**
- *  文件共享管理后台接口（/admin/setting/*、/admin/fileshare/*）的报文编解码与几条纯规则，FileShareAdminProtocol.h
+ *  文件共享管理后台接口（/admin/setting/ 与 /admin/fileshare/ 下的接口）的报文编解码与几条纯规则，FileShareAdminProtocol.h
  *
  *  docs/文件共享方案.md 6.5（第 3 期第 3 步）。处理流水线是「HttpSession 校验令牌 → FileShareAdminService 调各个
  *  Manager → HttpSession 写管理员操作日志、回包」；其中不碰网络与数据库的部分（企业范围的确定、分页换算、请求解析、

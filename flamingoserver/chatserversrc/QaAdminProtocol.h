@@ -1,5 +1,5 @@
 ﻿/**
- *  企业问答管理接口（/admin/qa/*.do）的纯逻辑：请求字段的解析、应用范围的校验与应答拼装，QaAdminProtocol.h
+ *  企业问答管理接口（/admin/qa/ 下的各个 .do 接口）的纯逻辑：请求字段的解析、应用范围的校验与应答拼装，QaAdminProtocol.h
  *  （docs/群问答方案.md §2.1、docs/Admin控制台接口文档.md「企业问答」一章）。
  *
  *  与 SensitiveAdminProtocol 一样只包含 AdminApiCodes.h，不包含 Protocol.h（两边的 error_code 枚举同名会冲突）。

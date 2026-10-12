@@ -76,11 +76,14 @@
     <ClCompile Include="..\chatserversrc\DepartmentManager.cpp" />
     <ClCompile Include="..\chatserversrc\EmployeeManager.cpp" />
     <ClCompile Include="..\tests\test_apppath.cpp" />
+    <ClCompile Include="..\tests\test_cabundle.cpp" />
+    <ClCompile Include="..\tests\test_bundleddeps.cpp" />
     <ClCompile Include="..\tests\test_protocolparity.cpp" />
     <ClCompile Include="..\tests\test_serverconfigloader.cpp" />
     <ClCompile Include="..\tests\test_iothreadcount.cpp" />
     <ClCompile Include="..\tests\test_asynclog.cpp" />
     <ClCompile Include="..\utils\AppPath.cpp" />
+    <ClCompile Include="..\utils\CaBundleLocator.cpp" />
     <ClCompile Include="..\utils\ServerConfigLoader.cpp" />
     <ClCompile Include="..\base\ConfigFileReader.cpp" />
     <ClCompile Include="..\tests\test_profileprotocol.cpp" />

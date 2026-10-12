@@ -221,11 +221,21 @@ Then fetch balloonui (see "PC client" below), open `flamingoclient/FlamingoClien
 
 ### Building on Linux
 
-You need a g++ with C++11 support and CMake 3.12 or later. Build out of source in `build-linux/` as shown above, so that CMake's output does not mix with the Visual Studio projects under `windowsproj/`.
+You need a g++ with C++11 support (the gcc 4.8.5 that ships with CentOS / RHEL 7 is enough), CMake 3.12 or later and Perl. CentOS / RHEL 7 ship CMake 2.8: on 7.7 and later, install `cmake3` from EPEL; on 7.6 and earlier it cannot be installed (it needs python3, which arrived in 7.7), so download CMake's official Linux binary (`cmake-<version>-linux-x86_64.tar.gz`, unpack and run; 4.4.4 was tested on glibc 2.17). Build out of source in `build-linux/` as shown above, so that CMake's output does not mix with the Visual Studio projects under `windowsproj/`.
 
-- `WITH_MYSQL`: switch for the MySQL back end, `ON` by default. With `OFF`, the MySQL client is not built and only `dbtype=sqlite` is supported. To connect to MySQL, just drop the option: the MySQL client (MariaDB Connector/C 3.4.9) ships as source and is built along with the server; you only need the OpenSSL development package (`libssl-dev` or `openssl-devel`).
+All third-party libraries ship as source: libsodium 1.0.22 and OpenSSL 3.5.9 are built during the first cmake run, at configure time (about a minute on a multi-core machine, about three minutes on a single core; later cmake runs do not rebuild them), and the MySQL client is built by make. The OpenSSL development package is not needed. Building OpenSSL needs Perl and a few modules; if they are missing, cmake stops and prints the install command:
+
+| System | Install command |
+| --- | --- |
+| Debian / Ubuntu | `apt install perl` |
+| CentOS / RHEL 7 | `yum install perl perl-IPC-Cmd perl-Time-Piece` |
+| RHEL / Rocky / Alma 8 and 9 | `dnf install perl` |
+
+- `WITH_MYSQL`: switch for the MySQL back end, `ON` by default. With `OFF`, the MySQL client (MariaDB Connector/C 3.4.9) is not built and only `dbtype=sqlite` is supported.
+- `WITH_SYSTEM_OPENSSL`: `OFF` by default. With `ON`, the system OpenSSL is used instead (needs `libssl-dev` or `openssl-devel`, 1.0.2 or later), so it follows the distribution's security updates and Perl is not needed; if no OpenSSL is found, bots can call external services over HTTP only.
 - `CMAKE_BUILD_TYPE`: the default is an unoptimised debug build (`-O0 -g`); `Release` gives `-O2 -g`. Database-heavy requests can differ by a factor of ten, so deploy a `Release` build.
-- When the OpenSSL development package is installed, bots can call external services over HTTPS; without it, only HTTP.
+
+With the bundled OpenSSL, the root certificates bots need for HTTPS come from the system CA bundle, looked up in the usual locations of Debian, RHEL, openSUSE, Alpine and similar distributions; if yours is elsewhere, point the `SSL_CERT_FILE` environment variable at it.
 
 The outputs are `chatserver`, `fileserver`, `imgserver` and the test program `flamingo_tests` in `build-linux/` (plus `flamingo_tests_mysql` when `WITH_MYSQL=ON`).
 

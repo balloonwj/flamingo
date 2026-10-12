@@ -26,6 +26,10 @@
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
 #endif
+#ifdef FLAMINGO_BUNDLED_OPENSSL
+#include "CaBundleLocator.h"
+#include "../base/AsyncLog.h"
+#endif
 #endif
 
 namespace httpclient {
@@ -442,6 +446,64 @@ int ConnectWithTimeout(const std::string& host, int port, int timeoutMs, std::st
     return result;
 }
 
+#if defined(FLAMINGO_HAS_OPENSSL) && OPENSSL_VERSION_NUMBER < 0x10100000L
+//OpenSSL 1.0.x（如 CentOS 7 自带的 1.0.2k）与 1.1.0 及以上版本有三处差别，本段只在 1.0.x 下编译：
+//一是没有 TLS_client_method 与 SSL_set1_host，startTls 里分别改用 SSLv23_client_method 与
+//X509_VERIFY_PARAM_set1_host（1.1.0 起这两个函数就是这样实现的，行为相同）；
+//二是不会自动初始化，使用前必须调用 SSL_library_init；
+//三是内部没有自带加锁，多个线程同时使用之前必须注册加锁回调，否则内部数据结构会被并发访问破坏。
+//MySQL 后端启用时，MariaDB 连接器在 mysql_server_init 里会无条件注册它自己的加锁回调（见
+//mariadb-connector-c-3.4.9/libmariadb/secure/openssl.c 的 ma_tls_start）。chatserver 先初始化数据库、后启动
+//机器人线程，到这里时回调已经存在，就不再注册；dbtype=sqlite 或 WITH_MYSQL=OFF 时由这里注册。
+std::once_flag g_sslInitOnce;      //保证 InitOpenSsl 只执行一次
+std::mutex*    g_sslLocks = NULL;  //加锁回调使用的锁数组，共 CRYPTO_num_locks() 把；进程退出前不释放
+
+//OpenSSL 1.0.x 的加锁回调：mode 含 CRYPTO_LOCK 时给第 n 把锁加锁，否则解锁
+void SslLockingCallback(int mode, int n, const char* file, int line)
+{
+    (void)file;
+    (void)line;
+    if (mode & CRYPTO_LOCK)
+        g_sslLocks[n].lock();
+    else
+        g_sslLocks[n].unlock();
+}
+
+//初始化 OpenSSL 1.0.x 并在需要时注册加锁回调，见上文；只经 std::call_once 调用
+void InitOpenSsl()
+{
+    ::SSL_library_init();
+    ::SSL_load_error_strings();
+    if (::CRYPTO_get_locking_callback() == NULL)
+    {
+        g_sslLocks = new std::mutex[::CRYPTO_num_locks()];
+        ::CRYPTO_set_locking_callback(SslLockingCallback);
+    }
+}
+#endif
+
+#ifdef FLAMINGO_BUNDLED_OPENSSL
+//随仓库源码编出的 OpenSSL（cmake/FlamingoDeps.cmake）只会到编译时设定的 OPENSSLDIR 找根证书，而那个目录有意
+//不存在，所以要另行探测系统的证书包（utils/CaBundleLocator.h）。只探测一次，结果供之后的每个 TLS 连接使用
+std::once_flag g_caBundleOnce;  //保证 ProbeCaBundle 只执行一次
+std::string    g_caBundlePath;  //探测到的系统证书包；为空表示不额外加载（设置了环境变量，或一个都没找到）
+
+//探测系统证书包并写一条日志；只经 std::call_once 调用
+void ProbeCaBundle()
+{
+    if (!cabundle::ShouldProbe(::getenv("SSL_CERT_FILE"), ::getenv("SSL_CERT_DIR")))
+    {
+        LOGI("https: SSL_CERT_FILE or SSL_CERT_DIR is set, root certificates are taken from it");
+        return;
+    }
+    g_caBundlePath = cabundle::FindFirstExisting(cabundle::DefaultCandidates(), cabundle::FileExists);
+    if (g_caBundlePath.empty())
+        LOGW("https: no system CA bundle found, certificate verification will fail; set SSL_CERT_FILE to the CA bundle");
+    else
+        LOGI("https: using system CA bundle %s", g_caBundlePath.c_str());
+}
+#endif
+
 //一条连接上的读写：明文或 TLS
 class Channel
 {
@@ -471,13 +533,28 @@ public:
     bool startTls(const std::string& host, std::string& err)
     {
 #ifdef FLAMINGO_HAS_OPENSSL
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+        std::call_once(g_sslInitOnce, InitOpenSsl);
+        //SSLv23_client_method 与 1.1.0 起的 TLS_client_method 一样，协商双方都支持的最高协议版本
+        m_ctx = ::SSL_CTX_new(::SSLv23_client_method());
+#else
         m_ctx = ::SSL_CTX_new(::TLS_client_method());
+#endif
         if (m_ctx == NULL)
         {
             err = "SSL_CTX_new failed";
             return false;
         }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+        //不接受已不安全的 SSLv2 / SSLv3，与 1.1.0 起编译时默认去掉 SSLv3 的行为一致
+        ::SSL_CTX_set_options(m_ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+#endif
         ::SSL_CTX_set_default_verify_paths(m_ctx);
+#ifdef FLAMINGO_BUNDLED_OPENSSL
+        std::call_once(g_caBundleOnce, ProbeCaBundle);
+        if (!g_caBundlePath.empty())
+            ::SSL_CTX_load_verify_locations(m_ctx, g_caBundlePath.c_str(), NULL);
+#endif
         ::SSL_CTX_set_verify(m_ctx, SSL_VERIFY_PEER, NULL);
         m_ssl = ::SSL_new(m_ctx);
         if (m_ssl == NULL)
@@ -487,7 +564,11 @@ public:
         }
         ::SSL_set_fd(m_ssl, m_fd);
         ::SSL_set_tlsext_host_name(m_ssl, host.c_str());
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+        ::X509_VERIFY_PARAM_set1_host(::SSL_get0_param(m_ssl), host.c_str(), 0);
+#else
         ::SSL_set1_host(m_ssl, host.c_str());
+#endif
         if (::SSL_connect(m_ssl) != 1 || ::SSL_get_verify_result(m_ssl) != X509_V_OK)
         {
             err = "tls handshake or certificate verification failed";

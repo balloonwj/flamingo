@@ -32,4 +32,4 @@ foreach ($cfg in @("DebugLIB", "ReleaseLIB")) {
 }
 
 Write-Host "两个变体已更新完毕。头文件不随平台变化，通常不用重新复制；"
-Write-Host "换版本时用 Linux 侧脚本产出的 include 目录覆盖 deps\libsodium\include 即可。"
+Write-Host "换版本时，在 Linux 上对新版本源码运行一次 cmake，用构建目录下 deps-install/libsodium/include 覆盖 deps\libsodium\include 即可。"

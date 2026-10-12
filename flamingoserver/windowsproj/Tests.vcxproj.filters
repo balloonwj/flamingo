@@ -261,6 +261,12 @@
     <ClCompile Include="..\tests\test_apppath.cpp">
       <Filter>tests\utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_cabundle.cpp">
+      <Filter>tests\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_bundleddeps.cpp">
+      <Filter>tests\utils</Filter>
+    </ClCompile>
     <ClCompile Include="..\tests\test_protocolparity.cpp">
       <Filter>tests\protocol</Filter>
     </ClCompile>
@@ -274,6 +280,9 @@
       <Filter>tests\utils</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\AppPath.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\CaBundleLocator.cpp">
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\ServerConfigLoader.cpp">
