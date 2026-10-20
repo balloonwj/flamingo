@@ -109,9 +109,10 @@ void CHistoryDateJumpPopup::OpenBelow(const RECT& anchorScreen, const HistoryDat
     //这里把锚点矩形的左缘改为"右缘减弹层宽度"再交给它，效果即右对齐
     RECT anchor = anchorScreen;
     anchor.left = anchor.right - kHistoryDatePopupW;
-    //owner 传 NULL：DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，WS_POPUP 窗口的
-    //GetParent 返回的是 owner，传了它按钮的点击通知就会发到消息记录窗口而不是本弹层。
-    //与 TagEditPopup / EmojiPickerPopup 同一做法
+    //owner 传 NULL（与 TagEditPopup / EmojiPickerPopup 同一做法）。原为避免按钮的点击通知被发到消息记录窗口：
+    //当时 DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，而有所有者的 WS_POPUP 窗口的 GetParent 返回所有者。
+    //2026-10-14 起浮层内容的通知先到浮层自身，本类没有处理的才转给所有者（DuiPopupHost::OnPopupNotify，
+    //见开发约定文档 UI 约定第 11 条），这一原因已不存在
     Show(anchor, NULL);
 
     //焦点放在「从」的「日」上并全选：最常见的是只改日，直接输入即可

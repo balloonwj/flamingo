@@ -230,7 +230,7 @@ void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
                                    const std::vector<net::ContactItem>& contacts,
                                    const std::vector<net::DepartmentItem>& departments)
 {
-    // 只记下来备用（「转让群主并退出」确认后往这里投请求），不作为窗口的 owner，理由见下方 Create 处
+    // 只记下来备用（「转让群主并退出」确认后往这里投请求），不作为窗口的 owner（历史原因，见下方 Create 处）
     m_hNotifyTarget = owner;
     m_selfUserId  = selfUserId;
     m_contacts    = contacts;
@@ -260,9 +260,9 @@ void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
 
     if (!IsWindow())
     {
-        // owner 传 NULL：DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，
-        // 若有 owner 则子控件通知会被发到主面板而非本对话框；传 NULL 让通知自
-        // 路由回本对话框（与单聊窗 / 搜索弹窗同一处理）。
+        // owner 传 NULL（与单聊窗 / 搜索弹窗同一处理）。原先的理由是让控件通知发回本对话框
+        // （当时 DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标）；2026-10-14 起有无所有者，
+        // 控件通知都发回本窗口（开发约定文档 UI 约定第 11 条）。
         if (Create(NULL, CWindow::rcDefault, WindowTitleText(),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {

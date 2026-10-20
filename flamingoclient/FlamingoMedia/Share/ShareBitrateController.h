@@ -31,6 +31,10 @@ const int kShareMinBitrateBps = 300000;
 
 //码率自适应的评估周期（毫秒）
 const int64_t kShareBitrateWindowMs = 2000;
+//回执延迟的拥塞门限（毫秒）：一个周期里最大的往返加排队延迟超过它算拥塞（远程桌面用，2026-10-15，据推测，待实测再调）
+const int64_t kShareFeedbackCongestedDelayMs = 1000;
+//回执中断的门限（毫秒）：启用回执后，距最近一次回执超过它算拥塞
+const int64_t kShareFeedbackTimeoutMs = 3000;
 
 //屏幕共享的码率自适应计算
 class ShareBitrateController
@@ -65,6 +69,29 @@ public:
     //当前的目标码率（bit/s）
     int CurrentBps() const;
 
+    /**
+     *  换码率范围（源分辨率变了、编码档位随之变化时调用，docs/远程桌面H264与共享画质提升方案.md 4.2）：
+     *  上限、下限与当前码率一起换，连续不拥塞的计数清零，当前评估周期不重置。
+     *  @param maxBps     新的最高码率（bit/s），须大于 0
+     *  @param minBps     新的最低码率（bit/s）；大于 maxBps 时按 maxBps
+     *  @param currentBps 换范围后的当前码率（bit/s，通常由 ScaleBitrateToRange 换算）；夹在新范围之内
+     */
+    void SetRange(int maxBps, int minBps, int currentBps);
+
+    //当前的最高、最低码率（bit/s）
+    int MaxBps() const;
+    int MinBps() const;
+
+    /**
+     *  记录一次回执延迟（远程桌面用，docs/远程桌面H264与共享画质提升方案.md 4.5）：一对一中转对控制端下行没有积压保护，
+     *  send 阻塞只反映被控端的上行，另靠控制端回送的发送时刻算出往返加排队的延迟。第一次调用即启用这一信号：
+     *  一个周期里最大延迟超过 kShareFeedbackCongestedDelayMs，或距最近一次回执超过 kShareFeedbackTimeoutMs，都算拥塞。
+     *  屏幕共享不调用它，行为与原来相同。
+     *  @param delayMs 往返加排队的延迟（毫秒）；负数按 0
+     *  @param nowMs   收到回执的时刻（单调时钟，毫秒）
+     */
+    void OnFeedbackDelay(int64_t delayMs, int64_t nowMs);
+
 private:
     int     m_maxBps;          //最高码率（bit/s）
     int     m_minBps;          //最低码率（bit/s）
@@ -74,6 +101,9 @@ private:
     int64_t m_blockedMs;       //当前周期内 send 阻塞的总时长（毫秒）
     int     m_keyRequests;     //当前周期内收到的关键帧请求次数
     int     m_calmWindows;     //连续不拥塞的周期数
+    bool    m_feedbackOn;      //是否启用了回执延迟信号（第一次 OnFeedbackDelay 时启用）
+    int64_t m_maxFeedbackMs;   //当前周期内最大的回执延迟（毫秒）
+    int64_t m_lastFeedbackAt;  //最近一次收到回执的时刻（毫秒）
 };
 
 } // namespace screenshare

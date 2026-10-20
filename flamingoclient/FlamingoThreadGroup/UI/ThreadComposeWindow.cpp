@@ -139,7 +139,8 @@ bool CThreadComposeWindow::Open(HWND ownerWnd, const ComposeRequest& request)
 
 bool CThreadComposeWindow::CreateForRequest(HWND ownerWnd)
 {
-    //有所有者的弹窗用 WS_OVERLAPPEDWINDOW：子控件的通知才会发回本窗口（UI 约定第 11 条）
+    //有所有者的弹窗，用 WS_OVERLAPPEDWINDOW 建窗。控件通知发回本窗口（开发约定文档 UI 约定第 11 条）；2026-10-14 之前
+    //用 WS_POPUP 会让通知发到所有者，当时为此选用重叠窗口，现在两种样式的通知都发回本窗口
     if (Create(ownerWnd, CWindow::rcDefault, WindowTitle().c_str(), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("thread compose: Create failed, groupid=%lld, error=%lu.", static_cast<long long>(m_groupId),

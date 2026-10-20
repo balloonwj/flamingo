@@ -175,8 +175,7 @@ bool CRelayComposeDlg::Open(HWND owner, int64_t groupId)
 bool CRelayComposeDlg::BuildWindow(HWND owner)
 {
     //以群聊窗为 owner：本窗口在 z 序上恒在群聊窗之上，群聊窗销毁时本窗口被系统一并销毁。
-    //控件通知仍回到本窗口：DuiHost 用 ::GetParent 找投递目标，WS_OVERLAPPEDWINDOW 的顶层窗口
-    //即便带 owner，::GetParent 也返回 NULL（见 CBalloonClosePromptDlg 的说明与用例 CPD15）
+    //控件通知发回本窗口（开发约定文档 UI 约定第 11 条：只有 WS_CHILD 宿主的通知发给父窗口）
     if (Create(owner, CWindow::rcDefault, TR(kWindowTitle), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("relay compose dialog: Create failed.");

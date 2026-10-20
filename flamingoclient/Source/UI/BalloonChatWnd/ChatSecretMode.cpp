@@ -24,6 +24,7 @@
 #include <atlstr.h>
 
 #include "ChatSecretMode.h"
+#include "ChatCardModel.h"   // SetCardChip / ChatCardChipTone：卡片的状态标签
 
 #include <stdio.h>
 
@@ -363,6 +364,8 @@ void ApplySecretInviteCard(ChatMessage& msg, bool iAmInviter, const CString& pee
 void UpdateSecretInviteRemain(ChatMessage& msg, uint32_t remainSeconds)
 {
     msg.secretInviteStatus = TRF(L"剩余 {0} 秒", remainSeconds).c_str();
+    //倒计时用橙色标签（docs/聊天卡片美化方案.md 5.4）
+    SetCardChip(msg, msg.secretInviteStatus, kCardChipPending);
 }
 
 CString SecretInviteButtonText(int buttons, int index)

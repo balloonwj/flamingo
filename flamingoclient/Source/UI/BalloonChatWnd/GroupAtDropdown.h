@@ -7,7 +7,8 @@
  *
  *  形态与实现都对齐已有的 `BalloonSearch/SearchDropdown`：无边框顶层浮窗
  *  （WS_POPUP + WS_EX_TOOLWINDOW 不进任务栏 + WS_EX_NOACTIVATE 点击不抢激活，
- *  保证输入框焦点不丢），owner 传 NULL 让 DuiHost 的通知自路由回本窗口。
+ *  保证输入框焦点不丢），owner 传 NULL（原为让 DuiHost 的控件通知发回本窗口；
+ *  2026-10-14 起有无所有者，控件通知都发回本窗口，见开发约定文档 UI 约定第 11 条）。
  *  列表本体直接用 balloonui 的 DuiListBox，不自绘（遵循开发约定文档「新增控件须
  *  最大化复用 balloonui」）。
  *

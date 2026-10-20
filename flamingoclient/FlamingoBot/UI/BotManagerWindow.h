@@ -9,7 +9,8 @@
  *  列表数据来自 exe 缓存的 2801 结果（IBotWindowOwner::GetGroupBots）；每个群机器人的规则用 2802 取来，显示用法说明。
  *  exe 有了新的 2801 结果时模块调 OnGroupBotsChanged，本窗口重读列表并重拉详情。
  *
- *  窗口有所有者（群聊窗），按 UI 约定第 11 条用 WS_OVERLAPPEDWINDOW 建窗；标题栏有程序图标（第 10 条）。
+ *  窗口有所有者（群聊窗），用 WS_OVERLAPPEDWINDOW 建窗，控件通知发回本窗口（开发约定文档 UI 约定第 11 条）；
+ *  标题栏有程序图标（第 10 条）。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（本工程的 stdafx.h）。
  *

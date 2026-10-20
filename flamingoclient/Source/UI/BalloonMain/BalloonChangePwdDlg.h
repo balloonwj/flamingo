@@ -40,8 +40,8 @@ public:
 
     /**
      *  创建并显示对话框（已显示则前置 + 清空重置三个输入框）。
-     *    owner：owner 窗口句柄（主面板）；内部 Create 传 NULL 让子控件通知自路由
-     *           回本对话框（与新建群对话框同处理），owner 仅作语义留存。
+     *    owner：owner 窗口句柄（主面板），仅作语义留存；内部 Create 时 owner 传 NULL
+     *           （历史原因，见 .cpp；与新建群对话框相同）。
      */
     void OpenForChange(HWND owner);
 

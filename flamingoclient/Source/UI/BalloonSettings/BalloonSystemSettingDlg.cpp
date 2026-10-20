@@ -215,6 +215,7 @@ enum SettingCtrlId
     kIdRecordQuality   = 406,   // 录屏画质（下拉：标准 / 高清）→ SetRecordQuality，并交给 FlamingoMedia.dll
     kIdRecordFolder    = 407,   // 录屏保存位置：「更改」按钮，弹选目录框
     kIdRecordHotkey    = 408,   // 录屏快捷键 Ctrl+Alt+R（开关）→ EnableRecordHotkey，并立即注册或注销
+    kIdShareQuality    = 409,   // 屏幕共享清晰度（下拉：1080p / 2K / 4K）→ SetShareQuality，并交给 FlamingoMedia.dll（2026-10-15）
 
     // 存储页
     kIdClearCache      = 501,   // 清理本地缓存（按钮，占位）
@@ -241,6 +242,11 @@ static const COLORREF kRowErrorClr = RGB(0xE5, 0x48, 0x4D);
 // 录屏画质的下拉选项（与 CUserConfig::GetRecordQuality 的取值一一对应：0 标准，1 高清）
 static const wchar_t* const kRecordQualityOptions[] = { TR_NOOP(L"标准"), TR_NOOP(L"高清") };
 static const int kRecordQualityOptionCount = sizeof(kRecordQualityOptions) / sizeof(kRecordQualityOptions[0]);
+
+// 屏幕共享清晰度的下拉选项（与 CUserConfig::GetShareQuality 的取值一一对应：0 为 1080p、1 为 2K、2 为 4K；
+// docs/远程桌面H264与共享画质提升方案.md 4.2）。选项是分辨率的通用写法，不需要翻译
+static const wchar_t* const kShareQualityOptions[] = { L"1080p", L"2K", L"4K" };
+static const int kShareQualityOptionCount = sizeof(kShareQualityOptions) / sizeof(kShareQualityOptions[0]);
 
 // =======================================================================
 // 开机自启动 —— 注册表 Run 项读写（HKCU，避免需要管理员权限）
@@ -524,7 +530,8 @@ void CBalloonSystemSettingDlg::OpenSettings(HWND owner)
 
     if (!IsWindow())
     {
-        // owner 传 NULL：让子控件通知自路由回本对话框（与修改密码对话框同处理）。
+        // owner 传 NULL，与修改密码对话框相同。原先这样做是为了让控件通知发回本对话框；
+        // 2026-10-14 起有无所有者，控件通知都发回本窗口（开发约定文档 UI 约定第 11 条）。
         if (Create(NULL, CWindow::rcDefault, TR(L"系统设置"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
@@ -1627,6 +1634,13 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildAudioVideoP
     bool echo = (cfg != NULL) ? (cfg->IsEnableEchoCancel() != FALSE) : true;
     AddSwitchRow(page.get(), TR(L"回声消除"), TR(L"暂未生效：一对一通话时始终开启"), kIdEchoCancel, echo, true);
 
+    // ---- 屏幕共享清晰度（2026-10-15，docs/远程桌面H264与共享画质提升方案.md 4.2）----
+    // 1080p / 2K（默认）/ 4K：发起共享时画面编码的长边上限，码率随之提高；选项是分辨率的通用写法，不翻译
+    int shareQuality = (cfg != NULL) ? (int)cfg->GetShareQuality() : 1;
+    AddComboRow(page.get(), TR(L"屏幕共享清晰度"),
+                TR(L"共享屏幕时画面的最高分辨率，越高越清晰；4K 对观看者的电脑和网络要求更高"),
+                kIdShareQuality, kShareQualityOptions, kShareQualityOptionCount, shareQuality, true, false);
+
     // ---- 屏幕录制（docs/屏幕共享与录制方案.md 6.1 / 6.2）----
     // 画质：标准 / 高清
     int recordQuality = (cfg != NULL) ? (int)cfg->GetRecordQuality() : 0;
@@ -2433,6 +2447,11 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
     case kIdRecordQuality:
         cfg->SetRecordQuality(value == 1 ? 1 : 0);
         PushRecordSettings();
+        break;
+    //屏幕共享清晰度：写配置，并立即交给 FlamingoMedia.dll（共享进行中时，下一帧按新的长边上限重建编码器）
+    case kIdShareQuality:
+        cfg->SetShareQuality(value);
+        balloonscreenshare::PushShareQuality((int)cfg->GetShareQuality());
         break;
     //录屏快捷键：写配置，并立即在主面板上注册或注销
     case kIdRecordHotkey:

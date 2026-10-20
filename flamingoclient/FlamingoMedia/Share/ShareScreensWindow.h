@@ -6,8 +6,11 @@
  *  用户关窗只是隐藏，画面清单再变化（有人新开始共享）时重新显示。
  *  第 23 期起各块画面叠上它自己的标注，白板也作为一块画面显示（可各自滚动缩放、跟随创建者）。
  *  2026-10-07 起（方案第 14.3 节第 4 条）窗口顶部多一行按钮：「标注」在这里对别人的画面标注（落笔在哪块画面就标在哪块上），
- *  「申请控制」向当前那一块（放大的那块，没有放大时为第一块）的共享人申请控制，对方同意后在这里直接操作他的屏幕。
+ *  「申请控制」向当前那一块（放大的那块，没有放大时为第一块别人的画面）的共享人申请控制，对方同意后在这里直接操作他的屏幕。
  *  两个按钮只把命令经 kMsgShareScreensCommand 交给控制器，由控制器决定状态，再经 SetAnnotating / SetControlState 告知本窗口。
+ *  2026-10-12 起（docs/远程桌面控制权限与观看工具条方案.md 第 2.2 节 C）窗口改名「共享画面」，画面清单里也有主持人自己的那一块
+ *  （名字后面加「（我）」），它取推流管线按限帧率留下的本机画面（ShareHostStreamer::SetLocalPreviewSeat），只能看、不能申请控制；
+ *  只有主持人自己在共享时控制器不打开本窗口。
  *
  *  典型用法（屏幕共享控制器里）：
  *      m_screensWindow.SetScreens(seats, names);
@@ -34,7 +37,7 @@ class DuiButton;
 
 namespace screenshare {
 
-//主持人看其他共享者屏幕的窗口
+//主持人的「共享画面」窗口（2026-10-12 前叫「其他人的屏幕」）：看全部共享画面，含主持人自己的那一块
 class CShareScreensWindow : public balloonwjui::DuiFrameWindow
 {
 public:
@@ -79,6 +82,9 @@ public:
     //画面来源有新帧（UI 线程上调用）：逐块取最新一帧，帧序号变了的才换
     void OnFeedFrame();
 
+    //某块画面当前那一帧的尺寸（2026-10-12，单元测试用），见 CShareVideoCanvas::ScreenFrameSize；窗口没打开时返回 false
+    bool ScreenFrameSizeForTest(int seat, int& width, int& height) const;
+
     /**
      *  标注来源（第 23 期）：每块画面叠它自己的标注，白板按它的笔迹画出来。不拥有，须在 Close 之前一直有效；可为 NULL。
      */
@@ -119,8 +125,21 @@ public:
      */
     void SetControlScreen(int seat);
 
-    //当前那一块的画面座位：放大的那块，没有放大时为第一块；窗口没开时为 -1
+    //当前那一块的画面座位：放大的那块，没有放大时为第一块别人的画面；窗口没开时为 -1
     int ActiveScreenSeat() const;
+
+    //标出主持人自己那一块（2026-10-12），见 CShareVideoCanvas::SetOwnScreen；窗口重建时沿用
+    void SetOwnScreen(int seat);
+
+    /**
+     *  是否把窗口排除在屏幕采集之外（2026-10-12），由控制器按 ShouldExcludeShareView 决定。窗口还没建时记下，建好后生效；
+     *  关窗不复位，控制器每次打开前都会重新设置。
+     *  @param excluded true 排除，false 允许采集
+     */
+    void SetCaptureExcluded(bool excluded);
+
+    //当前是否排除在屏幕采集之外（2026-10-12，单元测试用）
+    bool IsCaptureExcluded() const;
 
     //当前那一块是不是白板：白板不能申请控制
     bool ActiveIsBoard() const;
@@ -166,6 +185,8 @@ private:
     IShareAnnotationInput*    m_annotInput;    //标注输入的接收方（不拥有）
     int                       m_controlState;  //控制键鼠的状态（2026-10-07），取值见 share_viewer_control_state
     int                       m_controlScreen; //被控制的画面座位；-1 表示没有在控制
+    int                       m_ownSeat;       //主持人自己那一块的画面座位（2026-10-12）；-1 表示清单里没有
+    bool                      m_captureExcluded; //是否排除在屏幕采集之外（2026-10-12，见 SetCaptureExcluded）
     IShareControlInput*       m_controlInput;  //控制中键鼠输入的接收方（不拥有）
     ShareControlForwarder     m_forwarder;     //控制中把键鼠换算后交给控制输入
     balloonmain::ProgramWindowIcons m_programIcons;   //标题栏（与任务栏）的程序图标（2026-10-07）；本类持有，析构时释放

@@ -71,6 +71,22 @@ bool RemoteDesktopProtocol::parseSessionRequest(const std::string& json, std::st
     return !sessionid.empty();
 }
 
+bool RemoteDesktopProtocol::parseControlRequest(const std::string& json, std::string& sessionid, int& action)
+{
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    sessionid = root["sessionid"].asString();
+    //缺会话 id、缺动作或动作不是整数都视为非法
+    if (sessionid.empty() || !root["action"].isInt())
+        return false;
+
+    action = root["action"].asInt();
+    //动作只认 enum rd_control_action 的取值范围
+    return action >= rd_control_request && action <= rd_control_release;
+}
+
 std::string RemoteDesktopProtocol::buildInviteResponse(int code, const std::string& msg,
                                                        const std::string& sessionid)
 {
@@ -117,5 +133,30 @@ std::string RemoteDesktopProtocol::buildStateNotify(const std::string& sessionid
     root["sessionid"] = sessionid;
     root["state"]     = state;
     root["msg"]       = msg;
+    return writeCompact(root);
+}
+
+std::string RemoteDesktopProtocol::buildControlResponse(int code, const std::string& msg, const std::string& sessionid,
+                                                        int action, int control)
+{
+    Json::Value root;
+    root["code"]      = code;
+    root["msg"]       = msg;
+    root["sessionid"] = sessionid;
+    root["action"]    = action;
+    root["control"]   = control;
+    return writeCompact(root);
+}
+
+std::string RemoteDesktopProtocol::buildControlNotify(const std::string& sessionid, int action, int control,
+                                                      int64_t fromid, const std::string& fromname)
+{
+    Json::Value root;
+    root["sessionid"] = sessionid;
+    root["action"]    = action;
+    root["control"]   = control;
+    //fromid 以字符串编码，避免大整数精度丢失
+    root["fromid"]    = std::to_string(fromid);
+    root["fromname"]  = fromname;
     return writeCompact(root);
 }

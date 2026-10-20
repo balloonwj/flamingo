@@ -8,6 +8,7 @@
 
 #include <memory>
 #include "ShareMessages.h"   // kMsgShareScreensCommand：顶部按钮交给控制器的命令（2026-10-07）
+#include "ShareSources.h"    // SetWindowCaptureAllowed：排除在屏幕采集之外（2026-10-12）
 #include "../../Source/Common/Log/IULog.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -53,6 +54,8 @@ CShareScreensWindow::CShareScreensWindow()
     , m_annotInput(NULL)
     , m_controlState(share_viewer_control_none)
     , m_controlScreen(-1)
+    , m_ownSeat(-1)
+    , m_captureExcluded(false)
     , m_controlInput(NULL)
 {
 }
@@ -72,12 +75,15 @@ void CShareScreensWindow::Open(HWND anchor, IShareScreenFeed* feed, HWND notifyW
             ShowWindow(SW_SHOWNOACTIVATE);
         return;
     }
-    if (Create(NULL, CWindow::rcDefault, TR(L"其他人的屏幕"), WS_OVERLAPPEDWINDOW, 0) == NULL)
+    if (Create(NULL, CWindow::rcDefault, TR(L"共享画面"), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("screenshare: create screens window failed.");
         return;
     }
-    SetTitle(TR(L"其他人的屏幕"));
+    //主持人正在共享自己的屏幕、没有允许截图：排除在屏幕采集之外（2026-10-12）
+    if (m_captureExcluded)
+        SetWindowCaptureAllowed(m_hWnd, false);
+    SetTitle(TR(L"共享画面"));
     //标题栏左侧的程序图标（2026-10-07，开发约定文档 UI 约定第 10 条）：标题栏不透明，底色与它一致
     SetIcon(m_programIcons.TitleBitmap(balloonmain::kProgramTitleIconSize, balloonmain::kOpaqueTitleBarColor));
     //没有所有者、会出现在任务栏：任务栏与 Alt-Tab 也用程序图标
@@ -104,7 +110,7 @@ void CShareScreensWindow::Open(HWND anchor, IShareScreenFeed* feed, HWND notifyW
     m_controlBtn = controlBtn.get();
     tools->AddChild(std::move(controlBtn), balloonwjui::DuiLayout::Hint().Fixed(kControlBtnW));
     std::unique_ptr<balloonwjui::DuiLabel> hint(new balloonwjui::DuiLabel());
-    hint->SetText(TR(L"双击一块画面放大；申请控制针对放大的那一块，没有放大时为第一块"));
+    hint->SetText(TR(L"双击一块画面放大；申请控制针对放大的那一块，没有放大时为第一块别人的画面"));
     hint->SetTextColor(kHintColor);
     hint->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     tools->AddChild(std::move(hint), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -112,6 +118,7 @@ void CShareScreensWindow::Open(HWND anchor, IShareScreenFeed* feed, HWND notifyW
     std::unique_ptr<CShareVideoCanvas> canvas(new CShareVideoCanvas());
     canvas->SetScreens(m_seats, m_names);
     canvas->SetBoards(m_boardSeats, m_boardOwnerSeats);
+    canvas->SetOwnScreen(m_ownSeat);
     canvas->SetAnnotation(m_annot);
     canvas->SetAnnotating(m_annotating && !m_annotPointer, m_annotInput);
     m_canvas = canvas.get();
@@ -189,14 +196,44 @@ void CShareScreensWindow::OnFeedFrame()
         int w = 0;
         int h = 0;
         uint64_t serial = 0;
+        //任何一路出帧都会通知到这里：先只比序号，变了才拷贝整帧
+        uint64_t& last = m_lastSerials[m_seats[i]];
+        if (!m_feed->GetScreenSerial(m_seats[i], serial) || serial == last)
+            continue;
         if (!m_feed->GetScreenFrame(m_seats[i], m_scratch, w, h, serial))
             continue;
-        uint64_t& last = m_lastSerials[m_seats[i]];
         if (serial == last)
             continue;
         last = serial;
         m_canvas->SwapScreenFrame(m_seats[i], m_scratch, w, h);
     }
+}
+
+void CShareScreensWindow::SetCaptureExcluded(bool excluded)
+{
+    if (excluded == m_captureExcluded)
+        return;
+    m_captureExcluded = excluded;
+    LOG_INFO("screenshare: screens window %s screen capture.", excluded ? "excluded from" : "visible to");
+    if (IsWindow())
+        SetWindowCaptureAllowed(m_hWnd, !excluded);
+}
+
+bool CShareScreensWindow::IsCaptureExcluded() const
+{
+    return m_captureExcluded;
+}
+
+void CShareScreensWindow::SetOwnScreen(int seat)
+{
+    m_ownSeat = seat;
+    if (m_canvas != NULL)
+        m_canvas->SetOwnScreen(seat);
+}
+
+bool CShareScreensWindow::ScreenFrameSizeForTest(int seat, int& width, int& height) const
+{
+    return m_canvas != NULL && m_canvas->ScreenFrameSize(seat, width, height);
 }
 
 void CShareScreensWindow::SetAnnotation(const ShareAnnotationSession* session)

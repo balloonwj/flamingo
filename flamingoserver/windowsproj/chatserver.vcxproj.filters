@@ -1,50 +1,95 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Account">
+      <UniqueIdentifier>{43b83b06-13c0-0148-2b27-38740df010f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="AdminLink">
+      <UniqueIdentifier>{1b83d639-be64-af57-60be-c9f547f693c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Announcement">
+      <UniqueIdentifier>{90f3db50-5a39-3d27-b517-c0065881f067}</UniqueIdentifier>
+    </Filter>
     <Filter Include="base">
-      <UniqueIdentifier>{25dd53c6-6062-45bb-a73f-96de33c45a2b}</UniqueIdentifier>
+      <UniqueIdentifier>{15a23bcc-e263-4841-3b59-8b871bba9c27}</UniqueIdentifier>
     </Filter>
-    <Filter Include="chatserversrc">
-      <UniqueIdentifier>{d9196d7f-1f47-46ce-aa16-ea105de881c4}</UniqueIdentifier>
+    <Filter Include="Bot">
+      <UniqueIdentifier>{7f0b173a-76a1-6416-4bb1-cb672baf1e86}</UniqueIdentifier>
     </Filter>
-    <Filter Include="chatserversrc\admin">
-      <UniqueIdentifier>{426cf0c0-6fad-4ed0-bcf7-be0c17e9d2a3}</UniqueIdentifier>
+    <Filter Include="Call">
+      <UniqueIdentifier>{966fda59-1ab2-f6a5-499d-424107b6449f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="chatserversrc\app">
-      <UniqueIdentifier>{3281e529-1d00-423c-a92a-d359142f8e8c}</UniqueIdentifier>
+    <Filter Include="Contacts">
+      <UniqueIdentifier>{ff0c056a-c25b-ff61-0d92-95f562c14089}</UniqueIdentifier>
     </Filter>
-    <Filter Include="chatserversrc\core">
-      <UniqueIdentifier>{cd15beb5-6b80-4c4e-9d6b-d7c793339659}</UniqueIdentifier>
+    <Filter Include="Core">
+      <UniqueIdentifier>{20e4a8e2-d680-2376-1d77-563de0fb2484}</UniqueIdentifier>
     </Filter>
     <Filter Include="dbapi">
-      <UniqueIdentifier>{6b1c9f4a-3d27-4a51-9c8e-2f7b5a0d81c3}</UniqueIdentifier>
+      <UniqueIdentifier>{cc16697e-b399-0f1c-c09b-ccb2a2e3df29}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Enterprise">
+      <UniqueIdentifier>{a0d8435a-caa6-c66b-75af-34b674973056}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Files">
+      <UniqueIdentifier>{437306d3-7a8b-3c43-1e7e-bc50947f555e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FileShare">
+      <UniqueIdentifier>{c8d48a0a-1701-ae9e-0757-ca59419f505f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Groups">
+      <UniqueIdentifier>{b1dfe17e-5968-1385-2ebc-cf5306be795e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Http">
+      <UniqueIdentifier>{792734fe-fe9e-a338-a135-a53e9783d9ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="jsoncpp1.9.0">
+      <UniqueIdentifier>{f6845c94-bbbc-4f10-e1fc-ec4f98037cfd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Messages">
+      <UniqueIdentifier>{4e690cc9-04b8-2635-63b4-667e0edd870e}</UniqueIdentifier>
     </Filter>
     <Filter Include="mysqlapi">
-      <UniqueIdentifier>{1f037ea0-8622-4ceb-8f00-caab409c8398}</UniqueIdentifier>
+      <UniqueIdentifier>{e0602b06-e3a9-2d77-2d3a-8fae84194ee7}</UniqueIdentifier>
     </Filter>
     <Filter Include="mysqlmgr">
-      <UniqueIdentifier>{e52fe5c5-81e6-4383-85cd-d6e4fe457acb}</UniqueIdentifier>
+      <UniqueIdentifier>{a1f4980a-ffef-ef4a-a4d8-ed2524f84974}</UniqueIdentifier>
     </Filter>
     <Filter Include="net">
-      <UniqueIdentifier>{f9a1b4b3-7ed0-485a-a67d-0e7220f2b131}</UniqueIdentifier>
+      <UniqueIdentifier>{304d6776-b08d-cb95-dfda-a50f618d4712}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="P2P">
+      <UniqueIdentifier>{7ed93af2-c8bc-403a-ef76-e305db3613c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RemoteDesktop">
+      <UniqueIdentifier>{d49ed684-9732-9c3d-9d8c-b9a67e0d5376}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ScreenShare">
+      <UniqueIdentifier>{b0fa2ef9-44ec-e337-4b44-d342ca05cc9f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="SecretChat">
+      <UniqueIdentifier>{78b64df1-3362-3917-ba25-ac8ab8e17131}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sensitive">
+      <UniqueIdentifier>{ba450f9f-6afd-581d-6c89-4aa09a2c8b62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sqlite3">
+      <UniqueIdentifier>{f6bf7011-a8d6-b8bc-224f-dd0d684843c4}</UniqueIdentifier>
     </Filter>
     <Filter Include="sqliteapi">
-      <UniqueIdentifier>{9d4e7c21-5a83-42b6-b0f7-1e6c8d3a90f5}</UniqueIdentifier>
+      <UniqueIdentifier>{7dfe5f33-9b80-ad0a-5ee2-63f6aa62da88}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third-party">
-      <UniqueIdentifier>{91ac5d15-dd05-42ce-9331-add7a66b5c93}</UniqueIdentifier>
+    <Filter Include="ThreadGroup">
+      <UniqueIdentifier>{04f4a353-ccbe-cdc3-f7e5-69fd1c727850}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third-party\jsoncpp1.9.0">
-      <UniqueIdentifier>{f36a8527-c4eb-4bae-88bd-3848858e757b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="third-party\sqlite3">
-      <UniqueIdentifier>{0a5af0ed-fbc2-4021-becb-deaac7c2c83f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="third-party\zlib1.3.2">
-      <UniqueIdentifier>{9f01eb1f-26de-47c1-afb4-9000813e5e99}</UniqueIdentifier>
+    <Filter Include="Update">
+      <UniqueIdentifier>{d44ead83-d2ed-996e-00ec-f6d73cf1f3e7}</UniqueIdentifier>
     </Filter>
     <Filter Include="utils">
-      <UniqueIdentifier>{a326b564-ca39-44d7-9145-103f19f980ab}</UniqueIdentifier>
+      <UniqueIdentifier>{e7407ae3-1836-bbcd-ca5a-ac30f3335941}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="zlib1.3.2">
+      <UniqueIdentifier>{3d5c1c6c-c88b-a849-8b47-8b1debc37aa4}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -70,295 +115,310 @@
       <Filter>base</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\BussinessLogic.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ChatServer.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ChatSession.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ChatSessionMemo.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\LoginProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FavoriteProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FavoriteManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ContactTagProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ContactTagManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\UpdateProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Update</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ClientVersionManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Update</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\UpdatePackageScanner.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Update</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\FileEnum.cpp">
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\RegisterProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\RegisterService.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AccountName.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\SmsCodeManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FriendProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AnnouncementProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Announcement</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MessageProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\RemoteDesktopProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\RemoteDesktopManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CallProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Call</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CallManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Call</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CallCardWriter.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Call</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ScreenShareProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ScreenShareManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ScreenShareRules.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ScreenShareLinkTable.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CloudRecordLink.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CloudRecordRules.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CloudRecordProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CloudRecordStore.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CloudRecordService.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CloudRecordServerEnv.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ScreenShareService.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupCallManager.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupCallProtocol.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupCallService.cpp">
+      <Filter>Call</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupCallServerEnv.cpp">
+      <Filter>Call</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FolderTransferManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FolderTransferProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileShareProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>FileShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\P2PProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>P2P</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\P2PSessionManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>P2P</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\SecretChatManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>SecretChat</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ChatSessionSecret.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ThreadProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ThreadGroup</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ThreadManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ThreadGroup</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ThreadWatchRegistry.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ThreadGroup</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ChatSessionThread.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\P2PSignalService.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>P2P</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\P2PServerSetup.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>P2P</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\ConfigHostCheck.cpp">
+      <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileShareSessionManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>FileShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileShareManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>FileShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileSharePolicy.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>FileShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileShareAdminService.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>FileShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileShareAdminProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>FileShare</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FeatureSwitchManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MessageManager.cpp">
-      <Filter>chatserversrc\app</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\MessagePinManager.cpp">
-      <Filter>chatserversrc\app</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\MessageDeleteRange.cpp">
-      <Filter>chatserversrc\app</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\GroupProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\GroupPermission.cpp">
-      <Filter>chatserversrc\app</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\GroupAutoName.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MessageSearchText.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GlobalSearchProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessagePinManager.cpp">
+      <Filter>Messages</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessageDeleteRange.cpp">
+      <Filter>Messages</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupProtocol.cpp">
+      <Filter>Groups</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupPermission.cpp">
+      <Filter>Groups</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupAutoName.cpp">
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\SensitiveWordMatcher.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\SensitiveWordManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\SensitiveAdminProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupFollowManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupQaProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupQaManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\BotRules.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\BotManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\BotEngine.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\BotProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\BotServerEnv.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ChatSessionBot.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\HttpRequestParse.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Http</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\HttpsClient.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupLinkProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupLinkManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\QaAdminProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupInviteProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupInviteManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CardProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CardManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MemoProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AdminLinkProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>AdminLink</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AdminLinkSession.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>AdminLink</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AdminLinkServer.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>AdminLink</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MemoManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FileStoreManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupFileProtocol.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupFileManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\FileToken.cpp">
       <Filter>utils</Filter>
@@ -379,58 +439,58 @@
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\DepartmentManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\DepartmentMsg.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\DepartmentPath.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AdminManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\EnterpriseManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\EmployeeManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\AnnouncementManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Announcement</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\ServiceAccountManager.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\HttpServer.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Http</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\HttpSession.cpp">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Http</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\main.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MonitorServer.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MonitorSession.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\TcpSession.cpp">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\UserManager.cpp">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\dbapi\DbConfig.cpp">
       <Filter>dbapi</Filter>
@@ -457,7 +517,7 @@
       <Filter>mysqlapi</Filter>
     </ClCompile>
     <ClCompile Include="..\sqlite3\sqlite3.c">
-      <Filter>third-party\sqlite3</Filter>
+      <Filter>sqlite3</Filter>
     </ClCompile>
     <ClCompile Include="..\sqliteapi\DatabaseSqlite.cpp">
       <Filter>sqliteapi</Filter>
@@ -568,52 +628,52 @@
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\adler32.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\compress.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\crc32.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\deflate.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzclose.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzlib.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzread.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzwrite.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\infback.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\inffast.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\inflate.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\inftrees.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\trees.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\uncompr.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\ZlibUtil.cpp">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\zutil.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -648,238 +708,250 @@
       <Filter>base</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BussinessLogic.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ChatServer.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ChatSession.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\LoginProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ContactsProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\FavoriteProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\FavoriteManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ContactRemarkManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ContactTagProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ContactTagManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\UpdateProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Update</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ClientVersionManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Update</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\UpdatePackageScanner.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Update</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\FileEnum.h">
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ProfileProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\RegisterProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\RegisterService.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AccountName.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\SmsCodeManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\FriendProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Contacts</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AnnouncementProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Announcement</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MessageProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\RemoteDesktopProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>RemoteDesktop</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\RemoteDesktopManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>RemoteDesktop</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CallProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Call</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CallManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Call</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CallCardWriter.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Call</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ScreenShareProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ScreenShareManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ScreenShareRules.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ScreenShareLinkTable.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CloudRecordLink.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CloudRecordRules.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CloudRecordProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CloudRecordStore.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CloudRecordService.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CloudRecordServerEnv.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ScreenShareService.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>ScreenShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupCallManager.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupCallProtocol.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupCallService.h">
+      <Filter>Call</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupCallServerEnv.h">
+      <Filter>Call</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MessageManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MessagePinManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MessageDeleteRange.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupPermission.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupAutoName.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MessageSearchText.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GlobalSearchProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\SensitiveWordDefs.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\SensitiveWordMatcher.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\SensitiveWordManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\SensitiveAdminProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Sensitive</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupFollowManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupQaProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupQaManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BotDefs.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BotRules.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BotManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BotEngine.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BotProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\BotServerEnv.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Bot</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\HttpRequestParse.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Http</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\HttpsClient.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupLinkProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupLinkManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\QaAdminProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupInviteProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupInviteManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Groups</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CardProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CardManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MemoProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AdminLinkProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>AdminLink</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AdminLinkSession.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>AdminLink</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AdminLinkServer.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>AdminLink</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MemoManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Messages</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\FileProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\FileStoreManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupFileProtocol.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupFileManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Files</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\FileToken.h">
       <Filter>utils</Filter>
@@ -891,7 +963,7 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\Protocol.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\net\FrameCodec.h">
       <Filter>net</Filter>
@@ -903,88 +975,142 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\DepartmentManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\DepartmentMsg.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\DepartmentPath.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AdminManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\EnterpriseManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\EmployeeManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AnnouncementManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Announcement</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\ServiceAccountManager.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\HttpMsg.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Http</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\HttpServer.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Http</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\HttpSession.h">
-      <Filter>chatserversrc\admin</Filter>
+      <Filter>Http</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MonitorServer.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MonitorSession.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\AdminApiCodes.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Enterprise</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\TcpSession.h">
-      <Filter>chatserversrc\core</Filter>
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\UserManager.h">
-      <Filter>chatserversrc\app</Filter>
+      <Filter>Account</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\ConfigHostCheck.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FeatureSwitchManager.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FolderTransferManager.h">
+      <Filter>Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FolderTransferProtocol.h">
+      <Filter>Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileShareManager.h">
+      <Filter>FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileShareProtocol.h">
+      <Filter>FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileSharePolicy.h">
+      <Filter>FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileShareSessionManager.h">
+      <Filter>FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileShareAdminProtocol.h">
+      <Filter>FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileShareAdminService.h">
+      <Filter>FileShare</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\P2PProtocol.h">
+      <Filter>P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\P2PServerSetup.h">
+      <Filter>P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\P2PSessionManager.h">
+      <Filter>P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\P2PSignalService.h">
+      <Filter>P2P</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ThreadManager.h">
+      <Filter>ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ThreadProtocol.h">
+      <Filter>ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ThreadWatchRegistry.h">
+      <Filter>ThreadGroup</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\SecretChatManager.h">
+      <Filter>SecretChat</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\allocator.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\assertions.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\autolink.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\config.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\features.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\forwards.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\json.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\json_tool.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\reader.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\value.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\version.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\writer.h">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\dbapi\DbConfig.h">
       <Filter>dbapi</Filter>
@@ -1020,7 +1146,7 @@
       <Filter>mysqlapi</Filter>
     </ClInclude>
     <ClInclude Include="..\sqlite3\sqlite3.h">
-      <Filter>third-party\sqlite3</Filter>
+      <Filter>sqlite3</Filter>
     </ClInclude>
     <ClInclude Include="..\sqliteapi\DatabaseSqlite.h">
       <Filter>sqliteapi</Filter>
@@ -1137,50 +1263,50 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\crc32.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\deflate.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\gzguts.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\inffast.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\inffixed.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\inflate.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\inftrees.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\trees.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\zconf.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\zlib.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\ZlibUtil.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.3.2\zutil.h">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\jsoncpp1.9.0\json_valueiterator.inl">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\zlib1.3.2\文件概览.txt">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\jsoncpp1.9.0\json_valueiterator.inl">
+      <Filter>jsoncpp1.9.0</Filter>
+    </None>
   </ItemGroup>
 </Project>

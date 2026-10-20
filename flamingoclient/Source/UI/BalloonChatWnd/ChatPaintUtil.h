@@ -36,6 +36,22 @@ void AddRoundRect(Gdiplus::GraphicsPath& path,
                   Gdiplus::REAL w, Gdiplus::REAL h, Gdiplus::REAL radius);
 
 /**
+ *  往 path 里加一个四个角各自给半径的圆角矩形（聊天气泡靠头像那一角收小时用，docs/聊天气泡美化方案.md 第 1 节第 3 条）。
+ *  每个角的半径都限制在宽、高各一半以内；半径为 0 的角画成直角。
+ *  @param path        [入出参] 目标路径
+ *  @param x / y       左上角
+ *  @param w / h       宽与高（像素）
+ *  @param rTopLeft    左上角半径（像素）
+ *  @param rTopRight   右上角半径（像素）
+ *  @param rBottomRight 右下角半径（像素）
+ *  @param rBottomLeft 左下角半径（像素）
+ */
+void AddRoundRectCorners(Gdiplus::GraphicsPath& path,
+                         Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL w, Gdiplus::REAL h,
+                         Gdiplus::REAL rTopLeft, Gdiplus::REAL rTopRight,
+                         Gdiplus::REAL rBottomRight, Gdiplus::REAL rBottomLeft);
+
+/**
  *  用 GDI 在 rc 里画一段文字，字体族固定为微软雅黑，背景透明。
  *  @param hdc         目标设备上下文
  *  @param text        文字；为 NULL 或空串时不画

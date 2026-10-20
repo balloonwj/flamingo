@@ -72,6 +72,7 @@
 #include "SecretChatManager.h"         //单聊密聊的内存会话：启动时按配置设置上限，周期扫描邀请超时
 #include "P2PSessionManager.h"         //P2P 信令的会话管理：启动时按配置初始化
 #include "P2PServerSetup.h"            //P2P 配置项的读取
+#include "../utils/ConfigHostCheck.h"  //启动时检查下发给客户端的主机地址是否只有本机才能访问
 #include "ChatServer.h"
 #include "MonitorServer.h"
 #include "HttpServer.h"
@@ -318,6 +319,43 @@ static int64_t ReadOptionalInt64Config(CConfigFileReader& config, const char* ke
 
     //foldermaxsize 默认 50 GiB，超出 32 位，故一律按 64 位解析
     return static_cast<int64_t>(atoll(value));
+}
+
+/**
+ *  启动时检查实际下发给客户端的主机地址，只有本机才能访问的（如默认的 127.0.0.1）按配置项各打一条 WARN。
+ *  这类地址下发出去以后，其他机器上的客户端连的是它自己那台电脑，中转、P2P 地址探测、自动更新与云端录像传输全部失败，
+ *  而服务端这一侧收不到任何连接、也就没有任何错误日志，只能在启动时提醒部署人员（见 utils/ConfigHostCheck.h）。
+ *  须在各功能都配置完成之后调用：P2P 的探测地址取 P2PSessionManager 实际使用的配置（已按规则回落）。
+ *  @param config 已加载的配置文件（借用）
+ */
+static void WarnLocalOnlyPublishedHosts(CConfigFileReader& config)
+{
+    std::vector<PublishedHost> published;
+    //中转与 P2P 地址探测：按 P2P 会话管理器实际使用的配置列出
+    const char* probeHost = config.getConfigName("p2pprobehost");
+    P2PServerSetup::appendPublishedHosts(Singleton<P2PSessionManager>::Instance().getConfig(),
+                                         probeHost != NULL && probeHost[0] != '\0', published);
+    //FileStoreManager 在上传、下载应答里下发的地址，与交给它及 FolderTransferManager、FileShareSessionManager 的取值相同。
+    //客户端只在云端录像传输（imgserver）与自动更新（fileserver）时按下发的地址连接，聊天里的图片、文件按自己
+    //flamingo.ini 里的地址连接（docs/服务端配置项说明.md），所以用途只写这几项
+    const char* imgserverhost = config.getConfigName("imgserverhost");
+    const char* imgserverport = config.getConfigName("imgserverport");
+    const char* fileserverhost = config.getConfigName("fileserverhost");
+    const char* fileserverport = config.getConfigName("fileserverport");
+    published.push_back(PublishedHost("imgserverhost", imgserverhost != NULL ? imgserverhost : "",
+                                      imgserverport != NULL ? atoi(imgserverport) : 0,
+                                      "cloud recording upload and download"));
+    published.push_back(PublishedHost("fileserverhost", fileserverhost != NULL ? fileserverhost : "",
+                                      fileserverport != NULL ? atoi(fileserverport) : 0,
+                                      "update package download, folder transfer and file share"));
+
+    const std::vector<LocalOnlyHostWarning> warnings = ConfigHostCheck::findLocalOnly(published);
+    for (size_t i = 0; i < warnings.size(); ++i)
+    {
+        LOGW("config item %s=%s is reachable from this machine only, so clients on other machines cannot use %s. "
+             "set it to an address the clients can reach (normally the server address in their flamingo.ini).",
+             warnings[i].m_key.c_str(), warnings[i].m_host.c_str(), warnings[i].m_usages.c_str());
+    }
 }
 
 /**
@@ -644,6 +682,7 @@ int main(int argc, char* argv[])
     {
         LOGF("Init FileStoreManager failed, please check your database config..............");
     }
+
     {
         //文件令牌密钥与目标 fileserver / imgserver 地址来自配置文件；
         //缺项时取空串 / 0，configure 仍可调用，仅文件功能不可用
@@ -910,6 +949,8 @@ int main(int argc, char* argv[])
              applied.m_relayPort, applied.m_lanes, applied.m_maxAccess, applied.m_maxTransfers,
              applied.m_maxTransferPerShare, applied.m_openTimeoutMs, applied.m_idleTimeoutMs);
     }
+    //下发给客户端的地址都已确定：跨机器部署时保留默认的 127.0.0.1 是常见的配置遗漏，按实际下发的地址检查一遍
+    WarnLocalOnlyPublishedHosts(config);
     {
         //文件共享的启动一致性清扫：退群、踢人、解散时的联动处理是在群操作成功之后另起的，中途失败会留下
         //不一致（分享者已不在群里、成员已不在群里、群已不存在），这里统一补齐（docs/文件共享方案.md 6.1）。

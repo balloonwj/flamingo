@@ -89,6 +89,19 @@ int BuildCameraTiles(bool selfOn, int selfSeat, const std::set<int>& otherSeats,
  */
 RECT ComputeCameraWindowRect(const RECT& work, int tileCount, int overflowCount);
 
+//摄像头小窗收起后小把手的宽与按钮行高（像素，2026-10-12）；把手的标题条取 balloonui 标题栏的最小高度 18
+const int kCameraHandleW = 72;
+const int kCameraHandleTitleH = 18;
+const int kCameraHandleContentH = 36;
+
+/**
+ *  摄像头小窗收起后小把手的位置（2026-10-12）：贴着展开时窗口的右边缘与顶边，宽 kCameraHandleW、
+ *  高 kCameraHandleTitleH + kCameraHandleContentH。
+ *  @param expanded 展开时的窗口矩形（ComputeCameraWindowRect 的结果，屏幕坐标）
+ *  @return 小把手的窗口矩形（屏幕坐标）
+ */
+RECT ComputeCameraHandleRect(const RECT& expanded);
+
 } // namespace screenshare
 
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"

@@ -8,8 +8,9 @@
  *    - 窗口高度随条数变化（HeightFor），宽度固定；各尺寸按弹窗所在显示器的 DPI 换算（2026-10-07 起，字体随 DPI 放大，
  *      窗口不放大时文字放不下）；不自动关闭，点标题栏的关闭按钮才关闭；
  *    - 访问者下载成功那一条的「已保存到 …」放不下时省略路径中间（DT_PATH_ELLIPSIS），其余说明省略末尾。
- *  形态与录制完成提示一致（FlamingoMedia/Record/RecordDoneToast）：无所有者的置顶 WS_POPUP（UI 约定第 11 条：没有所有者的
- *  浮层可以用 WS_POPUP）、WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW、显示时不抢焦点，标题栏左侧有程序图标（UI 约定第 10 条）。
+ *  形态与录制完成提示一致（FlamingoMedia/Record/RecordDoneToast）：无所有者的置顶 WS_POPUP（UI 约定第 11 条：2026-10-14 起
+ *  有无所有者，控件通知都发回本窗口，WS_POPUP 可以照常使用）、WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW、显示时不抢焦点，
+ *  标题栏左侧有程序图标（UI 约定第 10 条）。
  *  点了链接后不在控件通知里直接执行，而是投给自己一条 kMsgNoticeLink，等通知处理完再交给监听者：执行的动作可能重建本窗口
  *  的内容，不能在被点的控件的通知还没返回时销毁它。
  *

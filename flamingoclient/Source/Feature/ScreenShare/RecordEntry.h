@@ -49,6 +49,12 @@ void ToggleRecording();
 void PushRecordSettings(int quality, const wchar_t* folder);
 
 /**
+ *  把屏幕共享清晰度交给模块（登录后、设置变化时调用；docs/远程桌面H264与共享画质提升方案.md 4.2）。
+ *  @param quality 0 为 1080p、1 为 2K（默认）、2 为 4K
+ */
+void PushShareQuality(int quality);
+
+/**
  *  把鼠标效果的设置交给模块（屏幕共享第 16 期，登录后调用）。
  *  @param text 账号配置里保存的设置文本；为空时模块按默认设置（只开光圈）
  */

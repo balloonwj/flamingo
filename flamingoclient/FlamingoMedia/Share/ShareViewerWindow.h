@@ -2,7 +2,8 @@
  *  屏幕共享观看窗，ShareViewerWindow.h
  *
  *  观看者加入共享后打开（docs/屏幕共享与录制方案.md 5.2 第 7 步）：默认全屏，铺满主面板所在的显示器；ESC 退出全屏、
- *  F11 切换；全屏时顶部浮一条工具条（复用远程桌面的 CRdViewerToolbar，文字改成「屏幕共享」「离开」）。客户区是一个
+ *  F11 切换；按钮放在一条浮动工具条上（CViewerFloatBar，2026-10-12 起，此前窗口模式放在标题栏上、全屏时借用远程桌面的
+ *  CRdViewerToolbar），窗口模式与全屏都是这一条，风格与共享者的控制条一致。客户区是一个
  *  自绘画面控件 CShareVideoCanvas，按窗口大小等比缩放绘制最新一帧，没有画面或对方暂停、最小化、掉线时在画面中央
  *  显示提示文字。收流管线 ShareViewerReceiver 由本窗口持有：中转、解码在它的接收线程上完成，本窗口只在 UI 线程上取
  *  最新一帧绘制。
@@ -26,13 +27,15 @@
 #include <string>
 #include <vector>
 #include "ShareViewerReceiver.h"
+#include "ShareScreenFeed.h"   // IShareScreenFeed：本人那一块的本机预览来源（2026-10-12）
 #include "ShareCameraPanel.h"
 #include "ShareAnnotationOverlay.h"
 #include "ShareInfoPopup.h"
 #include "ShareRemoteControl.h"
 #include "ShareWhiteboard.h"   // 白板画面的视野（第 23 期）
 #include "ShareRoomPolicy.h"   // ShareBoardCloseItem：「主持人 ▾」菜单的「关闭白板 ▸」（2026-10-08）
-#include "../RemoteDesktop/RdViewerToolbar.h"
+#include "ViewerFloatBar.h"   // CViewerFloatBar：浮动观看工具条（2026-10-12）
+#include "ShareFrameDrawer.h"   // ShareFrameDrawer：缩小显示 2K、4K 画面时不走 HALFTONE（2026-10-15）
 #include "ShareBarPopupGuard.h"   // CShareBarPopupGuard：字幕菜单开着时观看窗被关闭（2026-10-07）
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
@@ -81,7 +84,8 @@ public:
 /**
  *  控制中把窗口上的键鼠消息换算成输入、交给控制输入接口（2026-10-07 从观看窗抽出，观看窗与主持人的「其他人的屏幕」窗口
  *  共用）。记下已发出按下、还没发出抬起的鼠标按钮与按键，失去焦点或结束控制时补发抬起；按下鼠标后抓住鼠标，全部按钮
- *  松开后放开。
+ *  松开后放开。鼠标移动被限频挡下时，用一个以本对象地址为编号的窗口定时器（TIMERPROC 回调，不经窗口的 WM_TIMER 处理）
+ *  在间隔到后补发最后的位置（2026-10-17），使用方不需要为此改动消息映射。
  *
  *  典型用法（窗口的键鼠消息处理里）：
  *      if (!m_forwarder.Handle(m_hWnd, uMsg, wParam, lParam, videoRect, m_controlInput)) bHandled = FALSE;
@@ -90,6 +94,9 @@ class ShareControlForwarder
 {
 public:
     ShareControlForwarder();
+
+    //停掉补发定时器：定时器回调按编号找回本对象，不能留到对象销毁之后
+    ~ShareControlForwarder();
 
     /**
      *  处理一条键鼠消息。
@@ -109,13 +116,34 @@ public:
      */
     void Release(IShareControlInput* input);
 
-    //清空记录并放开鼠标，不补发抬起（窗口关闭、房间已离开时调用）
+    //清空记录并放开鼠标，不补发抬起（窗口关闭、房间已离开时调用）；被限频挡下的移动也不再补发
     void Reset();
 
 private:
+    ShareControlForwarder(const ShareControlForwarder&);
+    ShareControlForwarder& operator=(const ShareControlForwarder&);
+
+    //补发定时器的回调（界面线程上，由窗口的消息循环派发）；idEvent 是 ShareControlForwarder 对象的地址
+    static VOID CALLBACK FlushTimerProc(HWND hwnd, UINT msg, UINT_PTR idEvent, DWORD tick);
+
+    /**
+     *  有被限频挡下的移动、补发定时器又没在走时，启动一次（单次，到点后由 onFlushTimer 停掉）。
+     *  @param hwnd  定时器所在的窗口（收到消息的窗口）
+     *  @param input 补发时的接收方，不拥有
+     */
+    void armFlushTimer(HWND hwnd, IShareControlInput* input);
+
+    //停掉补发定时器（没有在走时什么都不做）
+    void killFlushTimer();
+
+    //补发定时器到点：取出到期的移动交给接收方；还没到期（期间又发出过移动）时重新启动
+    void onFlushTimer();
+
     ShareViewerInputTranslator m_translator;   //把窗口消息换成输入（画面外按下不发、移动限频等）
     std::vector<uint32_t>      m_keysDown;     //已发出按下、还没发出抬起的键
     bool                       m_captured;     //按下鼠标后是否已 SetCapture（全部按钮松开后释放）
+    HWND                       m_flushHwnd;    //补发定时器所在的窗口；定时器没在走时为 NULL
+    IShareControlInput*        m_flushInput;   //补发时的接收方（最近一次 Handle 传入的），不拥有；定时器没在走时无意义
 };
 
 //画面控件：等比缩放绘制最新一帧（黑边留白），有提示文字时在中央叠一块半透明底的文字
@@ -154,7 +182,7 @@ public:
     void SetAnnotating(bool on, IShareAnnotationInput* input);
 
     //画面最近一次实际画在哪里（宿主客户区坐标，去掉黑边之后）；还没画过时为空矩形。控制键鼠据此换算坐标（第 18 期）。
-    //多人共享（第 22 期）时为「当前那一块」（放大的那块，没有放大时为第一块）的画面矩形
+    //多人共享（第 22 期）时为「当前那一块」（放大的那块，没有放大时为第一块别人的画面）的画面矩形
     RECT VideoRect() const;
 
     /**
@@ -179,8 +207,25 @@ public:
      */
     bool ScreensGone() const;
 
-    //当前那一块的画面座位（第 22 期）：放大的那块，没有放大时为第一块；没有清单时为 -1
+    //当前那一块的画面座位（第 22 期）：放大的那块，没有放大时为第一块别人的画面（2026-10-12 起清单里有本人那一块，
+    //见 SetOwnScreen；只有本人那一块时就是它）；没有清单时为 -1
     int ActiveScreenSeat() const;
+
+    /**
+     *  标出本人那一块（2026-10-12）：它只能看，没有放大时「当前那一块」跳过它，申请控制、录制默认作用在别人的画面上。
+     *  @param seat 本人画面的座位；-1 表示清单里没有本人那一块
+     */
+    void SetOwnScreen(int seat);
+
+    /**
+     *  多块画面时名字标签要避开的窗口（2026-10-13）：观看窗的浮动工具条浮在画面上方，标签与它重叠时画到它下方。
+     *  绘制时取它当前的位置（不可见时不避开）。
+     *  @param wnd 要避开的窗口对象，不拥有，生命周期须长于本控件；NULL 表示不避开
+     */
+    void SetLabelObstacle(const ATL::CWindow* wnd);
+
+    //要避开的窗口自上次绘制后挪了位置、改了大小或显隐（如工具条收起）时重画，让标签回到合适的位置；由宿主定时调用
+    void RefreshLabelObstacle();
 
     /**
      *  画面清单里哪几块是白板（第 23 期）：白板没有视频，按标注会话里它的笔迹与最近收到的白板视野（建立者广播的背景与可见区域）
@@ -212,12 +257,30 @@ public:
      */
     bool ScreenVideoRect(int seat, RECT& out) const;
 
+    /**
+     *  某块画面当前那一帧的尺寸（2026-10-12）。
+     *  @param seat   画面座位
+     *  @param width  [出参] 帧宽
+     *  @param height [出参] 帧高
+     *  @return 这块画面在清单里且已有帧返回 true
+     */
+    bool ScreenFrameSize(int seat, int& width, int& height) const;
+
+    /**
+     *  某块画面的名字标签最近一次画在哪里（宿主客户区坐标，2026-10-13，单元测试核对它不被浮动工具条盖住）。
+     *  @param seat 画面座位
+     *  @param out  [出参] 标签矩形
+     *  @return 这块画面在清单里且已画过返回 true
+     */
+    bool ScreenLabelRect(int seat, RECT& out) const;
+
     virtual void OnPaint(HDC hdc, const RECT& rcDirty) override;
     virtual bool OnLButtonDown(POINT pt, UINT mkFlags) override;
     virtual bool OnMouseMove(POINT pt, UINT mkFlags) override;
     virtual bool OnLButtonUp(POINT pt, UINT mkFlags) override;
     virtual bool OnSetCursor(POINT pt) override;
-    //标注模式下双击左键：完成折线、曲线（第 19 期）
+    //双击左键：标注模式下完成折线、曲线（第 19 期）；多块画面时放大或还原某一块（第 22 期）；
+    //其余情况上报 DUIN_DBLCLK，观看窗据此切换全屏（2026-10-12）
     virtual bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
     //标注模式下按下右键：完成折线、曲线（第 19 期）
     virtual bool OnRButtonDown(POINT pt, UINT mkFlags) override;
@@ -263,6 +326,8 @@ private:
      *  @param content [出参] 整个世界在控件里的矩形（标注按它换算，可以比 area 大）
      */
     void drawBoardIn(HDC hdc, const RECT& area, ScreenTile& t, RECT& content);
+    //名字标签要避开的窗口当前在宿主客户区里的矩形；没有设置、窗口不存在或不可见时为空矩形
+    RECT labelObstacleRect() const;
     //点在哪块白板上；不在白板上返回 -1
     int boardTileAt(POINT pt) const;
     /**
@@ -276,6 +341,7 @@ private:
     std::vector<uint8_t> m_frame;    //当前画面
     int                  m_width;    //画面宽
     int                  m_height;   //画面高
+    ShareFrameDrawer     m_drawer;   //画面的绘制器（2026-10-15）：2K、4K 画面缩小显示时用 SSE2 缩放代替 HALFTONE，单画面与多画面共用
     std::wstring         m_status;   //提示文字
     RECT                 m_videoRect;   //最近一次画面实际画在哪里（控件所在宿主的客户区坐标）
     const ShareAnnotationSession* m_annot;   //标注来源（不拥有）
@@ -287,6 +353,9 @@ private:
     std::vector<ScreenTile> m_tiles;    //多人共享的画面清单（第 22 期）；不多于一块时按原来的单画面绘制
     int                  m_enlarged;    //放大的那一块在 m_tiles 里的下标（第 22 期）；-1 表示并列
     bool                 m_screensGone; //画面清单有过画面、现在一块都没有（见 ScreensGone）；清单又非空时清除
+    int                  m_ownSeat;     //本人那一块的画面座位（2026-10-12，见 SetOwnScreen）；-1 表示没有
+    const ATL::CWindow*  m_labelObstacle;   //名字标签要避开的窗口（2026-10-13，见 SetLabelObstacle），不拥有；NULL 表示不避开
+    RECT                 m_labelObstacleRect;   //最近一次绘制时要避开的矩形（宿主客户区坐标），空矩形表示没有；RefreshLabelObstacle 据此判断变化
     std::vector<RECT>    m_tileVideoRects;   //各块画面最近一次实际所占的矩形（第 22 期），与 m_tiles 一一对应；单画面时只有一个元素
     RECT                 m_annotRect;   //标注模式下正在接鼠标动作的那块画面的矩形（第 22 期 22e，宿主客户区坐标）；
                                         //按下或悬停时按鼠标所在的画面更新，按着期间不变
@@ -303,19 +372,19 @@ public:
     enum Command
     {
         kCmdLeave  = 1,   //用户关窗或点了「离开」
-        kCmdMicOn  = 2,   //用户要打开麦克风（全屏工具条按钮或标题栏图标）
+        kCmdMicOn  = 2,   //用户要打开麦克风（浮动工具条的按钮）
         kCmdMicOff = 3,   //用户要关闭麦克风
-        kCmdCameraOn  = 4,   //用户要打开摄像头（全屏工具条按钮或标题栏图标）
+        kCmdCameraOn  = 4,   //用户要打开摄像头（浮动工具条的按钮）
         kCmdCameraOff = 5,   //用户要关闭摄像头
-        kCmdAnnotate  = 6,   //用户要进入或退出标注模式（全屏工具条按钮或标题栏图标）
-        kCmdRecordStart = 7, //用户要开始录制（全屏工具条按钮或标题栏图标）
+        kCmdAnnotate  = 6,   //用户要进入或退出标注模式（浮动工具条的按钮）
+        kCmdRecordStart = 7, //用户要开始录制（浮动工具条的按钮）
         kCmdRecordStop  = 8, //用户要停止录制
-        kCmdViewers     = 9, //点了「N 人观看 ▾」或标题栏「观看者」图标：打开或关闭观看者名单（第 13 期）
+        kCmdViewers     = 9, //点了工具条的「N 人观看 ▾」：打开或关闭观看者名单（第 13 期）
         kCmdControl     = 10, //点了「申请控制 / 取消申请 / 结束控制」（第 18 期），控制器按当前状态决定发什么
         kCmdShareMine   = 11, //点了「共享我的屏幕 / 取消共享申请 / 停止我的共享」（第 22 期），控制器按当前状态决定发什么
         kCmdBoard       = 12, //点了「新建白板 / 取消白板申请 / 关闭我的白板」（第 23 期），控制器按当前状态决定发什么
-        kCmdCaptionSelf = 13, //标题栏「字幕」菜单：「为我的发言生成字幕」，lParam 为 1 打开、0 关闭（语音字幕）
-        kCmdCaptionShow = 14, //标题栏「字幕」菜单：「显示字幕」，lParam 为 1 打开、0 关闭（语音字幕）
+        kCmdCaptionSelf = 13, //工具条「字幕」菜单：「为我的发言生成字幕」，lParam 为 1 打开、0 关闭（语音字幕）
+        kCmdCaptionShow = 14, //工具条「字幕」菜单：「显示字幕」，lParam 为 1 打开、0 关闭（语音字幕）
         kCmdHostMenu    = 15, //「主持人 ▾」菜单选了一项（2026-10-07，经移交成为主持人的人），lParam 为 share_host_menu_item
         kCmdCloseBoard  = 16, //「主持人 ▾」菜单「关闭白板 ▸」选了一块（2026-10-08），lParam 为白板的建立者 userid
     };
@@ -347,20 +416,20 @@ public:
     //房间号（控制器据此核对）
     const std::string& RoomId() const;
 
-    //刷新麦克风状态：全屏工具条按钮的文字与标题栏图标随之变化
+    //刷新麦克风状态：浮动工具条上的按钮随之变化
     void SetMicOn(bool on);
 
     /**
-     *  刷新说话人提示（如「李四 正在说话」），接在标题与全屏工具条状态行的后面。
+     *  刷新说话人提示（如「李四 正在说话」），接在窗口标题与浮动工具条的标题条的后面。
      *  @param text 说话人提示；为空表示没有人在说话
      */
     void SetSpeakingText(const std::wstring& text);
 
-    //刷新观看人数（不含发起人，第 13 期），显示在全屏工具条的「N 人观看 ▾」上
+    //刷新观看人数（不含发起人，第 13 期），显示在浮动工具条的「N 人观看 ▾」上
     void SetViewerCount(int count);
 
     /**
-     *  刷新共享时长（第 13 期），接在标题与全屏工具条状态行里的发起人名后面。
+     *  刷新共享时长（第 13 期），接在窗口标题与浮动工具条的标题条里的发起人名后面。
      *  @param text 时长文字（见 FormatShareDuration）；为空表示还没开始计时
      */
     void SetDurationText(const std::wstring& text);
@@ -374,16 +443,54 @@ public:
     //是否强制模式
     bool IsForced() const;
 
+    //浮动工具条上各按钮的编号（2026-10-12），随 WM_SHARE_VIEWER_TOOLBAR 的 wParam 回传；单元测试按它找按钮
+    enum ViewerBarButtonId
+    {
+        kBarMic = kViewerBarUserIdFirst,   //打开 / 关闭麦克风
+        kBarCamera,       //打开 / 关闭摄像头
+        kBarAnnotate,     //标注 / 退出标注
+        kBarRecord,       //录制 / 停止录制
+        kBarCaption,      //字幕：弹出「为我的发言生成字幕」「显示字幕」两个勾选项；字幕能使用时才有
+        kBarControl,      //申请控制 / 取消申请 / 结束控制（第 18 期）
+        kBarShareMine,    //共享我的屏幕 / 取消共享申请 / 停止我的共享（第 22 期）
+        kBarBoard,        //新建白板 / 取消白板申请 / 关闭我的白板（第 23 期）
+        kBarViewers,      //「N 人观看 ▾」：打开或关闭观看者名单（第 13 期）
+        kBarInfo,         //共享说明：共享有描述时才有（第 15 期）
+        kBarHost,         //主持人菜单：经移交成为主持人时才有（2026-10-07）
+        kBarFullscreen,   //全屏 / 退出全屏：强制模式下没有
+        kBarLeave,        //离开共享：强制模式下没有
+    };
+
+    //浮动工具条的窗口（2026-10-12，单元测试用）；没有显示时为 NULL
+    HWND BarWindowForTest() const;
+
+    //浮动工具条对象（2026-10-12，截图用例把它的控件树画进内存位图）
+    CViewerFloatBar& BarForTest();
+
     /**
-     *  取观看者名单的锚点：全屏时为工具条上「N 人观看 ▾」按钮的屏幕矩形，窗口模式时为标题栏右侧一块。
+     *  取浮动工具条上某个按钮的屏幕矩形（2026-10-12，单元测试用）。
+     *  @param id  按钮编号，取值见 ViewerBarButtonId
+     *  @param out [出参] 屏幕坐标
+     *  @return 工具条可见且有这个按钮时返回 true
+     */
+    bool BarButtonRectForTest(UINT id, RECT& out) const;
+
+    //某块画面当前那一帧的尺寸（2026-10-12，单元测试用），见 CShareVideoCanvas::ScreenFrameSize；窗口没打开时返回 false
+    bool ScreenFrameSizeForTest(int seat, int& width, int& height) const;
+
+    //某块画面的名字标签最近一次画在哪里（2026-10-13，单元测试用，本窗口客户区坐标），见 CShareVideoCanvas::ScreenLabelRect
+    bool ScreenLabelRectForTest(int seat, RECT& out) const;
+
+    /**
+     *  取观看者名单的锚点：工具条上「N 人观看 ▾」按钮的屏幕矩形；工具条收起、隐藏时为窗口右上角往左的一块。
      *  @param out [出参] 屏幕坐标
      *  @return 窗口存在时返回 true
      */
     bool GetViewersAnchor(RECT& out) const;
 
     /**
-     *  设置共享标题与描述（第 15 期，来自 1721 / 1725 / 1727 与 1734）。标题栏与全屏工具条状态行的主体文字随之变化；
-     *  描述由无变有或由有变无时，标题栏「共享说明」图标与全屏工具条「共享说明」按钮随之出现或消失；
+     *  设置共享标题与描述（第 15 期，来自 1721 / 1725 / 1727 与 1734）。窗口标题与浮动工具条标题条的主体文字随之变化；
+     *  描述由无变有或由有变无时，浮动工具条的「共享说明」按钮随之出现或消失；
      *  「共享说明」浮窗开着时内容随之更新，描述变空时关闭浮窗。窗口未建时只记下，打开窗口时生效。
      *  @param title 共享标题；空串表示老版本发起端没有设标题，标题栏显示「某某 的屏幕共享」
      *  @param desc  共享描述；空串表示没有描述
@@ -399,7 +506,7 @@ public:
      */
     void SetAudioSession(ShareAudioSession* audio);
 
-    //刷新摄像头状态：全屏工具条按钮的文字与标题栏图标随之变化
+    //刷新摄像头状态：浮动工具条上的按钮随之变化
     void SetCameraOn(bool on);
 
     /**
@@ -431,6 +538,28 @@ public:
     //当前那一块的画面座位（第 22 期）：控制键鼠、录制作用在这一块上；没有清单时为 -1
     int ActiveScreenSeat() const;
 
+    /**
+     *  本人那一块的画面来源（2026-10-12，docs/远程桌面控制权限与观看工具条方案.md 第 2.2 节 C）：本人也在共享屏幕时，
+     *  这个座位的画面改从 feed（本人的共享者推流管线，按限帧率留下的本机画面）取，不再取中转转回来的那一份。
+     *  feed 有新帧时由调用方调 OnViewerFrame 通知本窗口取帧。关窗时复位。
+     *  @param seat 本人画面的座位；小于 0 表示本人没在共享屏幕
+     *  @param feed 画面来源，不拥有，取消（seat 小于 0 或传 NULL）之前须一直有效
+     */
+    void SetLocalScreen(int seat, IShareScreenFeed* feed);
+
+    //本人那一块的来源有了新的一帧（2026-10-12，界面线程）：投给自己，稍后与收流管线的帧一起取
+    void OnLocalScreenFrame();
+
+    /**
+     *  是否把观看窗与它的浮动工具条排除在屏幕采集之外（2026-10-12），由控制器按 ShouldExcludeShareView 决定。
+     *  窗口还没建时记下，建好后生效；关窗时复位为不排除。
+     *  @param excluded true 排除，false 允许采集
+     */
+    void SetCaptureExcluded(bool excluded);
+
+    //观看窗当前是否排除在屏幕采集之外（2026-10-12，单元测试用）
+    bool IsCaptureExcluded() const;
+
     //画面清单里哪几块是白板（第 23 期），见 CShareVideoCanvas::SetBoards；窗口重建时沿用
     void SetBoards(const std::vector<int>& seats, const std::vector<int>& ownerSeats);
 
@@ -453,7 +582,7 @@ public:
     void SetControlScreen(int seat);
 
     /**
-     *  「共享我的屏幕」按钮的状态（第 22 期）：标题栏图标与全屏工具条按钮的文字随之变化。
+     *  「共享我的屏幕」按钮的状态（第 22 期）：浮动工具条上的按钮随之变化。
      *  @param state 取值见 share_viewer_mine_state
      */
     void SetShareMineState(int state);
@@ -468,8 +597,8 @@ public:
     bool Reconnect(const ShareRelayInfo& relay, const unsigned char* serverPubKey);
 
     /**
-     *  经移交成为主持人时的主持人入口（2026-10-07，docs/屏幕共享与录制方案.md 第 14.3 节第 2 条）：打开时全屏工具条末尾多一个
-     *  「主持人 ▾」按钮、标题栏多一个皇冠图标，点它弹出修改标题与描述、全员静音、录制与标注权限的菜单。
+     *  经移交成为主持人时的主持人入口（2026-10-07，docs/屏幕共享与录制方案.md 第 14.3 节第 2 条）：打开时浮动工具条上多一个
+     *  「主持人」按钮（皇冠图标），点它弹出修改标题与描述、全员静音、录制与标注权限的菜单。
      *  @param on              是否放主持人入口
      *  @param recordAllowed   房间此刻是否允许他人录制（菜单里的勾选状态）
      *  @param annotateAllowed 房间此刻是否允许他人标注（菜单里的勾选状态）
@@ -487,7 +616,7 @@ public:
     void SetHostBoards(const std::vector<ShareBoardCloseItem>& items);
 
     /**
-     *  「新建白板」按钮的状态（第 23 期）：标题栏图标与全屏工具条按钮的文字随之变化。
+     *  「新建白板」按钮的状态（第 23 期）：浮动工具条上的按钮随之变化。
      *  @param state 取值同 share_viewer_mine_state：0 没有白板，1 已申请，2 白板开着
      */
     void SetBoardState(int state);
@@ -504,7 +633,7 @@ public:
     //笔迹有变化：重画画面
     void AnnotationChanged();
 
-    //刷新录制状态：全屏工具条按钮的文字与标题栏图标随之变化；停止时一并清掉录制时长
+    //刷新录制状态：浮动工具条上的按钮随之变化；停止时一并清掉录制时长
     void SetRecording(bool on);
 
     /**
@@ -515,8 +644,8 @@ public:
     void RefreshRecordBoardFrame();
 
     /**
-     *  录下这场共享的已录时长（2026-10-07，方案第 14.2 节：共享中的录制不再弹出单独的录制条）。录制中写在标题栏与全屏工具条
-     *  的状态行里，如「● 录制 03:21」，圆点每次调用在实心与空心之间交替（控制器每秒调用一次，即每秒闪一下）。
+     *  录下这场共享的已录时长（2026-10-07，方案第 14.2 节：共享中的录制不再弹出单独的录制条）。录制中写在窗口标题与浮动工具条的
+     *  标题条里，如「● 录制 03:21」，圆点每次调用在实心与空心之间交替（控制器每秒调用一次，即每秒闪一下）。
      *  @param text 已录时长文字（FormatRecordDuration 的结果）；为空表示不显示
      */
     void SetRecordDuration(const std::wstring& text);
@@ -529,7 +658,7 @@ public:
     void SetCloudRecordState(bool recording, bool paused);
 
     /**
-     *  设置控制键鼠的状态（第 18 期，控制器决定）：全屏工具条按钮与标题栏图标随之变化；进入控制时开始把画面上的键鼠转给
+     *  设置控制键鼠的状态（第 18 期，控制器决定）：浮动工具条上的按钮随之变化；进入控制时开始把画面上的键鼠转给
      *  控制输入接口，离开控制时补发还按着的鼠标按钮与按键的抬起（发给控制器，由它决定还能不能发出去）。
      *  @param state 取值见 share_viewer_control_state
      */
@@ -545,8 +674,8 @@ public:
     void SetCaptionSink(ShareCaptionSink* sink);
 
     /**
-     *  字幕的状态（语音字幕）：可用时标题栏放一个「字幕」图标，点它弹出「为我的发言生成字幕」「显示字幕」两个勾选项；
-     *  不可用（企业关闭了字幕、字幕组件缺失）时不放图标。只在窗口模式下有入口，全屏时沿用已选的状态。
+     *  字幕的状态（语音字幕）：可用时浮动工具条上有「字幕」按钮，点它弹出「为我的发言生成字幕」「显示字幕」两个勾选项；
+     *  不可用（企业关闭了字幕、字幕组件缺失）时没有这个按钮。窗口模式与全屏都有入口。
      *  @param available 字幕能否使用
      *  @param selfOn    「为我的发言生成字幕」是否打开
      *  @param showOn    「显示字幕」是否打开
@@ -571,9 +700,10 @@ public:
     {
         WM_SHARE_VIEWER_FRAME   = WM_APP + 1,   //收流管线解出了新的一帧
         WM_SHARE_VIEWER_EVENT   = WM_APP + 2,   //收流管线事件：wParam = share_viewer_event，lParam = 附加值
-        WM_SHARE_VIEWER_TOOLBAR = WM_APP + 3,   //全屏工具条按钮：wParam = CRdViewerToolbar::ToolbarCmd
-        WM_SHARE_VIEWER_CAPTION_MENU = WM_APP + 4,   //点了标题栏「字幕」图标：等点击通知处理完再弹菜单（语音字幕）
-        WM_SHARE_VIEWER_HOST_MENU = WM_APP + 5,      //点了「主持人 ▾」按钮或标题栏皇冠图标：等点击通知处理完再弹菜单（2026-10-07）
+        WM_SHARE_VIEWER_TOOLBAR = WM_APP + 3,   //浮动工具条的按钮（2026-10-12 起）：wParam = ViewerBarButtonId
+        //WM_APP + 4、WM_APP + 5 已作废、不得复用：原为点了标题栏「字幕」「主持人」图标后延后弹菜单的消息。
+        //浮动工具条本身用 PostMessage 投递点击（WM_SHARE_VIEWER_TOOLBAR），2026-10-14 删除
+        WM_SHARE_VIEWER_FULLSCREEN = WM_APP + 6,     //双击了画面：等通知处理完再切换全屏（2026-10-12）
     };
 
     BEGIN_MSG_MAP(CShareViewerWindow)
@@ -583,10 +713,11 @@ public:
         MESSAGE_HANDLER(WM_KILLFOCUS, OnKillFocusMsg)
         MESSAGE_HANDLER(WM_SHARE_VIEWER_FRAME, OnFrameMsg)
         MESSAGE_HANDLER(WM_SHARE_VIEWER_EVENT, OnEventMsg)
-        MESSAGE_HANDLER(WM_SHARE_VIEWER_TOOLBAR, OnToolbarCmd)
-        MESSAGE_HANDLER(WM_SHARE_VIEWER_CAPTION_MENU, OnCaptionMenuMsg)
-        MESSAGE_HANDLER(WM_SHARE_VIEWER_HOST_MENU, OnHostMenuMsg)
+        MESSAGE_HANDLER(WM_SHARE_VIEWER_TOOLBAR, OnBarCmd)
+        MESSAGE_HANDLER(WM_SHARE_VIEWER_FULLSCREEN, OnFullscreenMsg)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
+        MESSAGE_HANDLER(WM_MOVE, OnMoveSizeMsg)
+        MESSAGE_HANDLER(WM_SIZE, OnMoveSizeMsg)
         MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDown)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
@@ -612,67 +743,78 @@ private:
     void requestBoard();
     //补发还按着的鼠标按钮与按键的抬起，并清空记录（第 18 期）
     void releaseControlInput();
-    LRESULT OnToolbarCmd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    //浮动工具条的按钮（2026-10-12）：wParam 为 ViewerBarButtonId
+    LRESULT OnBarCmd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    //窗口移动或改变大小：浮动工具条跟着挪到新的画面区域顶部（不拦截，照常交给基类）
+    LRESULT OnMoveSizeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnKeyDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //标题栏麦克风图标被点击；其余通知交给基类
+    //双击画面切换全屏；其余通知交给基类
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //按麦克风状态重新放一个标题栏图标（先移除旧的）
-    void refreshMicIcon();
+    //按当前状态刷新浮动工具条的按钮（2026-10-12 起取代标题栏图标与全屏工具条的文字按钮）
+    void refreshBar();
+    //浮动工具条的按钮清单：麦克风、摄像头、标注、录制、[字幕]、申请控制、共享我的屏幕、新建白板、N 人观看、
+    //[共享说明]、[主持人]、[全屏]、[离开]，方括号内的按条件出现
+    std::vector<ViewerBarButtonSpec> barButtons() const;
+    //浮动工具条的参照矩形（屏幕坐标）：全屏时为所在显示器，窗口模式时为标题栏以下的画面区域
+    RECT barAnchor() const;
     //请控制器切换麦克风
     void requestMicToggle();
     //请控制器切换摄像头
     void requestCameraToggle();
-    //全屏工具条额外按钮的文字（麦克风、摄像头、标注）
-    std::vector<std::wstring> toolbarExtraTexts() const;
     //请控制器切换标注模式
     void requestAnnotateToggle();
     //请控制器开始或停止录制
     void requestRecordToggle();
     //请控制器打开或关闭观看者名单（第 13 期）
     void requestViewersToggle();
-    //标题栏「字幕」图标被点击：在光标处弹出两个勾选项，选中的结果通知控制器（语音字幕）
+    //工具条「字幕」按钮被点击：在按钮下方弹出两个勾选项，选中的结果通知控制器（语音字幕）
     void showCaptionMenu();
-    LRESULT OnCaptionMenuMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //「主持人 ▾」按钮或皇冠图标被点击（2026-10-07）：在按钮下方或光标处弹出主持人菜单，选中的一项通知控制器
+    //工具条「主持人」按钮被点击（2026-10-07）：在按钮下方弹出主持人菜单，选中的一项通知控制器
     void showHostMenu();
-    LRESULT OnHostMenuMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //「主持人 ▾」是全屏工具条上第几个额外按钮：排在最后，「共享说明」出现时往后挪一个
-    size_t hostExtraIndex() const;
+    //WM_SHARE_VIEWER_FULLSCREEN（2026-10-12）：双击画面之后切换全屏；强制模式下不切换
+    LRESULT OnFullscreenMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     //打开或关闭「共享说明」浮窗（第 15 期，本窗口自己处理，不经过控制器）
     void toggleInfoPopup();
     /**
-     *  取浮窗的锚点：全屏时为工具条上第 extraIndex 个额外按钮的屏幕矩形，窗口模式时为标题栏右侧一块。
-     *  @param extraIndex 全屏工具条额外按钮的下标
+     *  取浮窗的锚点：浮动工具条上某个按钮的屏幕矩形；工具条收起、隐藏时为标题栏右侧一块。
+     *  @param buttonId 按钮编号，取值见 ViewerBarButtonId
      *  @param out        [出参] 屏幕坐标
      *  @return 窗口存在时返回 true
      */
-    bool popupAnchor(size_t extraIndex, RECT& out) const;
+    bool popupAnchor(UINT buttonId, RECT& out) const;
     //按 m_forced 调整全屏、工具条按钮、置顶与拉回前台的定时器（第 13 期）
     void applyForced();
     //强制模式下切到别的程序时把观看窗拉回前台（拉回前台定时器调用）
     void pullBackToFront();
 
     void EnsureWindow();
-    //按当前状态建客户区的控件树（画面与摄像头小窗条）并放好标题栏图标；新建窗口与复用等待销毁的窗口时调用
+    //按当前状态建客户区的控件树（画面与摄像头小窗条）并刷新浮动工具条的按钮；新建窗口与复用等待销毁的窗口时调用
     void buildContent();
     void toggleFullscreen();
     void refreshStatus();
     //标题文字：「周会演示 · 12:34   N fps」，没有共享标题时主体为「某某 的屏幕共享」（见 MakeShareViewerCaption），
-    //标题栏与全屏工具条的状态行共用
+    //窗口标题与浮动工具条的标题条共用
     std::wstring titleText() const;
     void requestLeave();
+    //按座位取某块画面的最新一帧：本人那一块取本机预览（SetLocalScreen），其余取收流管线（2026-10-12）
+    bool pullScreenFrame(int seat, std::vector<uint8_t>& bgra, int& width, int& height, uint64_t& serial);
+    //按座位只取帧序号、不拷贝画面，来源与 pullScreenFrame 相同（OnFrameMsg 先比序号，变了才取帧）
+    bool peekScreenSerial(int seat, uint64_t& serial) const;
 
     ShareViewerReceiver   m_receiver;          //收流管线
     CShareVideoCanvas*    m_canvas;            //画面控件（控件树持有，本指针仅引用）
-    CRdViewerToolbar      m_toolbar;           //全屏工具条
+    CViewerFloatBar       m_bar;               //浮动工具条（2026-10-12，窗口模式与全屏共用）
     HWND                  m_notifyWnd;         //通知窗口（不拥有）
     std::string           m_roomId;            //房间号
     std::wstring          m_hostName;          //发起人显示名
     std::vector<uint8_t>  m_scratch;           //取帧缓冲（与画面控件交换）
     uint64_t              m_lastSerial;        //上次取到的帧序号
     std::map<int, uint64_t> m_lastSerials;     //多人共享（第 22 期）：各画面座位上次取到的帧序号
+    int                   m_localSeat;         //本人画面的座位（2026-10-12）：这一块取本机预览；本人没在共享屏幕时为 -1，关窗时复位
+    IShareScreenFeed*     m_localFeed;         //本人那一块的画面来源（不拥有，本人的共享者推流管线）；关窗时置空
+    bool                  m_captureExcluded;   //是否排除在屏幕采集之外（2026-10-12，见 SetCaptureExcluded）；关窗时复位
     std::vector<int>      m_screenSeats;       //多人共享的画面清单（第 22 期）：画面座位，按显示顺序
     std::vector<std::wstring> m_screenNames;   //与 m_screenSeats 一一对应的共享人名字
     std::vector<int>      m_boardSeats;        //画面清单里白板的座位（第 23 期），窗口重建时交给画面控件；关窗时清空
@@ -681,26 +823,18 @@ private:
     bool                  m_hostOnline;        //发起人是否在线
     int                   m_sourceState;       //发起人的共享内容状态
     bool                  m_relayBroken;       //房间中转是否已断开或连不上
+    bool                  m_undecodable;       //有画面判为超出本机系统的解码能力（2026-10-15，Win7 观看大分辨率的共享）
     int                   m_framesSinceTick;   //本秒内画出的帧数（标题栏显示帧率）
     int                   m_lastFps;           //上一秒画出的帧数，打开时为 0
     bool                  m_micOn;             //麦克风是否打开（控制器经 SetMicOn 告知）
     std::wstring          m_speaking;          //说话人提示；为空表示没有人在说话
-    HBITMAP               m_micOnIcon;         //标题栏图标：麦克风已打开（本类生成、析构释放）
-    HBITMAP               m_micOffIcon;        //标题栏图标：麦克风已关闭（同上）
-    int                   m_micIconId;         //标题栏麦克风图标的 id；没有放图标时为 0
     bool                  m_cameraOn;          //摄像头是否打开（控制器经 SetCameraOn 告知）
-    HBITMAP               m_camOnIcon;         //标题栏图标：摄像头已打开（本类生成、析构释放）
-    HBITMAP               m_camOffIcon;        //标题栏图标：摄像头已关闭（同上）
-    int                   m_camIconId;         //标题栏摄像头图标的 id；没有放图标时为 0
     CShareCameraPanel*    m_cameraPanel;       //右侧摄像头小窗条（控件树持有，本指针仅引用）
     IShareCameraFrames*   m_cameraSource;      //摄像头画面的来源（不拥有）
     const ShareAnnotationSession* m_annotSession;   //标注来源（不拥有）
     IShareAnnotationInput* m_annotInput;       //标注模式下鼠标动作的接收方（不拥有）
     bool                  m_annotating;        //是否在标注模式
     bool                  m_annotPointer;      //标注模式下是否处于「鼠标」状态（2026-10-07）：是时画面控件不拦截标注输入
-    HBITMAP               m_penIcon;           //标题栏图标：标注（本类生成、析构释放）
-    HBITMAP               m_penOnIcon;         //标题栏图标：标注模式中（同上）
-    int                   m_penIconId;         //标题栏标注图标的 id；没有放图标时为 0
     bool                  m_recording;         //是否在录制（控制器经 SetRecording 告知）
     std::wstring          m_recordDuration;    //录下这场共享的已录时长文字（2026-10-07）；没在录制时为空
     bool                  m_recordDotOn;       //标题里录制圆点此刻是否实心，每次 SetRecordDuration 交替一次
@@ -710,49 +844,31 @@ private:
     int                   m_recordBoardH;      //白板图的高（像素）
     uint64_t              m_recordBoardSerial; //白板图的序号，每画一次加一（录制线程据此判断是不是新画面）；同样受锁保护
     std::atomic<bool>     m_recordBoardActive; //当前那块是不是白板且白板图可用：是时 GetRecordFrame 取白板图
-    HBITMAP               m_recIcon;           //标题栏图标：录制（本类生成、析构释放）
-    HBITMAP               m_recOnIcon;         //标题栏图标：录制中（同上）
-    int                   m_recIconId;         //标题栏录制图标的 id；没有放图标时为 0
     int                   m_viewerCount;       //观看人数，不含发起人（第 13 期，控制器经 SetViewerCount 告知）
     std::wstring          m_duration;          //共享时长文字（第 13 期）；为空表示还没开始计时
     bool                  m_forced;            //是否强制模式（第 13 期）
     bool                  m_cloudRecording;    //这场共享是否正在云端录制（第 27b 期，含暂停）
     bool                  m_cloudRecordPaused; //云端录制是否暂停中
     bool                  m_pullBackFailed;    //强制模式下上一次拉回前台是否失败（只在由成功变失败时记一次日志）
-    HBITMAP               m_peopleIcon;        //标题栏图标：观看者（第 13 期，本类生成、析构释放）
-    int                   m_peopleIconId;      //标题栏观看者图标的 id；没有放图标时为 0
     std::wstring          m_shareTitle;        //共享标题（第 15 期，控制器经 SetShareInfo 告知）；为空表示发起端没有设标题
     std::wstring          m_shareDesc;         //共享描述（第 15 期）；为空表示没有描述，此时不放「共享说明」入口
-    HBITMAP               m_infoIcon;          //标题栏图标：共享说明（第 15 期，本类生成、析构释放）
-    int                   m_infoIconId;        //标题栏共享说明图标的 id；没有放图标时为 0
     CShareInfoPopup       m_infoPopup;         //「共享说明」浮窗（第 15 期），随观看窗关闭
     int                   m_controlState;      //控制键鼠的状态（第 18 期），取值见 share_viewer_control_state
     IShareControlInput*   m_controlInput;      //控制中键鼠输入的接收方（不拥有）
     ShareControlForwarder m_forwarder;         //控制中把键鼠换算后交给控制输入，记着按下未抬起的按钮与按键
-    HBITMAP               m_ctrlIcons[3];      //标题栏控制图标，按 share_viewer_control_state 取（本类生成、析构释放）
-    int                   m_ctrlIconId;        //标题栏控制图标的 id；没有放图标时为 0
     int                   m_mineState;         //「共享我的屏幕」按钮的状态（第 22 期），取值见 share_viewer_mine_state
-    HBITMAP               m_mineIcons[kShareMineStateCount];   //标题栏「共享我的屏幕」图标，按状态取（本类生成、析构释放）
-    int                   m_mineIconId;        //标题栏「共享我的屏幕」图标的 id；没有放图标时为 0
     int                   m_boardState;        //「新建白板」按钮的状态（第 23 期），取值同 share_viewer_mine_state
-    HBITMAP               m_boardIcons[kShareMineStateCount];   //标题栏「新建白板」图标，按状态取（本类生成、析构释放）
-    int                   m_boardIconId;       //标题栏「新建白板」图标的 id；没有放图标时为 0
-    bool                  m_captionAvailable;  //字幕能否使用（控制器经 SetCaptionState 告知）；不能使用时不放「字幕」图标
-    //标题栏「字幕」菜单与「主持人 ▾」菜单的弹出状态（2026-10-07，两个菜单不会同时弹出，共用一份）：菜单开着时共享结束、
+    bool                  m_captionAvailable;  //字幕能否使用（控制器经 SetCaptionState 告知）；不能使用时工具条上没有「字幕」按钮
+    //工具条「字幕」菜单与「主持人 ▾」菜单的弹出状态（2026-10-07，两个菜单不会同时弹出，共用一份）：菜单开着时共享结束、
     //控制器调 CloseViewer，先关菜单、只隐藏窗口，等 TrackPopup 返回后再销毁；期间又打开观看窗时直接复用这个窗口。
     //原因同屏幕共享控制条（方案 13.1，用例 MMD2、MMD4）
     CShareBarPopupGuard   m_captionPopup;
     bool                  m_captionSelf;       //「为我的发言生成字幕」是否打开
     bool                  m_captionShow;       //「显示字幕」是否打开
-    HBITMAP               m_captionIcon;       //标题栏图标：字幕，没有为本人生成字幕（本类生成、析构释放）
-    HBITMAP               m_captionOnIcon;     //标题栏图标：正在为本人生成字幕（同上）
-    int                   m_captionIconId;     //标题栏「字幕」图标的 id；没有放图标时为 0
     bool                  m_hostTools;         //是否放主持人入口（2026-10-07，经移交成为主持人时由控制器打开）；关窗时复位
     bool                  m_hostRecordAllowed; //主持人菜单里「允许他人录制」的勾选状态
     bool                  m_hostAnnotAllowed;  //主持人菜单里「允许他人标注」的勾选状态
     std::vector<ShareBoardCloseItem> m_hostBoards;   //主持人菜单「关闭白板 ▸」的各项（2026-10-08）；为空时不显示这一项
-    HBITMAP               m_hostIcon;          //标题栏图标：皇冠，主持人入口（本类生成、析构释放）
-    int                   m_hostIconId;        //标题栏皇冠图标的 id；没有放图标时为 0
     balloonmain::ProgramWindowIcons m_programIcons;   //标题栏（与任务栏）的程序图标（2026-10-07）；本类持有，析构时释放
 };
 

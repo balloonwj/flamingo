@@ -96,8 +96,9 @@ bool CTrayMsgTipPopup::EnsureCreated()
     EnsureTrayTipClassRegistered();
 
     // 顶层无边框浮窗：WS_POPUP；WS_EX_TOOLWINDOW 不进任务栏；WS_EX_NOACTIVATE 弹出 /
-    // 点击不抢前台与焦点。owner 传 NULL —— 让 DuiHost::SendNotify 的 GetParent 为空、
-    // 通知自路由回本窗口。初始 0 尺寸、不可见，ShowForEntries 时定位。
+    // 点击不抢前台与焦点。owner 传 NULL：原先这样做是为了让 DuiHost::SendNotify 把通知
+    // 发回本窗口；2026-10-14 起有无所有者，非 WS_CHILD 宿主的控件通知都发回本窗口
+    // （开发约定文档 UI 约定第 11 条）。初始 0 尺寸、不可见，ShowForEntries 时定位。
     HWND hWnd = ::CreateWindowEx(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kTrayTipClassName, NULL,
@@ -300,7 +301,7 @@ LRESULT CTrayMsgTipPopup::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lPar
     return 0;
 }
 
-// ---- 通知处理（自路由：owner 为空，DuiHost::SendNotify 回到本窗口）-------
+// ---- 通知处理（本窗口不是 WS_CHILD 宿主，DuiHost::SendNotify 把控件通知发回本窗口）----
 
 LRESULT CTrayMsgTipPopup::OnChildNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
                                         LPARAM lParam, BOOL& bHandled)

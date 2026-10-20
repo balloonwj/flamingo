@@ -76,8 +76,8 @@ public:
 
     /**
      *  创建并显示对话框，按当前用户已存头像预选。已显示则前置并复位预选。
-     *    owner：owner 窗口句柄（主面板）；内部 Create 传 NULL 让子控件通知自路由
-     *           回本对话框（与改密 / 新建群对话框同处理）。
+     *    owner：owner 窗口句柄（主面板），当前未使用；内部 Create 时 owner 传 NULL
+     *           （历史原因，见 .cpp；与改密 / 新建群对话框相同）。
      *    facetype：当前用户已存的头像类型（见 balloonmain::AvatarKind）。
      *    customfaceUtf8：当前用户已存的 customface（UTF-8）。
      *    nickname：当前用户昵称（自动头像取首字、首字母页默认值、预览回退用）。

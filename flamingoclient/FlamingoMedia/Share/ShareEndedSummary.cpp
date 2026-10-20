@@ -58,11 +58,19 @@ bool ShareParticipantLog::InCall() const
     return m_inCall;
 }
 
+void ShareParticipantLog::SetInitiator(int64_t hostId)
+{
+    if (m_hostId == 0 && hostId != 0)
+        m_hostId = hostId;
+}
+
 void ShareParticipantLog::Observe(const ShareStateNotify& n)
 {
     if (m_roomId.empty() || n.m_roomId != m_roomId)
         return;
-    if (n.m_hostId != 0)
+    //发起人：第一次看到的主持人，之后不再改（2026-10-13）。主持人移交后推送里的 hostId 是接任的人；原来跟着改的话，
+    //发起人既不在最前、也不在其余分享人里（他当主持人时被跳过），结束提示会把他算成参与者
+    if (m_hostId == 0 && n.m_hostId != 0)
         m_hostId = n.m_hostId;
     for (size_t i = 0; i < n.m_members.size(); ++i)
     {

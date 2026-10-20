@@ -47,7 +47,7 @@ public:
      *  在签名文字的屏幕矩形处打开内联编辑。
      *    signRectScreen：签名文字的屏幕矩形（调用方把 host 客户区矩形转屏幕后传入）。
      *    owner：         调用方（主面板）的窗口句柄，仅用于标识来源；本弹层实际以
-     *                    NULL 作 owner 创建，理由见 .cpp 里 Show 处的注释（通知路由）。
+     *                    NULL 作 owner 创建（历史原因，见 .cpp 里 Show 处的注释）。
      *    currentSign：   当前签名文本，带入编辑框并全选。
      */
     void OpenForSignature(const RECT& signRectScreen, HWND owner, LPCTSTR currentSign);

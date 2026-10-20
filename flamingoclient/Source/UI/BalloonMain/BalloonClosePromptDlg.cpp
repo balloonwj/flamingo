@@ -386,12 +386,13 @@ void CBalloonClosePromptDlg::OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlami
         // owner 传主面板：owned 窗口在 z 序上恒在 owner 之上，用户再怎么点主面板都
         // 压不住本框；主面板被销毁时本框也会被系统一并销毁，不会留下孤立窗口。
         //
-        // 曾经这里传的是 NULL，理由写作"让子控件通知自路由回本对话框"。该理由不成立：
-        // balloonui 的 DuiHost::SendNotify 是用 ::GetParent(m_hWnd) 找投递目标、取不到
-        // 才自路由，而 WS_OVERLAPPEDWINDOW 的顶层窗口即便带 owner，::GetParent 仍返回
-        // NULL（owner 须用 ::GetWindow(GW_OWNER) 取），所以通知照旧回到本框自己。
-        // 守卫用例见 Tests/ClosePromptDecisionTests.cpp 的 CPD15；工程内 CBalloonKickoutDlg
-        // 与 CBalloonRegisterWindow 也一直是带 owner 创建、控件通知正常。
+        // 曾经这里传的是 NULL，理由写作"让子控件通知自路由回本对话框"。2026-10-14 起
+        // DuiHost::SendNotify 只把 WS_CHILD 宿主的控件通知发给父窗口，有无所有者，本框控件的
+        // 通知都发回本框（开发约定文档 UI 约定第 11 条），不需要为此去掉所有者。
+        // 在此之前 SendNotify 用 ::GetParent(m_hWnd) 找投递目标，本框带 owner 时通知同样回到
+        // 本框：WS_OVERLAPPEDWINDOW 的顶层窗口即便带 owner，::GetParent 也返回 NULL（owner 须用
+        // ::GetWindow(GW_OWNER) 取），Tests/ClosePromptDecisionTests.cpp 的 CPD15 验证的就是这一
+        // Win32 语义。工程内 CBalloonKickoutDlg 与 CBalloonRegisterWindow 也一直是带 owner 创建。
         // 标题「关闭 <产品名称>」，产品名称取 flamingo.ini 的 [ui] apptitle
         const std::wstring caption = TRF(L"关闭 {0}", g_strAppTitle);
         if (Create(ownerPanel, CWindow::rcDefault, caption.c_str(),

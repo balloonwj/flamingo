@@ -21,6 +21,7 @@
 #include "../../FlamingoMedia/Share/ShareSharerBar.h"
 #include "../Common/I18n/I18n.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // DuiToolTipMgr：查按钮的悬停提示
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 using namespace screenshare;
@@ -115,7 +116,8 @@ TEST_CASE("SSBD1 sharer bar offers screen-as-whiteboard when sharing a window", 
     bar.SetScreenBoard(true, false);
     balloonwjui::DuiButton* b = SsbdButton(bar, CShareSharerBar::kIdScreenBoard);
     REQUIRE(b != NULL);
-    CHECK(b->GetText() == CString(TR(L"屏幕当白板")));
+    //2026-10-14 起是图标按钮，文字改作悬停提示（docs/远程桌面控制权限与观看工具条方案.md 8.2 第 6 条）
+    CHECK(balloonwjui::DuiToolTipMgr::Inst().GetText(b) == CString(TR(L"屏幕当白板")));
     CHECK(SsbdWidth(bar) > plainW);
     RECT client;
     ::GetClientRect(bar.m_hWnd, &client);
@@ -133,11 +135,11 @@ TEST_CASE("SSBD1 sharer bar offers screen-as-whiteboard when sharing a window", 
         CHECK(msg.wParam == static_cast<WPARAM>(share_sharer_screen_board));
     }
     CHECK(got);
-    //进入之后：按钮文字为「退出屏幕白板」
+    //进入之后：悬停提示为「退出屏幕白板」
     bar.SetScreenBoard(true, true);
     b = SsbdButton(bar, CShareSharerBar::kIdScreenBoard);
     REQUIRE(b != NULL);
-    CHECK(b->GetText() == CString(TR(L"退出屏幕白板")));
+    CHECK(balloonwjui::DuiToolTipMgr::Inst().GetText(b) == CString(TR(L"退出屏幕白板")));
     bar.Hide();
     ::DestroyWindow(notify);
 }

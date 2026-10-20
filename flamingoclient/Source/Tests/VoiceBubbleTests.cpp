@@ -75,7 +75,7 @@ namespace {
 //画图测试的画布尺寸（像素）
 const int kVbListWidth = 600;
 const int kVbListHeight = 120;
-//判定「红点的红色」的阈值：红色通道高、绿蓝通道低（红点用 #D9534F）
+//判定「红点的红色」的阈值：红色通道高、绿蓝通道低（红点用 #E5484D，2026-10-14 起与聊天卡片的红色统一）
 const int kVbRedMinR = 180;
 const int kVbRedMaxG = 120;
 const int kVbRedMaxB = 120;

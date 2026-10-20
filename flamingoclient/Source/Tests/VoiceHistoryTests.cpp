@@ -51,7 +51,7 @@ const char* const kVhMd5 = "0123456789abcdef0123456789abcdef";
 //画图测试的画布尺寸（像素）
 const int kVhCanvasW = 320;
 const int kVhCanvasH = 60;
-//判定「红点的红色」的阈值：红色通道高、绿蓝通道低（红点用 #D9534F）
+//判定「红点的红色」的阈值：红色通道高、绿蓝通道低（红点用 #E5484D，2026-10-14 起与聊天卡片的红色统一）
 const int kVhRedMinR = 180;
 const int kVhRedMaxG = 120;
 const int kVhRedMaxB = 120;

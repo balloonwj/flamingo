@@ -3,8 +3,10 @@
  *  上面一个搜索框（按名字过滤），下面是群成员的名字列表（DuiListBox），单击一个名字即选中。
  *  成员名单由发帖窗口经宿主拉取后交进来；还没拉到时列表处显示「正在加载成员…」。
  *
- *  由 balloonui 现成控件组合而成（DuiPopupHost + DuiEdit + DuiListBox，UI 约定第 2 条）。所有者传 NULL 弹出，
- *  控件通知发回本浮层自己（UI 约定第 11 条）；选中时经回调交给发帖窗口，由它投递消息、在通知处理完后再插入。
+ *  由 balloonui 现成控件组合而成（DuiPopupHost + DuiEdit + DuiListBox，UI 约定第 2 条）。所有者传 NULL 弹出
+ *  （原为让控件通知发回本浮层；2026-10-14 起浮层内容的通知总是先到本浮层，由本类的 OnDuiNotify 处理，本类没处理的
+ *  才由 DuiPopupHost 转给所有者，所有者为 NULL 时不转，见 DuiPopupHost::OnPopupNotify 与开发约定文档 UI 约定第 11 条）。
+ *  选中时经回调交给发帖窗口，由它投递消息、在通知处理完后再插入。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（本工程的 stdafx.h）。
  *

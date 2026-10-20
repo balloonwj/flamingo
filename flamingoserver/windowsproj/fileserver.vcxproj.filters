@@ -2,28 +2,37 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="base">
-      <UniqueIdentifier>{b38039ce-2321-48b2-b8a2-065690faf027}</UniqueIdentifier>
+      <UniqueIdentifier>{664150f3-c166-4e9b-f96d-b016a7baa5ab}</UniqueIdentifier>
     </Filter>
-    <Filter Include="chatserversrc">
-      <UniqueIdentifier>{4031b6c2-cc77-463c-9fa5-c12e15f2f813}</UniqueIdentifier>
+    <Filter Include="CloudRecord">
+      <UniqueIdentifier>{321d5dbc-e7c7-2f3c-dfbe-726b1a2cef76}</UniqueIdentifier>
     </Filter>
-    <Filter Include="fileserversrc">
-      <UniqueIdentifier>{c0dc0a70-c533-486c-b6a9-f61f7f2dd741}</UniqueIdentifier>
+    <Filter Include="Entry">
+      <UniqueIdentifier>{6be4fe4a-cfbb-5b3d-7d6a-0cb2a0137246}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FolderRelay">
+      <UniqueIdentifier>{25fce8e4-dbb5-77cb-0dca-a510fa8db130}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="jsoncpp1.9.0">
+      <UniqueIdentifier>{2d3a33f6-13c4-c5d9-6a7e-1e08a0ac4b9c}</UniqueIdentifier>
     </Filter>
     <Filter Include="net">
-      <UniqueIdentifier>{1af03fa3-4535-4021-aae6-ba20c9053e56}</UniqueIdentifier>
+      <UniqueIdentifier>{c05c1835-13bd-3a34-fb3e-46af69ac577b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third-party">
-      <UniqueIdentifier>{a8ab4e16-8f15-41a2-baba-363c151f80c0}</UniqueIdentifier>
+    <Filter Include="Protocol (chatserversrc)">
+      <UniqueIdentifier>{49875d1f-6496-a199-1878-64bb55922879}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third-party\jsoncpp1.9.0">
-      <UniqueIdentifier>{32484d61-5602-4692-8e5d-0ee274929f9a}</UniqueIdentifier>
+    <Filter Include="Transfer">
+      <UniqueIdentifier>{e900f7e1-3516-2322-374a-ad2d8374f93a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third-party\zlib1.3.2">
-      <UniqueIdentifier>{dc41a04c-e898-48b3-8903-3a00c83bff67}</UniqueIdentifier>
+    <Filter Include="Update">
+      <UniqueIdentifier>{36d41066-cf48-6d78-2e00-429fe2b37716}</UniqueIdentifier>
     </Filter>
     <Filter Include="utils">
-      <UniqueIdentifier>{84f3d3f1-22cb-4172-b155-a4a704aef0c0}</UniqueIdentifier>
+      <UniqueIdentifier>{06f6fa9f-57c1-3525-7606-8c45f890cd00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="zlib1.3.2">
+      <UniqueIdentifier>{29f86386-e0b3-0647-f7ef-ac27ae3d99eb}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -34,52 +43,52 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\zutil.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\uncompr.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\trees.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\inftrees.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\inflate.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\inffast.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\infback.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzwrite.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzread.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzlib.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\gzclose.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\deflate.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\crc32.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\compress.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\adler32.c">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.3.2\ZlibUtil.cpp">
-      <Filter>third-party\zlib1.3.2</Filter>
+      <Filter>zlib1.3.2</Filter>
     </ClCompile>
     <ClCompile Include="..\base\AsyncLog.cpp">
       <Filter>base</Filter>
@@ -97,10 +106,10 @@
       <Filter>base</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\FileManager.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\UpdatePackageIndex.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Update</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\FileEnum.cpp">
       <Filter>utils</Filter>
@@ -112,22 +121,31 @@
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\FileServer.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\FileSession.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\UploadPartPolicy.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\CloudRecordScene.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>CloudRecord</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FolderRelayEndpoint.cpp">
+      <Filter>FolderRelay</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\RelayToken.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\CloudRecordCtlMsg.cpp">
+      <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\main.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Entry</Filter>
     </ClCompile>
     <ClCompile Include="..\fileserversrc\TcpSession.cpp">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClCompile>
     <ClCompile Include="..\net\Acceptor.cpp">
       <Filter>net</Filter>
@@ -207,17 +225,14 @@
     <ClCompile Include="..\utils\FileToken.cpp">
       <Filter>utils</Filter>
     </ClCompile>
-    <ClCompile Include="..\utils\CloudRecordCtlMsg.cpp">
-      <Filter>utils</Filter>
-    </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
-      <Filter>third-party\jsoncpp1.9.0</Filter>
+      <Filter>jsoncpp1.9.0</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -249,10 +264,10 @@
       <Filter>base</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\FileManager.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\UpdatePackageIndex.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Update</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\FileEnum.h">
       <Filter>utils</Filter>
@@ -264,22 +279,31 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\FileMsg.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\FileServer.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\FileSession.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\UploadPartPolicy.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\CloudRecordScene.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>CloudRecord</Filter>
     </ClInclude>
     <ClInclude Include="..\fileserversrc\TcpSession.h">
-      <Filter>fileserversrc</Filter>
+      <Filter>Transfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileSessionRemoval.h">
+      <Filter>Transfer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FolderRelayEndpoint.h">
+      <Filter>FolderRelay</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FolderRelayHub.h">
+      <Filter>FolderRelay</Filter>
     </ClInclude>
     <ClInclude Include="..\net\Acceptor.h">
       <Filter>net</Filter>
@@ -372,7 +396,7 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\Protocol.h">
-      <Filter>chatserversrc</Filter>
+      <Filter>Protocol (chatserversrc)</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -420,4 +420,59 @@ void BuildShareBoardCloseItems(const std::vector<ShareWhiteboardInfo>& boards, i
  */
 bool ShareViewerListCanGrantControl(bool roomHost, bool hostStreaming, bool hostScreenStopped, bool publishStreaming);
 
+/**
+ *  画面主人开始被控制时的提示文字（2026-10-12，纯函数）：被控制期间本人可以照常操作，不再「动一下鼠标即可收回」，
+ *  提示改为点屏幕顶部工具条上的「收回控制」。
+ *  @param controllerName 控制者的显示名
+ *  @return 已翻译的提示文字
+ */
+std::wstring MakeShareControlStartNotice(const std::wstring& controllerName);
+
+/**
+ *  画面主人被控制期间，工具条状态文字的开头（2026-10-14，纯函数）：「某某 正在控制你的屏幕」。主持人控制条（CShareControlBar）
+ *  与共享者控制条（CShareSharerBar）共用，调用方在后面接「 · 」与原有的状态文字。
+ *  @param controllerName 控制者的显示名
+ *  @return 已翻译的文字
+ */
+std::wstring MakeShareControlledByText(const std::wstring& controllerName);
+
+/**
+ *  多人共享里一块画面的名字（2026-10-12，docs/远程桌面控制权限与观看工具条方案.md 第 2.2 节 C）：每个人都看到全部画面，
+ *  本人的那一块也在其中，名字后面加「（我）」以便一眼认出。观看窗与主持人的「共享画面」窗口共用。
+ *  @param ownerName    画面主人（白板为建立者）的显示名
+ *  @param isWhiteboard 是不是白板：白板写成「某某 的白板」
+ *  @param isSelf       是不是本人的画面
+ *  @return 已翻译的名字
+ */
+std::wstring MakeShareTileName(const std::wstring& ownerName, bool isWhiteboard, bool isSelf);
+
+//申请控制某块画面时的判定结果（2026-10-12），见 DecideShareControlTarget
+enum share_control_target
+{
+    share_control_target_ok    = 0,   //可以向画面主人申请控制
+    share_control_target_board = 1,   //当前那一块是白板：白板没有电脑可控制，提示「白板不能申请控制」
+    share_control_target_self  = 2,   //当前那一块是本人的画面：只能看、不能控制自己，提示「不能控制自己的屏幕」
+    share_control_target_none  = 3,   //查不到画面主人（清单还没到或那块刚结束）：不发申请，也不提示
+};
+
+/**
+ *  申请控制当前那一块画面之前的判定（2026-10-12，纯函数）：每个人都看到全部画面之后，当前那一块可能是本人自己的画面。
+ *  白板优先于本人判断：本人建的白板也按白板提示。
+ *  @param activeIsBoard 当前那一块是不是白板
+ *  @param ownerId       当前那一块的主人 userid；查不到时传 0
+ *  @param selfId        本人 userid
+ *  @return 取值见 enum share_control_target
+ */
+int DecideShareControlTarget(bool activeIsBoard, int64_t ownerId, int64_t selfId);
+
+/**
+ *  看画面的窗口（观看窗与它的浮动工具条、主持人的「共享画面」窗口）是否要排除在屏幕采集之外（2026-10-12，纯函数）。
+ *  这些窗口里有本人正在共享的那一块，本人共享整块屏幕时它们又会被采进共享画面，出现一层套一层的镜像；
+ *  只在本人正在共享自己的屏幕、而且没有打开「允许截图」时排除。只看不共享的人没有「允许截图」开关，不排除，照常能截图。
+ *  @param sharingOwnScreen 本人是否正在共享自己的屏幕（推流中，且没有停掉自己的画面）
+ *  @param captureAllowed   「允许截图」开关是否打开（IsBarCaptureAllowed）
+ *  @return 要排除返回 true
+ */
+bool ShouldExcludeShareView(bool sharingOwnScreen, bool captureAllowed);
+
 } // namespace screenshare

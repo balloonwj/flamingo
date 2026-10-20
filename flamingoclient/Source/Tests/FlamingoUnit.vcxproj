@@ -702,6 +702,7 @@
     <ClCompile Include="ChatBubbleBackfillRepaintTests.cpp" />
     <ClCompile Include="ChatReadReceiptTests.cpp" />
     <ClCompile Include="ChatPinClickTests.cpp" />
+    <ClCompile Include="ChatCardShotTests.cpp" />
     <ClCompile Include="ChatMessageDeleteTests.cpp" />
     <ClCompile Include="ChatForwardSelectionTests.cpp" />
     <ClCompile Include="MergedRecordRowsTests.cpp" />
@@ -729,6 +730,9 @@
     <ClCompile Include="LogCleanupPolicyTests.cpp" />
     <ClCompile Include="ChatLinkDetectTests.cpp" />
     <ClCompile Include="ChatTimeSeparatorTests.cpp" />
+    <ClCompile Include="ChatTimeSeparatorListTests.cpp" />
+    <ClCompile Include="ChatCardStyleTests.cpp" />
+    <ClCompile Include="ChatBubbleStyleTests.cpp" />
     <ClCompile Include="ChatFileLocationTests.cpp" />
     <ClCompile Include="ChatFileStateModelTests.cpp" />
     <ClCompile Include="ChatFontMapTests.cpp" />
@@ -908,6 +912,7 @@
     <ClCompile Include="AvatarGlyphCenterTests.cpp" />
     <ClCompile Include="SearchCandidateCacheTests.cpp" />
     <ClCompile Include="MainPanelWheelRepaintTests.cpp" />
+    <ClCompile Include="DpiScaledMinSizeTests.cpp" />
     <ClCompile Include="HoverRepaintTests.cpp" />
     <ClCompile Include="PanelDragZoneTests.cpp" />
     <ClCompile Include="PinyinFullTests.cpp" />
@@ -921,6 +926,13 @@
     <ClCompile Include="ProfileFieldsTests.cpp" />
     <ClCompile Include="ProfileTests.cpp" />
     <ClCompile Include="RdInputTests.cpp" />
+    <ClCompile Include="RdControlGateTests.cpp" />
+    <ClCompile Include="RdControlledBarTests.cpp" />
+    <ClCompile Include="RdViewerControlTests.cpp" />
+    <ClCompile Include="RdViewFitTests.cpp" />
+    <ClCompile Include="ShareCaptureRetryTests.cpp" />
+    <ClCompile Include="ShareSourceStatusTests.cpp" />
+    <ClCompile Include="ViewerMouseButtonsTests.cpp" />
     <ClCompile Include="RichEditContextMenuPlacementTests.cpp" />
     <ClCompile Include="RdRelayFramingTests.cpp" />
     <ClCompile Include="FolderManifestTests.cpp" />
@@ -928,6 +940,7 @@
     <ClCompile Include="ChatFolderStateModelTests.cpp" />
     <ClCompile Include="FolderRelayClientTests.cpp" />
     <ClCompile Include="FolderRelayConnectTests.cpp" />
+    <ClCompile Include="TcpConnectWaitTests.cpp" />
     <ClCompile Include="FolderRecvSessionTests.cpp" />
     <ClCompile Include="FolderSendSessionTests.cpp" />
     <ClCompile Include="FolderProtocolClientTests.cpp" />
@@ -1039,6 +1052,9 @@
     <ClCompile Include="..\UI\BalloonChatWnd\ChatDirectFileModel.cpp" />
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFolderStateModel.cpp" />
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFileVisual.cpp" />
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCardModel.cpp" />
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatBubbleGroup.cpp" />
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatCardPaint.cpp" />
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFontMap.cpp" />
     <ClCompile Include="..\UI\BalloonChatWnd\FontSettingPopup.cpp" />
     <ClCompile Include="..\UI\BalloonChatWnd\ChatHeaderInfo.cpp" />
@@ -1235,6 +1251,7 @@
     <ClCompile Include="..\UI\BalloonMain\MainPanelListItem.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelMockData.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelScrollView.cpp" />
+    <ClCompile Include="..\UI\BalloonMain\DpiScaledMinSize.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelSectionHeader.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelStatusMenu.cpp" />
     <ClCompile Include="..\UI\BalloonMain\PresenceBadge.cpp" />
@@ -1362,13 +1379,31 @@
     <ClCompile Include="..\..\FlamingoMedia\GroupCall\GroupCallWindow.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareViewerWindow.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareInfoPopup.cpp" />
-    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdViewerToolbar.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdViewerWindow.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdViewerControl.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdViewFit.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdKeyframePolicy.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdVideoFrames.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdVideoNegotiation.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdVideoFrameQueue.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdPicture.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdVideoPicture.cpp" />
+    <ClCompile Include="RdVideoFramesTests.cpp" />
+    <ClCompile Include="RdVideoNegotiationTests.cpp" />
+    <ClCompile Include="RdVideoPictureTests.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\GdiScreenCapturer.cpp" />
     <ClCompile Include="MediaMenuDestroyTests.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareVideoEncoder.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\DxgiOutputCapturer.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCaptureRetry.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareSourceStatus.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ViewerMouseButtons.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareLatestFrame.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareAspectFit.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\WgcWindowCapturer.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareSources.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareVideoPolicy.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareFrameDrawer.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareSourcePolicy.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareRelayClient.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareProtocolClient.cpp" />
@@ -1411,6 +1446,10 @@
     <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\CaptureFallbackPolicy.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdInputEncoder.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdInputInjector.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdControlGate.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdControlledBar.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdControlledControl.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ViewerFloatBar.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdRelayFraming.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdRelayClient.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\RemoteDesktop\RdTransport.cpp" />
@@ -1485,6 +1524,7 @@
     <ClCompile Include="..\..\FlamingoMedia\Call\MfCameraCapture.cpp" />
     <ClCompile Include="ShareCameraTests.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareCameraPanel.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareCameraWindow.cpp" />
     <ClCompile Include="ShareCameraPanelTests.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotation.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationSession.cpp" />
@@ -1518,6 +1558,7 @@
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareRoomPolicy.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\SharePickerPolicy.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareTopBarCollapse.cpp" />
+    <ClCompile Include="..\..\FlamingoMedia\Share\ShareTopBar.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareHwH264Encoder.cpp" />
     <ClCompile Include="ShareHwEncoderTests.cpp" />
     <ClCompile Include="ShareTopBarCollapseTests.cpp" />
@@ -1572,6 +1613,7 @@
     <ClCompile Include="ShareRecordPenTests.cpp" />
     <ClCompile Include="../../FlamingoMedia/Share/ShareWhiteboard.cpp" />
     <ClCompile Include="ShareMultiTests.cpp" />
+    <ClCompile Include="../../FlamingoMedia/Share/ShareLocalPreview.cpp" />
     <ClCompile Include="../../FlamingoMedia/Share/ShareScreens.cpp" />
     <ClCompile Include="../../FlamingoMedia/Share/ShareScreenDecoders.cpp" />
     <ClCompile Include="ShareCanvasTests.cpp" />
@@ -1588,7 +1630,9 @@
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareAnnotationOverlay.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareEndedSummary.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareEndedToast.cpp" />
-    <ClCompile Include="ShareEndedTests.cpp" />
+    <ClCompile Include="ShareEndedTests.cpp">
+      <AdditionalOptions>/FC %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="..\..\FlamingoMedia\Share\SharePickerDialog.cpp" />
     <ClCompile Include="SharePickerWindowTests.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Record\RecordBar.cpp" />
@@ -1606,6 +1650,11 @@
     <ClCompile Include="MediaToastTests.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareBarButtonArt.cpp" />
     <ClCompile Include="ShareBarArtTests.cpp" />
+    <ClCompile Include="ShareViewerFullscreenTests.cpp" />
+    <ClCompile Include="ShareOwnTileTests.cpp" />
+    <ClCompile Include="ShareControlRevokeTests.cpp" />
+    <ClCompile Include="ViewerFloatBarTests.cpp" />
+    <ClCompile Include="ShareCameraWindowTests.cpp" />
     <ClCompile Include="ToolbarHideTests.cpp" />
     <ClCompile Include="ShareBoardOwnerTests.cpp" />
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareConfirmDialog.cpp" />
@@ -1624,6 +1673,13 @@
       <AdditionalOptions>/FC %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="..\..\FlamingoMedia\Share\ShareSharerBar.cpp" />
+    <ClCompile Include="ShareSharerBarTests.cpp" />
+    <ClCompile Include="ShareQualitySettingTests.cpp">
+      <AdditionalOptions>/FC %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="ShareVideoPerfTests.cpp" />
+    <ClCompile Include="ShareFrameDrawerTests.cpp" />
+    <ClCompile Include="ShareUndecodableTests.cpp" />
     <ClCompile Include="ShareSharerBoardTests.cpp">
       <AdditionalOptions>/FC %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>

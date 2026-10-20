@@ -97,6 +97,12 @@ bool CScreenFrameEncoder::HasFrame() const
     return !m_current.empty();
 }
 
+bool CScreenFrameEncoder::NeedsKeyframe() const
+{
+    //Feed 在尺寸变化（含首次）时把基准置为失效，GetFirstFrame 把当前帧设为基准
+    return HasFrame() && !m_hasBaseline;
+}
+
 int CScreenFrameEncoder::Width() const
 {
     return m_width;

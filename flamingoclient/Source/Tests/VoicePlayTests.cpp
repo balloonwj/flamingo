@@ -234,6 +234,10 @@ public:
         return media_cloud_exit_keep;
     }
 
+    virtual void SetShareQuality(int /*quality*/) override
+    {
+    }
+
     //以下为与语音无关的方法，用例不调用
     virtual uint32_t GetApiVersion() const override
     {

@@ -109,6 +109,12 @@ public:
     void SetRecordSettings(int quality, const CString& folder);
 
     /**
+     *  把屏幕共享清晰度交给模块（模块没加载时什么都不做，加载后登录时会再推送一次）。
+     *  @param quality 0 为 1080p、1 为 2K（默认）、2 为 4K
+     */
+    void SetShareQuality(int quality);
+
+    /**
      *  把鼠标效果的设置交给模块（屏幕共享第 16 期，登录后与保存新设置后）。
      *  @param text 设置文本（ASCII，格式见 FlamingoMedia 的 SerializeMouseEffectSettings）；为空时模块按默认设置
      */

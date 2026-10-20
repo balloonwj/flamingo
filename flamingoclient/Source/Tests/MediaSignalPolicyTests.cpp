@@ -8,6 +8,7 @@
  *  第 15 期：屏幕共享段延到 1734（修改标题与描述的 1733 应答、1734 推送），段后的号改为 1735。
  *  第 18 期：屏幕共享段延到 1736（控制键鼠的 1735 应答、1736 推送），段后的号改为 1737。
  *  第 22 期：屏幕共享段延到 1739（多人共享的 1737 应答、1738 推送、1739 移交主持人的应答），与群通话段（1740 起）相接。
+ *  2026-10-12：远程桌面控制权限的 1718 应答、1719 推送放行（S1），两段之间只剩 1717 不放行。
  *  被测函数是纯函数（net/MediaSignalPolicy.cpp）。框架 Catch2 v3。
  *  balloonwj@qq.com   2026-10-02
  */
@@ -24,19 +25,21 @@ TEST_CASE("MSP-S1 音视频信令白名单", "[mediadll]")
                                  cmd_call_hangup, cmd_call_state_notify, cmd_call_signaling, cmd_call_switch_media,
                                  cmd_call_media_changed_notify,
                                  cmd_rd_invite, cmd_rd_invite_notify, cmd_rd_response, cmd_rd_cancel, cmd_rd_close,
-                                 cmd_rd_state_notify, cmd_rd_relay_info };
+                                 cmd_rd_state_notify, cmd_rd_relay_info, cmd_rd_control, cmd_rd_control_notify };
     for (size_t i = 0; i < sizeof(allowed) / sizeof(allowed[0]); ++i)
     {
         INFO("cmd " << allowed[i]);
         CHECK(net::IsMediaSignalCmd(allowed[i]));
     }
-    //按号段核对：1701~1709 是通话的 9 条，1710~1716 是远程桌面的 7 条
+    //按号段核对：1701~1709 是通话的 9 条，1710~1716 是远程桌面的 7 条，1718、1719 是远程桌面控制权限（2026-10-12）
     CHECK(cmd_call_invite == 1701);
     CHECK(cmd_call_media_changed_notify == 1709);
     CHECK(cmd_rd_invite == 1710);
     CHECK(cmd_rd_relay_info == 1716);
+    CHECK(cmd_rd_control == 1718);
+    CHECK(cmd_rd_control_notify == 1719);
 
-    //段外与尚未开发的命令一律拒绝
+    //段外与尚未开发的命令一律拒绝；1717 是一对一通话卡片推送，由 exe 自己处理，不交给 FlamingoMedia
     CHECK_FALSE(net::IsMediaSignalCmd(1700));
     CHECK_FALSE(net::IsMediaSignalCmd(1717));
     CHECK_FALSE(net::IsMediaSignalCmd(9999));
@@ -79,9 +82,9 @@ TEST_CASE("MSP-S2 屏幕共享信令放行", "[mediadll]")
     CHECK(cmd_cloudrecord_notify == 1757);
     CHECK_FALSE(net::IsMediaSignalCmd(1758));
 
-    //远程桌面与屏幕共享两段之间的空号一律拒绝（屏幕共享段第 22 期起延到 1739，与群通话段相接，段后没有空号）
+    //远程桌面与屏幕共享两段之间只剩 1717 不放行（1718、1719 自 2026-10-12 起归远程桌面控制权限，见 MSP-S1）；
+    //屏幕共享段第 22 期起延到 1739，与群通话段相接，段后没有空号
     CHECK_FALSE(net::IsMediaSignalCmd(1717));
-    CHECK_FALSE(net::IsMediaSignalCmd(1719));
     //房间中转的 1859 / 1860 走 imgserver 连接，不经主连接，同样拒绝
     CHECK_FALSE(net::IsMediaSignalCmd(cmd_screenshare_relay_hello));
     CHECK_FALSE(net::IsMediaSignalCmd(cmd_screenshare_relay_data));

@@ -31,4 +31,30 @@ namespace call {
 void Nv12ToBgra(const uint8_t* nv12, int width, int height, int stride,
                 uint8_t* bgra, int bgraStride);
 
+/**
+ *  Nv12ToBgra 的两种实现，参数与结果都与 Nv12ToBgra 相同（逐字节一致，单元测试 SSVP15，2026-10-15）。
+ *  Nv12ToBgra 在 Release 版用 SSE2 实现（一次 8 个像素）、在 Debug 版用逐像素实现，与 ConvertBgraToNv12 相同的取舍：
+ *  Debug 版不优化向量指令，SSE2 实现反而更慢。这两个函数供单元测试与性能对比直接调用，产品代码请用 Nv12ToBgra。
+ */
+void Nv12ToBgraSse2(const uint8_t* nv12, int width, int height, int stride,
+                    uint8_t* bgra, int bgraStride);
+
+void Nv12ToBgraReference(const uint8_t* nv12, int width, int height, int stride,
+                         uint8_t* bgra, int bgraStride);
+
+/**
+ *  只转换 NV12 画面左上角 width × height 的区域（2026-10-15）：解码器的输出按 16 对齐补齐（如 1080 解成 1088）时，
+ *  直接按载荷里的真实尺寸转换，不再先转整幅再逐行拷贝。结果与先 Nv12ToBgra 整幅再裁剪逐字节相同；
+ *  Release 版用 SSE2 实现、Debug 版用逐像素实现。
+ *  @param nv12        NV12 缓冲起始（Y 平面起点）
+ *  @param planeHeight Y 平面的行数（UV 平面位于 nv12 + stride × planeHeight），须不小于 height
+ *  @param stride      NV12 行跨度（字节）
+ *  @param width       要转换的宽（像素，不大于行跨度）
+ *  @param height      要转换的高（像素）
+ *  @param bgra        输出 BGRA 缓冲（容量 ≥ bgraStride × height）
+ *  @param bgraStride  输出行跨度（字节），须 ≥ width × 4
+ */
+void Nv12ToBgraCropped(const uint8_t* nv12, int planeHeight, int stride, int width, int height,
+                       uint8_t* bgra, int bgraStride);
+
 } // namespace call

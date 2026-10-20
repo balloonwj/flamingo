@@ -41,6 +41,12 @@ public:
     //是否已喂入至少一帧（可产出 BITMAPINFO / 首屏）。
     bool HasFrame() const;
 
+    /**
+     *  是否需要发关键帧（2026-10-14 起由编码器报告）：已喂入画面而对端还没有可用的基准帧——首次喂入、或画面尺寸变了
+     *  之后为 true，GetFirstFrame 之后为 false。推流循环抓帧之后据此当轮补发关键帧，不再先发一个只有帧头的增量帧。
+     */
+    bool NeedsKeyframe() const;
+
     //产出 BITMAPINFO 引擎帧（rd_frame_bitmapinfo + BITMAPINFOHEADER）。无帧时产出空头。
     void GetBitmapInfo(std::vector<BYTE>& out) const;
 

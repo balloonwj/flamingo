@@ -33,7 +33,19 @@ ShareBitrateController::ShareBitrateController(int maxBps, int minBps)
     , m_blockedMs(0)
     , m_keyRequests(0)
     , m_calmWindows(0)
+    , m_feedbackOn(false)
+    , m_maxFeedbackMs(0)
+    , m_lastFeedbackAt(0)
 {
+}
+
+void ShareBitrateController::OnFeedbackDelay(int64_t delayMs, int64_t nowMs)
+{
+    m_feedbackOn = true;
+    m_lastFeedbackAt = nowMs;
+    const int64_t d = (delayMs < 0) ? 0 : delayMs;
+    if (d > m_maxFeedbackMs)
+        m_maxFeedbackMs = d;
 }
 
 void ShareBitrateController::OnFrameSent(int64_t blockedMs)
@@ -62,10 +74,15 @@ bool ShareBitrateController::Evaluate(int64_t nowMs, int& outBps)
     if (elapsed < kShareBitrateWindowMs)
         return false;
 
-    const bool congested = (m_blockedMs * kBlockedRatioDivisor >= elapsed) || (m_keyRequests >= kCongestedKeyRequests);
+    bool congested = (m_blockedMs * kBlockedRatioDivisor >= elapsed) || (m_keyRequests >= kCongestedKeyRequests);
+    //回执延迟（只在启用后算）：周期内最大延迟超过门限，或回执中断太久
+    if (m_feedbackOn &&
+        (m_maxFeedbackMs > kShareFeedbackCongestedDelayMs || nowMs - m_lastFeedbackAt > kShareFeedbackTimeoutMs))
+        congested = true;
     m_windowStartMs = nowMs;
     m_blockedMs = 0;
     m_keyRequests = 0;
+    m_maxFeedbackMs = 0;
 
     int target = m_currentBps;
     if (congested)
@@ -97,6 +114,32 @@ bool ShareBitrateController::Evaluate(int64_t nowMs, int& outBps)
 int ShareBitrateController::CurrentBps() const
 {
     return m_currentBps;
+}
+
+void ShareBitrateController::SetRange(int maxBps, int minBps, int currentBps)
+{
+    if (maxBps <= 0)
+        return;
+    m_maxBps = maxBps;
+    m_minBps = (minBps > maxBps) ? maxBps : minBps;
+    int current = currentBps;
+    if (current > m_maxBps)
+        current = m_maxBps;
+    if (current < m_minBps)
+        current = m_minBps;
+    m_currentBps = current;
+    //新范围下重新攒不拥塞的周期，避免换范围后立刻按新上限的 10% 回升
+    m_calmWindows = 0;
+}
+
+int ShareBitrateController::MaxBps() const
+{
+    return m_maxBps;
+}
+
+int ShareBitrateController::MinBps() const
+{
+    return m_minBps;
 }
 
 } // namespace screenshare

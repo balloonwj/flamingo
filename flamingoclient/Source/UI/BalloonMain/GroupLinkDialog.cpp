@@ -45,7 +45,8 @@ void CGroupLinkDialog::Show(HWND owner, int64_t groupId, const CString& groupNam
     const LPCTSTR title = TR(L"生成加群链接");
     if (!IsWindow())
     {
-        //WS_OVERLAPPEDWINDOW：带 owner 时控件通知仍回到本窗口（开发约定文档 UI 约定 11）
+        //以调用方传入的 owner 为所有者：本窗口恒在它之上。控件通知发回本窗口（开发约定文档 UI 约定第 11 条：
+        //只有 WS_CHILD 宿主的控件通知发给父窗口）
         if (Create(owner, CWindow::rcDefault, title, WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR("group link dialog: Create failed.");

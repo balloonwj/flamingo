@@ -684,7 +684,7 @@ net::RelayCardContent MakeBareCard()
 
 } // anonymous namespace
 
-TEST_CASE("CRB1 卡片气泡的行高随说明行数、接龙条数与有无按钮变化", "[grouprelay]")
+TEST_CASE("CRB1 卡片气泡的行高随说明行数与接龙条数变化，与有无按钮无关", "[grouprelay]")
 {
     const int bare = RelayRowHeight(MakeRelayMessage(MakeBareCard(), kNowMs, false));
 
@@ -707,10 +707,10 @@ TEST_CASE("CRB1 卡片气泡的行高随说明行数、接龙条数与有无按�
     CHECK(RelayRowHeight(MakeRelayMessage(many, kNowMs, false))
           == RelayRowHeight(MakeRelayMessage(exactly, kNowMs, false)));
 
-    //没有按钮（已结束）比有按钮矮
+    //卡片底部一行常驻（左边是类型标签「接龙」，docs/聊天卡片美化方案.md 3.6、第 9 节）：没有按钮（已结束）与有按钮同高
     net::RelayCardContent closed = MakeBareCard();
     closed.m_state = relay_state_closed;
-    CHECK(RelayRowHeight(MakeRelayMessage(closed, kNowMs, false)) < bare);
+    CHECK(RelayRowHeight(MakeRelayMessage(closed, kNowMs, false)) == bare);
 
     //说明：一行比没有高，两行更高，再长也只显示两行
     net::RelayCardContent shortNote = MakeBareCard();

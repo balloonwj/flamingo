@@ -286,8 +286,8 @@ bool CThreadWindow::Open(int64_t postId)
 {
     if (!IsWindow())
     {
-        //没有所有者的独立顶层窗口：子控件的通知路由回本窗口（UI 约定第 11 条）。WS_CLIPCHILDREN：右侧的群成员面板
-        //是 exe 建的子窗口，本窗口重画时不能盖住它
+        //独立的顶层窗口，不设所有者。控件通知发回本窗口（不带 WS_CHILD 的宿主都是如此，开发约定文档 UI 约定第 11 条）。
+        //WS_CLIPCHILDREN：右侧的群成员面板是 exe 建的子窗口，本窗口重画时不能盖住它
         if (Create(NULL, CWindow::rcDefault, L"", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, 0) == NULL)
         {
             LOG_ERROR("thread window: Create failed, groupid=%lld, error=%lu.", static_cast<long long>(m_groupId),
@@ -638,9 +638,8 @@ void CThreadWindow::OnReactorsLoaded(int targetType, int64_t targetId, int react
     const std::wstring text = (rest > 0) ? TRF(kReactorsLineMore, label, names, rest) : TRF(kReactorsLine, label, names);
     POINT cursor = { 0, 0 };
     ::GetCursorPos(&cursor);
-    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
-    tips.Register(m_hoverChip, text.c_str());
-    tips.OnHover(m_hoverChip, cursor);
+    //按名单文字登记并开始计时；同一标签的名单重复到达时，Retarget 先收起正在显示的旧文字再换成新文字
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(m_hoverChip, text.c_str(), cursor);
 }
 
 //======================== 测试用 ========================

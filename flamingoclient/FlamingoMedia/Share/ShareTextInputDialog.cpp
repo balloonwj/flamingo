@@ -239,7 +239,7 @@ void CShareTextInputDialog::openAt(int x, int y, HWND notifyWnd, bool excludeFro
     m_notifyWnd = notifyWnd;
     m_finished = false;
     m_hintLabel = NULL;
-    //不设所有者窗口，按钮通知才会发回本窗口（见头文件说明）
+    //不设所有者窗口（原为让按钮通知发回本窗口；2026-10-14 起有无所有者，控件通知都发回本窗口，见头文件说明）
     const DWORD exStyle = (spec.m_inTaskbar ? WS_EX_APPWINDOW : WS_EX_TOOLWINDOW) | (spec.m_topmost ? WS_EX_TOPMOST : 0);
     if (Create(NULL, CWindow::rcDefault, spec.m_title.c_str(), WS_POPUP, exStyle) == NULL)
     {

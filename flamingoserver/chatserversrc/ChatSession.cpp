@@ -454,6 +454,11 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onRemoteDesktopClose(body, conn);
             break;
 
+        //远程桌面控制权限：控制端申请 / 撤回 / 放弃，被控端授予 / 拒绝 / 收回（2026-10-12）
+        case cmd_rd_control:
+            onRemoteDesktopControl(body, conn);
+            break;
+
         case cmd_call_invite:
             onCallInvite(body, conn);
             break;
@@ -4090,7 +4095,9 @@ void ChatSession::onRemoteDesktopResponse(const std::string& body, const std::sh
         return;
     }
 
-    //接受：给双方各签一枚 relay 令牌（同会话、相反角色），分别下发中转参数
+    //接受：记为已接通（控制状态从未授权开始，控制端只能查看，见 onRemoteDesktopControl），
+    //再给双方各签一枚 relay 令牌（同会话、相反角色），分别下发中转参数
+    mgr.markConnected(sessionId);
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
     std::string tokenController;
     std::string tokenControlled;
@@ -4172,6 +4179,45 @@ void ChatSession::onRemoteDesktopClose(const std::string& body, const std::share
                RemoteDesktopProtocol::buildStateNotify(sessionId, rd_state_disconnected, "disconnected"));
     mgr.removeSession(sessionId);
     LOGI("remote desktop closed, session: %s, by: %d", sessionId.c_str(), m_userinfo.userid);
+}
+
+void ChatSession::onRemoteDesktopControl(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string sessionId;
+    int action = 0;
+    if (!RemoteDesktopProtocol::parseControlRequest(body, sessionId, action))
+    {
+        send(cmd_rd_control, m_seq,
+             RemoteDesktopProtocol::buildControlResponse(error_code_bad_request, "bad request", sessionId, action,
+                                                         rd_control_none));
+        LOGI("remote desktop control: bad request, userid: %d", m_userinfo.userid);
+        return;
+    }
+
+    //校验角色与状态、更新会话表里的控制状态，规则见 RemoteDesktopManager::applyControl
+    RemoteDesktopControlResult result;
+    const int code = Singleton<RemoteDesktopManager>::Instance().applyControl(sessionId, m_userinfo.userid, action,
+                                                                             result);
+    send(cmd_rd_control, m_seq,
+         RemoteDesktopProtocol::buildControlResponse(code, code == error_code_ok ? "ok" : "rejected", sessionId,
+                                                     action, result.m_control));
+    if (code != error_code_ok)
+    {
+        LOGI("remote desktop control rejected, session: %s, userid: %d, action: %d, control: %d, code: %d",
+             sessionId.c_str(), m_userinfo.userid, action, result.m_control, code);
+        return;
+    }
+
+    //状态有变化时转给会话的另一方：申请、撤回、放弃给被控端，授予、拒绝、收回给控制端
+    if (result.m_notifyUser > 0)
+    {
+        sendToUser(static_cast<int32_t>(result.m_notifyUser), cmd_rd_control_notify,
+                   RemoteDesktopProtocol::buildControlNotify(sessionId, action, result.m_control, m_userinfo.userid,
+                                                             m_userinfo.nickname));
+    }
+    LOGI("remote desktop control, session: %s, userid: %d, action: %d, control: %d, notify: %lld", sessionId.c_str(),
+         m_userinfo.userid, action, result.m_control, (long long)result.m_notifyUser);
 }
 
 void ChatSession::onCallInvite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)

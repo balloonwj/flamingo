@@ -39,6 +39,7 @@
 #include "RdControlledStreamer.h"
 #include "RdViewerWindow.h"
 #include "RdControlledBar.h"
+#include "RdControlledControl.h"   // RdControlledControlState：被控端的控制权限状态（2026-10-12）
 #include "RdSessionActions.h"
 #include "RdMessages.h"
 #include "RemoteDesktopProtocolClient.h"
@@ -118,9 +119,13 @@ public:
     //控制端关闭观看窗时结束会话（cmd_rd_close）。
     virtual void CloseSession(const std::string& sessionId) override;
 
+    //控制端在观看窗浮动工具条上申请、撤回申请或结束控制（cmd_rd_control，2026-10-12）。
+    virtual void SendControl(const std::string& sessionId, int action) override;
+
     BEGIN_MSG_MAP(CRdController)
-        MESSAGE_HANDLER(kMsgRdControlledEndByUser, OnControlledEndByUserMsg)   //被控端点受控提示条的「结束控制」
+        MESSAGE_HANDLER(kMsgRdControlledBarCommand, OnControlledBarCommandMsg)   //被控端点了顶部条上的按钮
         MESSAGE_HANDLER(kMsgRdStreamerConnectFailed, OnStreamerConnectFailedMsg)   //被控端推流器建立传输失败
+        MESSAGE_HANDLER(kMsgRdControlRequestAnswer, OnControlRequestAnswerMsg)    //被控端在控制申请提示上做了选择
     END_MSG_MAP()
 
     //远程桌面用途的 P2P 业务方是否已登记（P2P 可用），测试与日志用
@@ -147,11 +152,27 @@ private:
     void HandleRelayInfo(const net::RDRelayInfo& info);
     void HandleStateNotify(const net::RDStateNotify& state);
 
-    //被控端用户点受控提示条的「结束控制」：发 cmd_rd_close，停推流，关提示条
-    LRESULT OnControlledEndByUserMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    //被控端用户点了顶部条上的按钮（wParam 为 RdControlledBarButtonId）：「结束远程桌面」发 cmd_rd_close、停推流、关顶部条
+    LRESULT OnControlledBarCommandMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     //被控端推流器建立传输失败：停推流、关提示条、发 cmd_rd_close 结束会话并提示用户（wParam 为推流器的启动序号）
     LRESULT OnStreamerConnectFailedMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    //被控端在控制申请提示上做了选择（wParam 为 CShareCornerToast::kCmdJoin 同意、kCmdIgnore 拒绝）：发 grant 或 deny
+    LRESULT OnControlRequestAnswerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  执行被控端控制权限的一组动作（2026-10-12），按顺序：改把关开关、发 1718、显示或关闭申请提示、刷新顶部条。
+     *  @param effects RdControlledControlState 算出的动作
+     */
+    void applyControlledEffects(const RdControlledEffects& effects);
+
+    //收到 1718 应答或 1719 推送：本端是被控端的会话交给被控端的控制权限状态，否则交给观看窗（本端是控制端）
+    void HandleControlResponse(const net::RDControlResponse& resp);
+    void HandleControlNotify(const net::RDControlNotify& notify);
+
+    //结束被控端这一侧：关闭把关与申请提示，停推流、关顶部条、清会话 id（不发信令，需要时调用方先发 cmd_rd_close）
+    void endControlledSide();
 
     //向宿主的 P2P 服务登记用途 rd；P2P 不可用或按诊断开关关闭时不登记
     void RegisterP2P();
@@ -167,9 +188,11 @@ private:
     CBalloonRemoteDesktopDlg    m_rdDlg;                  //会话对话框，呼叫中 / 授权两种形态共用一个对象
     RdControlledStreamer        m_rdStreamer;             //被控端推流器：本端为被控端时连中转服务器抓屏并推送
     CRdViewerWindow             m_rdViewer;               //控制端观看窗：本端为控制端时连中转服务器收屏幕帧并显示
-    CRdControlledBar            m_rdControlledBar;        //被控端受控提示条：屏幕顶部置顶显示「正在被控制」并提供结束按钮
+    CRdControlledBar            m_rdControlledBar;        //被控端顶部条：主显示器顶部置顶显示查看 / 控制状态，提供允许、收回控制与结束按钮
     std::wstring                m_rdControlledPeerName;   //控制方昵称，由邀请推送带来，供受控提示条显示；生命周期到本次会话结束
     std::string                 m_rdControlledSessionId;  //本次会话 id，被控方主动结束时要用它发 cmd_rd_close；无会话时为空
+    RdControlledControlState    m_controlFlow;            //被控端的控制权限状态（2026-10-12）：每次接通时从未授权开始
+    screenshare::CShareCornerToast m_controlToast;        //被控端的控制申请提示（右下角「某某 申请控制你的电脑」，2026-10-12）
     balloonp2p::P2PLinkBroker   m_p2pBroker;              //用途 rd 的 P2P 业务方：Init 时登记、Shutdown 时注销；
                                                           //为每次带 p2psessionid 的会话认领链路槽
 };

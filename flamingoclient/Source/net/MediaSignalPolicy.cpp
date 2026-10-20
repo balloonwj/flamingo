@@ -17,8 +17,14 @@ bool IsMediaSignalCmd(uint16_t cmd)
     {
         return true;
     }
-    //屏幕共享 cmd_screenshare_start（1720）~ cmd_screenshare_transfer_host（1739，第 22 期多人共享）。与远程桌面之间的
-    //1717~1719 是空号，不放行；房间中转的 1859 / 1860 走 imgserver 连接，不经主连接，也不在这里
+    //远程桌面控制权限 cmd_rd_control（1718）、cmd_rd_control_notify（1719），2026-10-12 起。夹在中间的 1717 是一对一
+    //通话卡片推送，由 exe 的 CIUSocket 自己处理，不交给 FlamingoMedia
+    if (cmd == cmd_rd_control || cmd == cmd_rd_control_notify)
+    {
+        return true;
+    }
+    //屏幕共享 cmd_screenshare_start（1720）~ cmd_screenshare_transfer_host（1739，第 22 期多人共享）。
+    //房间中转的 1859 / 1860 走 imgserver 连接，不经主连接，也不在这里
     if (cmd >= cmd_screenshare_start && cmd <= cmd_screenshare_transfer_host)
     {
         return true;

@@ -60,6 +60,15 @@ bool ShouldInsertTimeSeparator(long long prevMs, long long curMs, long long thre
         return true;
     }
 
+    //跨天必插（2026-10-14）：前后两条不在同一个本地日期时，间隔再短也插，保证每天的第一条消息前面都有日期。
+    //本地时间转换失败时不按跨天处理，只看间隔
+    struct tm prevTm;
+    struct tm curTm;
+    if (ToLocalTm(prevMs, prevTm) && ToLocalTm(curMs, curTm) && !IsSameDay(prevTm, curTm))
+    {
+        return true;
+    }
+
     //用 >= ：正好满阈值就算"隔了一会儿"，不必多等一毫秒。
     return (curMs - prevMs) >= thresholdMs;
 }

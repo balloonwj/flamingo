@@ -7,6 +7,8 @@
 #include "stdafx.h"
 #include "ChatAnnouncementCard.h"
 
+#include "ChatCardModel.h"   // SetCardChip / ChatCardChipTone：卡片的状态标签
+
 #include <stdlib.h>
 
 #include "../../third-party/jsoncpp-1.9.0/json.h"
@@ -137,6 +139,7 @@ void ApplyAnnouncementCard(ChatMessage& msg, const std::string& contentJson, con
         msg.screenShareStatus = TR(L"公告内容不可用");
         msg.screenShareHasButton = false;
         msg.screenShareButtonEnabled = false;
+        SetCardChip(msg, msg.screenShareStatus, kCardChipEnded);
         return;
     }
 
@@ -159,11 +162,15 @@ void ApplyAnnouncementCard(ChatMessage& msg, const std::string& contentJson, con
         msg.screenShareDesc.Empty();
         msg.screenShareStatus = TR(L"该公告已被删除");
         msg.screenShareButtonEnabled = false;
+        SetCardChip(msg, msg.screenShareStatus, kCardChipEnded);
         return;
     }
     msg.screenShareDesc = info.m_body;
     msg.screenShareStatus = TRF(L"优先级：{0}", AnnouncementSeverityText(info.m_severity)).c_str();
     msg.screenShareButtonEnabled = true;
+    //标签只写优先级本身：重要、紧急为红，通知为灰（docs/聊天卡片美化方案.md 5.2）
+    const bool severe = (info.m_severity == group_announcement_important || info.m_severity == group_announcement_urgent);
+    SetCardChip(msg, AnnouncementSeverityText(info.m_severity), severe ? kCardChipBad : kCardChipEnded);
 }
 
 bool IsAnnouncementCardOpenable(const ChatMessage& msg)

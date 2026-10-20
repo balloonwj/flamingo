@@ -30,6 +30,16 @@ enum SharePickerMode
     share_picker_switch = 1,   //共享过程中切换内容
     share_picker_record = 2,   //独立录屏选择录制范围
     share_picker_start_in_call = 3,   //一对一通话中发起共享：声音经由通话传输，不显示「同时开启麦克风」
+    share_picker_switch_to_start = 4, //多人共享里经主持人同意后第一次选择内容（2026-10-14 起，原为切换模式加 SetSwitchStartsShare）：
+                                      //界面与切换内容相同（没有标题与选项），但本人还没有开始共享，确认按钮为「开始共享」
+};
+
+//选择窗确认按钮的种类（2026-10-13），决定按钮上的文字
+enum SharePickerConfirmKind
+{
+    share_confirm_start  = 0,   //「开始共享」：发起共享、通话中发起，以及多人共享里经主持人同意后第一次选择要共享的内容
+    share_confirm_switch = 1,   //「切换」：本人已经在共享，换一个共享的内容
+    share_confirm_record = 2,   //「开始录制」：独立录屏选择录制范围
 };
 
 //共享密码的位数（与服务端 ScreenShareRules::isValidPassword 一致）
@@ -97,6 +107,20 @@ bool SharePickerOffersInfo(int mode);
  *  @param mode 选择窗用途，取值见 SharePickerMode
  */
 bool SharePickerOffersCaption(int mode);
+
+/**
+ *  选择窗确认按钮的种类（2026-10-13）。多人共享里经主持人同意后的第一次选择（share_picker_switch_to_start）界面与切换内容
+ *  相同，但本人此时还没有开始共享，按钮应为「开始共享」而不是「切换」。
+ *  @param mode 选择窗用途，取值见 SharePickerMode
+ *  @return 取值见 SharePickerConfirmKind：录制为 share_confirm_record，切换内容为 share_confirm_switch，其余为 share_confirm_start
+ */
+int SharePickerConfirmKindFor(int mode);
+
+/**
+ *  选择窗是否按切换内容的样子显示（没有标题、描述与各项勾选）：切换内容，以及多人共享里经主持人同意后的第一次选择。
+ *  @param mode 选择窗用途，取值见 SharePickerMode
+ */
+bool SharePickerIsSwitchLayout(int mode);
 
 /**
  *  「开始共享」按钮能否点。

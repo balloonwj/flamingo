@@ -6,6 +6,9 @@
  *  sessionid 贯穿全程：邀请时建会话(createSession)，被控端应答 / 取消 / 结束时
  *  按 sessionid 查会话以定位对端、校验参与方、签发 relay 令牌，会话结束时清除。
  *
+ *  被控端接受后会话记为已接通，控制状态从「未授权」开始：控制端只能查看，经 cmd_rd_control（1718）
+ *  申请、被控端同意（或被控端直接授予）之后才能控制，规则见 applyControl（2026-10-12）。
+ *
  *  授权通过后给控制端、被控端各签一枚 RelayToken（同 sessionid、相反 role、
  *  uid 与 peeruid 对调），双方据此连 imgserver 中转通道、按字节双向转发屏幕帧
  *  与控制命令（中转层见 [RelaySession]，本类不参与中转数据）。
@@ -30,13 +33,27 @@ struct RemoteDesktopSessionInfo
     std::string sessionid;     //会话 id（UUID，不含令牌分隔符 '.' / '|'）
     int64_t     controllerId;  //控制端 userid（发起邀请、观看并控制对方的一方）
     int64_t     controlledId;  //被控端 userid（被观看与控制的一方）
-    int         state;         //会话状态，取值见 enum rd_state
     int64_t     createTime;    //会话创建时间，Unix 毫秒（供超时清理）
     int64_t     controllerOfflineAt;   //控制端最后一个登录连接断开的时刻，Unix 毫秒；0 表示在线（掉线宽限用）
     int64_t     controlledOfflineAt;   //被控端最后一个登录连接断开的时刻，Unix 毫秒；0 表示在线（掉线宽限用）
+    bool        connected;     //被控端是否已接受邀请（markConnected 置位）；接受之前不允许任何控制动作
+    int         controlState;  //控制状态，取值见 enum rd_control_state；建会话与接通时都是未授权
 
     RemoteDesktopSessionInfo()
-        : controllerId(0), controlledId(0), state(0), createTime(0), controllerOfflineAt(0), controlledOfflineAt(0)
+        : controllerId(0), controlledId(0), createTime(0), controllerOfflineAt(0), controlledOfflineAt(0),
+          connected(false), controlState(0)
+    {
+    }
+};
+
+//一次控制动作（RemoteDesktopManager::applyControl）的结果，供 ChatSession 回应答与推 1719
+struct RemoteDesktopControlResult
+{
+    int     m_control;      //动作之后的控制状态，取值见 enum rd_control_state；动作被拒时为当前状态
+    int64_t m_notifyUser;   //要推 1719 的人（会话的另一方）；0 表示状态没有变化、不必通知
+
+    RemoteDesktopControlResult()
+        : m_control(0), m_notifyUser(0)
     {
     }
 };
@@ -68,7 +85,7 @@ public:
     int getRelayPort() const;
 
     /**
-     *  新建一次远程桌面会话：生成 sessionid、以 rd_state_ringing 登记会话表。
+     *  新建一次远程桌面会话：生成 sessionid、登记会话表（未接通，控制状态为未授权）。
      *  @param controllerId 控制端 userid（发起方）
      *  @param controlledId 被控端 userid（被叫方）
      *  @param now          当前时间，Unix 毫秒（作 createTime）
@@ -85,19 +102,36 @@ public:
     bool getSession(const std::string& sessionid, RemoteDesktopSessionInfo& out);
 
     /**
-     *  更新会话状态。
-     *  @param sessionid 会话 id
-     *  @param state     新状态，取值见 enum rd_state
-     *  @return 会话存在并更新返回 true，否则 false
-     */
-    bool setState(const std::string& sessionid, int state);
-
-    /**
      *  删除会话（拒绝 / 取消 / 结束时调用）。
      *  @param sessionid 会话 id
      *  @return 删除了一条返回 true；本无该会话返回 false
      */
     bool removeSession(const std::string& sessionid);
+
+    /**
+     *  被控端接受了邀请：把会话记为已接通，控制状态置为未授权（只能查看）。
+     *  @param sessionid 会话 id
+     *  @return 会话存在返回 true，否则 false
+     */
+    bool markConnected(const std::string& sessionid);
+
+    /**
+     *  执行一次控制动作（cmd_rd_control=1718）并更新会话的控制状态。规则：
+     *    - 申请、撤回、放弃只能由控制端做；授予、拒绝、收回只能由被控端做；
+     *    - 会话接通之前一律不允许；
+     *    - 申请：未授权 → 申请中，通知被控端；申请中或已授权时再申请按成功处理、不通知；
+     *    - 撤回：申请中 → 未授权，通知被控端；
+     *    - 授予：未授权或申请中 → 已授权，通知控制端；已授权时再授予按成功处理、不通知；
+     *    - 拒绝：申请中 → 未授权，通知控制端；
+     *    - 收回（被控端）、放弃（控制端）：已授权 → 未授权，通知对方。
+     *  @param sessionid 会话 id
+     *  @param actorId   做动作的人
+     *  @param action    控制动作，见 enum rd_control_action
+     *  @param out       [出参] 动作之后的控制状态与要通知的人
+     *  @return error_code_ok 成功；error_code_rd_not_exist 会话不存在；error_code_rd_not_participant 不是参与方或角色不对；
+     *          error_code_rd_control_state 当前状态不允许；error_code_bad_request 动作取值越界
+     */
+    int applyControl(const std::string& sessionid, int64_t actorId, int action, RemoteDesktopControlResult& out);
 
     /**
      *  给会话的某一角色签发 relay 令牌。role==RelayToken::role_controller 时

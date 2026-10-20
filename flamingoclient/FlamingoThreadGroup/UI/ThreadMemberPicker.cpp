@@ -89,7 +89,8 @@ void CThreadMemberPicker::OpenAt(const RECT& anchorScreen)
     if (m_search != NULL)
         m_search->SetTextNoNotify(L"");
     ApplyFilter();
-    //所有者传 NULL：控件通知发回本浮层（UI 约定第 11 条）
+    //所有者传 NULL（原为让控件通知发回本浮层；2026-10-14 起浮层内容的通知总是先到本浮层，本类没处理的才转给所有者，
+    //所有者为 NULL 时不转，见 DuiPopupHost::OnPopupNotify 与开发约定文档 UI 约定第 11 条）
     Show(anchorScreen, NULL);
     if (m_search != NULL)
         m_search->SetFocus();

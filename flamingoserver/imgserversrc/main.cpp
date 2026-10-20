@@ -204,7 +204,8 @@ int main(int argc, char* argv[])
     //imgserver 以 file_server_kind_image 启动，只放行头像 / 图片消息场景。
     //最后一个参数是文件夹传输中转令牌的密钥，这里<u>刻意传空串</u>：单聊文件夹传输由
     //fileserver 承载（见 docs/单聊文件夹传输方案.md 第 2 节的表），imgserver 的图片端口
-    //不提供这项能力，空密钥使 cmd_folder_relay_hello 一律被拒并记日志。注意本行与下面
+    //不提供这项能力，空密钥使 cmd_folder_relay_hello 一律被拒（下面记一条 INFO，说明这是
+    //设计如此，不是漏配）。注意本行与下面
     //RelayServer 用的 relaytokenkey 是同一把密钥的两处用途，但走的是两个不同的监听端口：
     //那边是远程桌面 / 音视频的中转端口，与这里的图片端口互不相干
     //图片端口的网络 I/O 工作线程数。可选配置项：缺失或取值非法时回落到
@@ -214,6 +215,10 @@ int main(int argc, char* argv[])
     int ioThreadCount = serverconfig::ReadIoThreadCountConfig(
                             config, "iothreadnum", FileServer::kDefaultIoThreadCount);
 
+    LOGI("folder relay is not provided by imgserver by design (it is served by fileserver), "
+         "cmd_folder_relay_hello on this port will be rejected. this is normal; "
+         "relaytokenkey in %s is used only by the relay port (relaylistenport).",
+         config.getFilePath().c_str());
     Singleton<FileServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop,
         imgcachedir.c_str(), filetokenkey.c_str(), file_server_kind_image, "", ioThreadCount);
 
@@ -228,7 +233,7 @@ int main(int argc, char* argv[])
     int relayIoThreadCount = serverconfig::ReadIoThreadCountConfig(
                                  config, "relayiothreadnum", RelayServer::kDefaultIoThreadCount);
 
-    //屏幕共享每个观看者的积压上限，单位字节；缺失或不大于 0 时用默认值 1 MiB（见 RoomForwardPolicy.h）
+    //屏幕共享每个观看者的积压上限，单位字节；缺失或不大于 0 时用默认值 4 MiB（见 RoomForwardPolicy.h）
     const char* viewerBufferBytesStr = config.getConfigName("screenshareviewerbufferbytes");
     const long long viewerBufferBytes = (viewerBufferBytesStr != NULL) ? atoll(viewerBufferBytesStr) : 0;
     Singleton<RelayServer>::Instance().setScreenShareViewerBufferBytes(

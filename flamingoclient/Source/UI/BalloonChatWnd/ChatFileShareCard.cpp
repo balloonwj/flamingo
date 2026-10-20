@@ -22,6 +22,7 @@
 #include <atlstr.h>
 
 #include "ChatFileShareCard.h"
+#include "ChatCardModel.h"                     // SetCardChip / ChatCardChipTone：卡片的状态标签
 #include "../../net/MessageProtocolClient.h"   // parseShareCardContent
 #include "../../net/Protocol.h"                // share_kind / share_state / 原因
 #include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
@@ -170,6 +171,7 @@ void ApplyFileShareCard(ChatMessage& msg, const std::string& contentJson, const 
         msg.shareState = 0;
         msg.shareStatus = ShareCardStatusText(live.m_moduleReady, false, 0, 0);
         msg.text = TR(kShareTypeText);
+        SetCardChip(msg, msg.shareStatus, kCardChipEnded);
         return;
     }
 
@@ -204,6 +206,13 @@ void ApplyFileShareState(ChatMessage& msg, bool moduleReady, int state, int reas
         return;
     msg.shareState = state;
     msg.shareStatus = ShareCardStatusText(moduleReady, state != 0, state, reason);
+    //状态标签就是这句状态文字：可用为绿，暂不可用为橙，已失效、还不知道、本客户端没有加载模块为灰（docs/聊天卡片美化方案.md 5.2）
+    int tone = kCardChipEnded;
+    if (moduleReady && state == share_state_available)
+        tone = kCardChipLive;
+    else if (moduleReady && state == share_state_unavailable)
+        tone = kCardChipPending;
+    SetCardChip(msg, msg.shareStatus, tone);
     //按钮：本客户端加载了模块、共享没有失效、本企业的功能没有关闭才可点；状态还不知道时也允许点，浏览窗口里会显示实际情况
     const bool featureOff = (state == share_state_unavailable && reason == share_unavailable_feature_disabled);
     msg.shareButtonEnabled = moduleReady && msg.shareButton != kShareCardButtonNone && msg.shareId > 0

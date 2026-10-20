@@ -58,7 +58,12 @@ void RelayServer::onConnected(std::shared_ptr<TcpConnection> conn)
 {
     if (conn->connected())
     {
-        LOGI("relay client connected: %s", conn->peerAddress().toIpPort().c_str());
+        //关闭 Nagle 算法：中转转发的键鼠帧、指针帧都是几十字节的小包，开着 Nagle 时，上一个包被对端确认之前
+        //后续小包会被攒着不发，再遇上接收端的延迟确认（Windows 默认最长 200 毫秒），键鼠操作就会成批晚到。
+        //客户端一侧建连时已关闭（Source/net/TcpConnectWait.h 的 ConnectBlockingSocket），这里补上服务端到客户端的方向
+        conn->setTcpNoDelay(true);
+        LOGI("relay client connected: %s, nodelay=%d", conn->peerAddress().toIpPort().c_str(),
+             conn->isTcpNoDelay() ? 1 : 0);
         std::shared_ptr<RelaySession> spSession(new RelaySession(conn, m_tokenKey, &m_hub, &m_roomRelay,
                                                                  m_cloudRecordOn ? &m_cloudControl : NULL));
         conn->setMessageCallback(std::bind(&RelaySession::onRead, spSession.get(),

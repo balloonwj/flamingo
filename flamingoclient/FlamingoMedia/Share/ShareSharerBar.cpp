@@ -9,33 +9,29 @@
 #include <memory>
 #include "ShareMessages.h"
 #include "ShareSources.h"
+#include "ShareBarButtonArt.h"   // ShareBarLookFor / ShareBarTooltipFor、kShareRevokeBtnMinW、kShareTopBar*：与主持人控制条共用
+#include "ShareRoomPolicy.h"     // MakeShareControlledByText：被控制时的状态文字
 #include "../../Source/Common/Log/IULog.h"
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"   //「更多」菜单（2026-10-08）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../Source/Common/I18n/I18n.h"         // TR：界面文字的多语言查找
-#include "../../Source/Common/I18n/I18nLayout.h"   // DefaultButtonWidthForText：译文较长时加宽按钮
+#include "../../Source/Common/I18n/I18nLayout.h"   // DefaultButtonWidthForText、MeasureUiTextWidth：按文字宽度定按钮与状态文字的宽
 
 namespace screenshare {
 
 namespace {
 
-//共享者控制条：整条宽、标题栏高、内容横条高、按钮宽、按钮上下留白、横条内边距与间距、距工作区顶部的距离
-const int kBarW = 300;
-const int kBarTitleH = 18;
-const int kBarContentH = 44;
-const int kStopW = 84;
-//「标注」按钮的宽（第 22 期 22e）
-const int kAnnotW = 84;
-//「屏幕当白板 / 退出屏幕白板」按钮的最小宽（2026-10-07），译文较长时按两种文字中较宽的一个加宽
-const int kScreenBoardW = 104;
-//「更多」按钮的最小宽（2026-10-08），译文较长时加宽
-const int kMoreW = 56;
-const int kBtnVMargin = 8;
-const int kRowPad = 12;
-const int kRowGap = 8;
-const int kTopMargin = 8;
+//状态文字最少占的宽（像素）；实际按文字测量（被控制时含控制者的名字，简体中文界面也要量），
+//整条超出工作区时由基类收窄，状态文字以省略号结尾
+const int kSharerTipMinW = 120;
+//状态文字量出的宽度之外多留的像素，避免取整误差让 DT_END_ELLIPSIS 把最后一个字换成省略号
+const int kSharerTipSlackPx = 4;
+//「标注」「更多」「停止共享」三个总有的图标按钮；「屏幕当白板」提供时再加一个
+const int kSharerFixedIconButtons = 3;
+//「收回控制」按钮上下留白（像素）：与主持人控制条的文字按钮一致，比图标按钮的留白小一点
+const int kSharerRevokeVMargin = 8;
 //退出选择框：宽、标题栏高、内边距、行间距、说明文字高、按钮高、底部两个按钮的宽
 const int kDlgW = 380;
 const int kDlgTitleH = 36;
@@ -44,43 +40,8 @@ const int kDlgGap = 8;
 const int kDlgTextH = 44;
 const int kDlgBtnH = 32;
 const int kDlgBottomBtnW = 96;
-//底色与文字色（与控制条一致）、红点颜色
-const COLORREF kBarBgColor = RGB(44, 48, 56);
-const COLORREF kBarTextColor = RGB(255, 255, 255);
+//共享者控制条状态点的颜色：蓝色，与主持人控制条的绿色状态点区分
 const COLORREF kDotColor = RGB(30, 136, 229);
-//红点所占的宽
-const int kDotW = 14;
-//纯色背景图的边长、32 位 DIB 的位深与每像素字节数、不透明
-const int kSolidBitmapSize = 8;
-const WORD kBitsPerPixel32 = 32;
-const int kBytesPerPixel = 4;
-const BYTE kOpaque = 255;
-
-//纯色位图（不透明）
-HBITMAP makeSolidBitmap(COLORREF c, int side)
-{
-    BITMAPINFO bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = side;
-    bi.bmiHeader.biHeight = -side;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = kBitsPerPixel32;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = NULL;
-    HBITMAP bmp = ::CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-    if (bmp == NULL)
-        return NULL;
-    BYTE* p = static_cast<BYTE*>(bits);
-    for (int i = 0; i < side * side; ++i)
-    {
-        p[i * kBytesPerPixel + 0] = GetBValue(c);
-        p[i * kBytesPerPixel + 1] = GetGValue(c);
-        p[i * kBytesPerPixel + 2] = GetRValue(c);
-        p[i * kBytesPerPixel + 3] = kOpaque;
-    }
-    return bmp;
-}
 
 //某块显示器（或主显示器）的工作区
 RECT workAreaOf(const RECT& anchor)
@@ -113,13 +74,16 @@ std::unique_ptr<balloonwjui::DuiButton> makeButton(const wchar_t* text, UINT id,
 //==================== CShareSharerBar ====================
 
 CShareSharerBar::CShareSharerBar()
-    : m_notifyWnd(NULL)
-    , m_bgBitmap(NULL)
+    : CShareTopBar(kIdHide, kIdToggle)
+    , m_notifyWnd(NULL)
     , m_annotButton(NULL)
+    , m_screenBoardButton(NULL)
     , m_moreButton(NULL)
+    , m_stopButton(NULL)
     , m_annotating(false)
     , m_screenBoardAvailable(false)
     , m_screenBoardActive(false)
+    , m_tipLabel(NULL)
 {
     memset(&m_anchor, 0, sizeof(m_anchor));
 }
@@ -127,60 +91,81 @@ CShareSharerBar::CShareSharerBar()
 CShareSharerBar::~CShareSharerBar()
 {
     Hide();
-    if (m_bgBitmap != NULL)
-        ::DeleteObject(m_bgBitmap);
+    //「更多」菜单期间推迟的销毁还没执行（对象先于那条消息析构）：在这里销毁，基类析构时窗口已不再引用背景图
+    if (IsWindow())
+        DestroyWindow();
 }
 
 void CShareSharerBar::Show(const RECT& anchor, HWND notifyWnd)
 {
     m_notifyWnd = notifyWnd;
-    if (!IsWindow())
+    m_anchor = anchor;
+    if (IsWindow())
     {
+        //「更多」菜单弹出期间被隐藏、等待销毁的窗口：直接复用并取消推迟的销毁（否则 m_hWnd 不为空，再 Create
+        //会触发 atlwin.h 的断言），内容按当前状态重建
+        if (m_popup.TakePendingDestroy())
+        {
+            LOG_INFO("screenshare: sharer bar reused while its menu is closing.");
+            BuildUi();
+        }
+    }
+    else
+    {
+        //没有所有者的置顶小窗：不抢焦点、不进任务栏，每次摆放都放回最上层
         const DWORD exStyle = WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-        if (Create(NULL, CWindow::rcDefault, TR(L"屏幕共享"), WS_POPUP, exStyle) == NULL)
+        if (!CreateTopBar(NULL, TR(L"屏幕共享"), WS_POPUP, exStyle))
         {
             LOG_ERROR("screenshare: create sharer bar failed.");
             return;
         }
-        SetTitle(TR(L"屏幕共享"));
-        SetTitleBarHeight(kBarTitleH);
-        SetButtons(false, false, false);
-        SetResizable(false);
-        SetBorderPx(0);
-        if (m_bgBitmap == NULL)
-            m_bgBitmap = makeSolidBitmap(kBarBgColor, kSolidBitmapSize);
-        if (m_bgBitmap != NULL)
-        {
-            RECT insets = { 0, 0, 0, 0 };
-            SetBgImage(m_bgBitmap, insets);
-            SetTitleBarTransparent(true);
-            SetTitleTextColor(kBarTextColor);
-        }
+        SetTopBarTopmost(true);
+        //新建的条从一直展开开始；之后重复调用 Show 只重新摆位，不改收起状态
+        ResetCollapse();
         BuildUi();
         //控制条浮在被共享的内容上，默认不能被采进共享画面；「允许截图」打开时（2026-10-08）允许
         ApplyBarCaptureState(m_hWnd);
     }
-    m_anchor = anchor;
-    const RECT work = workAreaOf(anchor);
-    int w = i18n::DefaultButtonWidthForText(TR(L"你正在共享屏幕"), kBarW - kStopW) + kStopW + kAnnotW + kRowGap;
-    //「更多」（2026-10-08）
-    w += i18n::DefaultButtonWidthForText(TR(L"更多"), kMoreW) + kRowGap;
-    //「屏幕当白板」（2026-10-07）：提供时整条加宽
-    if (m_screenBoardAvailable)
-        w += screenBoardWidth() + kRowGap;
-    const int x = work.left + ((work.right - work.left) - w) / 2;
-    ::SetWindowPos(m_hWnd, HWND_TOPMOST, x, work.top + kTopMargin, w, kBarTitleH + kBarContentH,
-                   SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    placeAtAnchor();
+}
+
+void CShareSharerBar::placeAtAnchor()
+{
+    HMONITOR mon = ::MonitorFromRect(&m_anchor, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi;
+    memset(&mi, 0, sizeof(mi));
+    mi.cbSize = sizeof(mi);
+    RECT work;
+    RECT monitor;
+    if (::GetMonitorInfo(mon, &mi))
+    {
+        work = mi.rcWork;
+        monitor = mi.rcMonitor;
+    }
+    else
+    {
+        ::SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0);
+        monitor = work;
+    }
+    //摆在工作区顶部居中，隐藏后的感应区取整块显示器的顶边（与主持人控制条一致）
+    PlaceTopBar(work, monitor);
 }
 
 void CShareSharerBar::Hide()
 {
     m_annotButton = NULL;
+    m_screenBoardButton = NULL;
     m_moreButton = NULL;
+    m_stopButton = NULL;
+    m_tipLabel = NULL;
     m_annotating = false;
+    //停止共享之后不会再被控制；下一次共享从没人控制开始
+    m_controllerName.clear();
     //下一次共享由控制器按共享内容重新设置
     m_screenBoardAvailable = false;
     m_screenBoardActive = false;
+    //停掉收起检查、回到一直展开（基类）
+    StopTopBar();
     if (!IsWindow())
         return;
     //「更多」菜单正在弹出：菜单的嵌套消息循环还在本窗口的消息处理里，此时销毁窗口，ATL 要等那条消息返回才清 m_hWnd，
@@ -196,22 +181,31 @@ void CShareSharerBar::Hide()
     DestroyWindow();
 }
 
+bool CShareSharerBar::GetMoreMenuAnchor(POINT& pt) const
+{
+    if (m_moreButton == NULL || !IsWindow())
+        return false;
+    const RECT& rc = m_moreButton->GetRect();
+    POINT corner = { rc.left, rc.bottom };
+    ::ClientToScreen(m_hWnd, &corner);
+    pt = corner;
+    return true;
+}
+
 LRESULT CShareSharerBar::OnShowMoreMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
     (void)uMsg;
     (void)wParam;
     (void)lParam;
     (void)bHandled;
-    //已经有菜单开着、窗口已隐藏（等待销毁或已停止共享）：不再弹
-    if (m_popup.IsActive() || m_popup.IsPendingDestroy() || !IsWindowVisible() || m_moreButton == NULL)
+    //已经有菜单开着、窗口已隐藏（等待销毁、已停止共享或已隐藏工具条）：不再弹
+    POINT pt = { 0, 0 };
+    if (m_popup.IsActive() || m_popup.IsPendingDestroy() || !IsWindowVisible() || !GetMoreMenuAnchor(pt))
         return 0;
     balloonwjui::DuiMenu menu;
     //允许截图：本机的工具条与控制条能否被截图，只对这一场共享有效
     menu.AppendChecked(kMenuAllowCapture, TR(L"允许截图"), IsBarCaptureAllowed());
     //菜单弹在「更多」按钮下方
-    const RECT& rc = m_moreButton->GetRect();
-    POINT pt = { rc.left, rc.bottom };
-    ClientToScreen(&pt);
     const std::vector<std::unique_ptr<balloonwjui::DuiMenu> > noSubMenus;
     m_popup.BeginMenu(&menu, noSubMenus);
     const UINT chosen = menu.TrackPopup(pt.x, pt.y, m_hWnd);
@@ -230,75 +224,137 @@ LRESULT CShareSharerBar::OnShowMoreMenu(UINT uMsg, WPARAM wParam, LPARAM lParam,
     return 0;
 }
 
-int CShareSharerBar::screenBoardWidth() const
-{
-    return i18n::DefaultButtonWidthForTexts(TR(L"屏幕当白板"), TR(L"退出屏幕白板"), kScreenBoardW);
-}
-
 void CShareSharerBar::SetScreenBoard(bool available, bool active)
 {
     if (available == m_screenBoardAvailable && active == m_screenBoardActive)
         return;
+    const bool buttonChanged = (available != m_screenBoardAvailable);
     m_screenBoardAvailable = available;
     m_screenBoardActive = active;
-    //按钮出现、消失或文字变了：重建内容并按新的宽度重新摆位（命令经 PostMessage 交给控制器，这里不在按钮的点击通知里）
+    if (!IsWindow())
+        return;
+    //按钮出现或消失：重建内容并按新的宽度重新摆位（命令经 PostMessage 交给控制器，这里不在按钮的点击通知里）；
+    //只是进入或退出屏幕白板：换外观与悬停提示即可
+    if (buttonChanged)
+    {
+        BuildUi();
+        placeAtAnchor();
+    }
+    else
+    {
+        refreshLooks();
+    }
+}
+
+void CShareSharerBar::SetControlledBy(const std::wstring& controllerName)
+{
+    if (controllerName == m_controllerName)
+        return;
+    m_controllerName = controllerName;
+    LOG_INFO("screenshare: sharer bar controlled state %d.", m_controllerName.empty() ? 0 : 1);
+    //按钮出现或消失：重建内容并按新的宽度重新摆位（由控制器在处理 1725 或收回命令时调用，不在按钮的点击通知里）
     if (IsWindow())
     {
         BuildUi();
-        Show(m_anchor, m_notifyWnd);
+        placeAtAnchor();
     }
+}
+
+std::wstring CShareSharerBar::TipTextForTest() const
+{
+    if (m_tipLabel == NULL)
+        return std::wstring();
+    return std::wstring(m_tipLabel->GetText().GetString());
+}
+
+RECT CShareSharerBar::TipRectForTest() const
+{
+    RECT rc = { 0, 0, 0, 0 };
+    if (m_tipLabel != NULL)
+        rc = m_tipLabel->GetRect();
+    return rc;
 }
 
 void CShareSharerBar::SetAnnotating(bool on)
 {
     m_annotating = on;
+    refreshLooks();
+}
+
+void CShareSharerBar::refreshLooks()
+{
+    //标注：标注中蓝底，提示「退出标注」
     if (m_annotButton != NULL)
     {
-        m_annotButton->SetText(on ? TR(L"退出标注") : TR(L"标注"));
-        m_annotButton->Invalidate();
+        Art().Apply(m_annotButton, ShareBarLookFor(share_bar_annotate, m_annotating),
+                    ShareBarTooltipFor(share_bar_annotate, m_annotating, false));
     }
+    //屏幕当白板：图标与观看者的「新建白板」相同，提示写本条自己的说法（在屏幕白板里时蓝底、提示「退出屏幕白板」）
+    if (m_screenBoardButton != NULL)
+    {
+        Art().Apply(m_screenBoardButton, ShareBarLookFor(share_bar_board, m_screenBoardActive),
+                    m_screenBoardActive ? TR(L"退出屏幕白板") : TR(L"屏幕当白板"));
+    }
+    if (m_moreButton != NULL)
+        Art().Apply(m_moreButton, ShareBarLookFor(share_bar_more, false), ShareBarTooltipFor(share_bar_more, false, false));
+    //停止共享：红底方块；停的只是自己的画面，提示写「停止共享」而不是主持人的「结束共享」
+    if (m_stopButton != NULL)
+        Art().Apply(m_stopButton, ShareBarLookFor(share_bar_stop_share, false), TR(L"停止共享"));
+    ApplyOwnButtonLooks();
 }
 
 void CShareSharerBar::BuildUi()
 {
-    std::unique_ptr<balloonwjui::DuiVBox> root(new balloonwjui::DuiVBox());
-    root->SetBgColor(kBarBgColor);
-    root->SetPadding(0);
-    std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
-    row->SetPadding(kRowPad, 0, kRowPad, 0);
-    row->SetGap(kRowGap);
+    //状态文字：有人在控制本人屏幕（2026-10-12）时写在最前面，与主持人控制条一致
+    std::wstring tip = TR(L"你正在共享屏幕");
+    if (!m_controllerName.empty())
+        tip = MakeShareControlledByText(m_controllerName) + L" · " + tip;
+    //状态文字是运行期内容（含控制者的名字），按实际宽度量，不用「简体中文界面恒为设计宽度」的 DefaultButtonWidthForText
+    int tipW = i18n::MeasureUiTextWidth(tip.c_str(), i18n::DefaultFontPixelHeight(), false) + kSharerTipSlackPx;
+    if (tipW < kSharerTipMinW)
+        tipW = kSharerTipMinW;
+    const int revokeW = i18n::DefaultButtonWidthForText(TR(L"收回控制"), kShareRevokeBtnMinW);
+    const int iconButtons = m_screenBoardAvailable ? kSharerFixedIconButtons + 1 : kSharerFixedIconButtons;
+    //整条宽：左右内边距、状态点、状态文字、「收回控制」（有时）、图标按钮，再加最右端的「隐藏」「收起 / 固定」；
+    //横条里每个控件之前有一个 kShareBarBtnGap 的间距（第一个除外）
+    int width = kShareTopBarRowPadLeft + kShareTopBarRowPadRight + kShareTopBarDotW + kShareBarBtnGap + tipW +
+                iconButtons * (kShareBarBtnPx + kShareBarBtnGap) + OwnButtonsWidth();
+    if (!m_controllerName.empty())
+        width += revokeW + kShareBarBtnGap;
+    SetTopBarWidth(width);
+    //标题条：展开时写「屏幕共享」，收起成小把手时写「▼ 屏幕共享」
+    SetTopBarTitles(TR(L"屏幕共享"), TR(L"屏幕共享"));
+
+    std::unique_ptr<balloonwjui::DuiHBox> row = MakeTopBarRow();
     std::unique_ptr<balloonwjui::DuiLabel> dot(new balloonwjui::DuiLabel());
     dot->SetText(_T("●"));
     dot->SetTextColor(kDotColor);
     dot->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    row->AddChild(std::move(dot), balloonwjui::DuiLayout::Hint().Fixed(kDotW));
+    row->AddChild(std::move(dot), balloonwjui::DuiLayout::Hint().Fixed(kShareTopBarDotW));
     std::unique_ptr<balloonwjui::DuiLabel> label(new balloonwjui::DuiLabel());
-    label->SetText(TR(L"你正在共享屏幕"));
-    label->SetTextColor(kBarTextColor);
+    label->SetText(tip.c_str());
+    label->SetTextColor(kShareTopBarTextColor);
     label->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    m_tipLabel = label.get();
     row->AddChild(std::move(label), balloonwjui::DuiLayout::Hint().Weight(1));
-    //在自己共享的内容上标注（第 22 期 22e）
-    std::unique_ptr<balloonwjui::DuiButton> annot = makeButton(m_annotating ? TR(L"退出标注") : TR(L"标注"), kIdAnnotate,
-                                                               balloonwjui::DuiButton::Variant::Default);
-    m_annotButton = annot.get();
-    row->AddChild(std::move(annot), balloonwjui::DuiLayout::Hint().Fixed(kAnnotW).Margin(0, kBtnVMargin, 0, kBtnVMargin));
-    //屏幕当白板（2026-10-07，方案第 14.1 节 ③）：只共享一个窗口、或已在屏幕白板里时才有
-    if (m_screenBoardAvailable)
+    //收回控制（2026-10-12）：只在有人控制本人屏幕时才有；被控制期间本人可以照常操作，只有点它（或控制者自己结束）才收回。
+    //少见而要紧的操作，保留红色文字按钮
+    if (!m_controllerName.empty())
     {
-        row->AddChild(makeButton(m_screenBoardActive ? TR(L"退出屏幕白板") : TR(L"屏幕当白板"), kIdScreenBoard,
-                                 balloonwjui::DuiButton::Variant::Default),
-                      balloonwjui::DuiLayout::Hint().Fixed(screenBoardWidth()).Margin(0, kBtnVMargin, 0, kBtnVMargin));
+        row->AddChild(makeButton(TR(L"收回控制"), kIdRevokeControl, balloonwjui::DuiButton::Variant::Danger),
+                      balloonwjui::DuiLayout::Hint().Fixed(revokeW).Margin(0, kSharerRevokeVMargin, 0,
+                                                                           kSharerRevokeVMargin));
     }
-    //更多（2026-10-08）：目前只有「允许截图」一项
-    std::unique_ptr<balloonwjui::DuiButton> more = makeButton(TR(L"更多"), kIdMore, balloonwjui::DuiButton::Variant::Default);
-    m_moreButton = more.get();
-    row->AddChild(std::move(more), balloonwjui::DuiLayout::Hint()
-                                       .Fixed(i18n::DefaultButtonWidthForText(TR(L"更多"), kMoreW))
-                                       .Margin(0, kBtnVMargin, 0, kBtnVMargin));
-    row->AddChild(makeButton(TR(L"停止共享"), kIdStop, balloonwjui::DuiButton::Variant::Danger),
-                  balloonwjui::DuiLayout::Hint().Fixed(kStopW).Margin(0, kBtnVMargin, 0, kBtnVMargin));
-    root->AddChild(std::move(row), balloonwjui::DuiLayout::Hint().Weight(1));
-    SetClientContent(std::move(root));
+    //图标按钮（外观与悬停提示由 refreshLooks 装上）：标注（第 22 期 22e）、屏幕当白板（2026-10-07，只共享一个窗口、
+    //或已在屏幕白板里时才有）、更多（2026-10-08，目前只有「允许截图」一项）、停止共享
+    m_annotButton = AddTopBarIconButton(row.get(), kIdAnnotate);
+    m_screenBoardButton = m_screenBoardAvailable ? AddTopBarIconButton(row.get(), kIdScreenBoard) : NULL;
+    m_moreButton = AddTopBarIconButton(row.get(), kIdMore);
+    m_stopButton = AddTopBarIconButton(row.get(), kIdStop);
+    //「隐藏」与「收起 / 固定」：最右端，由基类加
+    AddTopBarOwnButtons(row.get());
+    SetClientContent(MakeTopBarRoot(std::move(row)));
+    refreshLooks();
 }
 
 LRESULT CShareSharerBar::OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -306,29 +362,43 @@ LRESULT CShareSharerBar::OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BO
     (void)uMsg;
     (void)wParam;
     const balloonwjui::DuiNotify* n = reinterpret_cast<const balloonwjui::DuiNotify*>(lParam);
+    if (n == NULL || n->code != static_cast<UINT>(balloonwjui::DUIN_CLICK))
+    {
+        bHandled = FALSE;
+        return 0;
+    }
+    //「隐藏」「收起 / 固定」：基类处理，不发给控制器
+    if (HandleTopBarClick(n->ctrlId))
+        return 0;
     //停止共享
-    if (n != NULL && n->code == static_cast<UINT>(balloonwjui::DUIN_CLICK) && n->ctrlId == static_cast<UINT>(kIdStop))
+    if (n->ctrlId == static_cast<UINT>(kIdStop))
     {
         if (m_notifyWnd != NULL && ::IsWindow(m_notifyWnd))
             ::PostMessage(m_notifyWnd, kMsgShareSharerCommand, share_sharer_stop, 0);
         return 0;
     }
     //标注 / 退出标注（第 22 期 22e）
-    if (n != NULL && n->code == static_cast<UINT>(balloonwjui::DUIN_CLICK) && n->ctrlId == static_cast<UINT>(kIdAnnotate))
+    if (n->ctrlId == static_cast<UINT>(kIdAnnotate))
     {
         if (m_notifyWnd != NULL && ::IsWindow(m_notifyWnd))
             ::PostMessage(m_notifyWnd, kMsgShareSharerCommand, share_sharer_annotate, 0);
         return 0;
     }
+    //收回控制（2026-10-12）：交给控制器发 1735 收回
+    if (n->ctrlId == static_cast<UINT>(kIdRevokeControl))
+    {
+        if (m_notifyWnd != NULL && ::IsWindow(m_notifyWnd))
+            ::PostMessage(m_notifyWnd, kMsgShareSharerCommand, share_sharer_revoke_control, 0);
+        return 0;
+    }
     //更多（2026-10-08）：投给自己，等这次点击通知处理完再弹菜单
-    if (n != NULL && n->code == static_cast<UINT>(balloonwjui::DUIN_CLICK) && n->ctrlId == static_cast<UINT>(kIdMore))
+    if (n->ctrlId == static_cast<UINT>(kIdMore))
     {
         PostMessage(kMsgShowMoreMenu, 0, 0);
         return 0;
     }
     //屏幕当白板 / 退出屏幕白板（2026-10-07）：由控制器提示确认后切换共享内容
-    if (n != NULL && n->code == static_cast<UINT>(balloonwjui::DUIN_CLICK) &&
-        n->ctrlId == static_cast<UINT>(kIdScreenBoard))
+    if (n->ctrlId == static_cast<UINT>(kIdScreenBoard))
     {
         if (m_notifyWnd != NULL && ::IsWindow(m_notifyWnd))
             ::PostMessage(m_notifyWnd, kMsgShareSharerCommand, share_sharer_screen_board, 0);

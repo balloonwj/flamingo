@@ -14,10 +14,13 @@
 
 #include <objbase.h>
 #include <mfapi.h>
+#include <algorithm>   // std::find、std::sort：把本机预览的座位并进 ScreenSeats
 #include <chrono>
 #include <string.h>
 #include "ShareSources.h"       // EnumerateShareMonitors（第 23 期 MonitorSourceForWindow）
 #include "ShareVideoPolicy.h"
+#include "ShareCaptureRetry.h"   // 采集丢失后按间隔持续重建（2026-10-12）
+#include "ShareSourceStatus.h"   // 共享内容状态由各个条件统一计算（2026-10-14）
 #include "../../Source/net/Protocol.h"
 #include "../../Source/Common/Log/IULog.h"
 
@@ -31,8 +34,10 @@ namespace {
 const int kRelayConnectTimeoutSec = 5;
 //暂停、窗口已关闭等不取帧时每轮的等待，单位毫秒
 const DWORD kIdleWaitMs = 50;
-//采集器失效后重建之前的等待，单位毫秒
-const DWORD kCapturerRetryWaitMs = 500;
+//采集器重建日志的节流：前几次失败逐次记录，之后每隔这么多次记一条（重试间隔 500 毫秒，120 次约 1 分钟），成功时总记录。
+//锁屏、安全桌面期间会一直重试，逐次记录时一小时有七千多行
+const int kRetryLogFirstAttempts = 3;
+const int kRetryLogEveryAttempts = 120;
 //每像素字节数
 const int kBytesPerPixel = 4;
 //公钥字节数
@@ -86,6 +91,8 @@ ShareHostStreamer::ShareHostStreamer()
     , m_keyRequested(false)
     , m_keyRequestCount(0)
     , m_bitrate(kShareBitrateBps, kShareMinBitrateBps)
+    , m_quality(kShareQualityDefault)
+    , m_controlled(false)
     , m_relayLost(false)
     , m_switchPending(false)
     , m_lastW(0)
@@ -101,9 +108,6 @@ ShareHostStreamer::ShareHostStreamer()
     , m_inputSink(NULL)
     , m_recordTap(false)
     , m_recordSeed(false)
-    , m_recordW(0)
-    , m_recordH(0)
-    , m_recordSerial(0)
 {
     memset(m_pubKey, 0, sizeof(m_pubKey));
     memset(&m_sourceRect, 0, sizeof(m_sourceRect));
@@ -398,6 +402,8 @@ void ShareHostStreamer::Stop()
     }
     m_thread.reset();
     m_running.store(false);
+    //本机预览属于这一场：下一场由控制器按新的快照重新设置
+    m_preview.SetSeat(-1);
     //P2P 观看者：关闭帧通道与链路
     std::shared_ptr<P2PViewerLink> viewer;
     {
@@ -428,6 +434,20 @@ void ShareHostStreamer::SetPaused(bool paused)
 void ShareHostStreamer::RequestKeyFrame()
 {
     m_keyRequested.store(true);
+}
+
+void ShareHostStreamer::SetQuality(int quality)
+{
+    const int previous = m_quality.exchange(quality);
+    if (previous != quality)
+        LOG_INFO("screenshare host: quality %d -> %d.", previous, quality);
+}
+
+void ShareHostStreamer::SetControlled(bool controlled)
+{
+    const bool previous = m_controlled.exchange(controlled);
+    if (previous != controlled)
+        LOG_INFO("screenshare host: controlled %d -> %d.", previous ? 1 : 0, controlled ? 1 : 0);
 }
 
 RECT ShareHostStreamer::CurrentSourceRect() const
@@ -465,6 +485,13 @@ void ShareHostStreamer::sendSourceState(int state)
 {
     std::vector<std::string> bodies(1, ShareFraming::buildSourceStateBody(m_relay.m_seat, state));
     routeBodies(bodies, false, false);
+}
+
+void ShareHostStreamer::publishSourceState(int state)
+{
+    m_sourceState = state;
+    sendSourceState(m_sourceState);
+    notify(share_host_source_state, m_sourceState);
 }
 
 void ShareHostStreamer::copyLastFrame(const ShareCaptureFrame& f)
@@ -515,11 +542,20 @@ void ShareHostStreamer::WorkerProc()
     bool capturerOk = capturer && capturer->Start();
     if (!capturerOk)
         notify(share_host_capture_failed, 0);
+    //采集丢失后的重试（2026-10-12）：按间隔持续重建，第一次失败时向观看端报告「画面暂停」，恢复后报告继续
+    ShareCaptureRetry retry;
+    //共享内容状态（2026-10-14）：各处只记事件，每轮取帧之后统一计算一次，变了才发给观看端。上一次推流留下的状态不沿用
+    ShareSourceStatus status;
+    m_sourceState = screenshare_source_sharing;
 
-    ShareFramePacer pacer(kShareMaxFps, kShareKeyFrameIntervalMs);
-    //码率自适应从最高码率重新开始（上一次推流降下来的码率不沿用）
+    //帧率上限按当前的控制状态取：被别人控制键鼠期间为 kShareControlledFps，否则 kShareMaxFps（2026-10-17）
+    bool controlledNow = m_controlled.load();
+    ShareFramePacer pacer(controlledNow ? kShareControlledFps : kShareMaxFps, kShareKeyFrameIntervalMs);
+    //码率自适应从最高码率重新开始（上一次推流降下来的码率不沿用）。码率范围按编码尺寸定，编码器第一次建好时
+    //报告范围变化，下面的 Encode 之后据此换成实际的范围（2026-10-15）
     m_bitrate = ShareBitrateController(kShareBitrateBps, kShareMinBitrateBps);
     m_keyRequestCount.store(0);
+    m_encoder.SetParams(ShareVideoParamsForControl(m_quality.load(), controlledNow));
     m_encoder.SetBitrate(kShareBitrateBps);
     //鼠标效果从头开始（上一次推流留下的轨迹、点击圈不沿用，设置保留）
     m_mouseFx.Reset();
@@ -529,6 +565,17 @@ void ShareHostStreamer::WorkerProc()
     {
         //P2P 观看者：链路就绪就打开帧通道，等太久或失败就放弃
         pollP2PViewer();
+
+        //控制状态变了：换帧率上限（下面采集等新画面的时长随之变化）；编码参数在编码之前按同一状态设置，
+        //帧率变化时编码器重建，下一帧为关键帧
+        const bool controlled = m_controlled.load();
+        if (controlled != controlledNow)
+        {
+            controlledNow = controlled;
+            pacer.SetMaxFps(controlled ? kShareControlledFps : kShareMaxFps);
+            LOG_INFO("screenshare host: frame rate cap -> %d fps (controlled=%d).",
+                     controlled ? kShareControlledFps : kShareMaxFps, controlled ? 1 : 0);
+        }
 
         //切换共享内容：换采集器，编码器按新尺寸重建（下一帧必为关键帧）
         bool switchNow = false;
@@ -553,23 +600,39 @@ void ShareHostStreamer::WorkerProc()
             m_encoder.Close();
             m_mouseFx.Reset();
             m_keyRequested.store(true);
+            //换了共享内容：上一个内容的重试作废；「已关闭」「已最小化」清除，新采集器建好时不再算采集挂起
+            retry.Reset();
+            status.OnSourceSwitched(capturerOk);
             if (!capturerOk)
                 notify(share_host_capture_failed, 0);
             LOG_INFO("screenshare host: switched source, kind=%d, ok=%d.", m_source.m_kind, capturerOk ? 1 : 0);
         }
 
-        //暂停：不取新画面；刚进入暂停时通知观看端
+        //采集丢失后按间隔重建（2026-10-12，之前只重建一次，失败后观看端一直停在最后一帧）
+        if (!capturerOk && capturer && retry.Due(steadyMs()))
+        {
+            capturerOk = capturer->Start();
+            const int report = retry.OnAttempt(capturerOk, steadyMs());
+            const int attempts = retry.Attempts();
+            if (capturerOk || attempts <= kRetryLogFirstAttempts || attempts % kRetryLogEveryAttempts == 0)
+                LOG_INFO("screenshare host: capturer rebuild attempt %d, ok=%d.", attempts, capturerOk ? 1 : 0);
+            //重建成功：画面尺寸可能变了（分辨率变化），下一帧出关键帧
+            if (capturerOk)
+                m_keyRequested.store(true);
+            //第一次失败记为采集挂起，恢复时清除
+            status.OnRetryReport(report);
+        }
+
+        //暂停：不取新画面；暂停状态的变化交给共享内容状态
         const bool paused = m_paused.load();
         if (paused != wasPaused)
         {
             wasPaused = paused;
-            m_sourceState = paused ? screenshare_source_paused : screenshare_source_sharing;
-            sendSourceState(m_sourceState);
-            notify(share_host_source_state, m_sourceState);
+            status.OnPauseChanged(paused);
         }
 
         bool newFrame = false;
-        if (!paused && capturerOk && m_sourceState != screenshare_source_closed)
+        if (!paused && capturerOk && !status.IsClosed())
         {
             ShareCaptureFrame frame;
             const int r = capturer->Capture(static_cast<UINT>(pacer.minIntervalMs()), frame);
@@ -580,42 +643,42 @@ void ShareHostStreamer::WorkerProc()
             }
             else if (r == share_capture_closed)
             {
-                m_sourceState = screenshare_source_closed;
-                sendSourceState(m_sourceState);
-                notify(share_host_source_state, m_sourceState);
+                //共享的窗口关闭了：之后不再取帧，直到换了共享内容
+                status.OnCaptureClosed();
             }
             else if (r == share_capture_lost || r == share_capture_fatal)
             {
-                //锁屏、分辨率变化等：稍等后重建采集器
+                //锁屏、分辨率变化等：停下采集器，按间隔持续重建（第一次在一个间隔之后，见上面的重试）
                 capturer->Stop();
-                ::Sleep(kCapturerRetryWaitMs);
-                capturerOk = capturer->Start();
+                capturerOk = false;
+                retry.OnLost(steadyMs());
+                LOG_WARNING("screenshare host: capture lost (result %d), rebuilding.", r);
             }
 
-            //最小化状态变化：通知观看端
-            const int state = capturer->IsMinimized() ? screenshare_source_minimized : screenshare_source_sharing;
-            if (m_sourceState != screenshare_source_closed && state != m_sourceState)
+            if (capturerOk)
             {
-                m_sourceState = state;
-                sendSourceState(m_sourceState);
-                notify(share_host_source_state, m_sourceState);
+                //窗口是否最小化
+                status.OnMinimizedObserved(capturer->IsMinimized());
+                //显示器矩形（2026-10-12 起采集器重建时重新读取，分辨率变化后跟着变）
+                std::lock_guard<std::mutex> guard(m_mutex);
+                m_sourceRect = capturer->SourceRect();
             }
-            std::lock_guard<std::mutex> guard(m_mutex);
-            m_sourceRect = capturer->SourceRect();
         }
         else
         {
             ::Sleep(kIdleWaitMs);
         }
+        //本轮的事件都已记下：统一算一次共享内容状态，与上次发出的不同才发给观看端并通知界面
+        const int sourceState = status.State();
+        if (sourceState != m_sourceState)
+            publishSourceState(sourceState);
         //刚打开录制旁路：把最近一帧补给录制
         if (m_recordSeed.load() && !m_lastFrame.empty() && m_recordSeed.exchange(false))
-        {
-            std::lock_guard<std::mutex> guard(m_recordMutex);
-            m_recordFrame = m_lastFrame;
-            m_recordW = m_lastW;
-            m_recordH = m_lastH;
-            ++m_recordSerial;
-        }
+            m_recordFrame.Store(&m_lastFrame[0], m_lastW, m_lastH, m_lastW * kBytesPerPixel);
+        //刚打开本机预览（2026-10-12）：同样把最近一帧补进去，画面不变时也能马上看到自己那一块
+        if (m_preview.IsEnabled() && !m_preview.HasFrame() && !m_lastFrame.empty() &&
+            m_preview.Offer(&m_lastFrame[0], m_lastW, m_lastH, m_lastW * kBytesPerPixel, steadyMs()))
+            notify(share_host_remote_screen, m_preview.Seat());
 
         const bool keyRequested = m_keyRequested.exchange(false);
         const int64_t now = steadyMs();
@@ -655,13 +718,10 @@ void ShareHostStreamer::WorkerProc()
         last.m_height = m_lastH;
         //录制旁路：留一份编码用的画面，录下的内容与观看者看到的一致（带鼠标效果，第 16 期起在这里取）
         if (m_recordTap.load())
-        {
-            std::lock_guard<std::mutex> guard(m_recordMutex);
-            m_recordFrame.assign(pixels, pixels + static_cast<size_t>(stride) * m_lastH);
-            m_recordW = m_lastW;
-            m_recordH = m_lastH;
-            ++m_recordSerial;
-        }
+            m_recordFrame.Store(pixels, m_lastW, m_lastH, stride);
+        //本机预览（2026-10-12）：限帧率留一份，本人在观看窗或「共享画面」窗口里看到的自己那一块与别人看到的一致
+        if (m_preview.Offer(pixels, m_lastW, m_lastH, stride, now))
+            notify(share_host_remote_screen, m_preview.Seat());
         const uint64_t tsUs = static_cast<uint64_t>(now - startMs) * 1000;
         //码率自适应：把这段时间的关键帧请求计入，每个评估周期最多调整一次码率
         m_bitrate.OnKeyFrameRequests(m_keyRequestCount.exchange(0));
@@ -671,8 +731,19 @@ void ShareHostStreamer::WorkerProc()
             m_encoder.SetBitrate(bps);
             LOG_INFO("screenshare host: bitrate -> %d bps.", bps);
         }
+        //清晰度（2026-10-15）：发起人在设置里改了档位时，编码器下一次 Encode 按新的长边上限重建；没变时什么都不做。
+        //2026-10-17 起帧率随控制状态变化，同样经这里交给编码器
+        m_encoder.SetParams(ShareVideoParamsForControl(m_quality.load(), controlledNow));
         m_encoder.Encode(last, d.m_keyframe, tsUs, this);
         pacer.onEncoded(now, d.m_keyframe || m_encoder.LastWasRebuild());
+        //编码尺寸变了（源尺寸、清晰度或逐档退）导致码率范围变化：码率自适应换到新范围，当前码率沿用编码器按比例换算的值
+        if (m_encoder.TakeRangeChanged())
+        {
+            m_bitrate.SetRange(m_encoder.MaxBps(), m_encoder.MinBps(), m_encoder.BitrateBps());
+            LOG_INFO("screenshare host: source %dx%d, encode %dx%d, bitrate %d bps (range %d-%d).", m_lastW, m_lastH,
+                     m_encoder.EncodeWidth(), m_encoder.EncodeHeight(), m_encoder.BitrateBps(), m_encoder.MinBps(),
+                     m_encoder.MaxBps());
+        }
         if (!paused)
             m_mouseFx.OnEncoded();
     }
@@ -719,6 +790,13 @@ void ShareHostStreamer::SetAudioSession(ShareAudioSession* audio)
     m_audio.store(audio);
 }
 
+void ShareHostStreamer::SetLocalPreviewSeat(int seat)
+{
+    if (seat != m_preview.Seat())
+        LOG_INFO("screenshare host: local preview seat %d -> %d.", m_preview.Seat(), seat);
+    m_preview.SetSeat(seat);
+}
+
 void ShareHostStreamer::SetCameraEndpoints(ShareCameraSender* sender, ShareCameraReceiver* receiver)
 {
     m_cameraSender.store(sender);
@@ -732,22 +810,12 @@ void ShareHostStreamer::SetRecordTapEnabled(bool on)
     m_recordSeed.store(on);
     if (on)
         return;
-    std::lock_guard<std::mutex> guard(m_recordMutex);
-    m_recordFrame.clear();
-    m_recordW = 0;
-    m_recordH = 0;
+    m_recordFrame.Clear();
 }
 
 bool ShareHostStreamer::GetRecordFrame(std::vector<uint8_t>& bgra, int& width, int& height, uint64_t& serial)
 {
-    std::lock_guard<std::mutex> guard(m_recordMutex);
-    if (m_recordFrame.empty())
-        return false;
-    bgra = m_recordFrame;
-    width = m_recordW;
-    height = m_recordH;
-    serial = m_recordSerial;
-    return true;
+    return m_recordFrame.Get(bgra, width, height, serial);
 }
 
 void ShareHostStreamer::SetAnnotationSink(ShareAnnotationSink* sink)
@@ -885,12 +953,31 @@ void ShareHostStreamer::OnScreenDecoded(int seat)
 bool ShareHostStreamer::GetScreenFrame(int seat, std::vector<uint8_t>& bgra, int& width, int& height,
                                        uint64_t& serial) const
 {
+    //本人的那一块取本机预览，不取中转可能转回来的那一份
+    if (seat >= 0 && seat == m_preview.Seat())
+        return m_preview.Get(seat, bgra, width, height, serial);
     return m_screens.GetLatestFrame(seat, bgra, width, height, serial);
+}
+
+bool ShareHostStreamer::GetScreenSerial(int seat, uint64_t& serial) const
+{
+    //与 GetScreenFrame 一样，本人的那一块取本机预览的序号
+    if (seat >= 0 && seat == m_preview.Seat())
+        return m_preview.GetSerial(seat, serial);
+    return m_screens.LatestSerial(seat, serial);
 }
 
 std::vector<int> ShareHostStreamer::ScreenSeats() const
 {
-    return m_screens.Seats();
+    std::vector<int> seats = m_screens.Seats();
+    //本机预览已有画面：把本人的座位按升序并进去
+    const int own = m_preview.Seat();
+    if (own >= 0 && m_preview.HasFrame() && std::find(seats.begin(), seats.end(), own) == seats.end())
+    {
+        seats.push_back(own);
+        std::sort(seats.begin(), seats.end());
+    }
+    return seats;
 }
 
 int ShareHostStreamer::ScreenSourceState(int seat) const

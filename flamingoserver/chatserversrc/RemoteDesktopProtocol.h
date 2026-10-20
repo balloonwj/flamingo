@@ -10,6 +10,9 @@
  *  推送给对端（state 取不同值），故服务端只需 buildStateNotify 一种"结束类"推送，
  *  cmd_rd_cancel / cmd_rd_close 仅作 客户端→服务端 方向。
  *
+ *  控制权限（2026-10-12）：接通后默认只能查看。控制动作经 cmd_rd_control（1718）上报，
+ *  服务端按会话表里的控制状态校验后回应答，并经 cmd_rd_control_notify（1719）转给另一方。
+ *
  *  本模块为纯逻辑，只依赖 jsoncpp，不触及网络与数据库，便于单元测试，见
  *  tests/test_remotedesktopprotocol.cpp。
  *
@@ -29,6 +32,26 @@ enum rd_state
     rd_state_peer_offline = 4,   //对方离线：被控端当前不在线，无法建立会话
     rd_state_timeout      = 5,   //超时：邀请在限定时间内无人应答，自动结束
     rd_state_disconnected = 6,   //已断开：会话已结束（任一端结束或连接中断）
+};
+
+//远程桌面控制动作，cmd_rd_control（1718）的 action 字段，也随 1719 推送转给对方。与客户端 net::rd_control_action 取值一致。
+//谁能做、什么状态下能做见 RemoteDesktopManager::applyControl
+enum rd_control_action
+{
+    rd_control_request = 1,   //申请控制：控制端发起，转给被控端，被控端在右下角提示里同意或拒绝
+    rd_control_cancel  = 2,   //撤回申请：控制端在被控端处理之前撤回，转给被控端（被控端关掉申请提示）
+    rd_control_grant   = 3,   //授予控制：被控端同意申请，或没人申请时直接允许，转给控制端
+    rd_control_deny    = 4,   //拒绝申请：被控端拒绝（含提示超时），转给控制端
+    rd_control_revoke  = 5,   //收回控制：被控端在控制进行中收回，转给控制端
+    rd_control_release = 6,   //放弃控制：控制端自己结束控制，转给被控端
+};
+
+//远程桌面的控制状态，随 1718 应答与 1719 推送的 control 字段下发。与客户端 net::rd_control_state 取值一致
+enum rd_control_state
+{
+    rd_control_none      = 0,   //未授权：控制端只能查看，被控端丢弃收到的键鼠输入；会话接通后的初始状态
+    rd_control_requested = 1,   //申请中：控制端已申请，等待被控端同意或拒绝
+    rd_control_granted   = 2,   //已授权：被控端注入控制端发来的键鼠输入
 };
 
 //远程桌面信令编解码工具类；全部为静态方法，不可实例化。
@@ -61,6 +84,15 @@ public:
      *  @return JSON 合法且 sessionid 非空返回 true，否则 false
      */
     static bool parseSessionRequest(const std::string& json, std::string& sessionid);
+
+    /**
+     *  解析控制动作请求（cmd_rd_control=1718）。
+     *  @param json      请求包体（UTF-8 JSON），形如 {"sessionid":"…","action":1}
+     *  @param sessionid [出参] 会话 id
+     *  @param action    [出参] 控制动作，见 enum rd_control_action
+     *  @return JSON 合法、sessionid 非空且 action 是 1~6 的整数时返回 true，否则 false
+     */
+    static bool parseControlRequest(const std::string& json, std::string& sessionid, int& action);
 
     //==== 构造 服务端→客户端 的应答与推送 ====
 
@@ -103,6 +135,28 @@ public:
      */
     static std::string buildStateNotify(const std::string& sessionid, int state,
                                         const std::string& msg);
+
+    /**
+     *  构造控制动作的应答（cmd_rd_control 的应答），失败时同样带上 sessionid 与 action，客户端据此找到对应会话。
+     *  @param code      错误码，见 enum error_code；0 表示成功
+     *  @param msg       可读描述
+     *  @param sessionid 会话 id（解析失败时为空）
+     *  @param action    请求里的控制动作，见 enum rd_control_action（解析失败时为 0）
+     *  @param control   动作之后的控制状态，见 enum rd_control_state；失败时为服务端当前记录的状态
+     */
+    static std::string buildControlResponse(int code, const std::string& msg, const std::string& sessionid,
+                                            int action, int control);
+
+    /**
+     *  构造控制动作推送（cmd_rd_control_notify=1719），发给会话的另一方。
+     *  @param sessionid 会话 id
+     *  @param action    对方做的控制动作，见 enum rd_control_action
+     *  @param control   动作之后的控制状态，见 enum rd_control_state
+     *  @param fromid    做动作的人的 userid（字符串编码写入）
+     *  @param fromname  做动作的人的昵称（UTF-8），被控端的申请提示里显示
+     */
+    static std::string buildControlNotify(const std::string& sessionid, int action, int control, int64_t fromid,
+                                          const std::string& fromname);
 
 private:
     RemoteDesktopProtocol() = delete;

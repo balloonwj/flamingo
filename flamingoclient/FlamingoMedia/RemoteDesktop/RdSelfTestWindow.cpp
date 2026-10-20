@@ -62,13 +62,14 @@ void CRdSelfTestWindow::CreateAndShow(HWND hParent)
         s_registered = true;
     }
 
-    //先建好引擎，喂入 BITMAPINFO 帧与首屏帧，使解码器进入就绪态
+    //先建好引擎，抓一帧、喂入 BITMAPINFO 帧与首屏帧，使解码器进入就绪态
     m_capturer = new RdScreenCapturer(16);
     m_decoder  = new RdScreenDecoder();
-    m_capturer->captureBitmapInfo(m_buf);
+    std::vector<BYTE> first;
+    m_capturer->captureFrame();
+    m_capturer->buildKeyframe(m_buf, first);
     m_decoder->apply(m_buf.data(), m_buf.size());
-    m_capturer->captureFirst(m_buf);
-    m_decoder->apply(m_buf.data(), m_buf.size());
+    m_decoder->apply(first.data(), first.size());
 
     m_hWnd = ::CreateWindowExW(
         0, kRdSelfTestClass,
@@ -145,8 +146,17 @@ void CRdSelfTestWindow::onTimer()
     if (m_capturer == NULL || m_decoder == NULL)
         return;
 
-    //抓下一帧（增量）并喂给解码器
-    m_capturer->captureNext(m_buf);
+    //抓下一帧：画面尺寸变了时编码器报告需要关键帧，喂 BITMAPINFO 与首屏；否则喂增量帧
+    m_capturer->captureFrame();
+    if (m_capturer->needsKeyframe())
+    {
+        std::vector<BYTE> first;
+        m_capturer->buildKeyframe(m_buf, first);
+        m_decoder->apply(m_buf.data(), m_buf.size());
+        m_decoder->apply(first.data(), first.size());
+        return;
+    }
+    m_capturer->buildNext(m_buf);
     m_decoder->apply(m_buf.data(), m_buf.size());
 }
 

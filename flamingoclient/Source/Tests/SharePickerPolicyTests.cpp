@@ -8,6 +8,8 @@
  *    - SSREF1 点「刷新」重新列出后，原先选中的内容还在就继续选中（显示器按显卡与输出序号认、窗口按句柄认），
  *             已经不在了就不选。
  *    - SSCAP1 字幕勾选项（2026-10-07）：录制、发起共享、通话中发起时可以有，切换内容时没有。
+ *    - SSCONF1 确认按钮的种类（2026-10-13）：发起共享为「开始共享」、切换内容为「切换」、录制为「开始录制」；多人共享里经主持人
+ *             同意后第一次选择要共享的内容时，选择窗是切换模式，但按钮为「开始共享」。
  *  框架 Catch2 v3。
  *
  *  典型用法：FlamingoUnit.exe "[sharepassword],[sharepicker]"
@@ -157,4 +159,22 @@ TEST_CASE("SSCAP1 caption check is offered when recording and when starting a sh
     CHECK(SharePickerOffersCaption(share_picker_start));
     CHECK(SharePickerOffersCaption(share_picker_start_in_call));
     CHECK_FALSE(SharePickerOffersCaption(share_picker_switch));
+}
+
+TEST_CASE("SSCONF1 confirm button: start, switch, record; switch mode that starts one's own share says start", "[sharepicker]")
+{
+    CHECK(SharePickerConfirmKindFor(share_picker_start) == share_confirm_start);
+    CHECK(SharePickerConfirmKindFor(share_picker_start_in_call) == share_confirm_start);
+    CHECK(SharePickerConfirmKindFor(share_picker_record) == share_confirm_record);
+    CHECK(SharePickerConfirmKindFor(share_picker_switch) == share_confirm_switch);
+    //多人共享里经主持人同意后第一次选择（2026-10-14 起是单独的用途值）：界面同切换内容，但按钮是「开始共享」
+    CHECK(SharePickerConfirmKindFor(share_picker_switch_to_start) == share_confirm_start);
+    CHECK(SharePickerIsSwitchLayout(share_picker_switch));
+    CHECK(SharePickerIsSwitchLayout(share_picker_switch_to_start));
+    CHECK_FALSE(SharePickerIsSwitchLayout(share_picker_start));
+    CHECK_FALSE(SharePickerIsSwitchLayout(share_picker_record));
+    //同意后的第一次选择与切换内容一样，不提供密码、字幕、标题描述等选项
+    CHECK_FALSE(SharePickerOffersPassword(share_picker_switch_to_start));
+    CHECK_FALSE(SharePickerOffersCaption(share_picker_switch_to_start));
+    CHECK_FALSE(SharePickerOffersInfo(share_picker_switch_to_start));
 }

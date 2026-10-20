@@ -70,7 +70,8 @@ void CShareInfoEditDialog::Open(HWND monitorRef, HWND notifyWnd, const std::wstr
         finish(false);
     m_notifyWnd = notifyWnd;
     m_finished = false;
-    //置顶、不进任务栏；不设所有者窗口，按钮通知才会发回本窗口（见头文件说明）
+    //置顶、不进任务栏；不设所有者窗口（原为让按钮通知发回本窗口；2026-10-14 起有无所有者，控件通知都发回本窗口，
+    //见头文件说明）
     const DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
     if (Create(NULL, CWindow::rcDefault, TR(L"修改标题与描述"), WS_POPUP, exStyle) == NULL)
     {

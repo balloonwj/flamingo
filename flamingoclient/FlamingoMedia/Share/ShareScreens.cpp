@@ -199,16 +199,25 @@ int SyncPublishPhase(int phase, const ShareStateNotify& state, int64_t selfId)
     return phase;
 }
 
-std::vector<ShareScreenInfo> CollectOtherScreens(const ShareStateNotify& state, int64_t selfId)
+int CountOtherScreens(const std::vector<ShareScreenInfo>& screens, int64_t selfId)
 {
-    std::vector<ShareScreenInfo> out;
-    const std::vector<ShareScreenInfo> all = CollectShareScreens(state);
-    for (size_t i = 0; i < all.size(); ++i)
+    int count = 0;
+    for (size_t i = 0; i < screens.size(); ++i)
     {
-        if (all[i].m_ownerId != selfId)
-            out.push_back(all[i]);
+        if (screens[i].m_ownerId != selfId)
+            ++count;
     }
-    return out;
+    return count;
+}
+
+int FindOwnScreenSeat(const std::vector<ShareScreenInfo>& screens, int64_t selfId)
+{
+    for (size_t i = 0; i < screens.size(); ++i)
+    {
+        if (!screens[i].m_isWhiteboard && screens[i].m_ownerId == selfId)
+            return screens[i].m_screenSeat;
+    }
+    return -1;
 }
 
 bool PickScreenRect(const std::vector<int>& tileSeats, const std::vector<RECT>& videoRects, int seat, RECT& out)
@@ -307,6 +316,25 @@ int HitScreenTile(const std::vector<RECT>& tiles, POINT pt)
             return static_cast<int>(i);
     }
     return -1;
+}
+
+RECT ComputeTileLabelRect(const RECT& tile, int labelW, int labelH, int margin, const RECT& obstacle)
+{
+    RECT box;
+    box.left = tile.left + margin;
+    box.top = tile.top + margin;
+    box.right = box.left + labelW;
+    box.bottom = box.top + labelH;
+    RECT overlap;
+    if (::IsRectEmpty(&obstacle) || !::IntersectRect(&overlap, &box, &obstacle))
+        return box;
+    //与浮动工具条重叠：挪到它下方；那样会超出这一块（块很矮）时宁可被遮住，也不画到别的块上
+    const int movedTop = obstacle.bottom + margin;
+    if (movedTop + labelH > tile.bottom)
+        return box;
+    box.top = movedTop;
+    box.bottom = movedTop + labelH;
+    return box;
 }
 
 } // namespace screenshare

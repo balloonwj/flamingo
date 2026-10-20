@@ -7,6 +7,7 @@
 #include "ShareCameraPanel.h"
 
 #include "ShareVideoPolicy.h"
+#include "ShareAspectFit.h"   // FitRectKeepAspect：摄像头画面等比缩进小窗
 #include "../../Source/Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace screenshare {
@@ -117,6 +118,16 @@ RECT ComputeCameraWindowRect(const RECT& work, int tileCount, int overflowCount)
     return rc;
 }
 
+RECT ComputeCameraHandleRect(const RECT& expanded)
+{
+    RECT rc;
+    rc.right = expanded.right;
+    rc.left = rc.right - kCameraHandleW;
+    rc.top = expanded.top;
+    rc.bottom = rc.top + kCameraHandleTitleH + kCameraHandleContentH;
+    return rc;
+}
+
 CShareCameraPanel::TileFrame::TileFrame()
     : m_width(0)
     , m_height(0)
@@ -196,16 +207,8 @@ void CShareCameraPanel::OnPaint(HDC hdc, const RECT& rcDirty)
         const TileFrame& f = m_frames[i];
         if (!f.m_bgra.empty() && f.m_width > 0 && f.m_height > 0)
         {
-            //等比缩进小窗，留黑边
-            const int tw = t.right - t.left;
-            const int th = t.bottom - t.top;
-            int dw = tw;
-            int dh = static_cast<int>(static_cast<int64_t>(tw) * f.m_height / f.m_width);
-            if (dh > th)
-            {
-                dh = th;
-                dw = static_cast<int>(static_cast<int64_t>(th) * f.m_width / f.m_height);
-            }
+            //等比缩进小窗，留黑边（与观看窗共用一份等比放置，2026-10-14）
+            const RECT fit = FitRectKeepAspect(t, f.m_width, f.m_height);
             BITMAPINFO bi;
             memset(&bi, 0, sizeof(bi));
             bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -216,8 +219,8 @@ void CShareCameraPanel::OnPaint(HDC hdc, const RECT& rcDirty)
             bi.bmiHeader.biCompression = BI_RGB;
             ::SetStretchBltMode(hdc, HALFTONE);
             ::SetBrushOrgEx(hdc, 0, 0, NULL);
-            ::StretchDIBits(hdc, t.left + (tw - dw) / 2, t.top + (th - dh) / 2, dw, dh, 0, 0, f.m_width, f.m_height,
-                            &f.m_bgra[0], &bi, DIB_RGB_COLORS, SRCCOPY);
+            ::StretchDIBits(hdc, fit.left, fit.top, fit.right - fit.left, fit.bottom - fit.top, 0, 0, f.m_width,
+                            f.m_height, &f.m_bgra[0], &bi, DIB_RGB_COLORS, SRCCOPY);
         }
         //名字条：小窗底部一条半透明黑底
         RECT bar = { t.left, t.bottom - kNameBarH, t.right, t.bottom };

@@ -614,23 +614,13 @@ LPCTSTR ImageViewerToolbar::TooltipForKind(ToolbarItemKind kind)
 
 void ImageViewerToolbar::UpdateTooltip(POINT ptHost)
 {
-    balloonwjui::DuiToolTipMgr& tt = balloonwjui::DuiToolTipMgr::Inst();
-
-    // 先离开：清掉上一个按钮的待显示 / 已显示 tooltip（OnHover 对同一控件有
-    // "已 pending 则直接返回"的短路，必须先 OnLeave 复位才能切到新文字）。
-    tt.OnLeave(this);
-
-    if (m_hoverIndex < 0 || !IsClickable(m_hoverIndex))
+    // 悬停按钮换了：Retarget 先收起上一个按钮的待显示 / 已显示 tooltip，再按新按钮的文字
+    // 登记并重新计时；悬停处没有可点击的按钮或按钮没有提示时只取消登记。
+    LPCTSTR text = NULL;
+    if (m_hoverIndex >= 0 && IsClickable(m_hoverIndex))
     {
-        return;
+        text = TooltipFor(m_hoverIndex);
     }
-    LPCTSTR text = TooltipFor(m_hoverIndex);
-    if (text == NULL || text[0] == _T('\0'))
-    {
-        return;
-    }
-
-    tt.Register(this, text);
 
     // tooltip 弹出位置：当前鼠标点换算成屏幕坐标。
     POINT screen = ptHost;
@@ -639,7 +629,7 @@ void ImageViewerToolbar::UpdateTooltip(POINT ptHost)
     {
         ::ClientToScreen(host->m_hWnd, &screen);
     }
-    tt.OnHover(this, screen);
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(this, text, screen);
 }
 
 } // namespace balloonimageviewer

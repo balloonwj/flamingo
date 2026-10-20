@@ -544,4 +544,37 @@ bool ShareViewerListCanGrantControl(bool roomHost, bool hostStreaming, bool host
     return roomHost && ((hostStreaming && !hostScreenStopped) || publishStreaming);
 }
 
+std::wstring MakeShareControlStartNotice(const std::wstring& controllerName)
+{
+    return TRF(L"{0} 正在控制你的屏幕，你仍可以操作；要收回控制，请点屏幕顶部工具条上的「收回控制」", controllerName);
+}
+
+std::wstring MakeShareControlledByText(const std::wstring& controllerName)
+{
+    return TRF(L"{0} 正在控制你的屏幕", controllerName);
+}
+
+std::wstring MakeShareTileName(const std::wstring& ownerName, bool isWhiteboard, bool isSelf)
+{
+    if (isWhiteboard)
+        return isSelf ? TRF(L"{0} 的白板（我）", ownerName) : TRF(L"{0} 的白板", ownerName);
+    return isSelf ? TRF(L"{0}（我）", ownerName) : ownerName;
+}
+
+bool ShouldExcludeShareView(bool sharingOwnScreen, bool captureAllowed)
+{
+    return sharingOwnScreen && !captureAllowed;
+}
+
+int DecideShareControlTarget(bool activeIsBoard, int64_t ownerId, int64_t selfId)
+{
+    if (activeIsBoard)
+        return share_control_target_board;
+    if (ownerId <= 0)
+        return share_control_target_none;
+    if (ownerId == selfId)
+        return share_control_target_self;
+    return share_control_target_ok;
+}
+
 } // namespace screenshare

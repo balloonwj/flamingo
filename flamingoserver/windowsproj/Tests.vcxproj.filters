@@ -693,6 +693,12 @@
     <ClCompile Include="..\chatserversrc\P2PServerSetup.cpp">
       <Filter>chatserversrc</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_confighostcheck.cpp">
+      <Filter>tests\protocol</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\ConfigHostCheck.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="..\tests\test_filesharesessionmanager.cpp">
       <Filter>tests\logic</Filter>
     </ClCompile>
@@ -856,6 +862,9 @@
       <Filter>tests\net</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\test_pollerrevents.cpp">
+      <Filter>tests\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_tcpnodelay.cpp">
       <Filter>tests\net</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\TcpSession.cpp">

@@ -63,6 +63,8 @@ const TonePalette kPalettes[] =
     { { RGB(47, 128, 237), RGB(70, 145, 245), RGB(34, 108, 208) }, RGB(255, 255, 255) },
     //结束、停止、正在录制：红底、白色图标
     { { RGB(229, 57, 53), RGB(240, 84, 80), RGB(196, 40, 40) }, RGB(255, 255, 255) },
+    //已申请、等待对方同意（2026-10-12）：橙底、白色图标，与观看窗原来标题栏图标的「申请中」橙色一致
+    { { RGB(237, 137, 30), RGB(245, 158, 60), RGB(206, 114, 18) }, RGB(255, 255, 255) },
 };
 const int kPaletteCount = sizeof(kPalettes) / sizeof(kPalettes[0]);
 
@@ -271,6 +273,78 @@ void drawIcon(Gdiplus::Graphics& g, int icon, float x, float y, float size, cons
             g.DrawLine(&pen, 4.5f, 4.5f, 19.5f, 19.5f);
         }
         break;
+    //白板：圆角矩形的板面、下方的支脚，板面上一支斜放的笔（新建白板，2026-10-12）
+    case share_bar_icon_board:
+        {
+            Gdiplus::GraphicsPath board;
+            addRoundRect(board, 3.0f, 4.0f, 18.0f, 13.0f, 1.5f);
+            g.DrawPath(&pen, &board);
+            g.DrawLine(&pen, 9.0f, 17.0f, 7.0f, 21.0f);
+            g.DrawLine(&pen, 15.0f, 17.0f, 17.0f, 21.0f);
+            g.DrawLine(&pen, 8.0f, 13.0f, 15.5f, 7.5f);
+        }
+        break;
+    //共享说明：圆圈里一个 i（上面一个圆点、下面一道竖线）
+    case share_bar_icon_info:
+        g.DrawEllipse(&pen, 3.0f, 3.0f, 18.0f, 18.0f);
+        g.FillEllipse(&brush, 10.8f, 6.8f, 2.4f, 2.4f);
+        g.DrawLine(&pen, 12.0f, 11.0f, 12.0f, 17.0f);
+        break;
+    //皇冠：三个尖的冠身加一道底边（主持人菜单）
+    case share_bar_icon_crown:
+        {
+            Gdiplus::PointF pts[7] = { Gdiplus::PointF(4.0f, 17.0f), Gdiplus::PointF(3.0f, 7.5f),
+                                       Gdiplus::PointF(8.5f, 11.5f), Gdiplus::PointF(12.0f, 5.0f),
+                                       Gdiplus::PointF(15.5f, 11.5f), Gdiplus::PointF(21.0f, 7.5f),
+                                       Gdiplus::PointF(20.0f, 17.0f) };
+            g.DrawPolygon(&pen, pts, 7);
+            g.DrawLine(&pen, 4.5f, 20.5f, 19.5f, 20.5f);
+        }
+        break;
+    //全屏：四个角各一道向外的直角折线
+    case share_bar_icon_fullscreen:
+        {
+            Gdiplus::PointF tl[3] = { Gdiplus::PointF(4.0f, 9.0f), Gdiplus::PointF(4.0f, 4.0f), Gdiplus::PointF(9.0f, 4.0f) };
+            Gdiplus::PointF tr[3] = { Gdiplus::PointF(15.0f, 4.0f), Gdiplus::PointF(20.0f, 4.0f),
+                                      Gdiplus::PointF(20.0f, 9.0f) };
+            Gdiplus::PointF br[3] = { Gdiplus::PointF(20.0f, 15.0f), Gdiplus::PointF(20.0f, 20.0f),
+                                      Gdiplus::PointF(15.0f, 20.0f) };
+            Gdiplus::PointF bl[3] = { Gdiplus::PointF(9.0f, 20.0f), Gdiplus::PointF(4.0f, 20.0f),
+                                      Gdiplus::PointF(4.0f, 15.0f) };
+            g.DrawLines(&pen, tl, 3);
+            g.DrawLines(&pen, tr, 3);
+            g.DrawLines(&pen, br, 3);
+            g.DrawLines(&pen, bl, 3);
+        }
+        break;
+    //退出全屏：四个角各一道向内的直角折线
+    case share_bar_icon_exit_fullscreen:
+        {
+            Gdiplus::PointF tl[3] = { Gdiplus::PointF(4.0f, 9.0f), Gdiplus::PointF(9.0f, 9.0f), Gdiplus::PointF(9.0f, 4.0f) };
+            Gdiplus::PointF tr[3] = { Gdiplus::PointF(15.0f, 4.0f), Gdiplus::PointF(15.0f, 9.0f),
+                                      Gdiplus::PointF(20.0f, 9.0f) };
+            Gdiplus::PointF br[3] = { Gdiplus::PointF(20.0f, 15.0f), Gdiplus::PointF(15.0f, 15.0f),
+                                      Gdiplus::PointF(15.0f, 20.0f) };
+            Gdiplus::PointF bl[3] = { Gdiplus::PointF(9.0f, 20.0f), Gdiplus::PointF(9.0f, 15.0f),
+                                      Gdiplus::PointF(4.0f, 15.0f) };
+            g.DrawLines(&pen, tl, 3);
+            g.DrawLines(&pen, tr, 3);
+            g.DrawLines(&pen, br, 3);
+            g.DrawLines(&pen, bl, 3);
+        }
+        break;
+    //离开：左边一个开口朝右的门框，中间一支向右穿出门框的箭头
+    case share_bar_icon_leave:
+        {
+            Gdiplus::PointF frame[4] = { Gdiplus::PointF(11.0f, 4.0f), Gdiplus::PointF(4.0f, 4.0f),
+                                         Gdiplus::PointF(4.0f, 20.0f), Gdiplus::PointF(11.0f, 20.0f) };
+            g.DrawLines(&pen, frame, 4);
+            g.DrawLine(&pen, 9.0f, 12.0f, 20.0f, 12.0f);
+            Gdiplus::PointF head[3] = { Gdiplus::PointF(16.0f, 8.0f), Gdiplus::PointF(20.0f, 12.0f),
+                                        Gdiplus::PointF(16.0f, 16.0f) };
+            g.DrawLines(&pen, head, 3);
+        }
+        break;
     //不画图标或未知取值
     default:
         break;
@@ -335,10 +409,46 @@ ShareBarButtonLook ShareBarLookFor(int action, bool on)
     //隐藏工具条
     case share_bar_hide:
         return makeLook(share_bar_icon_hide, false, false, share_bar_tone_normal);
+    //申请控制：控制中蓝底（申请中的橙底由 ShareBarLookForTriState 给出）
+    case share_bar_control:
+        return makeLook(share_bar_icon_mouse, false, false, on ? share_bar_tone_active : share_bar_tone_normal);
+    //共享我的屏幕：共享中蓝底
+    case share_bar_share_mine:
+        return makeLook(share_bar_icon_switch, false, false, on ? share_bar_tone_active : share_bar_tone_normal);
+    //新建白板：白板开着时蓝底
+    case share_bar_board:
+        return makeLook(share_bar_icon_board, false, false, on ? share_bar_tone_active : share_bar_tone_normal);
+    //共享说明
+    case share_bar_info:
+        return makeLook(share_bar_icon_info, false, false, share_bar_tone_normal);
+    //主持人菜单：点开是菜单，带下拉三角
+    case share_bar_host:
+        return makeLook(share_bar_icon_crown, false, true, share_bar_tone_normal);
+    //全屏 / 退出全屏：正在全屏时画「退出全屏」
+    case share_bar_fullscreen:
+        return makeLook(on ? share_bar_icon_exit_fullscreen : share_bar_icon_fullscreen, false, false,
+                        share_bar_tone_normal);
+    //离开共享 / 断开远程桌面：红底
+    case share_bar_leave:
+        return makeLook(share_bar_icon_leave, false, false, share_bar_tone_danger);
     //未知种类：常态、不画图标
     default:
         return ShareBarButtonLook();
     }
+}
+
+ShareBarButtonLook ShareBarLookForTriState(int action, int state)
+{
+    const bool triStateAction = (action == share_bar_control || action == share_bar_share_mine ||
+                                 action == share_bar_board);
+    //申请中只对三态按钮有意义：图标与关着时相同、换成橙底
+    if (state == share_bar_tri_pending && triStateAction)
+    {
+        ShareBarButtonLook look = ShareBarLookFor(action, false);
+        look.m_tone = share_bar_tone_pending;
+        return look;
+    }
+    return ShareBarLookFor(action, state == share_bar_tri_on);
 }
 
 std::wstring ShareBarTooltipFor(int action, bool on, bool recordBar)
@@ -400,10 +510,46 @@ std::wstring ShareBarTooltipFor(int action, bool on, bool recordBar)
     //隐藏工具条：提示里说明怎样让它重新出现
     case share_bar_hide:
         return TopBarHideText();
+    //申请控制：已生效与未申请时的文字；申请中的「取消申请」见 ShareBarTooltipForTriState
+    case share_bar_control:
+        return on ? TR(L"结束控制") : TR(L"申请控制");
+    //共享我的屏幕：同上
+    case share_bar_share_mine:
+        return on ? TR(L"停止我的共享") : TR(L"共享我的屏幕");
+    //新建白板：同上
+    case share_bar_board:
+        return on ? TR(L"关闭我的白板") : TR(L"新建白板");
+    //共享说明
+    case share_bar_info:
+        return TR(L"共享说明");
+    //主持人菜单
+    case share_bar_host:
+        return TR(L"主持人");
+    //全屏 / 退出全屏
+    case share_bar_fullscreen:
+        return on ? TR(L"退出全屏") : TR(L"全屏");
+    //离开共享（远程桌面的「断开」由使用方另给提示）。「离开」在别处是在线状态，用上下文区分
+    case share_bar_leave:
+        return TRC(L"离开屏幕共享的按钮", L"离开");
     //未知种类：没有提示
     default:
         return std::wstring();
     }
+}
+
+std::wstring ShareBarTooltipForTriState(int action, int state)
+{
+    if (state == share_bar_tri_pending)
+    {
+        //三态按钮申请中：点了是撤回申请
+        if (action == share_bar_control)
+            return TR(L"取消申请");
+        if (action == share_bar_share_mine)
+            return TR(L"取消共享申请");
+        if (action == share_bar_board)
+            return TR(L"取消白板申请");
+    }
+    return ShareBarTooltipFor(action, state == share_bar_tri_on, false);
 }
 
 int ShareRecordDotStateAt(bool recording, bool paused, int64_t nowMs)
@@ -513,6 +659,25 @@ HBITMAP MakeShareBarIconBitmap(int icon, int size, COLORREF color)
         drawIcon(g, icon, 0.0f, 0.0f, static_cast<float>(size), toGdiColor(color));
     }
     ::GdiFlush();
+    return bmp;
+}
+
+HBITMAP MakeShareBarBackgroundBitmap(COLORREF color)
+{
+    //背景图的边长（像素）：九宫格拉伸铺满窗口，取很小即可
+    const int side = 8;
+    void* bits = NULL;
+    HBITMAP bmp = createDib(side, bits);
+    if (bmp == NULL)
+        return NULL;
+    BYTE* p = static_cast<BYTE*>(bits);
+    for (int i = 0; i < side * side; ++i)
+    {
+        p[i * kBytesPerPixel + 0] = GetBValue(color);
+        p[i * kBytesPerPixel + 1] = GetGValue(color);
+        p[i * kBytesPerPixel + 2] = GetRValue(color);
+        p[i * kBytesPerPixel + 3] = kOpaque;
+    }
     return bmp;
 }
 

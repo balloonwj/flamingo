@@ -16,7 +16,9 @@
  *    - CFC4 画中画取谁、哪些画面还在共享、PCM 的均方根；CFC5 合成的视频码率取「标准」画质；
  *    - CFC6 白板靠白板视野判断还在（2026-10-07）；CFC7 白板图在一块画面里按 16:9 放下的尺寸；
  *    - 合成提速（2026-10-08）：CFC8 画面在格子里所占的矩形与是否原尺寸；CFC9 原尺寸画面逐行复制进画布
- *      （含越界裁剪）；CFC10 画布签名与能否沿用上一帧；CFC11 激光笔算作按时间变化的笔迹。
+ *      （含越界裁剪）；CFC10 画布签名与能否沿用上一帧；CFC11 激光笔算作按时间变化的笔迹；
+ *    - CFC12（2026-10-15，docs/远程桌面H264与共享画质提升方案.md A7）2K、4K 画面缩小进画布时改用 BgraDownscaler：何时走这条路径
+ *      （两个方向都缩小、不是原尺寸），以及缩进画布指定区域的结果（比例不超过 2 时与 BgraScaler 一致）、目标超出画布时不写。
  *  录制管理窗口「云端」页的纯逻辑（FlamingoMedia/Record/CloudRecordManagerModel，27d）：
  *    - CRM1 一行的状态：服务端状态与本机正在做的事合起来；CRM2 状态列的文字、颜色、进度条与到期提醒；
  *    - CRM3 副文字与一行可做的操作；CRM4 右上角的用量文字、提醒色与用量条；CRM5 重命名标题的校验；
@@ -43,6 +45,8 @@
 #include "../../FlamingoMedia/Share/ShareAnnotation.h"   // AnnotationStroke：CFC11
 #include "../../FlamingoMedia/Share/ShareFraming.h"
 #include "../../FlamingoMedia/Share/ShareProtocolClient.h"
+#include "../../FlamingoMedia/Share/ShareVideoPolicy.h"   // BgraScaler：CFC12 的对照结果
+#include "../../FlamingoMedia/Share/ShareFrameDrawer.h"   // BgraDownscaler：CFC12
 #include "../net/Protocol.h"
 #include "../Common/I18n/I18n.h"   // TR：CRM7 比较状态列的文字
 
@@ -510,6 +514,77 @@ TEST_CASE("CFC9 copy frame rows into the canvas", "[cloudrec]")
     screenrecord::CloudCopyFrameRows(&outside[0], 4, 3, &frame[0], 2, 2, -2, 0);
     for (size_t i = 0; i < outside.size(); ++i)
         CHECK(outside[i] == 0);
+}
+
+TEST_CASE("CFC12 fast downscale path: when it is used and what it writes into the canvas", "[cloudrec]")
+{
+    const RECT full = { 0, 0, 1920, 1080 };
+    //2K、4K 的整屏缩进 1080p 的画布：缩小，走快速缩放
+    CHECK(screenrecord::CloudFitUsesFastScale(2560, 1440, screenrecord::CloudFitRect(2560, 1440, full)));
+    CHECK(screenrecord::CloudFitUsesFastScale(3840, 2160, screenrecord::CloudFitRect(3840, 2160, full)));
+    //多人共享时 4K 画面缩进四分之一的格子（约 4 倍）：同样走快速缩放，BgraDownscaler 先逐次减半（SSFD3）
+    const RECT quarter = { 0, 0, 958, 539 };
+    CHECK(screenrecord::CloudFitUsesFastScale(3840, 2160, screenrecord::CloudFitRect(3840, 2160, quarter)));
+    //放大、原尺寸、尺寸不合法：不走快速缩放
+    CHECK_FALSE(screenrecord::CloudFitUsesFastScale(1280, 720, screenrecord::CloudFitRect(1280, 720, full)));
+    CHECK_FALSE(screenrecord::CloudFitUsesFastScale(1920, 1080, screenrecord::CloudFitRect(1920, 1080, full)));
+    CHECK_FALSE(screenrecord::CloudFitUsesFastScale(0, 1080, full));
+    //一个方向缩小、另一个方向放大（不会由 CloudFitRect 算出，直接给矩形）：不走快速缩放
+    const RECT mixed = { 0, 0, 100, 300 };
+    CHECK_FALSE(screenrecord::CloudFitUsesFastScale(200, 200, mixed));
+
+    //8×6 的画布全 0；4×4 的画面是渐变。缩进 (2,1)~(5,4) 的 3×3：这一块与 BgraScaler 直接缩放的结果逐字节一致，其余仍为 0
+    const int canvasW = 8;
+    const int canvasH = 6;
+    const int srcW = 4;
+    const int srcH = 4;
+    const int bpp = 4;
+    std::vector<uint8_t> canvas(static_cast<size_t>(canvasW) * canvasH * bpp, 0);
+    std::vector<uint8_t> src(static_cast<size_t>(srcW) * srcH * bpp, 0);
+    for (size_t i = 0; i < src.size(); ++i)
+        src[i] = static_cast<uint8_t>((i * 37) & 0xFF);
+    const RECT dst = { 2, 1, 5, 4 };
+    const int dstW = dst.right - dst.left;
+    const int dstH = dst.bottom - dst.top;
+    screenshare::BgraDownscaler scaler;
+    REQUIRE(screenrecord::CloudScaleFrameInto(scaler, &canvas[0], canvasW, canvasH, &src[0], srcW, srcH, dst));
+    std::vector<uint8_t> expect(static_cast<size_t>(dstW) * dstH * bpp, 0);
+    screenshare::BgraScaler reference;
+    reference.Scale(&src[0], srcW * bpp, srcW, srcH, &expect[0], dstW * bpp, dstW, dstH);
+    bool regionSame = true;
+    bool outsideZero = true;
+    for (int y = 0; y < canvasH; ++y)
+    {
+        for (int x = 0; x < canvasW; ++x)
+        {
+            const uint8_t* px = &canvas[(static_cast<size_t>(y) * canvasW + x) * bpp];
+            const bool inside = x >= dst.left && x < dst.right && y >= dst.top && y < dst.bottom;
+            for (int b = 0; b < bpp; ++b)
+            {
+                if (inside)
+                {
+                    const uint8_t want = expect[(static_cast<size_t>(y - dst.top) * dstW + (x - dst.left)) * bpp + b];
+                    if (px[b] != want)
+                        regionSame = false;
+                }
+                else if (px[b] != 0)
+                {
+                    outsideZero = false;
+                }
+            }
+        }
+    }
+    CHECK(regionSame);
+    CHECK(outsideZero);
+
+    //目标矩形超出画布：不写，返回 false（调用方改用 GDI，由 GDI 裁剪）
+    std::vector<uint8_t> untouched(static_cast<size_t>(canvasW) * canvasH * bpp, 0);
+    const RECT outside = { 6, 4, 9, 7 };
+    CHECK_FALSE(screenrecord::CloudScaleFrameInto(scaler, &untouched[0], canvasW, canvasH, &src[0], srcW, srcH, outside));
+    size_t nonZero = 0;
+    for (size_t i = 0; i < untouched.size(); ++i)
+        nonZero += (untouched[i] != 0) ? 1 : 0;
+    CHECK(nonZero == 0);
 }
 
 TEST_CASE("CFC10 canvas key and reuse decision", "[cloudrec]")

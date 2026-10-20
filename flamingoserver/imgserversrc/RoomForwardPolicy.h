@@ -57,8 +57,10 @@ enum room_forward_decision
 class RoomForwardPolicy
 {
 public:
-    //每个观看者输出缓冲上限的默认值，单位字节（imgserver 配置项，2026-10-02 与用户确认默认 1 MiB）
-    static const size_t kDefaultViewerBufferCapBytes = 1024 * 1024;
+    //每个观看者输出缓冲上限的默认值，单位字节（imgserver 配置项 screenshareviewerbufferbytes）。2026-10-02 与用户确认为 1 MiB；
+    //2026-10-15 调到 4 MiB（docs/远程桌面H264与共享画质提升方案.md 4.8，用户定的 Q3）：编码长边提到 2560 / 3840 后单个关键帧更大，
+    //余量要不低于「2～3 倍最大关键帧 + 约 1 秒码流」
+    static const size_t kDefaultViewerBufferCapBytes = 4 * 1024 * 1024;
     //同一路视频两次关键帧请求之间的最小间隔，单位毫秒
     static const int64_t kKeyFrameRequestIntervalMs = 2000;
 

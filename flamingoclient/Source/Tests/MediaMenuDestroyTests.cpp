@@ -118,13 +118,15 @@ public:
         unsigned char pubKey[kMmdPubKeyLen] = { 0 };
         //没有中转地址，收流管线启动失败、返回 false，窗口照样建好并显示
         m_wnd.Open(relay, pubKey, L"host", notify, NULL, std::shared_ptr<balloonp2p::P2PLinkSlot>());
-        //字幕可用时标题栏才有「字幕」图标、才弹得出字幕菜单
+        //字幕可用时工具条上才有「字幕」按钮、才弹得出字幕菜单
         m_wnd.SetCaptionState(true, false, true);
         return m_wnd.IsWindow() != FALSE;
     }
     virtual void RequestMenu() override
     {
-        ::PostMessageW(m_wnd.m_hWnd, screenshare::CShareViewerWindow::WM_SHARE_VIEWER_CAPTION_MENU, 0, 0);
+        //与浮动工具条点了「字幕」按钮时投递的消息相同
+        ::PostMessageW(m_wnd.m_hWnd, screenshare::CShareViewerWindow::WM_SHARE_VIEWER_TOOLBAR,
+                       screenshare::CShareViewerWindow::kBarCaption, 0);
     }
     virtual void Close() override
     {

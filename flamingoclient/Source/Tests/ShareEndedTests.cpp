@@ -8,12 +8,18 @@
  *    - SSET3 弹窗：各行文字就位、标题栏写「屏幕共享」；投来任何定时器消息都不关闭；点标题栏关闭（WM_CLOSE）才关闭；
  *    - SSET4 参与者很多时窗口随行数加高，各行与「知道了」按钮都完整落在窗口内；
  *    - SSET5 名单里的本人写「你」，其他人写显示名；写进参与者一行后为「参与者：你、乙」。
+ *    - SSET6 主持人移交以后（2026-10-13 四人共享实机测试发现后补）：发起人仍在分享人最前，不会因为不再是主持人而被算成参与者。
+ *    - SSET7 没人加入就结束（2026-10-15 实机检查发现）：服务端发起成功时不给发起人推 1725，名单一条推送
+ *      都没收到；开始主持时把本人记为发起人后，分享人一行是「你」，参与者为空；之后的 1725 不重复记发起人，0 不算发起人。
+ *    - SSET8 源文件守卫（控制器）：发起成功时把本人记为发起人，并把本人填的标题与描述记进房间信息，结束提示据此写标题。
+ *  SSET8 在运行时读取源文件，位置取自 __FILE__（FlamingoUnit.vcxproj 给本文件单独加了 /FC）。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-10-05
  */
 #include "stdafx.h"
 #include "catch_amalgamated.hpp"
 
+#include <stdio.h>
 #include <string>
 #include <vector>
 
@@ -40,6 +46,9 @@ const int64_t kSetDuration = 97;
 const int kSetMaxNames = 3;
 //SSET4 的参与者人数
 const int kSetManyPeople = 40;
+//SSET8：读文件时每次读的字节数、本文件在 flamingoclient 下的层数（Source\Tests\本文件）
+const size_t kSetReadChunk = 4096;
+const int kSetDepth = 3;
 
 ShareMember SetMember(int64_t userId, bool sharing)
 {
@@ -87,6 +96,45 @@ int SetWindowHeight(CShareEndedToast& toast)
     RECT rc;
     toast.GetWindowRect(&rc);
     return rc.bottom - rc.top;
+}
+
+//读出整个文件；打不开时返回空串
+std::string SetReadFile(const std::string& path)
+{
+    std::string data;
+    FILE* f = NULL;
+    if (fopen_s(&f, path.c_str(), "rb") != 0 || f == NULL)
+        return data;
+    char buf[kSetReadChunk];
+    size_t n = 0;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+        data.append(buf, n);
+    fclose(f);
+    return data;
+}
+
+//flamingoclient 目录：本文件路径去掉 kSetDepth 层
+std::string SetClientRoot()
+{
+    std::string self(__FILE__);
+    for (int i = 0; i < kSetDepth; ++i)
+    {
+        const size_t pos = self.find_last_of("\\/");
+        if (pos == std::string::npos)
+            return std::string();
+        self = self.substr(0, pos);
+    }
+    return self;
+}
+
+//取一个函数的函数体：从签名开始，到下一个以 nextPrefix 开头的行为止
+std::string SetFunctionBody(const std::string& source, const std::string& signature, const std::string& nextPrefix)
+{
+    const size_t begin = source.find(signature);
+    if (begin == std::string::npos)
+        return std::string();
+    const size_t next = source.find("\n" + nextPrefix, begin + signature.size());
+    return source.substr(begin, next == std::string::npos ? std::string::npos : next - begin);
 }
 
 } // namespace
@@ -255,4 +303,86 @@ TEST_CASE("SSET5 self is written as you", "[shareended]")
     const ShareEndedTexts t = FormatShareEndedTexts(kSetDuration, sharers, people, kSetMaxNames);
     CHECK(t.m_sharers == TRF(L"分享人：{0}", L"Host"));
     CHECK(t.m_participants == TRF(L"参与者：{0}", std::wstring(TR(L"你")) + TR(L"、") + L"Carol"));
+}
+
+TEST_CASE("SSET6 the initiator stays the first sharer after the host role is handed over", "[shareended]")
+{
+    ShareParticipantLog log;
+    log.Reset(kSetRoom, false);
+    //发起人与 B、C 三人同时共享，D 还没来
+    std::vector<ShareMember> before;
+    before.push_back(SetMember(kSetHost, true));
+    before.push_back(SetMember(kSetB, true));
+    before.push_back(SetMember(kSetC, true));
+    log.Observe(SetState(kSetRoom, before));
+    //发起人把主持人移交给 B 后离开；D 加入观看
+    std::vector<ShareMember> after;
+    after.push_back(SetMember(kSetB, true));
+    after.push_back(SetMember(kSetC, true));
+    after.push_back(SetMember(kSetD, false));
+    ShareStateNotify handedOver = SetState(kSetRoom, after);
+    handedOver.m_hostId = kSetB;
+    log.Observe(handedOver);
+    //发起人共享过屏幕：仍在分享人最前，不会被算成参与者
+    const std::vector<int64_t> sharers = log.Sharers();
+    REQUIRE(sharers.size() == 3);
+    CHECK(sharers[0] == kSetHost);
+    CHECK(sharers[1] == kSetB);
+    CHECK(sharers[2] == kSetC);
+    const std::vector<int64_t> people = log.Participants();
+    REQUIRE(people.size() == 1);
+    CHECK(people[0] == kSetD);
+}
+
+TEST_CASE("SSET7 nobody joined: the initiator is still the sharer", "[shareended]")
+{
+    //本人开始主持：服务端不推 1725，名单一条推送都没收到
+    ShareParticipantLog log;
+    log.Reset(kSetRoom, false);
+    log.SetInitiator(kSetHost);
+    std::vector<int64_t> sharers = log.Sharers();
+    REQUIRE(sharers.size() == 1);
+    CHECK(sharers[0] == kSetHost);
+    CHECK(log.Participants().empty());
+    //结束提示里本人写「你」
+    std::vector<std::wstring> names;
+    names.push_back(ShareEndedNameOf(sharers[0], kSetHost, L"Host"));
+    const ShareEndedTexts t = FormatShareEndedTexts(kSetDuration, names, std::vector<std::wstring>(), kSetMaxNames);
+    CHECK(t.m_sharers == TRF(L"分享人：{0}", std::wstring(TR(L"你"))));
+    CHECK(t.m_participants == std::wstring(TR(L"参与者：无")));
+
+    //之后有人加入：发起人不重复记，加入的人是参与者
+    std::vector<ShareMember> joined;
+    joined.push_back(SetMember(kSetHost, true));
+    joined.push_back(SetMember(kSetB, false));
+    log.Observe(SetState(kSetRoom, joined));
+    sharers = log.Sharers();
+    REQUIRE(sharers.size() == 1);
+    CHECK(sharers[0] == kSetHost);
+    REQUIRE(log.Participants().size() == 1);
+    CHECK(log.Participants()[0] == kSetB);
+
+    //userid 为 0 不算发起人；重新开始记录时发起人一并清空
+    ShareParticipantLog unknown;
+    unknown.Reset(kSetRoom, false);
+    unknown.SetInitiator(0);
+    CHECK(unknown.Sharers().empty());
+    log.Reset(kSetOtherRoom, false);
+    CHECK(log.Sharers().empty());
+}
+
+TEST_CASE("SSET8 starting a share records the initiator and the title", "[shareended]")
+{
+    const std::string root = SetClientRoot();
+    REQUIRE_FALSE(root.empty());
+    const std::string src = SetReadFile(root + "\\FlamingoMedia\\Share\\ShareController.cpp");
+    REQUIRE_FALSE(src.empty());
+    const std::string start =
+        SetFunctionBody(src, "void CShareController::onStartResult(", "void CShareController::");
+    REQUIRE_FALSE(start.empty());
+    //发起成功之后（取到房间号以后）记下发起人与标题，结束提示不再依赖服务端推来的 1724 / 1725
+    const size_t roomSet = start.find("m_hostRoomId = r.m_roomId;");
+    REQUIRE(roomSet != std::string::npos);
+    CHECK(start.find("m_participantLog.SetInitiator(m_host->GetSelfUserId());", roomSet) != std::string::npos);
+    CHECK(start.find("m_roomInfo.Remember(m_hostRoomId, m_hostTitle, m_hostDesc);", roomSet) != std::string::npos);
 }

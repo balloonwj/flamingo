@@ -190,8 +190,8 @@ void CForwardTargetDlg::Open(IForwardTargetSink* sink, int64_t selfUserId,
 
     if (!IsWindow())
     {
-        // 父窗口传 NULL：DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，有父窗口时
-        // 控件通知会发到主面板而不是本窗口（与 CreateGroupDlg 同一处理）
+        // 父窗口传 NULL，与 CreateGroupDlg 同一处理（原为让控件通知发回本窗口，而不是发到主面板；
+        // 2026-10-14 起有无所有者，控件通知都发回本窗口，见开发约定文档 UI 约定第 11 条）
         //可以最小化（2026-10-05 起）：没有属主的工具性窗口默认也有任务栏按钮，这里显式加上，最小化后从任务栏找回
         if (Create(NULL, CWindow::rcDefault, TR(L"转发"), WS_OVERLAPPEDWINDOW, WS_EX_APPWINDOW) == NULL)
         {

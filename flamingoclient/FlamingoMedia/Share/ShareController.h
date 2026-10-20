@@ -73,6 +73,7 @@
 #include "../Caption/ShareCaptionController.h"   // 实时字幕（语音字幕）
 #include "../Common/MediaToast.h"                // 轻量提示（2026-10-07）
 #include "../Record/RecordController.h"
+#include "../RemoteDesktop/RdControlGate.h"      // RdControlGate：画面主人一侧的控制把关（与远程桌面共用）
 
 namespace screenshare {
 
@@ -163,6 +164,13 @@ public:
      */
     void SetMouseEffects(const ShareMouseEffectSettings& settings);
 
+    /**
+     *  屏幕共享清晰度（docs/远程桌面H264与共享画质提升方案.md 4.2，2026-10-15）：交给主持人与共享者两条推流管线，推流中修改时
+     *  下一帧按新的长边上限重建编码器。exe 登录后与改了设置后经模块调用。
+     *  @param quality ShareQualityLevel 的取值；未知取值按 2K 档
+     */
+    void SetQuality(int quality);
+
     //登记录屏控制器（共享录制用）；不拥有，Shutdown 之前须一直有效；可为 NULL（录屏不可用）
     void SetRecorder(screenrecord::CRecordController* recorder);
 
@@ -209,7 +217,6 @@ public:
         MESSAGE_HANDLER(kMsgShareInfoEditResult, OnInfoEditResultMsg)
         MESSAGE_HANDLER(kMsgShareControlToast, OnControlToastMsg)
         MESSAGE_HANDLER(kMsgShareInputFrame, OnInputFrameMsg)
-        MESSAGE_HANDLER(kMsgShareLocalActivity, OnLocalActivityMsg)
         MESSAGE_HANDLER(kMsgShareSharingToast, OnSharingToastMsg)
         MESSAGE_HANDLER(kMsgSharePublisherEvent, OnPublisherEventMsg)
         MESSAGE_HANDLER(kMsgShareSharerCommand, OnSharerCommandMsg)
@@ -375,8 +382,6 @@ private:
     LRESULT OnControlToastMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     //UI 线程上处理一帧键鼠输入：核对控制者、换算坐标、过滤后注入
     LRESULT OnInputFrameMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //低级钩子判定画面主人本机有动静：收回控制
-    LRESULT OnLocalActivityMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     //1735 的应答：失败时按错误码提示，观看者的申请失败时回到「申请控制」
     void onControlResult(const std::string& json);
     //1736 推送：画面主人收到申请或撤回，申请人收到拒绝
@@ -391,22 +396,16 @@ private:
     void applyControlState(const ShareStateNotify& n, bool asHost);
     //发一条 1735
     void sendControl(int action, int64_t owner, int64_t target);
-    //发起人一侧：开始被某人控制（controllerId 为 0 表示结束），装卸钩子、刷新控制条、补发抬起
+    //画面主人一侧：开始被某人控制（controllerId 为 0 表示结束），刷新主持人控制条与共享者条、补发抬起
     void setControlledBy(int64_t controllerId);
-    //发起人一侧：补发注入后仍按着的按键与鼠标按钮的抬起，并清空过滤器
+    //发起人一侧：关闭控制把关，补发注入后仍按着的按键与鼠标按钮的抬起，并清空系统级按键过滤器
     void releaseInjectedInput();
     /**
      *  发起人一侧：立即收回控制。本地马上停止注入并发 1735；服务端确认（1725 里 controlledby 清零）之前到达的、
-     *  仍带着这位控制者的状态推送不再让控制恢复。没人在控制时什么也不做。
-     *  @param byLocalActivity 是否因为画面主人本机有动静而收回（提示文字不同）
+     *  仍带着这位控制者的状态推送不再让控制恢复。没人在控制时什么也不做。2026-10-12 起只在画面主人点「收回控制」
+     *  （主持人控制条、共享者条、观看者名单）时调用，画面主人本机有动静不再自动收回。
      */
-    void revokeControlNow(bool byLocalActivity);
-    //发起人一侧：安装 / 卸载检测本机动静的低级鼠标、键盘钩子
-    void installActivityHooks();
-    void removeActivityHooks();
-    //低级鼠标、键盘钩子的回调（安装它们的界面线程上调用）
-    static LRESULT CALLBACK lowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam);
-    static LRESULT CALLBACK lowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam);
+    void revokeControlNow();
     //发起人一侧：弹出排队中的下一个控制申请（没有排队的申请时什么也不做）
     void showNextControlRequest();
     //发起人一侧：把某人的申请从队列与提示里去掉（他撤回、离开或已被授予）
@@ -499,14 +498,27 @@ private:
      */
     void setHostScreenStopped(bool stopped);
     /**
-     *  主持人一侧刷新「其他人的屏幕」窗口与控制条上的入口；有新的画面加入时重新显示窗口，没有别人在共享时关闭；
-     *  已不在共享的画面让推流管线丢掉它的解码器。
-     *  @param before 上一次快照里主持人以外正在共享的画面
-     *  @param others 这一次快照里主持人以外正在共享的画面
+     *  主持人一侧刷新「共享画面」窗口（2026-10-12 前叫「其他人的屏幕」）与控制条上的入口：窗口里是全部画面（含主持人自己的那一块）；
+     *  有别人的新画面加入时重新显示窗口，没有别人在共享时关闭；已不在共享的画面让推流管线丢掉它的解码器。
+     *  @param before  上一次快照里的画面清单（含主持人自己）
+     *  @param screens 这一次快照里的画面清单（含主持人自己）
      */
-    void refreshScreensWindow(const std::vector<ShareScreenInfo>& before, const std::vector<ShareScreenInfo>& others);
-    //共享者一侧：边框跟随被共享的窗口（移动、缩放时重画，最小化时隐藏）；由 kPublishFollowTimerId 定时调用
-    void followPublishedSource();
+    void refreshScreensWindow(const std::vector<ShareScreenInfo>& before, const std::vector<ShareScreenInfo>& screens);
+    /**
+     *  一条推流管线的共享内容跟随（主持人的 kFollowTimerId 与共享者的 kPublishFollowTimerId 定时调用，2026-10-14 合并）：
+     *    - 共享整块显示器：采集器读到的显示器矩形变了（分辨率变化后采集器重建）就更新 source 里记的矩形，边框、标注层跟着换；
+     *    - 共享单个窗口：边框、标注层跟随窗口移动、缩放，窗口最小化或已关闭时隐藏。
+     *  正在这块内容上标注时，标注工具条按 annotAnchorRect() 挪动。
+     *  @param streamer     这条管线的推流器（借用，取采集器当前的显示器矩形）
+     *  @param source       这条管线记下的共享内容（借用；显示器矩形变了时更新它的 m_monitorRect）
+     *  @param border       这条管线的边框（借用）
+     *  @param overlay      这条管线的本机标注层（借用）
+     *  @param suppressed   共享已暂停或停止了共享屏幕：不显示边框，共享窗口时按隐藏处理
+     *  @param moveAnnotBar 标注工具条是否跟着挪（正在这块内容上标注）
+     *  @param logTag       日志前缀（英文），区分是哪条管线
+     */
+    void followStreamSource(const ShareHostStreamer& streamer, ShareSourceSpec& source, CShareBorderWindow& border,
+                            CShareAnnotationOverlay& overlay, bool suppressed, bool moveAnnotBar, const char* logTag);
     /**
      *  共享者在自己共享的内容上标注（第 22 期 22e，共享者控制条的「标注」）：输入层盖在内容上，标注工具条摆在内容上方；
      *  与观看窗里的标注模式互斥，进入一个之前先退出另一个。
@@ -651,6 +663,8 @@ private:
      *  @param allowed true 允许截图，false 恢复不允许
      */
     void setBarCapture(bool allowed);
+    //按本人是否正在共享自己的屏幕与「允许截图」开关，设置观看窗与「共享画面」窗口是否排除在屏幕采集之外（2026-10-12）
+    void applyViewCaptureState();
     //locked：加入是否需要密码（第 12 期）；forced：是否强制模式（第 13 期）。exe 据此在卡片、横幅上标出
     void reportStatus(int ctype, int64_t cid, const std::string& roomId, int64_t hostId, const std::wstring& hostName,
                       bool active, bool locked, bool forced = false, const std::wstring& title = std::wstring());
@@ -697,7 +711,9 @@ private:
     void releaseHostP2PViewers();
 
     void showError(const wchar_t* text);
-    void openPicker(bool switchMode, const std::wstring& hint);
+    //打开选择窗。switchMode 为切换模式（不显示标题与选项）；startsShare 只在切换模式下有意义：多人共享里经主持人同意后
+    //本人第一次选择要共享的内容时为 true，确认按钮显示「开始共享」而不是「切换」（2026-10-13）
+    void openPicker(bool switchMode, const std::wstring& hint, bool startsShare = false);
     HWND mainWindow() const;
     static std::wstring utf8ToWide(const std::string& s);
 
@@ -902,14 +918,16 @@ private:
     };
     int64_t                    m_controllerId;       //发起人一侧：正在控制本人屏幕的人；没有为 0
     int64_t                    m_revokingId;         //发起人一侧：本地已收回、等服务端确认的控制者；确认后（或没有时）为 0
-    ShareInputKeyFilter        m_injectKeys;         //发起人一侧：注入按键的系统级按键过滤与按着的键
-    std::vector<uint32_t>      m_injectedButtons;    //发起人一侧：已注入按下、还没注入松开的鼠标按钮（存松开消息）
-    ShareLocalActivityDetector m_localActivity;      //发起人一侧：本机动静判定（钩子回调里使用）
-    HHOOK                      m_mouseHook;          //发起人一侧：低级鼠标钩子；没有被控制时为 NULL
-    HHOOK                      m_keyHook;            //发起人一侧：低级键盘钩子；没有被控制时为 NULL
-    bool                       m_localActivityPosted;//发起人一侧：本次控制里是否已投过「本机有动静」，避免重复收回
+    ShareInputKeyFilter        m_injectKeys;         //发起人一侧：注入按键的系统级按键过滤（Win 键、Alt+Tab 等不注入）
+    remotedesktop::RdControlGate m_controlGate;      //发起人一侧：控制把关（2026-10-14 起与远程桌面共用）：被控制期间打开，
+                                                     //记下已注入、还没抬起的键与按钮，结束控制时给出要补发的松开
     uint32_t                   m_injectedCount;      //发起人一侧：本次控制里注入了多少条输入（结束控制时记日志）
     uint32_t                   m_droppedCount;       //发起人一侧：本次控制里丢弃了多少条输入（不是控制者、窗口外、系统级按键等）
+    //发起人一侧：本次控制里键鼠帧从中转接收线程投递到界面线程处理之间的排队时长统计（2026-10-17，结束控制时记日志，
+    //据此判断要不要把注入移出界面线程）：合计与最长（微秒）、统计了多少帧
+    uint64_t                   m_inputQueueTotalUs;
+    int64_t                    m_inputQueueMaxUs;
+    uint32_t                   m_inputQueueFrames;
     std::deque<ControlRequest> m_controlRequests;    //发起人一侧：排队的控制申请，队首正显示在提示里
     CShareCornerToast          m_controlToast;       //发起人一侧：「某某申请控制你的屏幕」提示
     int                        m_viewerControl;      //观看者一侧：控制状态，取值见 share_viewer_control_state
@@ -943,7 +961,7 @@ private:
                                                      //同意别人而应答人数已满时据此把他放回队列
     CShareCornerToast          m_sharingToast;       //主持人一侧：「某某申请共享屏幕」提示
     CShareScreensWindow        m_screensWindow;      //主持人一侧：「其他人的屏幕」窗口（建房间的主持人用，画面取自推流管线）
-    std::vector<ShareScreenInfo> m_screens;          //最近一次快照里本人要看的画面（不含本人自己的），离开房间时清空
+    std::vector<ShareScreenInfo> m_screens;          //最近一次快照里的全部画面（2026-10-12 起含本人自己的那一块），离开房间时清空
     int64_t                    m_controlOwner;       //观看者一侧：申请控制或正在控制的画面主人；没有时为 0
     CShareAnnotationOverlay    m_publishOverlay;     //共享者本机的标注层（第 22 期 22e）：盖在本人共享的内容上，显示这块画面的标注，
                                                      //在自己屏幕上标注时接住鼠标（构造时引用 m_annot，须声明在它之后）
@@ -975,7 +993,6 @@ private:
     LPARAM                     m_saveToastToken;     //「已保存为图片」提示的标识（每次保存加一）
     int                        m_saveCtype;          //保存图片时所在的那场共享的会话类型，提示的「发送到本会话」发到这里
     int64_t                    m_saveCid;            //同上，会话 id；没有时为 0
-    static CShareController*   s_hookOwner;          //低级钩子回调据此找到控制器；只在装了钩子时非 NULL（同一时间只有一个控制器）
 };
 
 } // namespace screenshare

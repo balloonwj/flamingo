@@ -108,6 +108,9 @@
     <ClInclude Include="..\fileserversrc\UploadPartPolicy.h" />
     <ClInclude Include="..\fileserversrc\CloudRecordScene.h" />
     <ClInclude Include="..\fileserversrc\TcpSession.h" />
+    <ClInclude Include="..\fileserversrc\FileSessionRemoval.h" />
+    <ClInclude Include="..\fileserversrc\FolderRelayEndpoint.h" />
+    <ClInclude Include="..\fileserversrc\FolderRelayHub.h" />
     <ClInclude Include="..\net\Acceptor.h" />
     <ClInclude Include="..\net\ByteBuffer.h" />
     <ClInclude Include="..\net\Callbacks.h" />

@@ -1,14 +1,14 @@
 /**
  *  ChatFileCard.h
  *
- *  文件卡片：聊天窗文件气泡里那张卡片（类型色块、文件名、"大小 · 状态"、进度条、底部操作
- *  链接）的尺寸计算、绘制与点击判断。聊天气泡（ChatBubble）与聊天记录查看窗里的文件行
- *  共用这一份，两处外观与行为一致。卡片底色由调用方画（气泡按收发方向取色），本文件只画
- *  卡片里的内容。
+ *  文件卡片：聊天窗文件气泡里那张卡片（白色底板、文档图标、文件名、大小与状态标签、进度条、底部一行）的尺寸计算、
+ *  绘制与点击判断。聊天气泡（ChatBubble）与消息记录窗、聊天记录管理器、聊天记录查看窗里的文件行共用这一份，几处外观
+ *  与行为一致。2026-10-14 起按聊天卡片美化方案换成新版式（docs/聊天卡片美化方案.md 5.1），卡片自己画白色底板，调用方
+ *  不再画底色。
  *
- *  绘制分两层，与气泡的绘制顺序对应：先用 GDI+ 画图形（色块、角标、进度条），再用 GDI
- *  画文字（类型字、文件名、状态行、操作链接）。文字层同时排出各操作链接的点击矩形，调用方
- *  保存下来，鼠标按下时交给 FileCardLinkAt 判断点中了哪一个。
+ *  绘制分两层，与气泡的绘制顺序对应：先用 GDI+ 画图形（底板、文档图标、进度条），再画文字与底部一行（类型字、文件名、
+ *  大小、状态标签、进度文字、类型标签与按钮）。第二层同时排出各按钮的点击矩形，调用方保存下来，鼠标按下时交给
+ *  FileCardLinkAt 判断点中了哪一个。
  *
  *  典型用法：
  *      RECT card = { x, y, x + balloonchatwnd::kFileCardWidth, y + FileCardHeight(msg) };
@@ -24,7 +24,10 @@
  */
 #pragma once
 
+#include <vector>
+
 #include "ChatMockData.h"         // ChatMessage
+#include "ChatCardModel.h"        // ChatCardButton
 #include "ChatFileStateModel.h"   // kMaxChatFileActions / 文件状态取值
 
 //只用到 Graphics 的引用，前置声明即可，包含本文件的地方不必先包含 <gdiplus.h>
@@ -55,32 +58,57 @@ bool FileCardSkipsReject(const ChatMessage& m);
 bool FileCardCanResend(const ChatMessage& m);
 
 /**
- *  按当前状态算卡片高度（逻辑像素）：头部区，有进度时加进度条，有操作时加按钮行。
+ *  按当前状态算卡片高度（逻辑像素）：头部区与卡片底部（含常驻的底部一行），有进度时加进度块。
  *  @param m 文件消息（取 fileState 与 FileCardSkipsReject 的结果）
  *  @return 卡片高度
  */
 int FileCardHeight(const ChatMessage& m);
 
 /**
- *  卡片底部某个操作链接的文字（已经过 TR 翻译）。绘制与单测共用这一处，按钮文字只在这里定义。
+ *  卡片底部某个按钮的文字（已经过 TR 翻译）。绘制与单测共用这一处，按钮文字只在这里定义。
  *  @param m   文件消息（「接收」与「下载」、「重新发送」与「重新下载」要看它）
  *  @param act 链接的动作，取值见 ChatFileActionKind
  *  @return 链接文字；未知动作按「重试」处理
  */
 CString FileCardLinkLabel(const ChatMessage& m, int act);
 
-//卡片底部各操作链接的排版结果：由 PaintFileCardText 写出，供点击判断与悬停反馈使用。
+/**
+ *  某个动作的按钮级别（docs/聊天卡片美化方案.md 5.1）：接收 / 下载、发送离线文件为主要，打开文件、重新发送 / 重新下载为
+ *  查看，其余（打开所在文件夹、另存为、取消、拒绝）为次要。
+ *  @param act 动作，取值见 ChatFileActionKind
+ *  @return 级别，取值见 ChatCardButtonLevel
+ */
+int FileCardActionLevel(int act);
+
+/**
+ *  卡片底部的按钮列表，按显示顺序从左到右：次要在左、主要在最右（ChatCardButtonsOf 对文件卡片转调这里）。
+ *  @param m 文件消息
+ *  @return 按钮列表；m_action 为 ChatFileActionKind 的取值；没有按钮时为空
+ */
+std::vector<ChatCardButton> FileCardButtons(const ChatMessage& m);
+
+/**
+ *  卡片副标题行里状态标签的文字与语义（docs/聊天卡片美化方案.md 5.1，2026-10-14 起）。规则与原来的状态行相同：先按 fileState
+ *  定，在线直传有自己的写法，本端发出的文件只要对方有过动作就改说对方那边的进展；传输中的标签不带百分比（百分比画在
+ *  进度条下面那一行）。
+ *  @param m    文件消息
+ *  @param text [出参] 标签文字（已翻译）
+ *  @param tone [出参] 标签语义，取值见 ChatCardChipTone
+ */
+void FileCardStatus(const ChatMessage& m, CString& text, int& tone);
+
+//卡片底部各按钮的排版结果：由 PaintFileCardText 写出，供点击判断与悬停反馈使用。
 struct FileCardLinks
 {
     int  m_count;                          //链接个数，0 ~ kMaxChatFileActions
-    RECT m_rect[kMaxChatFileActions];      //各链接的点击矩形（与绘制坐标同一坐标系），整行高度可点
+    RECT m_rect[kMaxChatFileActions];      //各按钮的点击矩形（与绘制坐标同一坐标系），按显示顺序从左到右
     int  m_action[kMaxChatFileActions];    //各链接的动作，取值见 ChatFileActionKind
 
     FileCardLinks();
 };
 
 /**
- *  画卡片的图形部分：类型色块（已删除时为灰色并画垃圾桶）、状态角标、进度条。
+ *  画卡片的图形部分：白色底板、文档图标（本机没有文件时为灰色，服务器上已删除时再画垃圾桶）、进度条（品牌橙）。
  *  @param g    目标 GDI+ 画布（调用方已设好抗锯齿）
  *  @param card 卡片矩形，宽应为 kFileCardWidth、高应为 FileCardHeight(m)
  *  @param m    文件消息
@@ -88,13 +116,13 @@ struct FileCardLinks
 void PaintFileCardShapes(Gdiplus::Graphics& g, const RECT& card, const ChatMessage& m);
 
 /**
- *  画卡片的文字部分：类型字、文件名、"大小 · 状态"（失败与已删除前带小图标）、底部操作
- *  链接，并写出各链接的点击矩形。
+ *  画卡片的文字与底部一行：类型字、文件名、大小、状态标签与「P2P」徽章、进度文字、类型标签与按钮，并写出各按钮的
+ *  点击矩形。
  *  @param hdc      目标设备上下文
- *  @param g        同一块画布上的 GDI+ 画布（状态行前的小图标用它画）
+ *  @param g        同一块画布上的 GDI+ 画布（状态标签与按钮的底用它画）
  *  @param card     卡片矩形，与 PaintFileCardShapes 收到的相同
  *  @param m        文件消息
- *  @param hoverIdx 鼠标悬停的链接下标；-1 表示没有悬停。悬停的链接颜色加深并加下划线
+ *  @param hoverIdx 鼠标悬停的按钮下标；-1 表示没有悬停
  *  @param links    [出参] 各操作链接的点击矩形与动作
  */
 void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const ChatMessage& m,

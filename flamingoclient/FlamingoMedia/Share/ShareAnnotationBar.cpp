@@ -54,12 +54,9 @@ const int kBelowGap = 8;
 //底色与标题文字色（与控制条一致）
 const COLORREF kBarBgColor = RGB(44, 48, 56);
 const COLORREF kBarTextColor = RGB(255, 255, 255);
-//纯色背景图的边长（像素）
-const int kSolidBitmapSize = 8;
 //32 位 DIB 的位深与每像素字节数
 const WORD kBitsPerPixel32 = 32;
 const int kBytesPerPixel = 4;
-const BYTE kOpaque = 255;
 //分组按钮前面图标与文字之间的距离（像素）；按钮因此加宽「图标边长 + 该距离」
 const int kIconTextGap = 4;
 //放不下工作区时的分组按钮宽（只有图标与下拉符号）
@@ -77,32 +74,6 @@ const int kHandlePadH = 8;
 //「鼠标」「固定」图标的颜色：白底的默认按钮上为深灰，主色按钮上为白色
 const COLORREF kIconDarkColor = RGB(60, 64, 72);
 const COLORREF kIconLightColor = RGB(255, 255, 255);
-
-//纯色位图（不透明）
-HBITMAP makeSolidBitmap(COLORREF c, int side)
-{
-    BITMAPINFO bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = side;
-    bi.bmiHeader.biHeight = -side;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = kBitsPerPixel32;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = NULL;
-    HBITMAP bmp = ::CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-    if (bmp == NULL)
-        return NULL;
-    BYTE* p = static_cast<BYTE*>(bits);
-    for (int i = 0; i < side * side; ++i)
-    {
-        p[i * kBytesPerPixel + 0] = GetBValue(c);
-        p[i * kBytesPerPixel + 1] = GetGValue(c);
-        p[i * kBytesPerPixel + 2] = GetRValue(c);
-        p[i * kBytesPerPixel + 3] = kOpaque;
-    }
-    return bmp;
-}
 
 //色块位图（透明底，四周留边、对勾表示当前色），颜色按钮前面用
 HBITMAP makeSwatchBitmap(uint32_t rgb)
@@ -352,7 +323,7 @@ void CShareAnnotationBar::EnsureWindow()
     SetResizable(false);
     SetBorderPx(0);
     if (m_bgBitmap == NULL)
-        m_bgBitmap = makeSolidBitmap(kBarBgColor, kSolidBitmapSize);
+        m_bgBitmap = MakeShareBarBackgroundBitmap(kBarBgColor);
     if (m_bgBitmap != NULL)
     {
         RECT insets = { 0, 0, 0, 0 };

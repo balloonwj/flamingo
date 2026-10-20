@@ -181,7 +181,8 @@ void CBalloonAnnouncePopupDlg::ShowAnnouncement(HWND ownerPanel, int64_t groupId
     {
         // 所有者：入群必读（SetOwnedByHost(true)）以群聊窗为所有者，保证弹窗不会被随后激活的群聊窗压在
         // 下面；主面板的新群公告不设所有者，主面板收在托盘里时它照样能弹出来。两种情况都用
-        // WS_OVERLAPPEDWINDOW，有所有者时 GetParent 仍为空，子控件通知照常发回本对话框（UI 约定第 11 条）。
+        // WS_OVERLAPPEDWINDOW；有无所有者，子控件通知都发回本对话框（开发约定文档 UI 约定第 11 条：只有 WS_CHILD
+        // 宿主的通知发给父窗口）。
         HWND owner = (m_ownedByHost && ::IsWindow(ownerPanel)) ? ownerPanel : NULL;
         if (Create(owner, CWindow::rcDefault, TR(L"新群公告"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)

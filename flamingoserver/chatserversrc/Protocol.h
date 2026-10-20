@@ -233,7 +233,7 @@ enum msg_type
     cmd_call_switch_media  = 1708,              //通话中切换媒体类型（语音<->视频），仅已接通态可用
     cmd_call_media_changed_notify = 1709,       //推送：通话媒体类型已变更，双方（含发起者）均收到
 
-    //==== 远程桌面 1710-1716（信令走 chatserver；画面流 / 控制流走 imgserver 中转）====
+    //==== 远程桌面 1710-1716、1718-1719（信令走 chatserver；画面流 / 控制流走 imgserver 中转或 P2P）====
     cmd_rd_invite          = 1710,              //发起远程桌面：控制端→服务器，应答回带本次会话 sessionid
     cmd_rd_invite_notify   = 1711,              //推送：被控端收到远程桌面邀请（带控制端 userid / 昵称）
     cmd_rd_response        = 1712,              //被控端应答邀请：accept 字段 1 接受 / 0 拒绝
@@ -241,6 +241,10 @@ enum msg_type
     cmd_rd_close           = 1714,              //任一端结束远程桌面会话（挂断 / 关闭窗口）
     cmd_rd_state_notify    = 1715,              //推送：会话状态变更（响铃 / 拒绝 / 取消 / 对方离线 / 超时 / 断开）
     cmd_rd_relay_info      = 1716,              //推送：下发 imgserver 中转地址 + relay 令牌 + 角色，双方据此连中转通道
+    //控制权限（2026-10-12，docs/远程桌面控制权限与观看工具条方案.md 第 4.1 节）：接通后默认只能查看，控制端申请、被控端同意，
+    //被控端也可以直接授予。1717 已归一对一通话卡片，取 1718、1719
+    cmd_rd_control         = 1718,              //控制端申请 / 撤回申请 / 放弃控制，被控端授予 / 拒绝 / 收回；应答带动作之后的控制状态
+    cmd_rd_control_notify  = 1719,              //推送：对方做了控制动作（申请、撤回、授予、拒绝、收回、放弃），带动作、新的控制状态与发起人
 
     //==== 一对一通话卡片 1717（编号接在远程桌面之后：1701~1709 是一对一通话、1710~1716 是远程桌面）====
     cmd_call_card_notify   = 1717,              //推送：一对一通话卡片已改写成结束状态（结果、时长），推给主叫与被叫的全部在线设备
@@ -676,6 +680,10 @@ enum error_code
     error_code_cloudrecord_unavailable    = 738,  //云端存储服务不可用：chatserver 与 imgserver 的控制连接断开，或 imgserver 拒绝开始（磁盘空间不足等）
     error_code_cloudrecord_not_found      = 739,  //云端录像不存在，或本人无权访问（不是开启者，录像也没有发到本人所在的会话）
     error_code_screenshare_not_owner      = 730,  //只有画面主人能授予、拒绝控制；只有画面主人或正在控制的人能收回（第 18 期）
+    //740～742 归远程桌面控制权限（cmd_rd_control 1718，2026-10-12）
+    error_code_rd_not_exist               = 740,  //远程桌面会话不存在：已结束，或 sessionid 无效
+    error_code_rd_not_participant         = 741,  //不是会话参与方，或角色不对（控制端不能授予 / 拒绝 / 收回，被控端不能申请 / 撤回 / 放弃）
+    error_code_rd_control_state           = 742,  //当前状态不允许这个动作：会话还没接通、没有待处理的申请、没有在控制
     //以下 721~728 归群通话（cmd_groupcall_* 1740~1751，见 docs/协议设计-v2.md 第 21 节）
     error_code_groupcall_not_exist        = 721,  //群通话不存在（已结束或 roomid 无效）
     error_code_groupcall_exists           = 722,  //该群已有进行中的群通话；应答带那一场的 roomid，客户端改为加入

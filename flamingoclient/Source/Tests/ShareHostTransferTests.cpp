@@ -8,7 +8,8 @@
  *    - HTR3 收到 1726 怎么处理：发起一侧优先；正在观看的房间又收到 1726（新主持人掉线后重新登录）时按重连处理；
  *    - HTR4 源文件守卫（控制器）：观看端套用 1725 后刷新主持人入口、强制模式不约束主持人；名单与全员静音按当前房间、
  *           对经移交成为主持人的人开放；onRelayInfo 按 HTR3 的决定重连观看窗；
- *    - HTR5 源文件守卫（观看窗）：全屏工具条上「主持人 ▾」的判断排在「共享说明」之前（没有共享说明时两者下标相同）；
+ *    - HTR5 源文件守卫（观看窗）：浮动工具条（2026-10-12 起取代全屏工具条）的「主持人」「共享说明」按钮按各自的编号
+ *      分派到主持人菜单与共享说明浮窗（原来按额外按钮的下标区分，没有共享说明时两者下标相同，要排先后）；
  *    - HTR6 标注输入面：主持人在「其他人的屏幕」窗口里标注时，由那个窗口的画面接住输入、工具条锚在那个窗口上；
  *           白板优先；不是主持人时不起作用；
  *    - HTR7 「其他人的屏幕」窗口：顶部两个按钮把命令投给控制器，文字随标注与控制状态变化；标注或控制中关窗时先请控制器退出；
@@ -150,6 +151,12 @@ public:
         (void)serial;
         return false;
     }
+    virtual bool GetScreenSerial(int seat, uint64_t& serial) const override
+    {
+        (void)seat;
+        (void)serial;
+        return false;
+    }
     virtual std::vector<int> ScreenSeats() const override
     {
         return std::vector<int>();
@@ -285,21 +292,26 @@ TEST_CASE("HTR4 controller opens host tools to the transferred host", "[sharehos
     CHECK(relay.find("m_viewer.Reconnect(", reconnect) != std::string::npos);
 }
 
-TEST_CASE("HTR5 viewer toolbar checks the host button before the info button", "[sharehosttransfer]")
+TEST_CASE("HTR5 viewer bar dispatches the host and info buttons by their own ids", "[sharehosttransfer]")
 {
     const std::string root = HtrClientRoot();
     REQUIRE_FALSE(root.empty());
     const std::string src = HtrReadFile(root + "\\FlamingoMedia\\Share\\ShareViewerWindow.cpp");
     REQUIRE_FALSE(src.empty());
-    const std::string body = HtrFunctionBody(src, "LRESULT CShareViewerWindow::OnToolbarCmd(", "LRESULT CShareViewerWindow::");
+    const std::string body = HtrFunctionBody(src, "LRESULT CShareViewerWindow::OnBarCmd(", "LRESULT CShareViewerWindow::");
     REQUIRE_FALSE(body.empty());
-    const size_t host = body.find("kCmdExtra + hostExtraIndex()");
-    const size_t info = body.find("kCmdExtra + kInfoExtraIndex");
+    const size_t host = body.find("case kBarHost:");
+    const size_t info = body.find("case kBarInfo:");
     REQUIRE(host != std::string::npos);
     REQUIRE(info != std::string::npos);
-    CHECK(host < info);
-    //「共享说明」只在有描述时认
-    CHECK(body.find("!m_shareDesc.empty() && wParam == CRdViewerToolbar::kCmdExtra + kInfoExtraIndex") != std::string::npos);
+    CHECK(body.find("showHostMenu();", host) != std::string::npos);
+    CHECK(body.find("toggleInfoPopup();", info) != std::string::npos);
+    //「共享说明」「主持人」按钮只在有描述、经移交成为主持人时才放进工具条
+    const std::string buttons =
+        HtrFunctionBody(src, "std::vector<ViewerBarButtonSpec> CShareViewerWindow::barButtons(", "RECT CShareViewerWindow::");
+    REQUIRE_FALSE(buttons.empty());
+    CHECK(buttons.find("if (!m_shareDesc.empty())") != std::string::npos);
+    CHECK(buttons.find("if (m_hostTools)") != std::string::npos);
 }
 
 TEST_CASE("HTR6 annotation surfaces for the screens window", "[sharehosttransfer]")

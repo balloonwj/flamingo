@@ -11,6 +11,7 @@
 #include "SocketRecvDrain.h"        // 主连接收包循环 net::DrainSocketRecv
 #include "FramePayload.h"           // 包体的压缩与加密管线
 #include "HandshakeRunner.h"         // 三帧握手的共用流程（连到三个服务的各条链路复用同一份）
+#include "TcpConnectWait.h"          // 带超时的非阻塞 connect（主连接、文件连接、图片连接共用）
 #include "Sha256.h"                 // 口令 SHA-256 哈希
 #include "LoginProtocolClient.h"    // v2 登录报文编解码
 #include "RegisterProtocolClient.h" // v2 注册报文编解码
@@ -520,39 +521,21 @@ bool CIUSocket::Connect(int timeout /*= 3*/)
 
     addrSrv.sin_family = AF_INET;
     addrSrv.sin_port = htons((u_short)m_nPort);
-    int ret = ::connect(m_hSocket, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
-    if (ret == 0)
+    //被拒绝、不可达时立即返回，失败原因与超时分开写进日志（见 TcpConnectWait.h）
+    const int timeoutMs = timeout * net::kTcpConnectMsPerSecond;
+    int connectError = 0;
+    const net::tcp_connect_result connectResult =
+        net::ConnectWithTimeout(m_hSocket, addrSrv, timeoutMs, connectError);
+    if (connectResult != net::tcp_connect_ok)
     {
-        LOG_INFO("Connect to server:%s, port:%d successfully.", m_strServer.c_str(), m_nPort);
-
-        //握手必须在 m_bConnected 置真之前做完，理由见 PerformHandshake 的注释
-        if (!PerformHandshake(HANDSHAKE_TIMEOUT_SEC))
-        {
-            Close();
-            return false;
-        }
-
-        m_bConnected = true;
-        return true;
-    } else if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
-    {
-        LOG_ERROR("Could not connect to server:%s, port:%d.", m_strServer.c_str(), m_nPort);
+        LOG_ERROR("Could not connect to server:%s, port:%d, %s.", m_strServer.c_str(), m_nPort,
+                  net::DescribeTcpConnect(connectResult, connectError, timeoutMs).c_str());
         return false;
     }
 
-    fd_set writeset;
-    FD_ZERO(&writeset);
-    FD_SET(m_hSocket, &writeset);
-    struct timeval tv = { timeout, 0 };
-    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
-    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
-    if (::select(static_cast<int>(m_hSocket + 1), NULL, &writeset, NULL, &tv) != 1)
-    {
-        LOG_ERROR("Could not connect to server:%s, port:%d.", m_strServer.c_str(), m_nPort);
-        return false;
-    }
+    LOG_INFO("Connect to server:%s, port:%d successfully.", m_strServer.c_str(), m_nPort);
 
-    //与上面那条成功路径同理：握手要赶在 m_bConnected 置真之前做完
+    //握手必须在 m_bConnected 置真之前做完，理由见 PerformHandshake 的注释
     if (!PerformHandshake(HANDSHAKE_TIMEOUT_SEC))
     {
         Close();
@@ -598,7 +581,7 @@ bool CIUSocket::TestConnect(PCTSTR lpszHost, short nPort, int nTimeoutSec)
     if (hTest == INVALID_SOCKET)
         return false;
 
-    //设为非阻塞，以便用 select 控制连接超时
+    //设为非阻塞，以便控制连接超时
     unsigned long on = 1;
     if (::ioctlsocket(hTest, FIONBIO, &on) == SOCKET_ERROR)
     {
@@ -622,37 +605,10 @@ bool CIUSocket::TestConnect(PCTSTR lpszHost, short nPort, int nTimeoutSec)
         addrSrv.sin_addr.s_addr = *((unsigned long*)pHostent->h_addr);
     }
 
-    bool bConnected = false;
-    int ret = ::connect(hTest, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
-    if (ret == 0)
-    {
-        //极少数情况下非阻塞 connect 立即成功
-        bConnected = true;
-    }
-    else if (ret == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
-    {
-        //非阻塞 connect 进行中：用 select 等待"可写"（连接完成）或"异常"（失败）
-        fd_set writeset;
-        FD_ZERO(&writeset);
-        FD_SET(hTest, &writeset);
-        fd_set exceptset;
-        FD_ZERO(&exceptset);
-        FD_SET(hTest, &exceptset);
-        struct timeval tv = { nTimeoutSec, 0 };
-        int n = ::select((int)hTest + 1, NULL, &writeset, &exceptset, &tv);
-        if (n > 0 && FD_ISSET(hTest, &writeset))
-        {
-            //可写后再用 SO_ERROR 复核：排除"连接失败也会变可写"的情况
-            int soErr = 0;
-            int errLen = sizeof(soErr);
-            if (::getsockopt(hTest, SOL_SOCKET, SO_ERROR,
-                             (char*)&soErr, &errLen) == 0 && soErr == 0)
-            {
-                bConnected = true;
-            }
-        }
-    }
-
+    //与主连接共用同一份带超时的 connect（见 TcpConnectWait.h）：被拒绝、不可达时立即返回
+    int connectError = 0;
+    const bool bConnected = net::ConnectWithTimeout(hTest, addrSrv, nTimeoutSec * net::kTcpConnectMsPerSecond,
+                                                    connectError) == net::tcp_connect_ok;
     ::closesocket(hTest);
     return bConnected;
 }
@@ -695,37 +651,15 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
 
     addrSrv.sin_family = AF_INET;
     addrSrv.sin_port = htons((u_short)m_nFilePort);
-    int ret = ::connect(m_hFileSocket, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
-    if (ret == 0)
+    //被拒绝、不可达时立即返回，失败原因与超时分开写进日志（见 TcpConnectWait.h）
+    const int timeoutMs = timeout * net::kTcpConnectMsPerSecond;
+    int connectError = 0;
+    const net::tcp_connect_result connectResult =
+        net::ConnectWithTimeout(m_hFileSocket, addrSrv, timeoutMs, connectError);
+    if (connectResult != net::tcp_connect_ok)
     {
-        LOG_INFO("Connect to file server:%s, port:%d successfully.", m_strFileServer.c_str(), m_nFilePort);
-        m_bConnectedOnFileSocket = true;
-
-        //握手放在标志置真<u>之后</u>：SendOnFilePort / RecvOnFilePort 一进来就判
-        //IsFileServerClosed，标志没置真的话它们会直接拒绝收发。这与主连接的顺序相反，
-        //但没有风险——文件链路是纯同步收发，没有独立收取线程会来抢这条 socket 的数据。
-        if (!PerformFileHandshake(timeout))
-        {
-            CloseFileServerConnection();
-            return false;
-        }
-
-        return true;
-    } else if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
-    {
-        LOG_ERROR("Could not connect to file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
-        return false;
-    }
-
-    fd_set writeset;
-    FD_ZERO(&writeset);
-    FD_SET(m_hFileSocket, &writeset);
-    struct timeval tv = { timeout, 0 };
-    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
-    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
-    if (::select(static_cast<int>(m_hFileSocket + 1), NULL, &writeset, NULL, &tv) != 1)
-    {
-        LOG_ERROR("Could not connect to file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
+        LOG_ERROR("Could not connect to file server:%s, port:%d, %s.", m_strFileServer.c_str(), m_nFilePort,
+                  net::DescribeTcpConnect(connectResult, connectError, timeoutMs).c_str());
         return false;
     }
 
@@ -733,7 +667,9 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
 
     m_bConnectedOnFileSocket = true;
 
-    //与上面那条成功路径同理：握手要排在标志置真之后
+    //握手放在标志置真<u>之后</u>：SendOnFilePort / RecvOnFilePort 一进来就判
+    //IsFileServerClosed，标志没置真的话它们会直接拒绝收发。这与主连接的顺序相反，
+    //但没有风险——文件链路是纯同步收发，没有独立收取线程会来抢这条 socket 的数据。
     if (!PerformFileHandshake(timeout))
     {
         CloseFileServerConnection();
@@ -781,36 +717,15 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
 
     addrSrv.sin_family = AF_INET;
     addrSrv.sin_port = htons((u_short)m_nImgPort);
-    int ret = ::connect(m_hImgSocket, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
-    if (ret == 0)
+    //被拒绝、不可达时立即返回，失败原因与超时分开写进日志（见 TcpConnectWait.h）
+    const int timeoutMs = timeout * net::kTcpConnectMsPerSecond;
+    int connectError = 0;
+    const net::tcp_connect_result connectResult =
+        net::ConnectWithTimeout(m_hImgSocket, addrSrv, timeoutMs, connectError);
+    if (connectResult != net::tcp_connect_ok)
     {
-        LOG_INFO("Connect to img server:%s, port:%d successfully.", m_strImgServer.c_str(), m_nImgPort);
-        m_bConnectedOnImgSocket = true;
-
-        //握手放在标志置真之后，理由同 ConnectToFileServer：SendOnImgPort /
-        //RecvOnImgPort 一进来就判 IsImgServerClosed，标志没置真就会直接拒绝收发。
-        if (!PerformImgHandshake(timeout))
-        {
-            CloseImgServerConnection();
-            return false;
-        }
-
-        return true;
-    } else if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
-    {
-        LOG_ERROR("Could not connect to img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
-        return false;
-    }
-
-    fd_set writeset;
-    FD_ZERO(&writeset);
-    FD_SET(m_hImgSocket, &writeset);
-    struct timeval tv = { timeout, 0 };
-    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
-    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
-    if (::select(static_cast<int>(m_hImgSocket + 1), NULL, &writeset, NULL, &tv) != 1)
-    {
-        LOG_ERROR("Could not connect to img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
+        LOG_ERROR("Could not connect to img server:%s, port:%d, %s.", m_strImgServer.c_str(), m_nImgPort,
+                  net::DescribeTcpConnect(connectResult, connectError, timeoutMs).c_str());
         return false;
     }
 
@@ -818,7 +733,8 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
 
     m_bConnectedOnImgSocket = true;
 
-    //与上面那条成功路径同理：握手要排在标志置真之后
+    //握手放在标志置真之后，理由同 ConnectToFileServer：SendOnImgPort /
+    //RecvOnImgPort 一进来就判 IsImgServerClosed，标志没置真就会直接拒绝收发。
     if (!PerformImgHandshake(timeout))
     {
         CloseImgServerConnection();

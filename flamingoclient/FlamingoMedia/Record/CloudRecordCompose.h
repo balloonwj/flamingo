@@ -12,7 +12,8 @@
  *    - CloudVisibleScreenSeats：哪些画面还在共享：发起人在前，其余按座位升序，超过 kScreenStaleMs 没有新帧的不再显示；
  *    - 合成提速（2026-10-08）：CloudFitRect / CloudFitIsOneToOne / CloudCopyFrameRows
  *      让原尺寸的画面直接逐行复制进画布、不经 GDI 缩放；CloudCanvasKey / CloudCanvasReusable / CloudHasTimedStrokes
- *      判断这一帧的画布能否沿用上一帧。
+ *      判断这一帧的画布能否沿用上一帧；
+ *    - 2K、4K 画面的快速缩小（2026-10-15）：CloudFitUsesFastScale / CloudScaleFrameInto。
  *
  *  balloonwj@qq.com   2026-10-06
  */
@@ -26,6 +27,7 @@
 
 namespace screenshare {
 struct AnnotationStroke;
+class BgraDownscaler;   //2K、4K 画面缩小进画布的快速缩放（CloudScaleFrameInto，2026-10-15）
 }
 
 namespace screenrecord {
@@ -190,6 +192,30 @@ bool CloudFitIsOneToOne(int srcW, int srcH, const RECT& dst);
  *  @param left、top  画面左上角在画布里的位置
  */
 void CloudCopyFrameRows(uint8_t* dst, int dstW, int dstH, const uint8_t* src, int srcW, int srcH, int left, int top);
+
+/**
+ *  画面放进 dst 时能否用快速缩放（2026-10-15，docs/远程桌面H264与共享画质提升方案.md A7）：两个方向都不放大、且不是原尺寸时
+ *  返回 true，规则与观看窗的 ShareUsesFastDownscale 相同。2K、4K 的共享画面缩进 1080p 画布时，GDI 的 HALFTONE 缩放每帧要
+ *  30～50 毫秒，4K 录像合成得比实时还慢（CCB2 实测）。快速缩放用 BgraDownscaler：比例不超过 2 时一次 SSE2 双线性，超过 2 时
+ *  （多人共享时 4K 画面缩进小格子）先按 2×2 平均逐次减半，不会跳过像素。放大与原尺寸不走这条路径。
+ *  @param srcW、srcH 画面的宽高（像素）
+ *  @param dst        画面在画布里所占的矩形（CloudFitRect 的结果）
+ */
+bool CloudFitUsesFastScale(int srcW, int srcH, const RECT& dst);
+
+/**
+ *  用 BgraDownscaler 把画面缩小进画布的 dst 矩形（2026-10-15，A7）。dst 须完全落在画布内，否则什么都不写、返回 false，
+ *  由调用方改用 GDI（GDI 自己裁剪）。调用方在此之前应先 GdiFlush，免得之前排队的 GDI 绘制覆盖这里写的像素。
+ *  @param scaler       缩放器（调用方持有并复用，一条线程上使用）
+ *  @param canvas       画布像素（自上而下的 BGRA，行跨度 = canvasW × 4）
+ *  @param canvasW、canvasH 画布的宽高
+ *  @param src          画面像素（自上而下的 BGRA，行跨度 = srcW × 4）
+ *  @param srcW、srcH   画面的宽高
+ *  @param dst          目标矩形（画布坐标）
+ *  @return 写进了画布返回 true
+ */
+bool CloudScaleFrameInto(screenshare::BgraDownscaler& scaler, uint8_t* canvas, int canvasW, int canvasH, const uint8_t* src,
+                         int srcW, int srcH, const RECT& dst);
 
 //合成画布内容的签名（2026-10-08）：签名相同、又没有按时间变化的笔迹时，这一帧的画布与上一帧相同，可以不重画
 struct CloudCanvasKey

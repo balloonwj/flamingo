@@ -9,7 +9,10 @@
  *    CTS5  今天只给 HH:MM；
  *    CTS6  昨天给「昨天 HH:MM」，且跨月同样成立；
  *    CTS7  今年更早给 MM-DD HH:MM，往年带年份；
- *    CTS8  时间戳非法或当前时刻取不到时的退化行为。
+ *    CTS8  时间戳非法或当前时刻取不到时的退化行为；
+ *    CTS9  跨天必插：前后两条不在同一个本地日期时，间隔不满阈值也插（2026-10-14）；
+ *    CTS10 跨天按本地日期判定，跨月、跨年同样成立（2026-10-14）。
+ *  消息列表一侧（本人回显、回执回填、跨午夜刷新）的用例见 ChatTimeSeparatorListTests.cpp（CTL1～CTL4）。
  *
  *  时间戳一律用本地时间经 mktime 构造，使被测代码与用例处在同一时区，结果不随机器
  *  时区变化。框架 Catch2 v3。
@@ -128,4 +131,33 @@ TEST_CASE("CTS8 非法时间戳与当前时刻取不到时的退化行为", "[ch
     //时分让人误以为是今天的。
     CHECK(FormatChatSeparatorTime(LocalMs(2026, 8, 12, 9, 5), 0)
           == CString(_T("2026-08-12 09:05")));
+}
+
+TEST_CASE("CTS9 跨天必插，同一天仍按阈值", "[chattime]")
+{
+    //23:58 与次日 00:01 只隔 3 分钟，但已经不是同一天：插，保证每天的第一条消息前面都有日期。
+    CHECK(ShouldInsertTimeSeparator(LocalMs(2026, 10, 13, 23, 58), LocalMs(2026, 10, 14, 0, 1),
+                                    kChatTimeSeparatorThresholdMs));
+
+    //同一天间隔 4 分钟：仍不插。
+    CHECK_FALSE(ShouldInsertTimeSeparator(LocalMs(2026, 10, 14, 10, 0), LocalMs(2026, 10, 14, 10, 4),
+                                          kChatTimeSeparatorThresholdMs));
+
+    //原有规则不变：本条时间未知不插，时间倒挂插。
+    CHECK_FALSE(ShouldInsertTimeSeparator(LocalMs(2026, 10, 13, 23, 58), 0, kChatTimeSeparatorThresholdMs));
+    CHECK(ShouldInsertTimeSeparator(LocalMs(2026, 10, 14, 0, 1), LocalMs(2026, 10, 13, 23, 58),
+                                    kChatTimeSeparatorThresholdMs));
+}
+
+TEST_CASE("CTS10 跨天按本地日期判定，跨月、跨年同样成立", "[chattime]")
+{
+    //跨月：10-31 23:59 → 11-01 00:00，间隔 1 分钟
+    CHECK(ShouldInsertTimeSeparator(LocalMs(2026, 10, 31, 23, 59), LocalMs(2026, 11, 1, 0, 0),
+                                    kChatTimeSeparatorThresholdMs));
+    //跨年：12-31 23:59 → 次年 01-01 00:01，间隔 2 分钟
+    CHECK(ShouldInsertTimeSeparator(LocalMs(2026, 12, 31, 23, 59), LocalMs(2027, 1, 1, 0, 1),
+                                    kChatTimeSeparatorThresholdMs));
+    //同一天的零点与 00:03：同一个日期，不插
+    CHECK_FALSE(ShouldInsertTimeSeparator(LocalMs(2026, 11, 1, 0, 0), LocalMs(2026, 11, 1, 0, 3),
+                                          kChatTimeSeparatorThresholdMs));
 }

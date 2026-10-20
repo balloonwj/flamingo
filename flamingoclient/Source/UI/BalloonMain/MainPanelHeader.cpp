@@ -436,24 +436,18 @@ void MainPanelHeader::SetHoverZone(int zone, POINT pt)
         return;
     }
     m_hoverZone = zone;
-    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
-    // 先收起并注销上一个按钮的提示：两个按钮挨着，从一个直接移到另一个时提示文字要换
-    tips.OnLeave(this);
-    tips.Unregister(this);
-    if (zone == kHoverNone)
-    {
-        return;
-    }
     // 提示只在按钮上登记：本控件是整块 Banner，按控件登记会在整块 Banner 上都弹提示。
     // 宿主只在鼠标进入本控件时通知提示管理器开始计时，进入按钮时由这里补一次通知。
-    tips.Register(this, HoverTipText(zone));
+    // 两个按钮挨着，从一个直接移到另一个时提示文字要换：Retarget 先收起上一个按钮的提示，
+    // 再按新文字登记并重新计时；离开按钮（zone 为 kHoverNone）时取消登记
+    POINT screen = pt;
     balloonwjui::DuiHost* host = GetHost();
     if (host != NULL && ::IsWindow(host->m_hWnd))
     {
-        POINT screen = pt;
         ::ClientToScreen(host->m_hWnd, &screen);
-        tips.OnHover(this, screen);
     }
+    const CString text = (zone == kHoverNone) ? CString() : HoverTipText(zone);
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(this, text, screen);
 }
 
 CString MainPanelHeader::HoverTipText(int zone) const

@@ -34,6 +34,7 @@
 #include "../App/CustomMsgDef.h"                                 // D 组：WM_CHAT_MENTION_ACTION
 #include "../UI/BalloonChatWnd/GroupMemberItem.h"                // D 组：被测的成员行
 #include "../UI/BalloonChatWnd/ChatBubble.h"
+#include "../UI/BalloonChatWnd/ChatBubbleStyle.h"                // R 组：@别人 的底色块颜色
 #include "../UI/BalloonChatWnd/ChatMessageList.h"
 #include "../UI/BalloonChatWnd/ChatMockData.h"
 #include "../UI/BalloonChatWnd/ChatTextSelection.h"
@@ -62,9 +63,9 @@ const int kAdmin   = grouprole::kNetRoleAdmin;
 const int kOwner   = grouprole::kNetRoleOwner;
 const int kUnknown = -1;   // 角色未知 / 不在本群（单聊窗、尚未拉到群资料）
 
-// @ 别人时片段的底色（与 ChatBubble.cpp 的 kAtOtherBg 同值）。渲染用例据它确认
-// 底色块确实画出来了。
-const COLORREF kAtOtherBg = RGB(0xE4, 0xEE, 0xFB);
+// @ 别人时片段的底色：直接引用气泡用的那个常量（2026-10-14 起为 #E6EEFC，docs/聊天气泡美化方案.md 第 1 节第 9 条；
+// 此前本文件抄了一份旧值 #E4EEFB，气泡改色后 R1 就找不到像素了）。渲染用例据它确认底色块确实画出来了。
+const COLORREF kAtOtherBg = balloonchatwnd::bubblestyle::kAtOtherBg;
 
 RECT MakeRect(int w)
 {
@@ -89,13 +90,24 @@ ChatMessage MakeMentionMessage(const CString& text, int atLen, long long uid, bo
     return m;
 }
 
+// 取列表里第 idx 条真实消息的气泡（断言存在）。时间分隔行等 kMsgTime 行不计数：本人回显前面也会插时间行
+// （docs/聊天消息时间显示方案.md 第 7 节，2026-10-14），按子控件下标取会取到时间行。
 ChatBubble* BubbleAt(ChatMessageList& list, size_t idx)
 {
     const std::vector<std::unique_ptr<DuiControl> >& kids = list.Children();
-    REQUIRE(idx < kids.size());
-    ChatBubble* b = dynamic_cast<ChatBubble*>(kids[idx].get());
-    REQUIRE(b != NULL);
-    return b;
+    size_t seen = 0;
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        REQUIRE(b != NULL);
+        if (b->GetMessage().kind == kMsgTime)
+            continue;
+        if (seen == idx)
+            return b;
+        ++seen;
+    }
+    FAIL("no real message at index " << idx);
+    return NULL;
 }
 
 // 造一个单行、等宽字符的排版模型，供命中测试做纯逻辑断言 —— 不依赖真实字体度量，

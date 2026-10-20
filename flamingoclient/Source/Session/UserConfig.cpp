@@ -29,6 +29,17 @@ static CString QuickReplyKey(int index)
 // 读「发送代码」窗口上次手选的语言标识时的缓冲区长度（字符）。语言标识最长十来个字符，留足余量。
 static const DWORD kCodeSnippetLangChars = 32;
 
+// 屏幕共享清晰度的取值（与 FlamingoMedia 的 screenshare::ShareQualityLevel 一致）：0 为 1080p、1 为 2K、2 为 4K；默认 2K
+static const long kShareQualityMin = 0;
+static const long kShareQualityMax = 2;
+static const long kShareQualityDefaultValue = 1;
+
+// 清晰度不在 0~2 之内（配置损坏、调用方传错）时按默认的 2K
+static long NormalizeShareQuality(long quality)
+{
+	return (quality < kShareQualityMin || quality > kShareQualityMax) ? kShareQualityDefaultValue : quality;
+}
+
 // 读 [ChatFontOverride] 整段时缓冲区的初始长度与上限（字符）。一行约 50 个字符，
 // 初始长度够放几百个会话；放不下时按倍数扩大，到上限为止。
 static const DWORD kOverrideSectionInitChars = 32 * 1024;
@@ -220,6 +231,7 @@ CUserConfig::CUserConfig()
 	m_bNotifyAfterLock = TRUE;
 	m_bAutoAway = TRUE;				//默认开：无操作满 5 分钟自动切到离开
 	m_nRecordQuality = 0;			//默认标准画质
+	m_nShareQuality = kShareQualityDefaultValue;	//屏幕共享清晰度默认 2K
 	m_strMouseEffects.Empty();		//默认没有改过鼠标效果，按默认设置（只开光圈）
 	m_bRecordHotkey = TRUE;			//默认启用 Ctrl+Alt+R
 	m_dwScreenshotHotkey = balloonscreenshot::kDefaultScreenshotHotkey;	//默认 Alt+Z
@@ -321,6 +333,8 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 	m_bAutoAway = iniFile.ReadInt(_T("Settings"), _T("AutoAway"), 1, pszFilePath) ? TRUE : FALSE;
 	m_bKeepAwake = iniFile.ReadInt(_T("Settings"), _T("KeepAwake"), 0, pszFilePath) ? TRUE : FALSE;
 	m_nRecordQuality = iniFile.ReadInt(_T("Settings"), _T("RecordQuality"), 0, pszFilePath) == 1 ? 1 : 0;
+	m_nShareQuality = NormalizeShareQuality(
+		iniFile.ReadInt(_T("Settings"), _T("ShareQuality"), kShareQualityDefaultValue, pszFilePath));
 	m_bRecordHotkey = iniFile.ReadInt(_T("Settings"), _T("RecordHotkey"), 1, pszFilePath) ? TRUE : FALSE;
 	//老账号的配置文件里没有这两项，按「Alt+Z、截图时隐藏当前窗口」处理；ScreenshotHotkey 为 0 表示用户停用了截图快捷键
 	m_dwScreenshotHotkey = (DWORD)iniFile.ReadInt(_T("Settings"), _T("ScreenshotHotkey"),
@@ -456,6 +470,7 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 	iniFile.WriteInt(_T("Settings"), _T("AutoAway"), m_bAutoAway, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("KeepAwake"), m_bKeepAwake, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("RecordQuality"), m_nRecordQuality, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("ShareQuality"), m_nShareQuality, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("RecordHotkey"), m_bRecordHotkey, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("ScreenshotHotkey"), (int)m_dwScreenshotHotkey, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("ScreenshotHideWindow"), m_bScreenshotHideWindow, pszFilePath);
@@ -866,6 +881,16 @@ void CUserConfig::SetRecordQuality(long quality)
 long CUserConfig::GetRecordQuality() const
 {
 	return m_nRecordQuality;
+}
+
+void CUserConfig::SetShareQuality(long quality)
+{
+	m_nShareQuality = NormalizeShareQuality(quality);
+}
+
+long CUserConfig::GetShareQuality() const
+{
+	return m_nShareQuality;
 }
 
 void CUserConfig::SetRecordFolder(LPCTSTR folder)

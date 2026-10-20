@@ -11,7 +11,9 @@
  *      提示登记，保留文字时文字不变；
  *    - SBAR5 录制条：按钮都是图标按钮（没有文字、有提示），都在窗口里且互不重叠；红点按时刻闪烁，暂停后变灰；
  *    - SBAR6 共享控制条：按钮都在窗口里且互不重叠，图标按钮没有文字；录制这场共享时红点出现并闪烁，停止后消失；
- *      字幕能使用时多一个字幕按钮、整条变宽，点它发「为我的发言生成字幕」并带上想要的新状态。
+ *      字幕能使用时多一个字幕按钮、整条变宽，点它发「为我的发言生成字幕」并带上想要的新状态；
+ *    - SBAR7~8 浮动观看工具条用的新按钮（2026-10-12）：白板、共享说明、主持人、全屏 / 退出全屏、离开的图标与提示，
+ *      三态按钮（申请控制、共享我的屏幕、新建白板）的常态 / 申请中（橙底）/ 打开（蓝底）外观，新图标都画出了内容。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-10-07
  */
@@ -293,4 +295,107 @@ TEST_CASE("SBAR6 share control bar uses icon buttons, a record badge and a capti
     CHECK(got);
     bar.Hide();
     ::DestroyWindow(notify);
+}
+
+TEST_CASE("SBAR7 viewer bar buttons: new icons, three-state looks and tooltips", "[sharebarart]")
+{
+    //浮动观看工具条（2026-10-12，docs/远程桌面控制权限与观看工具条方案.md 第 4.3 节）新增的按钮种类
+    CHECK(ShareBarLookFor(share_bar_board, false).m_icon == share_bar_icon_board);
+    CHECK(ShareBarLookFor(share_bar_info, false).m_icon == share_bar_icon_info);
+    //主持人菜单：皇冠图标，点开是菜单，带下拉三角
+    CHECK(ShareBarLookFor(share_bar_host, false).m_icon == share_bar_icon_crown);
+    CHECK(ShareBarLookFor(share_bar_host, false).m_dropMark);
+    //全屏：on 表示正在全屏，此时画「退出全屏」
+    CHECK(ShareBarLookFor(share_bar_fullscreen, false).m_icon == share_bar_icon_fullscreen);
+    CHECK(ShareBarLookFor(share_bar_fullscreen, true).m_icon == share_bar_icon_exit_fullscreen);
+    //离开 / 断开：红底
+    CHECK(ShareBarLookFor(share_bar_leave, false).m_icon == share_bar_icon_leave);
+    CHECK(ShareBarLookFor(share_bar_leave, false).m_tone == share_bar_tone_danger);
+
+    //三态按钮（申请控制、共享我的屏幕、新建白板）：常态灰底、申请中橙底、打开蓝底，图标不随状态变
+    const int triActions[] = { share_bar_control, share_bar_share_mine, share_bar_board };
+    const int triIcons[] = { share_bar_icon_mouse, share_bar_icon_switch, share_bar_icon_board };
+    for (size_t i = 0; i < sizeof(triActions) / sizeof(triActions[0]); ++i)
+    {
+        INFO("action " << triActions[i]);
+        CHECK(ShareBarLookForTriState(triActions[i], share_bar_tri_off).m_tone == share_bar_tone_normal);
+        CHECK(ShareBarLookForTriState(triActions[i], share_bar_tri_pending).m_tone == share_bar_tone_pending);
+        CHECK(ShareBarLookForTriState(triActions[i], share_bar_tri_on).m_tone == share_bar_tone_active);
+        CHECK(ShareBarLookForTriState(triActions[i], share_bar_tri_pending).m_icon == triIcons[i]);
+    }
+    //不是三态的按钮：申请中按关着处理，打开时与 ShareBarLookFor(action, true) 相同
+    CHECK(ShareBarLookForTriState(share_bar_mic, share_bar_tri_pending).m_slash);
+    CHECK(ShareBarLookForTriState(share_bar_mic, share_bar_tri_on).m_tone == share_bar_tone_active);
+
+    //提示文字
+    CHECK(ShareBarTooltipFor(share_bar_fullscreen, false, false) == std::wstring(TR(L"全屏")));
+    CHECK(ShareBarTooltipFor(share_bar_fullscreen, true, false) == std::wstring(TR(L"退出全屏")));
+    CHECK(ShareBarTooltipFor(share_bar_info, false, false) == std::wstring(TR(L"共享说明")));
+    CHECK(ShareBarTooltipFor(share_bar_host, false, false) == std::wstring(TR(L"主持人")));
+    CHECK(ShareBarTooltipFor(share_bar_leave, false, false) == std::wstring(TRC(L"离开屏幕共享的按钮", L"离开")));
+    //浮动观看工具条的默认提示：三态按钮申请中时提示撤回，其余情况与 ShareBarTooltipFor 相同
+    CHECK(ShareBarTooltipForTriState(share_bar_control, share_bar_tri_pending) == std::wstring(TR(L"取消申请")));
+    CHECK(ShareBarTooltipForTriState(share_bar_share_mine, share_bar_tri_pending) == std::wstring(TR(L"取消共享申请")));
+    CHECK(ShareBarTooltipForTriState(share_bar_board, share_bar_tri_pending) == std::wstring(TR(L"取消白板申请")));
+    CHECK(ShareBarTooltipForTriState(share_bar_board, share_bar_tri_on) == std::wstring(TR(L"关闭我的白板")));
+    CHECK(ShareBarTooltipForTriState(share_bar_mic, share_bar_tri_on) == ShareBarTooltipFor(share_bar_mic, true, false));
+    CHECK(ShareBarTooltipForTriState(share_bar_mic, share_bar_tri_pending) == ShareBarTooltipFor(share_bar_mic, false, false));
+}
+
+TEST_CASE("SBAR8 the pending tone and the new icons draw distinct bitmaps", "[sharebarart]")
+{
+    //申请中的橙底与常态、打开的底色都不同
+    HBITMAP off = MakeShareBarButtonBitmap(ShareBarLookForTriState(share_bar_control, share_bar_tri_off),
+                                           share_bar_btn_normal, kShareBarBtnPx);
+    HBITMAP pending = MakeShareBarButtonBitmap(ShareBarLookForTriState(share_bar_control, share_bar_tri_pending),
+                                               share_bar_btn_normal, kShareBarBtnPx);
+    HBITMAP on = MakeShareBarButtonBitmap(ShareBarLookForTriState(share_bar_control, share_bar_tri_on),
+                                          share_bar_btn_normal, kShareBarBtnPx);
+    REQUIRE(off != NULL);
+    REQUIRE(pending != NULL);
+    REQUIRE(on != NULL);
+    BYTE edgeOff[4];
+    BYTE edgePending[4];
+    BYTE edgeOn[4];
+    SbarPixel(off, 2, kShareBarBtnPx / 2, edgeOff);
+    SbarPixel(pending, 2, kShareBarBtnPx / 2, edgePending);
+    SbarPixel(on, 2, kShareBarBtnPx / 2, edgeOn);
+    CHECK(memcmp(edgePending, edgeOff, 3) != 0);
+    CHECK(memcmp(edgePending, edgeOn, 3) != 0);
+    ::DeleteObject(off);
+    ::DeleteObject(pending);
+    ::DeleteObject(on);
+
+    //每个新图标都画出了东西：位图中心附近有不透明的像素，且与不画图标的底图不同
+    const int newIcons[] = { share_bar_icon_board, share_bar_icon_info, share_bar_icon_crown, share_bar_icon_fullscreen,
+                             share_bar_icon_exit_fullscreen, share_bar_icon_leave };
+    for (size_t i = 0; i < sizeof(newIcons) / sizeof(newIcons[0]); ++i)
+    {
+        INFO("icon " << newIcons[i]);
+        HBITMAP icon = MakeShareBarIconBitmap(newIcons[i], kShareBarBtnPx, RGB(255, 255, 255));
+        REQUIRE(icon != NULL);
+        int opaque = 0;
+        for (int y = 0; y < kShareBarBtnPx; ++y)
+        {
+            for (int x = 0; x < kShareBarBtnPx; ++x)
+            {
+                BYTE px[4];
+                SbarPixel(icon, x, y, px);
+                if (px[kSbarAlphaByte] != 0)
+                    ++opaque;
+            }
+        }
+        CHECK(opaque > 0);
+        ::DeleteObject(icon);
+    }
+
+    //缓存按配色区分：同一图标的常态与申请中是两种外观
+    ShareBarButtonArtCache cache;
+    balloonwjui::DuiButton a;
+    balloonwjui::DuiButton b;
+    CHECK(cache.Apply(&a, ShareBarLookForTriState(share_bar_control, share_bar_tri_off), L"tip"));
+    CHECK(cache.Apply(&b, ShareBarLookForTriState(share_bar_control, share_bar_tri_pending), L"tip"));
+    CHECK(cache.LookCount() == 2);
+    balloonwjui::DuiToolTipMgr::Inst().Unregister(&a);
+    balloonwjui::DuiToolTipMgr::Inst().Unregister(&b);
 }

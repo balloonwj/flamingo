@@ -174,6 +174,10 @@ public:
 	//屏幕录制的画质：0 标准，1 高清（交给 FlamingoMedia.dll，见 docs/屏幕共享与录制方案.md 6.1）
 	void SetRecordQuality(long quality);
 	long GetRecordQuality() const;
+	//屏幕共享清晰度：0 为 1080p、1 为 2K（默认）、2 为 4K，即 screenshare::ShareQualityLevel（交给 FlamingoMedia.dll，
+	//见 docs/远程桌面H264与共享画质提升方案.md 4.2）。Set 与读配置时不在 0~2 之内的取值按 2K
+	void SetShareQuality(long quality);
+	long GetShareQuality() const;
 	//屏幕录制的保存目录；为空表示用默认目录（「视频」文件夹下的 FlamingoRecords）
 	void SetRecordFolder(LPCTSTR folder);
 	LPCTSTR GetRecordFolder() const;
@@ -311,6 +315,7 @@ private:
 	BOOL	m_bAutoAway;			//电脑无操作时是否自动切到"离开"（默认开）
 	long	m_nAutoAwayDelayIndex;	//自动离开的等待时长下拉索引（0=5分钟 1=10 2=15 3=30），映射见 SettingsBinding.h
 	long	m_nRecordQuality;		//屏幕录制的画质：0 标准，1 高清
+	long	m_nShareQuality;		//屏幕共享清晰度：0 为 1080p、1 为 2K（默认）、2 为 4K
 	CString	m_strRecordFolder;	//屏幕录制的保存目录；为空表示默认目录
 	CString	m_strMouseEffects;	//屏幕共享与录屏的鼠标效果设置文本（第 16 期）；为空表示没有改过，按默认设置
 	BOOL	m_bRecordHotkey;		//是否启用录屏快捷键 Ctrl+Alt+R

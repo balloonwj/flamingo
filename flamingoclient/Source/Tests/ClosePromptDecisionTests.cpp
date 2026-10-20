@@ -6,8 +6,10 @@
  *  偏好推默认选中项。
  *
  *  另覆盖 ClosePromptHostGuard —— 对话框模态显示期间主面板"禁用 — 恢复"的判定，
- *  以及该模态方案所依赖的一条 Win32 语义（owner 关系不改变 ::GetParent 的结果，
- *  故 balloonui 的通知仍自路由回对话框自身）。
+ *  以及一条 Win32 语义：给 WS_OVERLAPPEDWINDOW 顶层窗口设 owner 不改变 ::GetParent 的结果
+ *  （CPD15）。2026-10-14 之前 balloonui 的 DuiHost::SendNotify 按 ::GetParent 决定通知目标，
+ *  该模态方案靠这条语义让通知回到对话框自身；此后只有 WS_CHILD 宿主的通知发给父窗口
+ *  （开发约定文档 UI 约定第 11 条），通知去向已不取决于这条语义。
  *
  *  用 Catch2 v3（amalgamated）作框架，除最后一条外均为纯逻辑、不触 UI。
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
@@ -165,11 +167,13 @@ TEST_CASE("CPD14 一轮结束后可再次打开", "[closeprompt]")
 
 TEST_CASE("CPD15 给顶层窗口设 owner 不改变 GetParent 的结果", "[closeprompt]")
 {
-    // 本用例钉住的是关闭确认对话框改用"owner = 主面板"之后仍然成立的前提：
-    // balloonui 的 DuiHost::SendNotify 用 ::GetParent(m_hWnd) 找通知投递目标，
-    // 取不到才自路由回窗口自身。WS_OVERLAPPEDWINDOW 的顶层窗口即便带 owner，
-    // ::GetParent 仍为 NULL（owner 要用 ::GetWindow(GW_OWNER) 取），所以对话框
-    // 里那些卡片 / 复选框 / 按钮的通知照旧回到对话框自己，不会跑到主面板去。
+    // 本用例验证一条 Win32 语义：WS_OVERLAPPEDWINDOW 的顶层窗口即便带 owner，
+    // ::GetParent 仍为 NULL（owner 要用 ::GetWindow(GW_OWNER) 取）。
+    // 关闭确认对话框改用"owner = 主面板"时，balloonui 的 DuiHost::SendNotify 按
+    // ::GetParent(m_hWnd) 找通知投递目标，对话框里卡片 / 复选框 / 按钮的通知靠这条
+    // 语义才回到对话框自己。2026-10-14 起 SendNotify 只把 WS_CHILD 宿主的通知发给
+    // 父窗口，其余一律发回宿主自身（开发约定文档 UI 约定第 11 条），通知去向已不依赖
+    // 这条语义。
     HINSTANCE hInst = ::GetModuleHandle(NULL);
 
     // 用系统 STATIC 类建窗，省去注册窗口类；本用例只关心窗口关系，与类无关。
@@ -187,7 +191,7 @@ TEST_CASE("CPD15 给顶层窗口设 owner 不改变 GetParent 的结果", "[clos
     REQUIRE(hOwned != NULL);
 
     CHECK(::GetWindow(hOwned, GW_OWNER) == hOwner);   // owner 关系确实建立了
-    CHECK(::GetParent(hOwned) == NULL);               // 但通知目标查找仍取不到父窗口
+    CHECK(::GetParent(hOwned) == NULL);               // 但 ::GetParent 仍取不到父窗口
 
     ::DestroyWindow(hOwned);
     ::DestroyWindow(hOwner);

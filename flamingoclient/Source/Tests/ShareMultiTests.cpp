@@ -7,12 +7,16 @@
  *    - SSMC3 多画面布局：1 块铺满、2 块左右平分、3～4 块田字格，放大一块时主画面在上、其余缩成底部居中的一排小图；点中哪一块；
  *    - SSMC4 多路解码：两个座位的屏幕画面各自解码、各存最新一帧，源状态按座位记，移除一路不影响另一路；
  *    - SSMC5 主持人退出时可移交的人（除自己以外正在共享的人）；
- *    - SSMC6 本人要看的画面（去掉自己的那一块）；
+ *    - SSMC6 本人要看的画面：2026-10-12 起每个人都看到全部画面（含自己那一块），清单与顺序人人相同；
  *    - SSMC7 本人作为共享者的阶段按快照校正，「共享我的屏幕」按钮按阶段显示；
  *    - SSMC8 主持人一侧的共享申请队列；
  *    - SSMC9 观看窗画面控件选矩形：控制键鼠按被控制的那一块换算；
  *    - SSMC10 白板（第 23 期）的协议：快照里的白板与「申请白板中」、1738 的 kind 与座位、1737 带 kind；
- *    - SSMC11 白板进画面清单（排在屏幕之后）、占共享名额、不是可接任主持人的人；按白板的申请队列。
+ *    - SSMC11 白板进画面清单（排在屏幕之后）、占共享名额、不是可接任主持人的人；按白板的申请队列；
+ *    - MSC2a 本人那一块的本机预览：限帧率留帧、尺寸变化立即留、按座位取、关闭后丢弃（2026-10-12）；
+ *    - MSC1 画面块的名字：屏幕为共享人的名字、白板为「某某 的白板」，本人那一块后面加「（我）」（2026-10-12）；
+ *    - MSC4 申请控制的目标：白板、本人的画面都不能申请，查不到画面主人时不发（2026-10-12）；
+ *    - MSC7 名字标签的位置（2026-10-13）：默认在这一块的左上角；与浮动工具条重叠时挪到工具条下方；块太矮放不下时留在原处。
  *  SSMC4 用真实的 H.264 编码器造测试数据（与 ShareBitrateTests 相同的做法），其余为纯逻辑。框架 Catch2 v3。
  *
  *  典型用法：FlamingoUnit.exe "[sharemulti]"
@@ -27,10 +31,13 @@
 #include <vector>
 #include "../../FlamingoMedia/Call/MfH264Codec.h"
 #include "../../FlamingoMedia/Share/ShareFraming.h"
+#include "../../FlamingoMedia/Share/ShareLocalPreview.h"   // ShareLocalPreview（MSC2a）
 #include "../../FlamingoMedia/Share/ShareProtocolClient.h"
+#include "../../FlamingoMedia/Share/ShareRoomPolicy.h"   // MakeShareTileName、DecideShareControlTarget（MSC1、MSC4）
 #include "../../FlamingoMedia/Share/ShareScreenDecoders.h"
 #include "../../FlamingoMedia/Share/ShareScreens.h"
 #include "../../Source/net/Protocol.h"
+#include "../Common/I18n/I18n.h"   // TRF：MSC1 按当前语言比较名字
 
 using namespace screenshare;
 
@@ -353,7 +360,7 @@ TEST_CASE("SSMC5 主持人退出时可移交的人", "[sharemulti]")
     CHECK(HostTransferCandidates(alone, 2001).empty());
 }
 
-TEST_CASE("SSMC6 本人要看的画面去掉自己的那一块", "[sharemulti]")
+TEST_CASE("SSMC6 每个人看到的画面清单相同，含自己那一块", "[sharemulti]")
 {
     ShareStateNotify s;
     s.m_hostId = 2001;
@@ -361,22 +368,26 @@ TEST_CASE("SSMC6 本人要看的画面去掉自己的那一块", "[sharemulti]")
     s.m_members.push_back(ssmcMember(2002, 1, true, 4));
     s.m_members.push_back(ssmcMember(2003, 2, false, -1));
     s.m_members.push_back(ssmcMember(2004, 3, true, 5));
-    //共享者 2002 看到主持人与 2004，不看自己
-    std::vector<ShareScreenInfo> v = CollectOtherScreens(s, 2002);
-    REQUIRE(v.size() == 2);
+    //2026-10-12 起共享者、主持人、观看者看的都是同一份清单：主持人在前，其余共享者按画面座位
+    std::vector<ShareScreenInfo> v = CollectShareScreens(s);
+    REQUIRE(v.size() == 3);
     CHECK(v[0].m_ownerId == 2001);
-    CHECK(v[1].m_ownerId == 2004);
-    //主持人看到的是其他两位共享者
-    v = CollectOtherScreens(s, 2001);
-    REQUIRE(v.size() == 2);
-    CHECK(v[0].m_screenSeat == 4);
-    CHECK(v[1].m_screenSeat == 5);
-    //没在共享的观看者看到全部三块
-    CHECK(CollectOtherScreens(s, 2003).size() == 3);
-    //主持人停掉自己的画面：观看者只看到两位共享者
+    CHECK(v[1].m_ownerId == 2002);
+    CHECK(v[2].m_ownerId == 2004);
+    //别人的画面块数：共享者看到另外两块，只看不共享的人三块都是别人的
+    CHECK(CountOtherScreens(v, 2002) == 2);
+    CHECK(CountOtherScreens(v, 2003) == 3);
+    //只有自己在共享：没有别人的画面，主持人的「共享画面」窗口不打开
+    std::vector<ShareScreenInfo> hostOnly(1, v[0]);
+    CHECK(CountOtherScreens(hostOnly, 2001) == 0);
+    //本人屏幕的画面座位（取本机预览用）：主持人用成员座位，其他共享者用画面座位，只看不共享的人没有
+    CHECK(FindOwnScreenSeat(v, 2001) == 0);
+    CHECK(FindOwnScreenSeat(v, 2002) == 4);
+    CHECK(FindOwnScreenSeat(v, 2003) == -1);
+    //主持人停掉自己的画面：清单只剩两位共享者
     s.m_members[0].m_sharing = false;
     s.m_members[0].m_screenSeat = -1;
-    CHECK(CollectOtherScreens(s, 2003).size() == 2);
+    CHECK(CollectShareScreens(s).size() == 2);
 }
 
 TEST_CASE("SSMC7 共享者阶段按快照校正，「共享我的屏幕」按钮按阶段显示", "[sharemulti]")
@@ -533,10 +544,11 @@ TEST_CASE("SSMC11 白板进画面清单、占共享名额、不能接任主持�
     CHECK(all[3].m_screenSeat == 6);
     CHECK(all[3].m_ownerId == 2003);
     CHECK(all[3].m_ownerSeat == 2);
-    //本人建的白板不在本人要看的清单里
-    const std::vector<ShareScreenInfo> mine = CollectOtherScreens(s, 2003);
-    REQUIRE(mine.size() == 3);
-    CHECK(FindScreenBySeat(mine, 6) < 0);
+    //本人建的白板也在本人要看的清单里（2026-10-12 起每个人都看到全部画面），白板算建立者本人的
+    CHECK(FindScreenBySeat(all, 6) >= 0);
+    CHECK(CountOtherScreens(all, 2003) == 3);
+    //只建了白板的人没有本人屏幕：白板不取本机预览
+    CHECK(FindOwnScreenSeat(all, 2003) == -1);
     //名额：两个屏幕加两块白板
     CHECK(ShareSlotsUsed(s) == 4);
     //只建了白板的 2003 不能接任主持人
@@ -553,4 +565,114 @@ TEST_CASE("SSMC11 白板进画面清单、占共享名额、不能接任主持�
     REQUIRE(removed.size() == 1);
     CHECK(removed[0] == 2002);
     CHECK(boards.FrontUser() == 2003);
+}
+
+TEST_CASE("MSC1 tile names: owner name, owner's whiteboard, and (me) on one's own tile", "[sharemulti]")
+{
+    const std::wstring name = L"tom";
+    CHECK(MakeShareTileName(name, false, false) == name);
+    CHECK(MakeShareTileName(name, true, false) == TRF(L"{0} 的白板", name));
+    CHECK(MakeShareTileName(name, false, true) == TRF(L"{0}（我）", name));
+    CHECK(MakeShareTileName(name, true, true) == TRF(L"{0} 的白板（我）", name));
+}
+
+TEST_CASE("MSC4 control requests skip whiteboards and one's own screen", "[sharemulti]")
+{
+    const int64_t self = 2002;
+    const int64_t other = 2001;
+    CHECK(DecideShareControlTarget(false, other, self) == share_control_target_ok);
+    CHECK(DecideShareControlTarget(true, other, self) == share_control_target_board);
+    CHECK(DecideShareControlTarget(false, self, self) == share_control_target_self);
+    CHECK(DecideShareControlTarget(false, 0, self) == share_control_target_none);
+    //白板优先：本人建的白板也按白板提示
+    CHECK(DecideShareControlTarget(true, self, self) == share_control_target_board);
+}
+
+TEST_CASE("MSC2a local preview keeps the latest own frame at a limited rate", "[sharemulti]")
+{
+    const int seat = 7;
+    const int w = 4;
+    const int h = 2;
+    const int bpp = 4;
+    //行跨度比宽 × 4 多 8 个字节：留下的画面要按宽 × 4 紧密排列
+    const int stride = w * bpp + 8;
+    std::vector<uint8_t> src(static_cast<size_t>(stride) * h, 0);
+    for (int y = 0; y < h; ++y)
+        src[static_cast<size_t>(y) * stride] = static_cast<uint8_t>(y + 1);
+    std::vector<uint8_t> out;
+    int ow = 0;
+    int oh = 0;
+    uint64_t serial = 0;
+    ShareLocalPreview p;
+    //预览关闭时不留
+    CHECK_FALSE(p.IsEnabled());
+    CHECK_FALSE(p.Offer(&src[0], w, h, stride, 1000));
+    CHECK_FALSE(p.HasFrame());
+    p.SetSeat(seat);
+    CHECK(p.IsEnabled());
+    //第一帧立即留下
+    CHECK(p.Offer(&src[0], w, h, stride, 1000));
+    REQUIRE(p.Get(seat, out, ow, oh, serial));
+    CHECK(ow == w);
+    CHECK(oh == h);
+    CHECK(serial == 1);
+    REQUIRE(out.size() == static_cast<size_t>(w * bpp * h));
+    CHECK(out[0] == 1);
+    CHECK(out[static_cast<size_t>(w * bpp)] == 2);
+    //别的座位取不到
+    CHECK_FALSE(p.Get(seat + 1, out, ow, oh, serial));
+    //间隔不够、尺寸没变：不留
+    CHECK_FALSE(p.Offer(&src[0], w, h, stride, 1000 + kLocalPreviewIntervalMs - 1));
+    //尺寸变了：不受限帧率约束
+    CHECK(p.Offer(&src[0], w / 2, h, stride, 1000 + kLocalPreviewIntervalMs - 1));
+    REQUIRE(p.Get(seat, out, ow, oh, serial));
+    CHECK(ow == w / 2);
+    CHECK(serial == 2);
+    //间隔够了：留下
+    CHECK(p.Offer(&src[0], w / 2, h, stride, 1000 + 2 * kLocalPreviewIntervalMs));
+    //座位变了：画面保留，按新座位取
+    p.SetSeat(seat + 1);
+    CHECK(p.HasFrame());
+    CHECK(p.Get(seat + 1, out, ow, oh, serial));
+    CHECK(serial == 3);
+    //关闭：丢掉画面，帧序号不归零
+    p.SetSeat(-1);
+    CHECK_FALSE(p.HasFrame());
+    CHECK_FALSE(p.Get(seat + 1, out, ow, oh, serial));
+    p.SetSeat(seat);
+    CHECK(p.Offer(&src[0], w, h, stride, 5000));
+    REQUIRE(p.Get(seat, out, ow, oh, serial));
+    CHECK(serial == 4);
+    //行跨度小于宽 × 4：拒收
+    CHECK_FALSE(p.Offer(&src[0], w, h, w * bpp - 1, 9000));
+}
+
+TEST_CASE("MSC7 a tile name label moves below the floating bar when they overlap", "[sharemulti]")
+{
+    //一块画面、标签大小与边距（像素）
+    const RECT tile = { 500, 40, 1000, 600 };
+    const int labelW = 120;
+    const int labelH = 24;
+    const int margin = 8;
+    //没有要避开的矩形：左上角
+    RECT none = { 0, 0, 0, 0 };
+    RECT box = ComputeTileLabelRect(tile, labelW, labelH, margin, none);
+    CHECK(box.left == tile.left + margin);
+    CHECK(box.top == tile.top + margin);
+    CHECK(box.right - box.left == labelW);
+    CHECK(box.bottom - box.top == labelH);
+    //浮动工具条横跨两块的上方、盖住标签：挪到它下方，左边不变
+    const RECT bar = { 350, 44, 930, 108 };
+    box = ComputeTileLabelRect(tile, labelW, labelH, margin, bar);
+    CHECK(box.left == tile.left + margin);
+    CHECK(box.top == bar.bottom + margin);
+    CHECK(box.bottom - box.top == labelH);
+    //工具条在别处、不重叠：仍在左上角
+    const RECT farBar = { 0, 300, 100, 340 };
+    box = ComputeTileLabelRect(tile, labelW, labelH, margin, farBar);
+    CHECK(box.top == tile.top + margin);
+    //块太矮、挪下去会超出这一块：留在原处
+    const RECT shortTile = { 500, 40, 1000, 120 };
+    box = ComputeTileLabelRect(shortTile, labelW, labelH, margin, bar);
+    CHECK(box.top == shortTile.top + margin);
 }

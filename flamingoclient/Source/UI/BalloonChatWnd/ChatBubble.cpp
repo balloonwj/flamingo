@@ -40,6 +40,7 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "ChatBubble.h"
+#include "ChatBubbleStyle.h"   // 气泡美化的样式常量（docs/聊天气泡美化方案.md 第 2 节）
 #include "ChatImageCache.h"    // 图片后台解码 + 缩放缓存（大图首次显示不冻结 UI）
 #include "../../Common/Log/IULog.h"          // 引用缩略图的诊断日志
 #include "ChatIcons.h"
@@ -76,11 +77,13 @@ extern CAppModule _Module;
 #include "ChatAvatarBitmapCache.h"   // 发送者真图头像的共享位图缓存（同一头像只解码、缩放一次）
 #include "ChatRelayCard.h"           // RelayCardButton、RelayCopyTextForMessage（接龙卡片的按钮与复制文字）
 #include "ChatFileShareCard.h"       // ShareCardButtonLabel（共享卡片的按钮文字）
+#include "ChatCardModel.h"           // 卡片类型、状态标签与按钮列表（docs/聊天卡片美化方案.md）
+#include "ChatCardPaint.h"           // 卡片底板、图标块、状态标签、按钮与底部一行的绘制
+#include "ChatCardStyle.h"           // 卡片样式常量
 #include "ChatScreenShareCard.h"     // ScreenShareJoinRequest（屏幕共享卡片「加入」随消息投递的堆对象）
 #include "ChatMarkdown.h"            // Markdown 消息：由正文取源文本、图片转链接的前缀（卡片见 docs/Markdown消息方案.md 第 11.3 节）
 #include "ChatMarkdownCard.h"        // Markdown 卡片的宽度、标题与摘要、高度与内容绘制（与独立卡片控件共用）
 #include "../../net/Protocol.h"      // share_kind（共享卡片按类型选图标）
-#include "../../Common/Graphics/ShellTypeIcon.h"   // 文件共享卡片标题前的本机系统类型图标
 #include "../../App/CustomMsgDef.h"   // WM_VIEW_CHAT_IMAGE / WM_CHAT_FILE_ACTION / WM_CHAT_IMAGE_ACTION
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // ParseSendBody / ChatSegment（解析内联表情）
 #include "../../net/MessageProtocolClient.h"  // canRecallMessage（右键菜单里"撤回"项的时限判断）
@@ -98,6 +101,7 @@ namespace balloonchatwnd {
 
 //圆角矩形、GDI 文字与量宽三个工具函数与文件卡片共用一份实现（见 ChatPaintUtil.h）
 using chatpaint::AddRoundRect;
+using chatpaint::AddRoundRectCorners;
 using chatpaint::DrawGdiText;
 using chatpaint::MeasureTextWidth;
 
@@ -111,18 +115,18 @@ const int kAvatarSize     = 34;   // 头像边长
 const int kEdgePad        = 16;   // 头像距窗口边
 const int kAvatarGap      = 10;   // 头像与气泡列的间距
 const int kRowVMargin     = 7;    // 行上下外边距
-const int kTextBubbleH    = 36;   // 单行文字气泡高（折行测量失败时的回退）
+const int kTextBubbleH    = 38;   // 单行文字气泡高（折行测量失败时的回退）：行高 22 + 上下内边距 8 × 2（2026-10-14 之前为 36）
 const int kEmojiBubbleH   = 46;   // emoji 气泡高
 const int kFileBubbleH    = 58;   // 文件气泡高
-const int kImageBubblePad = 8;    // 图片气泡内边距（4 每侧）
+const int kImageBubblePad = 8;    // 原图片气泡内边距（4 每侧）。2026-10-14 起图片不再套气泡，只有带引用的代码卡片按它留气泡边
 // 引用块（气泡内部顶端那一块，标明本条回复的是谁的哪句话）。
 // 早先它画在气泡外面、只有一行；现按设计稿挪进气泡内部并改成两行 —— 第一行人名、
 // 第二行被引用内容，左侧一条竖线标明这是引用。
 const int kQuoteLineH     = 17;   // 引用块内每行文字的行高
 const int kQuoteBlockH    = kQuoteLineH * 2 + 4;   // 引用块总高（两行 + 行间距）
 const int kQuoteGap       = 6;    // 引用块与其下方正文之间的间距
-const int kQuoteBarW      = 3;    // 左侧竖线宽
-const int kQuoteBarGap    = 7;    // 竖线与文字之间的间距
+const int kQuoteBarW      = bubblestyle::kQuoteBarW;     // 左侧竖线宽：2（2026-10-14 之前为 3）
+const int kQuoteBarGap    = bubblestyle::kQuoteBarGap;   // 竖线与文字之间的间距：8（原为 7，文字位置不变）
 const int kQuoteThumbSize = kQuoteBlockH;   // 引用图片消息时缩略图的边长（与引用块等高）
 const int kQuoteThumbGap  = 8;              // 缩略图与右侧文字的间距
 const int kQuoteMinTextW  = 120;            // 引用块内文字至少留出的宽度（保证人名 / 摘要看得见）
@@ -137,7 +141,7 @@ const Gdiplus::REAL kReceiptCheckStroke = 2.0f;   // 勾的线宽
 
 // 文字气泡内边距 / 折行布局参数。
 const int    kTextPadH = 12;            // 文字气泡水平内边距（每侧）
-const int    kTextPadV = 9;             // 文字气泡垂直内边距（每侧）
+const int    kTextPadV = bubblestyle::kTextPadV;   // 文字气泡垂直内边距（每侧）：8（2026-10-14 之前为 9，与行高一起收紧）
 const int    kMinTextWidth = 40;        // 折行测量时文字区最小宽度
 const double kBubbleMaxWidthRatio = 0.62;  // 气泡最大宽 = 内容区宽 × 此比例
 
@@ -159,14 +163,18 @@ const Gdiplus::REAL kAvatarRadius = 7.0f;    // 头像圆角
 
 // ---- 配色 --------------------------------------------------------------
 
-const Gdiplus::Color kBubbleOther(255, 0xF3, 0xF2, 0xEF);  // 对方气泡底（浅灰）
+// 对方气泡底（浅灰，2026-10-14 起由 #F3F2EF 加深为 #F0EEEA，与聊天记录管理器的语音条共用 bubblestyle::kPeerBubbleFill）
+const Gdiplus::Color kBubbleOther(255, GetRValue(bubblestyle::kPeerBubbleFill), GetGValue(bubblestyle::kPeerBubbleFill),
+                                  GetBValue(bubblestyle::kPeerBubbleFill));
 const Gdiplus::Color kBubbleSelf (255, 0xFF, 0xE6, 0xD8);  // 自己气泡底（浅橙）
-const Gdiplus::Color kQuoteFill  (255, 0xEF, 0xEE, 0xEB);  // 引用块底
+// 引用块底：铺在气泡底色之上的半透明白（不透明度 60%，docs/聊天气泡美化方案.md 第 1 节第 7 条）
+const Gdiplus::Color kQuoteFill  ((BYTE)bubblestyle::kQuoteFillAlpha, 0xFF, 0xFF, 0xFF);
 const Gdiplus::Color kAccent     (255, 0xFF, 0x7A, 0x45);  // 主题橙
 const Gdiplus::Color kCheckRing  (255, 0xC2, 0xC0, 0xBB);  // 未选中勾选圈描边
 const COLORREF kBubbleText  = RGB(0x2A, 0x2A, 0x2A);       // 气泡文字
-const COLORREF kQuoteName   = RGB(0xFF, 0x7A, 0x45);       // 引用人名
-const COLORREF kQuoteText   = RGB(0x8A, 0x8A, 0x8A);       // 引用内容
+const COLORREF kQuoteName   = bubblestyle::kQuoteName;     // 引用人名：深灰半粗（2026-10-14 之前为品牌橙）
+const COLORREF kQuoteText   = bubblestyle::kQuoteText;     // 引用内容
+const COLORREF kQuoteBar    = bubblestyle::kQuoteBar;      // 引用块左侧竖线：灰色（原与人名同为品牌橙）
 const COLORREF kTimeColor   = RGB(0xA8, 0xA6, 0xA2);       // 时间分隔文字
 const int kRecallEditGapPx  = 6;    // 撤回提示行里提示文字与「编辑」之间的间距（像素）
 const COLORREF kReceiptText = RGB(0xA8, 0xA6, 0xA2);       // "已读"文字
@@ -219,124 +227,18 @@ const wchar_t* const kPinTooltipText = TR_NOOP(L"取消 Pin");
 // 文件卡片的几何常量、按状态算高度（FileCardHeight）、是否省掉「拒绝」（FileCardSkipsReject）
 // 与绘制都在 ChatFileCard.h/.cpp，与聊天记录查看窗共用一份。
 
-// ---- 文件夹气泡（kMsgFolder）几何与状态布局 ----------------------------
+// ---- 文件夹气泡（kMsgFolder）----
 //
-// 注：文件夹传输状态取值（kFolderInviting / kFolderTransferring / ... / kFolderUserCanceled）
-// 与「状态 → 可用操作」的映射（FolderStateHasProgress / FolderStateButtonCount /
-// FolderButtonActions / FolderRetryEnabled / FolderErrorText）已在 ChatFolderStateModel.h/.cpp，
-// 那是可单元测试的纯逻辑；本文件经 ChatFolderAction.h 取用，绝不在绘制代码里另写一份状态判断。
-
-// 文件夹气泡几何常量（逻辑像素）。整体沿用文件气泡那一套，只有下面三处不同：
-//   · 气泡更宽（344 而非 300）—— 状态行要放下"正在传输 <文件名>（第 i / 共 n 个）"，
-//     实测 320 宽时这一串在文件名之后就被省略号截断，"共 n 个"看不见了；
-//   · 头部之下多一行状态行（当前文件名、第 i / 共 n 个），传输中才有内容；
-//   · 失败态再多一行失败原因。
-const int kFolderBubbleW     = 344;  // 文件夹气泡固定宽
-const int kFolderPadH        = 14;   // 气泡水平内边距（每侧）
-const int kFolderIconSize    = 40;   // 图标底块边长（圆角方块，与文件气泡的类型块同尺寸）
-const int kFolderIconTop     = 10;   // 图标底块距气泡顶
-const int kFolderGlyphSize   = 24;   // 底块内文件夹图标的绘制边长（kChatIconFolder 按 viewBox 24 缩放到此尺寸）
-const int kFolderNameTop     = 12;   // 文件夹名距气泡顶
-const int kFolderNameH       = 20;   // 文件夹名行高
-const int kFolderSummaryTop  = 34;   // 摘要行（文件数 / 目录数 / 总大小）距气泡顶
-const int kFolderSummaryH    = 18;   // 摘要行行高
-const int kFolderTextGap     = 12;   // 图标底块与右侧文字之间的间距
-const int kFolderHeaderH     = 60;   // 头部区高（图标 + 文件夹名 + 摘要行）
-const int kFolderProgressH   = 5;    // 进度条厚
-const int kFolderStatusTopGap = 8;   // 状态行距上方（进度条或头部）
-const int kFolderStatusH     = 18;   // 状态行行高
-const int kFolderPctW        = 44;   // 状态行右端为百分比预留的宽度。百分比右对齐画在这一格里，
-                                     // 左侧的状态文字相应收窄并以省略号收尾，两者永不叠字
-                                     // （"100%" 在 11px 字号下约 28px，余量给中文括号留出空隙）
-const int kFolderCounterGap  = 8;    // 状态行主文字与右侧"第 i / 共 n 个"计数段之间的间距
-const int kFolderErrorTopGap = 4;    // 失败原因行距状态行
-const int kFolderErrorH      = 18;   // 失败原因行行高
-const int kFolderBtnTopGap   = 8;    // 按钮行距上方
-const int kFolderBtnH        = 30;   // 按钮行高（同时是按钮的命中矩形高）
-const int kFolderBtnBottomPad = 10;  // 按钮行下边距
-const int kFolderLinkPx      = 13;   // 底部操作链接文字字号
-const int kFolderLinkGap     = 18;   // 相邻操作链接的水平间距
-
-// 文件夹图标底块的底色（暖琥珀）。文件气泡按扩展名取色（见 ChatFileVisual），文件夹
-// 没有扩展名可言，故固定一色；选暖琥珀是因为它与主题橙同色系但更沉，两种气泡并排时
-// 一眼能分出"这是一个文件夹"而不是又一个文件。
-const COLORREF kFolderBlockColor = RGB(0xE8, 0x9C, 0x3A);
-
-// 本状态下是否要单独画一行失败原因。
-// 只对"没有正常传完"的几种终态给这一行，且要求宿主确实带回了错误码 —— errcode 为 0
-// 时 FolderErrorText 只会返回一句兜底文案，画出来等于占着一行说废话。
-// 发送端在应答前主动撤回邀请（kFolderInviteCanceled）不算失败，不给这一行。
-//   state：   传输状态，取值见 ChatFolderState
-//   errcode： 失败原因错误码（error_code_folder_*），0=宿主未记录
-bool FolderBubbleHasErrorLine(int state, int errcode)
-{
-    if (errcode == 0)
-    {
-        return false;
-    }
-    return state == kFolderFailed
-        || state == kFolderExpired
-        || state == kFolderUserCanceled
-        || state == kFolderRejected
-        || state == kFolderPeerOffline
-        || state == kFolderTimeout;
-}
-
-// 文件夹气泡总高（随状态变化：有无进度条 / 失败原因行 / 按钮行）。
-// 三处可变项<u>必须</u>与 RenderContent 里排布这三块时问的是同一批函数，否则会出现
-// 「按钮画出来了却被裁在气泡外面点不到」这种错位——文件气泡的注释里说的就是这件事。
-// 按钮全部排在<u>同一行</u>内（RenderContent 里按各自文字宽度从左往右顺排），故这里只按
-// 「有没有按钮」加一次行高，与按钮具体有几个无关；2026-08-14 把邀请态接收端从两个按钮
-// 加到三个（接收 / 另存为 / 拒绝）时，高度因此不必改动。
-//   state：   传输状态，取值见 ChatFolderState
-//   fromMe：  本行是否本端发起（影响按钮数：接收端在邀请态有三个、失败态一个都没有）
-//   errcode： 失败原因错误码，决定要不要留出失败原因那一行
-int FolderBubbleHeight(int state, bool fromMe, int errcode)
-{
-    int h = kFolderHeaderH;
-    if (FolderStateHasProgress(state))
-    {
-        h += kFolderProgressH;
-    }
-    //状态行任何状态都有（等待应答 / 正在创建目录 / 正在传输 / 已完成 / 已取消……），
-    //故不设条件；它是用户判断"这次传输眼下到哪一步了"的唯一一行字。
-    h += kFolderStatusTopGap + kFolderStatusH;
-    if (FolderBubbleHasErrorLine(state, errcode))
-    {
-        h += kFolderErrorTopGap + kFolderErrorH;
-    }
-    if (FolderStateButtonCount(state, fromMe) > 0)
-    {
-        h += kFolderBtnTopGap + kFolderBtnH + kFolderBtnBottomPad;
-    }
-    return h;
-}
+// 2026-10-14 起按标准卡片画（docs/聊天卡片美化方案.md 5.1）：状态标签、信息行与进度文字由 ChatCardModel 的
+// FolderCardStatus / FolderCardProgressText 给出，按钮由 ChatCardButtonsOf 给出；传输状态与「状态 → 可用操作」的映射仍在
+// ChatFolderStateModel（FolderStateHasProgress / FolderButtonActions / FolderRetryEnabled / FolderErrorText）。
 
 // ---- 合并转发聊天记录卡片（kMsgMerged）几何 ------------------------------
 //
 // 版式自上而下：标题一行（粗体）、最多 kMergedCardPreviewLines 行「发送者：摘要」（灰）、
 // 一条分隔线、底部「聊天记录（共 N 条）」（小号灰字）。卡片内容由 ChatMergedCard 解析，
 // 本文件只管画。整张卡片可点，点击打开聊天记录查看窗。
-const int kMergedBubbleW     = 280;  // 卡片固定宽
-const int kMergedPadH        = 14;   // 水平内边距（每侧）
-const int kMergedTitleTop    = 10;   // 标题距卡片顶
-const int kMergedTitleH      = 22;   // 标题行高
-const int kMergedTitlePx     = 14;   // 标题字号
-const int kMergedLinesGap    = 4;    // 标题与第一行预览之间的间距
-const int kMergedLineH       = 18;   // 每行预览的行高
-const int kMergedLinePx      = 12;   // 预览字号
-const int kMergedFooterGap   = 8;    // 最后一行预览与分隔线之间的间距
-const int kMergedFooterH     = 28;   // 分隔线下方底部文字行的高度
-const int kMergedFooterPx    = 11;   // 底部文字字号
-const COLORREF kMergedLineColor   = RGB(0x8A, 0x8A, 0x8A);   // 预览与底部文字的灰色
-const Gdiplus::Color kMergedDivider(255, 0xE2, 0xDE, 0xDA);  // 分隔线颜色
 
-// 合并卡片的总高：随预览行数变化（0 ~ kMergedCardPreviewLines 行）。
-int MergedBubbleHeight(size_t lineCount)
-{
-    return kMergedTitleTop + kMergedTitleH + kMergedLinesGap
-         + (int)lineCount * kMergedLineH + kMergedFooterGap + kMergedFooterH;
-}
 
 // ---- Markdown 消息卡片（kMsgText + isMarkdown）----------------------------
 //
@@ -348,39 +250,11 @@ int MergedBubbleHeight(size_t lineCount)
 // 版式自上而下：标题一行（类型图标 + 粗体名称）、显示路径一行（灰，为空时不画）、「某某的共享 · 状态」一行（小号灰字）；
 // 有按钮时再画一条分隔线和一行居中的按钮文字（主题橙，不可点时为灰）。卡片要显示的文字由 ChatFileShareCard 算好放在
 // ChatMessage 里，本文件只管画。按钮可点时整张卡片都可点，点击打开共享。
-const int kShareBubbleW      = 280;  // 卡片固定宽，与合并卡片、接龙卡片相同
-const int kSharePadH         = 14;   // 水平内边距（每侧）
-const int kShareTitleTop     = 10;   // 标题距卡片顶
-const int kShareTitleH       = 22;   // 标题行高
-const int kShareTitlePx      = 14;   // 标题字号
-const int kShareIconSize     = 18;   // 标题前类型图标的边长
-const int kShareIconGap      = 6;    // 图标与名称之间的间距
-const int kShareTypeIconSize = 16;   // 文件共享卡片标题前系统类型图标的边长（系统小图标的原尺寸，不缩放）
-const Gdiplus::REAL kShareIconStroke = 1.8f;   // 图标描边宽度（viewBox 24 单位）
-const int kSharePathGap      = 2;    // 标题与路径之间的间距
-const int kSharePathH        = 18;   // 路径行高
-const int kSharePathPx       = 12;   // 路径字号
-const int kShareStatusGap    = 4;    // 路径（没有路径时为标题）与状态行之间的间距
-const int kShareStatusH      = 18;   // 状态行行高
-const int kShareStatusPx     = 11;   // 状态行字号
-const int kShareBottomPad    = 8;    // 没有按钮时状态行下方的留白
-const int kShareBtnGap       = 6;    // 状态行与按钮上方分隔线之间的间距
 const int kShareBtnH         = 34;   // 分隔线下方按钮行的高度，也是按钮的命中矩形高
-const int kShareBtnPx        = 13;   // 按钮文字字号
-const int kShareNoticeGap    = 2;    // 副标题与说明块之间的间距（第 14 期，屏幕共享卡片的强制模式说明）
-const int kShareNoticeLineH  = 16;   // 说明块每行高
-const int kShareNoticeLines  = 2;    // 说明块最多两行（卡片宽 280 时，说明约占一行半）
-const int kShareNoticePx     = 11;   // 说明文字字号
-const int kShareDescGap      = 2;    // 副标题与描述块之间的间距（第 15 期，屏幕共享卡片的共享描述）
-const int kShareDescLineH    = 16;   // 描述块每行高
-const size_t kShareDescLines = 2;    // 描述块最多两行，超出部分省略；只有一行时按一行留高度
-const int kShareDescPx       = 11;   // 描述文字字号
-const COLORREF kShareGrayText     = RGB(0x8A, 0x8A, 0x8A);   // 路径与状态行的灰色
-const COLORREF kShareBtnText      = RGB(0xFF, 0x7A, 0x45);   // 按钮文字（主题橙，与接龙卡片一致）
-const COLORREF kShareBtnHoverText = RGB(0xCC, 0x62, 0x37);   // 鼠标悬停时的按钮文字
-const COLORREF kShareBtnDisabledText = RGB(0xB8, 0xB8, 0xB8);   // 按钮不可点时的文字
-const Gdiplus::Color kShareIconColor(255, 0xFF, 0x7A, 0x45);   // 类型图标（主题橙）
-const Gdiplus::Color kShareDivider(255, 0xE2, 0xDE, 0xDA);     // 按钮上方分隔线，与合并卡片相同
+const int kShareNoticeLineH  = 16;   // 强制模式说明每行高（第 14 期，屏幕共享卡片）
+const int kShareNoticeLines  = 2;    // 强制模式说明最多两行
+const int kShareNoticePx     = 11;   // 强制模式说明的字号
+const size_t kShareDescLines = 2;    // 描述块最多两行，超出部分省略；只有一行时按一行留高度（第 15 期，屏幕共享卡片的共享描述）
 
 // ---- 语音气泡（kMsgVoice，docs/语音消息方案.md 第 3.2 节）----
 // 一行高的气泡：左侧喇叭图标，中间波形，右侧时长；宽度随时长变化（ChatVoiceBubble 的 VoiceBubbleWidth）。几何、配色与
@@ -390,44 +264,169 @@ const Gdiplus::Color kShareDivider(255, 0xE2, 0xDE, 0xDA);     // 按钮上方�
 // 与文件共享卡片同一套几何与配色：标题行（屏幕共享图标 + 粗体「屏幕共享」）、副标题行（灰，「某某发起的共享」，占文件
 // 共享卡片的路径行）、状态行（小号灰字），别人发起的卡片再加一行「加入」按钮。按钮可点时整张卡片都可点，点击加入共享。
 const wchar_t* const kScreenShareCardTitle = TR_NOOP(L"屏幕共享");   // 标题行文字：第 15 期起写共享标题，没有标题的旧卡片写这一句
-const wchar_t* const kScreenShareCardButton = TR_NOOP(L"加入");      // 按钮文字
-const wchar_t* const kInfoCardButton = TR_NOOP(L"查看");             // 群公告卡片、群备忘卡片复用本版式时的按钮文字
-const wchar_t* const kCloudRecordCardButton = TR_NOOP(L"播放");      // 云端录像卡片复用本版式时的按钮文字
 const int kGroupCallCardVideo = 2;   // 群通话卡片的媒体类型取值：群视频（标题前画摄像机，其余画电话）
 
 // ---- 密聊邀请卡片（kMsgSecretInvite，docs/密聊方案.md 4.8）----
 // 与入群邀请卡片同一套几何与配色：标题行（挂锁 + 粗体标题）、说明行（灰）、剩余秒数（小号灰字），底部按钮行。
 // 发起方一侧只有「取消」一个按钮、占满整行；被邀请方一侧左半「同意」右半「忽略」，中间画一条竖向分隔线。
-const int kSecretBtnDividerInset = 8;   // 按钮行中间竖向分隔线上下各缩进的像素数，不与横向分隔线、卡片底边相接
 
-// 共享卡片的总高：随有无路径行、描述块的行数（屏幕共享卡片的共享描述，第 15 期，0 表示没有描述）、有无说明块
-// （屏幕共享卡片的强制模式说明，第 14 期）、有无按钮变化。
-int ShareBubbleHeight(bool hasPath, bool hasButton, bool hasNotice = false, size_t descLines = 0)
+// ---- 标准卡片：共享一族、邀请、接龙与合并转发的新版式（docs/聊天卡片美化方案.md 3.2～3.6、第 5 节，2026-10-14 起）----
+//
+// 屏幕共享、一对一通话、群通话、群公告、群备忘、云端录像（kMsgScreenShare）、文件共享（kMsgFileShare）、入群邀请
+// （kMsgGroupInvite）、密聊邀请（kMsgSecretInvite）、群接龙（kMsgRelay）与合并转发的聊天记录（kMsgMerged）。版式自上而下：
+// 头部（图标块 + 标题 + 副标题；没有副标题时标题单独一行）、说明块（共享描述、公告正文、备忘的时间与备注、分享者本人看到的
+// 共享路径、接龙说明、合并记录的预览）、强制模式说明、条目列表（接龙名单）、状态标签行（标签 + 信息行），最后是底部一行
+// （类型标签 + 按钮或右侧的灰字说明；标题即类型名且没有按钮时不画）。要画的内容先由 BuildStandardCardParts 按消息整理好，
+// 绘制（ChatBubble::PaintStandardCard）与高度（StandardCardHeight）都照这一份排布。
+
+// 文件夹卡片的副标题「128 个文件 · 12 个目录 · 共 2.4 GB」，定义在本文件后面
+CString BuildFolderSummaryText(const ChatMessage& msg);
+
+const int kStandardCardNoticeGap = 8;   // 说明块（没有说明块时为头部）与强制模式说明之间的间距
+const wchar_t kCardNameEnd = L'\uFF1A'; // 合并记录预览「名字：摘要」里名字后面的全角冒号（ChatMergedCard 的写法）
+const wchar_t kEntryIndexEnd = L'.';    // 接龙条目「1. 名字　内容」里序号后面的点（ChatRelayCard 的写法）
+
+// 一张标准卡片要画的内容
+struct StandardCardParts
 {
-    int h = kShareTitleTop + kShareTitleH;
-    if (hasPath)
+    CString              m_title;             // 粗体标题
+    CString              m_subtitle;          // 副标题；为空时标题单独一行，在头部里垂直居中
+    std::vector<CString> m_descLines;         // 说明块各行；为空时不画说明块
+    bool                 m_descPath;          // 说明块是不是一行路径：过长时省略中间部分（文件共享卡片）
+    bool                 m_descNamePrefix;    // 说明块每行「名字：摘要」的名字是否加深（合并转发卡片）
+    CString              m_notice;            // 强制模式说明（屏幕共享卡片）；为空时不画
+    std::vector<CString> m_entries;           // 条目列表（接龙名单），每条「序号. 内容」
+    CString              m_entriesEmpty;      // 条目列表一条都没有时写的一行灰字；为空时整块都不画
+    CString              m_footerNote;        // 底部一行右侧的灰字（合并转发的「共 N 条」），只在没有按钮时画
+    bool                 m_subtitleP2P;       // 副标题后面是否画「P2P」徽章（文件夹数据经直连链路传输时）
+    bool                 m_progress;          // 是否画进度块（进度条与下面一行文字）
+    int                  m_progressPct;       // 进度 0~100，m_progress 为真时有效
+    CString              m_progressLeft;      // 进度条下面一行的左段（正在传输的文件名、已传 / 总大小）
+    CString              m_progressRight;     // 进度条下面一行的右段（第几个 / 共几个 · 百分比）
+    CString              m_chipText;          // 状态标签文字；为空时不画标签
+    int                  m_chipTone;          // 状态标签语义，取值见 ChatCardChipTone
+    CString              m_metaText;          // 状态标签右侧的信息行
+
+    StandardCardParts()
+        : m_descPath(false), m_descNamePrefix(false), m_subtitleP2P(false), m_progress(false), m_progressPct(0),
+          m_chipTone(kCardChipNone)
     {
-        h += kSharePathGap + kSharePathH;
     }
-    if (descLines > 0)
+};
+
+// 按消息整理标准卡片要画的内容。
+//   msg：       消息
+//   shareDesc： 屏幕共享一族折好的描述（ChatBubble::m_shareDescLines）
+//   relayNote： 接龙折好的说明（ChatBubble::m_relayNoteLines）
+StandardCardParts BuildStandardCardParts(const ChatMessage& msg, const std::vector<CString>& shareDesc,
+                                         const std::vector<CString>& relayNote)
+{
+    StandardCardParts p;
+    //状态标签与信息行：多数卡片由各自的 ApplyXxx 填在消息里，文件夹卡片在下面按传输状态现算
+    p.m_chipText = msg.cardChipText;
+    p.m_chipTone = msg.cardChipTone;
+    p.m_metaText = msg.cardMetaText;
+    switch (msg.kind)
     {
-        h += kShareDescGap + static_cast<int>(descLines) * kShareDescLineH;
+    //文件夹：副标题写文件数、目录数与总大小，数据经直连链路传输时后面画「P2P」徽章；有进度的状态画进度块
+    case kMsgFolder:
+        p.m_title = msg.folderName;
+        p.m_subtitle = BuildFolderSummaryText(msg);
+        p.m_subtitleP2P = FolderBubbleShowsP2PBadge(msg.folderState, balloonmain::ShouldShowP2PBadge(msg.folderLinkPath));
+        p.m_progress = FolderStateHasProgress(msg.folderState);
+        p.m_progressPct = msg.folderProgress;
+        FolderCardProgressText(msg, p.m_progressLeft, p.m_progressRight);
+        FolderCardStatus(msg, p.m_chipText, p.m_chipTone, p.m_metaText);
+        break;
+    //文件共享：副标题写「某某的共享」，分享者本人的卡片在说明块里写共享路径
+    case kMsgFileShare:
+        p.m_title = msg.shareName;
+        p.m_subtitle = msg.shareOwnerLine;
+        if (!msg.sharePath.IsEmpty())
+        {
+            p.m_descLines.push_back(msg.sharePath);
+            p.m_descPath = true;
+        }
+        break;
+    //入群邀请
+    case kMsgGroupInvite:
+        p.m_title = msg.inviteTitle;
+        p.m_subtitle = msg.inviteSubtitle;
+        break;
+    //密聊邀请
+    case kMsgSecretInvite:
+        p.m_title = msg.secretInviteTitle;
+        p.m_subtitle = msg.secretInviteSubtitle;
+        break;
+    //接龙：副标题写截止时间，说明进说明块，名单进条目列表
+    case kMsgRelay:
+        p.m_title = msg.relayTitle;
+        p.m_subtitle = msg.relayDeadlineText;
+        p.m_descLines = relayNote;
+        p.m_entries = msg.relayLines;
+        p.m_entriesEmpty = TR(L"还没有人参与");
+        break;
+    //合并转发：没有副标题，预览进说明块且发送者名加深，条数写在底部一行右侧
+    case kMsgMerged:
+        p.m_title = msg.mergedTitle;
+        p.m_descLines = msg.mergedLines;
+        p.m_descNamePrefix = true;
+        if (msg.mergedCount > 0)
+            p.m_footerNote = TRF(L"共 {0} 条", msg.mergedCount).c_str();
+        break;
+    //屏幕共享一族：第 15 期之前的屏幕共享卡片没有标题，照旧写「屏幕共享」
+    default:
+        p.m_title = msg.screenShareTitle.IsEmpty() ? CString(TR(kScreenShareCardTitle)) : msg.screenShareTitle;
+        p.m_subtitle = msg.screenShareSubtitle;
+        p.m_descLines = shareDesc;
+        p.m_notice = msg.screenShareNotice;
+        break;
     }
-    if (hasNotice)
-    {
-        h += kShareNoticeGap + kShareNoticeLines * kShareNoticeLineH;
-    }
-    h += kShareStatusGap + kShareStatusH;
-    h += hasButton ? (kShareBtnGap + kShareBtnH) : kShareBottomPad;
+    return p;
+}
+
+// 头部高：图标块与标题（及副标题）取较高者，两者在其中垂直居中
+int StandardCardHeaderH(const StandardCardParts& p)
+{
+    const int textH = p.m_subtitle.IsEmpty() ? cardstyle::kTitleLineH : (cardstyle::kTitleLineH + cardstyle::kSubtitleLineH);
+    return (cardstyle::kTileSize > textH) ? cardstyle::kTileSize : textH;
+}
+
+// 条目列表占几行：有条目时按条数，一条都没有时写一行提示，两者都没有时为 0
+size_t StandardCardEntryRows(const StandardCardParts& p)
+{
+    if (!p.m_entries.empty())
+        return p.m_entries.size();
+    return p.m_entriesEmpty.IsEmpty() ? 0 : 1;
+}
+
+// 标准卡片的总高（与 PaintStandardCard 同一口径）
+int StandardCardHeight(const ChatMessage& msg, const StandardCardParts& p)
+{
+    int h = cardstyle::kCardPadTop + StandardCardHeaderH(p);
+    if (!p.m_descLines.empty())
+        h += cardstyle::kDescTopGap + cardstyle::kDescPadV * 2 + static_cast<int>(p.m_descLines.size()) * cardstyle::kDescLineH;
+    if (!p.m_notice.IsEmpty())
+        h += kStandardCardNoticeGap + kShareNoticeLines * kShareNoticeLineH;
+    if (p.m_progress)
+        h += cardstyle::kProgressTopGap + cardstyle::kProgressH + cardstyle::kProgressTextGap + cardstyle::kProgressTextLineH;
+    const size_t entryRows = StandardCardEntryRows(p);
+    if (entryRows > 0)
+        h += cardstyle::kEntriesTopGap + static_cast<int>(entryRows) * cardstyle::kEntryLineH;
+    if (!p.m_chipText.IsEmpty() || !p.m_metaText.IsEmpty())
+        h += cardstyle::kMetaTopGap + cardstyle::kMetaLineH;
+    h += cardstyle::kCardPadBottom;
+    if (ChatCardFooterVisible(ChatCardTitleIsTypeName(msg), ChatCardButtonsOf(msg).size()))
+        h += cardstyle::kFooterDividerH + cardstyle::kFooterH;
     return h;
 }
 
-// 文件共享卡片标题前的系统类型图标按哪一类取：磁盘与单个文件照原样，其余（文件夹，以及卡片内容不可用时）按文件夹。
-int ShareCardIconItemKind(int shareKind)
+// 这一行是否由卡片底板自己画底，不再填气泡底色（随卡片美化逐族加入，全部换完后所有卡片都是）
+bool BubbleDrawsCardFrame(const ChatMessage& msg)
 {
-    if (shareKind == share_kind_disk || shareKind == share_kind_file)
-        return shareKind;
-    return shellicon::kItemFolder;
+    return msg.kind == kMsgScreenShare || msg.kind == kMsgFileShare || msg.kind == kMsgGroupInvite
+        || msg.kind == kMsgSecretInvite || msg.kind == kMsgRelay || msg.kind == kMsgMerged || msg.kind == kMsgFile
+        || msg.kind == kMsgFolder;
 }
 
 // ---- 群接龙卡片（kMsgRelay）几何 ----------------------------------------
@@ -436,75 +435,10 @@ int ShareCardIconItemKind(int shareKind)
 // 条接龙（深色；一条都没有时写「还没有人参与」）、状态行（小号灰字）；有按钮时再画一条分隔线和
 // 一行居中的按钮文字（主题橙）。卡片要显示的文字由 ChatRelayCard 算好放在 ChatMessage 里，
 // 本文件只管画。整张卡片可点（打开详情窗），按钮那一行单独命中（打开详情窗并聚焦输入框）。
-const int kRelayBubbleW      = 280;  // 卡片固定宽，与合并卡片相同
-const int kRelayPadH         = 14;   // 水平内边距（每侧）
-const int kRelayTitleTop     = 10;   // 标题距卡片顶
-const int kRelayTitleH       = 22;   // 标题行高
-const int kRelayTitlePx      = 14;   // 标题字号
-const int kRelayIconSize     = 16;   // 标题前接龙图标的边长
-const int kRelayIconGap      = 6;    // 图标与标题文字之间的间距
-const Gdiplus::REAL kRelayIconStroke = 2.0f;   // 图标描边宽度（viewBox 24 单位）
-const int kRelayNoteGap      = 2;    // 标题与说明之间的间距
-const int kRelayNoteLineH    = 18;   // 说明每行的行高
-const int kRelayNotePx       = 12;   // 说明字号
 const size_t kRelayNoteMaxLines = 2; // 说明最多显示几行，再多以省略号收尾（方案 §3.2）
-const int kRelayEntriesGap   = 6;    // 说明（没有说明时为标题）与第一条接龙之间的间距
-const int kRelayEntryH       = 20;   // 每条接龙的行高
-const int kRelayEntryPx      = 13;   // 接龙文字字号
-const int kRelayStatusGap    = 4;    // 最后一条接龙与状态行之间的间距
-const int kRelayStatusH      = 18;   // 状态行行高
-const int kRelayStatusPx     = 11;   // 状态行字号
-const int kRelayBottomPad    = 8;    // 没有按钮时状态行下方的留白
-const int kRelayBtnGap       = 6;    // 状态行与按钮上方分隔线之间的间距
 const int kRelayBtnH         = 34;   // 分隔线下方按钮行的高度，也是按钮的命中矩形高
-const int kRelayBtnPx        = 13;   // 按钮文字字号
-const COLORREF kRelayGrayText  = RGB(0x8A, 0x8A, 0x8A);   // 说明、状态行与「还没有人参与」的灰色
-const COLORREF kRelayBtnText   = RGB(0xFF, 0x7A, 0x45);   // 按钮文字（主题橙）
-const COLORREF kRelayBtnHoverText = RGB(0xCC, 0x62, 0x37);   // 鼠标悬停时的按钮文字（主题橙加深）
-const Gdiplus::Color kRelayIconColor(255, 0xFF, 0x7A, 0x45);   // 标题前图标（主题橙）
-const Gdiplus::Color kRelayDivider(255, 0xE2, 0xDE, 0xDA);     // 按钮上方分隔线，与合并卡片相同
 
-// 接龙卡片的总高：随说明行数（0 ~ kRelayNoteMaxLines）、接龙条数（0 ~ kRelayCardPreviewLines，
-// 0 条时仍占一行写「还没有人参与」）与有无按钮变化。
-int RelayBubbleHeight(size_t noteLines, size_t entryLines, bool hasButton)
-{
-    int h = kRelayTitleTop + kRelayTitleH;
-    if (noteLines > 0)
-    {
-        h += kRelayNoteGap + (int)noteLines * kRelayNoteLineH;
-    }
-    const size_t shownEntries = (entryLines > 0) ? entryLines : 1;
-    h += kRelayEntriesGap + (int)shownEntries * kRelayEntryH;
-    h += kRelayStatusGap + kRelayStatusH;
-    if (hasButton)
-    {
-        h += kRelayBtnGap + kRelayBtnH;
-    }
-    else
-    {
-        h += kRelayBottomPad;
-    }
-    return h;
-}
 
-// 接龙卡片底部按钮的文字；不显示按钮时返回 NULL。
-LPCWSTR RelayButtonLabel(int button)
-{
-    switch (button)
-    {
-    //本人还没参与、名额未满
-    case kRelayButtonJoin:
-        return TR(L"参与接龙");
-
-    //本人已参与，修改自己那一条
-    case kRelayButtonModify:
-        return TR(L"修改我的");
-
-    //已结束、已截止、被禁言，或名额已满且本人未参与
-    default:
-        return NULL;
-    }
-}
 
 // 把接龙说明按 width 像素折成至多 maxLines 行：说明里的换行照常分段（空行跳过），段内按字符
 // 折行；放不下的部分在最后一行末尾以省略号收尾。hdc 上须已选好说明所用的字体。
@@ -588,121 +522,6 @@ void WrapRelayNote(HDC hdc, const CString& note, int width, size_t maxLines, std
     }
 }
 
-//文件夹气泡状态行的一行文字及其配色。之所以把三样打包返回，是因为它们必须一起决定：
-//同一句话在不同状态下颜色与字重都不同（进行中用主题橙半粗、失败用红、已结束用灰）。
-struct FolderStatusLine
-{
-    CString  m_text;      // 状态行主文字（已按状态拼好，绘制侧直接画；过长时以省略号收尾）
-    CString  m_counter;   // "第 i / 共 n 个"计数段，仅传输中且已知序号时非空。它<u>不</u>并进
-                          // m_text：文件名长短不可控，并成一串时先被省略号吃掉的正是这一段，
-                          // 而"传到第几个了"恰恰是用户最想看的。绘制侧把它右对齐单独成段，
-                          // 只让文件名那部分收缩
-    COLORREF m_color;     // 文字颜色（主文字与计数段同色）
-    bool     m_bold;      // 是否用半粗字重（进行中与失败的状态需要，其余不需要）
-};
-
-/**
- *  按文件夹传输状态拼出气泡里的状态行。
- *  @param msg 本行承载的消息（读 folderState / fromMe / folderCurFile / folderCurIndex /
- *             folderFileCount 五个字段）
- *  @return 状态行的主文字、计数段与配色。未知状态返回一句中性文案，保证这一行不会空着
- */
-FolderStatusLine BuildFolderStatusLine(const ChatMessage& msg)
-{
-    FolderStatusLine line;
-    line.m_color = RGB(0x8A, 0x8A, 0x8A);   // 默认灰：已结束、不再变化的那几种状态
-    line.m_bold  = false;
-
-    switch (msg.folderState)
-    {
-    //邀请已发出、等待应答：发送端在等，接收端要当场决定收不收
-    case kFolderInviting:
-        line.m_text  = msg.fromMe ? TR(L"等待对方接收…") : TR(L"对方想给你发送一个文件夹");
-        line.m_color = RGB(0xFF, 0x7A, 0x45);
-        line.m_bold  = true;
-        break;
-
-    //接收端正在逐级建目录，还没有字节传出去
-    case kFolderPreparing:
-        line.m_text  = msg.fromMe ? TR(L"对方正在创建目录…") : TR(L"正在创建目录…");
-        line.m_color = RGB(0xFF, 0x7A, 0x45);
-        line.m_bold  = true;
-        break;
-
-    //正在数据通道上收发文件字节：报当前传的是哪个文件、排第几个
-    case kFolderTransferring:
-        if (!msg.folderCurFile.IsEmpty())
-        {
-            line.m_text.Format(TR(L"正在传输 %s"), (LPCTSTR)msg.folderCurFile);
-        }
-        else
-        {
-            line.m_text = TR(L"正在传输…");
-        }
-        if (msg.folderCurIndex > 0)
-        {
-            //序号没报上来时（刚开始传第一个文件）这一段留空，不硬凑一个"第 0 个"
-            line.m_counter.Format(TR(L"第 %d / 共 %d 个"),
-                                  msg.folderCurIndex, msg.folderFileCount);
-        }
-        line.m_color = RGB(0xFF, 0x6A, 0x3D);
-        line.m_bold  = true;
-        break;
-
-    //全部文件传完并通过校验
-    case kFolderCompleted:
-        line.m_text  = msg.fromMe ? TR(L"全部发送完成") : TR(L"全部接收完成");
-        line.m_color = RGB(0x3B, 0xA5, 0x5D);   // 绿：这次传输已经安全落地
-        line.m_bold  = true;
-        break;
-
-    //接收端点了「拒绝」，一个字节都没传
-    case kFolderRejected:
-        line.m_text = msg.fromMe ? TR(L"对方已拒绝接收") : TR(L"已拒绝接收");
-        break;
-
-    //发送端在对方应答前撤回了邀请
-    case kFolderInviteCanceled:
-        line.m_text = msg.fromMe ? TR(L"已撤回邀请") : TR(L"对方已撤回邀请");
-        break;
-
-    //发起邀请时对方无在线连接，或响铃期间对方退出登录
-    case kFolderPeerOffline:
-        line.m_text = TR(L"对方不在线，传输未开始");
-        break;
-
-    //限定时间内无人应答，服务端自动结束了会话
-    case kFolderTimeout:
-        line.m_text = TR(L"邀请已超时");
-        break;
-
-    //传到一半失败：具体原因由下面单独的一行给出，这里只给状态本身
-    case kFolderFailed:
-        line.m_text  = TR(L"传输失败");
-        line.m_color = RGB(0xE5, 0x39, 0x35);
-        line.m_bold  = true;
-        break;
-
-    //失败且已超出保留期：续传位点作废，措辞要让用户明白"重试已经没用了"
-    case kFolderExpired:
-        line.m_text  = TR(L"传输失败，已超过可续传的时限");
-        line.m_color = RGB(0xE5, 0x39, 0x35);
-        break;
-
-    //任一端在传输过程中点了「取消」
-    case kFolderUserCanceled:
-        line.m_text = TR(L"已取消");
-        break;
-
-    //未知状态：宿主漏填 folderState（留了 0），或今后新增状态而本表没跟上。
-    //给一句中性文案，好过让这一行空着
-    default:
-        line.m_text = TR(L"文件夹传输");
-        break;
-    }
-    return line;
-}
-
 /**
  *  拼出文件夹气泡的摘要行文字，形如「128 个文件 · 12 个目录 · 共 2.4 GB」。
  *  目录数为 0 时省掉中间那一段——单层目录的文件夹说"0 个目录"没有意义。
@@ -739,14 +558,16 @@ typedef InlineTextStyle BubbleTextStyle;
 // @我 走主题橙系，与品牌色一脉相承、最醒目；自己气泡本身就是浅橙底，故其上的
 // 橙块要压深一档才拉得开层次。@别人 走中性蓝，两种气泡底共用一套 —— 蓝块落在
 // 浅橙底上略跳，但正因为跳才能一眼与「@我」区分。
-const COLORREF kAtMeBgOnOther    = RGB(0xFF, 0xDD, 0xCB);   // 对方气泡里 @我 的底色块
-const COLORREF kAtMeFgOnOther    = RGB(0xD9, 0x53, 0x1E);   // 对方气泡里 @我 的文字
+// 2026-10-14 起对方气泡里的「@我」与「@别人」改用 bubblestyle 里收敛后的配色（docs/聊天气泡美化方案.md 第 1 节第 9 条）；
+// 自己气泡里的「@我」仍用深一档的配色：浅橙气泡上再铺浅橙底看不出来
+const COLORREF kAtMeBgOnOther    = bubblestyle::kAtMeBg;    // 对方气泡里 @我 的底色块（原为 #FFDDCB）
+const COLORREF kAtMeFgOnOther    = bubblestyle::kAtMeFg;    // 对方气泡里 @我 的文字（原为 #D9531E）
 const COLORREF kAtMeBgOnSelf     = RGB(0xFF, 0xC9, 0xAE);   // 自己气泡里 @我 的底色块
 const COLORREF kAtMeFgOnSelf     = RGB(0xB8, 0x43, 0x1A);   // 自己气泡里 @我 的文字
-const COLORREF kAtOtherBg        = RGB(0xE4, 0xEE, 0xFB);   // @别人 的底色块（两种气泡共用）
-const COLORREF kAtOtherFg        = RGB(0x2F, 0x6F, 0xD0);   // @别人 的文字（两种气泡共用）
+const COLORREF kAtOtherBg        = bubblestyle::kAtOtherBg; // @别人 的底色块（两种气泡共用，原为 #E4EEFB）
+const COLORREF kAtOtherFg        = bubblestyle::kAtOtherFg; // @别人 的文字（两种气泡共用，原为 #2F6FD0）
 
-const int kAtBlockRadius  = 3;   // 底色块圆角半径（像素）
+const int kAtBlockRadius  = bubblestyle::kAtRadius;   // 底色块圆角半径（像素）：4（原为 3）
 const int kAtBlockPadX    = 2;   // 底色块相对文字左右各外扩（像素）
 const int kAtBlockPadY    = 1;   // 底色块相对文字上下各外扩（像素）
 
@@ -1062,6 +883,9 @@ ChatBubble::ChatBubble()
     , m_dragPressPt()
     , m_readReceiptEnabled(false)
     , m_avatarGray(false)
+    , m_groupedWithPrev(false)
+    , m_groupedWithNext(false)
+    , m_bubbleRectRel()
     , m_fileBtnCount(0)
     , m_fileHoverIdx(-1)
     , m_folderBtnCount(0)
@@ -1307,8 +1131,15 @@ void ChatBubble::PostMarkdownPreviewOpen()
 
 namespace {
 
-// 代码卡片四周留出的气泡边宽度（像素），与图片气泡每侧的内边距相同
+// 带引用的代码卡片四周留出的气泡边宽度（像素），与图片气泡每侧的内边距相同。不带引用时卡片外面不再套气泡，边宽为 0
+// （docs/聊天卡片美化方案.md 3.7，2026-10-14 起）
 const int kCodeBubblePad = kImageBubblePad / 2;
+
+// 代码卡片四周实际留出的气泡边：带引用时为 kCodeBubblePad，不带引用时为 0
+int CodeBubblePad(const ChatMessage& msg)
+{
+    return msg.hasQuote ? kCodeBubblePad : 0;
+}
 
 // 代码卡片可用的整列宽度：内容区宽度减去两侧的头像列（边距、头像、间距），比文字气泡的 62% 宽
 int CodeColumnWidth(int contentW)
@@ -1341,7 +1172,8 @@ bool ChatBubble::MeasureCode(HDC hdc, int contentW)
     CodeBlockOptions options;
     options.m_footerOpensViewer = true;
     options.m_copied = m_codeCopied;
-    LayoutCodeBlock(hdc, m_codeContent, options, columnW - kCodeBubblePad * 2, m_codeLayout);
+    const int pad = CodeBubblePad(m_msg);
+    LayoutCodeBlock(hdc, m_codeContent, options, columnW - pad * 2, m_codeLayout);
 
     // 普通文字的字符级模型一律清空：它们只属于普通文字路径，留着会让命中、菜单按旧内容判断
     m_selLayout = SelLayout();
@@ -1352,8 +1184,8 @@ bool ChatBubble::MeasureCode(HDC hdc, int contentW)
     m_atsFlat.clear();
 
     m_codeActive = true;
-    m_textBubbleW = m_codeLayout.m_size.cx + kCodeBubblePad * 2;
-    m_textBubbleH = m_codeLayout.m_size.cy + kCodeBubblePad * 2;
+    m_textBubbleW = m_codeLayout.m_size.cx + pad * 2;
+    m_textBubbleH = m_codeLayout.m_size.cy + pad * 2;
     if (m_msg.hasQuote)
     {
         // 引用块按文字气泡的内边距画在顶部，卡片接在它下面：引用块的高度与宽度下限照文字气泡计入，
@@ -1717,10 +1549,10 @@ POINT ChatBubble::TextOriginInHost(bool& okOut) const
     {
         bubbleX = m_rcItem.left + kEdgePad + kAvatarSize + kAvatarGap;
     }
-    int bubbleY = m_rcItem.top + kRowVMargin;
-    if (!m_msg.fromMe && !m_msg.senderName.IsEmpty())
+    int bubbleY = m_rcItem.top + RowTopMargin();
+    if (ShowsSenderName())
     {
-        bubbleY += kSenderNameHeight;   // 群聊：对方气泡上方有发送人名
+        bubbleY += kSenderNameHeight;   // 群聊：对方气泡上方有发送人名（与前一条同组时不画）
     }
     origin.x = bubbleX + kTextPadH;
     origin.y = bubbleY + kTextPadV;
@@ -2194,6 +2026,29 @@ void ChatBubble::SetSelected(bool selected)
     }
 }
 
+void ChatBubble::SetGroupPosition(bool withPrev, bool withNext)
+{
+    if (m_groupedWithPrev == withPrev && m_groupedWithNext == withNext)
+    {
+        return;
+    }
+    m_groupedWithPrev = withPrev;
+    m_groupedWithNext = withNext;
+    //头像、名字与气泡的位置都画在渲染缓存里，本类的 Invalidate 会把缓存置脏
+    Invalidate();
+}
+
+RECT ChatBubble::BubbleRectInHost() const
+{
+    RECT rc = m_bubbleRectRel;
+    if (::IsRectEmpty(&rc))
+    {
+        return rc;
+    }
+    ::OffsetRect(&rc, m_rcItem.left, m_rcItem.top);
+    return rc;
+}
+
 void ChatBubble::SetPinned(bool pinned)
 {
     if (m_msg.pinned != pinned)
@@ -2283,6 +2138,37 @@ std::vector<RenderSpan> ConvertAtsToFlat(const CString& body,
 namespace {
 
 // 按本条消息的字体量出单行文字气泡的高度（文字行高加上下内边距，不低于 kTextBubbleH）。语音气泡用它，
+// 画提示行（时间分隔、系统提示、撤回提示、接龙提示）的胶囊底（docs/聊天气泡美化方案.md 第 1 节第 5 条）：浅灰底，圆角为高的一半
+//   hdc： 目标设备上下文
+//   pill：胶囊矩形（与 hdc 同一坐标系）
+void PaintTipPill(HDC hdc, const RECT& pill)
+{
+    if (pill.right <= pill.left || pill.bottom <= pill.top)
+    {
+        return;
+    }
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    Gdiplus::GraphicsPath path;
+    AddRoundRect(path, (Gdiplus::REAL)pill.left, (Gdiplus::REAL)pill.top, (Gdiplus::REAL)(pill.right - pill.left),
+                 (Gdiplus::REAL)(pill.bottom - pill.top), (Gdiplus::REAL)(pill.bottom - pill.top) / 2.0f);
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(bubblestyle::kTipPillFill), GetGValue(bubblestyle::kTipPillFill),
+                                             GetBValue(bubblestyle::kTipPillFill)));
+    g.FillPath(&brush, &path);
+}
+
+// 聊天窗气泡正文的排版选项（docs/聊天气泡美化方案.md 第 1 节第 4 条）：没有表情的行高随字号（14 像素为 22），含表情的行
+// 按表情格撑高；折行时避头尾。测量（Measure、MeasureSingleLineBubbleHeight）与绘制（RenderContent）必须用同一份选项，
+// 否则测出来的气泡高度与画出来的文字对不上
+//   fontPx：正文字号（像素）
+InlineLayoutOptions BubbleLayoutOptions(int fontPx)
+{
+    InlineLayoutOptions opts;
+    opts.m_textLineH = bubblestyle::TextLineHeight(fontPx);
+    opts.m_kinsoku = true;
+    return opts;
+}
+
 // 与单行文字气泡同高：两者用同一个字体与同一个排版函数，字号、界面语言的字体变了也保持一致。
 // 量的是消息自身的文字（语音为占位文字「[语音]」，不含表情、不会折行）；取不到设备上下文或建不了字体时返回 kTextBubbleH
 int MeasureSingleLineBubbleHeight(const ChatMessage& msg)
@@ -2305,7 +2191,8 @@ int MeasureSingleLineBubbleHeight(const ChatMessage& msg)
         HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
         const std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(msg.text);
         //排版宽度给到语音气泡的最大宽度：占位文字很短，不会折成两行
-        const SIZE sz = LayoutInlineContent(hdc, segs, kVoiceBubbleMaxWidth, kFaceDisplayPx, NULL);
+        const SIZE sz = LayoutInlineContentEx(hdc, segs, kVoiceBubbleMaxWidth, kFaceDisplayPx,
+                                              BubbleLayoutOptions(st.sizePx), NULL);
         height = sz.cy + kTextPadV * 2;
         ::SelectObject(hdc, hOldFont);
         ::DeleteObject(hFont);
@@ -2447,7 +2334,7 @@ void ChatBubble::Measure(int availWidth)
         std::vector<balloonchat::ChatSegment> segs =
             balloonchat::ParseSendBody(m_msg.text);
         std::vector<InlinePlaced> placed;
-        SIZE sz = LayoutInlineContent(hdc, segs, maxTextW, kFaceDisplayPx, &placed);
+        SIZE sz = LayoutInlineContentEx(hdc, segs, maxTextW, kFaceDisplayPx, BubbleLayoutOptions(st.sizePx), &placed);
         m_textBubbleW = sz.cx + kTextPadH * 2;
         m_textBubbleH = sz.cy + kTextPadV * 2;
 
@@ -2579,14 +2466,15 @@ void ChatBubble::MeasureRelayNote()
     }
     // 字体参数与绘制说明时 DrawGdiText 建的字体完全一致，量出来的宽度才与画出来的相符
     HFONT hFont = ::CreateFontW(
-        -kRelayNotePx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        -cardstyle::kDescPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont != NULL)
     {
         HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
-        WrapRelayNote(hdc, m_msg.relayNote, kRelayBubbleW - kRelayPadH * 2, kRelayNoteMaxLines,
-                      m_relayNoteLines);
+        //说明块的文字宽：卡片宽减去两侧内边距与说明块自己的内边距
+        const int noteTextW = cardstyle::kCardWidth - cardstyle::kCardPadH * 2 - cardstyle::kDescPadH * 2;
+        WrapRelayNote(hdc, m_msg.relayNote, noteTextW, kRelayNoteMaxLines, m_relayNoteLines);
         ::SelectObject(hdc, hOldFont);
         ::DeleteObject(hFont);
     }
@@ -2607,17 +2495,227 @@ void ChatBubble::MeasureScreenShareDesc()
     }
     // 字体参数与绘制描述时 DrawGdiText 建的字体完全一致，量出来的宽度才与画出来的相符
     HFONT hFont = ::CreateFontW(
-        -kShareDescPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        -cardstyle::kDescPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, i18n::UiFontName());
     if (hFont != NULL)
     {
         HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
-        WrapRelayNote(hdc, m_msg.screenShareDesc, kShareBubbleW - kSharePadH * 2, kShareDescLines, m_shareDescLines);
+        //说明块的文字宽：卡片宽减去两侧内边距与说明块自己的内边距
+        const int descTextW = cardstyle::kCardWidth - cardstyle::kCardPadH * 2 - cardstyle::kDescPadH * 2;
+        WrapRelayNote(hdc, m_msg.screenShareDesc, descTextW, kShareDescLines, m_shareDescLines);
         ::SelectObject(hdc, hOldFont);
         ::DeleteObject(hFont);
     }
     ::ReleaseDC(NULL, hdc);
+}
+
+void ChatBubble::PaintStandardCard(HDC hdc, Gdiplus::Graphics& g, const RECT& card)
+{
+    const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+    const ChatCardTypeStyle style = ChatCardTypeStyleOf(m_msg);
+    const StandardCardParts parts = BuildStandardCardParts(m_msg, m_shareDescLines, m_relayNoteLines);
+    cardpaint::PaintCardFrame(g, card);
+
+    // 头部：图标块与标题（及副标题）在头部高度里各自垂直居中
+    const int left = card.left + cardstyle::kCardPadH;
+    const int right = card.right - cardstyle::kCardPadH;
+    const int headerH = StandardCardHeaderH(parts);
+    int y = card.top + cardstyle::kCardPadTop;
+    cardpaint::PaintCardTile(g, left, y + (headerH - cardstyle::kTileSize) / 2, style);
+    const int textLeft = left + cardstyle::kTileSize + cardstyle::kTileTextGap;
+    const int textH = parts.m_subtitle.IsEmpty() ? cardstyle::kTitleLineH : (cardstyle::kTitleLineH + cardstyle::kSubtitleLineH);
+    const int titleTop = y + (headerH - textH) / 2;
+    const RECT titleRc = { textLeft, titleTop, right, titleTop + cardstyle::kTitleLineH };
+    DrawGdiText(hdc, (LPCWSTR)parts.m_title, titleRc, cardstyle::kTitlePx, true, cardstyle::kTitleColor,
+                kOneLine | DT_END_ELLIPSIS);
+    if (!parts.m_subtitle.IsEmpty())
+    {
+        const RECT subRc = { textLeft, titleRc.bottom, right, titleRc.bottom + cardstyle::kSubtitleLineH };
+        DrawGdiText(hdc, (LPCWSTR)parts.m_subtitle, subRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor,
+                    kOneLine | DT_END_ELLIPSIS);
+        //「P2P」徽章：文件夹数据经直连链路传输时画在副标题之后（2026-10-04 起）
+        if (parts.m_subtitleP2P)
+        {
+            const int subW = MeasureTextWidth(hdc, (LPCWSTR)parts.m_subtitle, cardstyle::kSubtitlePx);
+            chatpaint::DrawP2PBadgeInRow(hdc, textLeft + subW + chatpaint::kP2PBadgeGapPx, subRc.top, subRc.bottom, right);
+        }
+    }
+    y += headerH;
+
+    // 说明块：浅色底，逐行画；合并记录预览的发送者名加深，共享路径过长时省略中间部分
+    if (!parts.m_descLines.empty())
+    {
+        y += cardstyle::kDescTopGap;
+        const RECT block = { left, y, right,
+                             y + cardstyle::kDescPadV * 2 + static_cast<int>(parts.m_descLines.size()) * cardstyle::kDescLineH };
+        cardpaint::PaintCardDescBlock(g, block);
+        for (size_t li = 0; li < parts.m_descLines.size(); ++li)
+        {
+            const int lineTop = block.top + cardstyle::kDescPadV + static_cast<int>(li) * cardstyle::kDescLineH;
+            RECT lineRc = { left + cardstyle::kDescPadH, lineTop, right - cardstyle::kDescPadH, lineTop + cardstyle::kDescLineH };
+            const CString& line = parts.m_descLines[li];
+            const int nameEnd = parts.m_descNamePrefix ? line.Find(kCardNameEnd) : -1;
+            if (nameEnd > 0)
+            {
+                const CString name = line.Left(nameEnd + 1);
+                DrawGdiText(hdc, (LPCWSTR)name, lineRc, cardstyle::kDescPx, false, cardstyle::kDescStrongText,
+                            kOneLine | DT_END_ELLIPSIS);
+                lineRc.left += MeasureTextWidth(hdc, (LPCWSTR)name, cardstyle::kDescPx);
+                if (lineRc.left < lineRc.right)
+                    DrawGdiText(hdc, (LPCWSTR)line.Mid(nameEnd + 1), lineRc, cardstyle::kDescPx, false, cardstyle::kDescText,
+                                kOneLine | DT_END_ELLIPSIS);
+            }
+            else
+            {
+                DrawGdiText(hdc, (LPCWSTR)line, lineRc, cardstyle::kDescPx, false, cardstyle::kDescText,
+                            kOneLine | (parts.m_descPath ? DT_PATH_ELLIPSIS : DT_END_ELLIPSIS));
+            }
+        }
+        y = block.bottom;
+    }
+
+    // 强制模式说明（第 14 期，屏幕共享卡片）：主题橙色，最多两行，自动换行
+    if (!parts.m_notice.IsEmpty())
+    {
+        y += kStandardCardNoticeGap;
+        const RECT noticeRc = { left, y, right, y + kShareNoticeLines * kShareNoticeLineH };
+        DrawGdiText(hdc, (LPCWSTR)parts.m_notice, noticeRc, kShareNoticePx, false, cardstyle::kViewText,
+                    DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
+        y = noticeRc.bottom;
+    }
+
+    // 进度块（文件夹传输）：品牌橙进度条，下面一行左边写正在传输的文件名或已传 / 总大小，右边写个数与百分比
+    if (parts.m_progress)
+    {
+        y += cardstyle::kProgressTopGap;
+        const RECT bar = { left, y, right, y + cardstyle::kProgressH };
+        cardpaint::PaintCardProgress(g, bar, parts.m_progressPct);
+        y = bar.bottom + cardstyle::kProgressTextGap;
+        const RECT rightRc = { left, y, right, y + cardstyle::kProgressTextLineH };
+        DrawGdiText(hdc, (LPCWSTR)parts.m_progressRight, rightRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor,
+                    DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        RECT leftRc = rightRc;
+        leftRc.right -= MeasureTextWidth(hdc, (LPCWSTR)parts.m_progressRight, cardstyle::kSubtitlePx) + cardstyle::kMetaGap;
+        DrawGdiText(hdc, (LPCWSTR)parts.m_progressLeft, leftRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor,
+                    kOneLine | DT_END_ELLIPSIS);
+        y += cardstyle::kProgressTextLineH;
+    }
+
+    // 条目列表（接龙名单）：左侧一列灰色序号，右侧是条目；一条都没有时写一行灰字
+    const size_t entryRows = StandardCardEntryRows(parts);
+    if (entryRows > 0)
+    {
+        y += cardstyle::kEntriesTopGap;
+        if (parts.m_entries.empty())
+        {
+            const RECT emptyRc = { left, y, right, y + cardstyle::kEntryLineH };
+            DrawGdiText(hdc, (LPCWSTR)parts.m_entriesEmpty, emptyRc, cardstyle::kEntryPx, false, cardstyle::kEntryEmptyText, kOneLine);
+        }
+        for (size_t li = 0; li < parts.m_entries.size(); ++li)
+        {
+            const int lineTop = y + static_cast<int>(li) * cardstyle::kEntryLineH;
+            const CString& entry = parts.m_entries[li];
+            //「1. 名字　内容」：点之前是序号，点与后面的空格之后是条目；不是这种写法时整行当条目画
+            const int dot = entry.Find(kEntryIndexEnd);
+            CString index;
+            CString body = entry;
+            if (dot > 0)
+            {
+                index = entry.Left(dot);
+                body = entry.Mid(dot + 1);
+                body.TrimLeft();
+            }
+            const RECT indexRc = { left, lineTop, left + cardstyle::kEntryIndexW, lineTop + cardstyle::kEntryLineH };
+            DrawGdiText(hdc, (LPCWSTR)index, indexRc, cardstyle::kEntryPx, false, cardstyle::kEntryIndexColor,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            const RECT bodyRc = { indexRc.right + cardstyle::kEntryIndexGap, lineTop, right, lineTop + cardstyle::kEntryLineH };
+            DrawGdiText(hdc, (LPCWSTR)body, bodyRc, cardstyle::kEntryPx, false, cardstyle::kEntryText, kOneLine | DT_END_ELLIPSIS);
+        }
+        y += static_cast<int>(entryRows) * cardstyle::kEntryLineH;
+    }
+
+    // 状态标签行：标签在左，信息行（时长、人数、大小）紧随其后
+    if (!parts.m_chipText.IsEmpty() || !parts.m_metaText.IsEmpty())
+    {
+        y += cardstyle::kMetaTopGap;
+        int x = cardpaint::PaintCardChip(hdc, g, left, y, y + cardstyle::kMetaLineH, parts.m_chipText, parts.m_chipTone);
+        if (!parts.m_metaText.IsEmpty())
+        {
+            if (x > left)
+                x += cardstyle::kMetaGap;
+            const RECT metaRc = { x, y, right, y + cardstyle::kMetaLineH };
+            DrawGdiText(hdc, (LPCWSTR)parts.m_metaText, metaRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor,
+                        kOneLine | DT_END_ELLIPSIS);
+        }
+    }
+
+    // 底部一行：类型标签与按钮。按钮与各自的矩形记在 m_cardButtons / m_cardBtnRects 供命中判断；第一个按钮的矩形同时
+    // 记在 m_relayBtnRect（接龙卡片）或 m_shareBtnRect（其余卡片，共享一族与入群邀请只有一个按钮，悬停与点击都照它判断）
+    ::SetRectEmpty(&m_shareBtnRect);
+    if (m_msg.kind == kMsgRelay)
+        ::SetRectEmpty(&m_relayBtnRect);
+    if (m_msg.kind == kMsgFolder)
+    {
+        m_folderBtnCount = 0;
+        for (int bi = 0; bi < kMaxChatFolderActions; ++bi)
+        {
+            ::SetRectEmpty(&m_folderBtnRect[bi]);
+            m_folderBtnEnabled[bi] = false;
+        }
+    }
+    m_cardButtons = ChatCardButtonsOf(m_msg);
+    m_cardBtnRects.clear();
+    if (ChatCardFooterVisible(ChatCardTitleIsTypeName(m_msg), m_cardButtons.size()))
+    {
+        const RECT footer = { card.left, card.bottom - cardstyle::kFooterH, card.right, card.bottom };
+        //悬停：密聊邀请按按钮编号记（m_secretBtnHover），接龙看 m_relayBtnHover，其余卡片只有一个按钮
+        int hoverIndex = -1;
+        if (m_msg.kind == kMsgSecretInvite)
+        {
+            for (size_t i = 0; i < m_cardButtons.size(); ++i)
+            {
+                if (m_cardButtons[i].m_action == m_secretBtnHover)
+                    hoverIndex = static_cast<int>(i);
+            }
+        }
+        else if (m_msg.kind == kMsgFolder)
+        {
+            hoverIndex = m_folderHoverIdx;
+        }
+        else if (!m_cardButtons.empty() && ((m_msg.kind == kMsgRelay) ? m_relayBtnHover : m_shareBtnHover))
+        {
+            hoverIndex = 0;
+        }
+        const cardpaint::CardFooterLayout lay =
+            cardpaint::PaintCardFooter(hdc, g, footer, style, ChatCardTypeLabel(m_msg), m_cardButtons, hoverIndex);
+        m_cardBtnRects = lay.m_buttonRects;
+        if (!m_cardBtnRects.empty())
+        {
+            if (m_msg.kind == kMsgRelay)
+                m_relayBtnRect = m_cardBtnRects[0];
+            else
+                m_shareBtnRect = m_cardBtnRects[0];
+        }
+        //文件夹：按钮的矩形与动作记进 m_folderBtnRect / m_folderBtnAction，FolderLinkAtPoint 照它们判断点中了哪一个
+        if (m_msg.kind == kMsgFolder)
+        {
+            for (size_t i = 0; i < m_cardButtons.size() && i < m_cardBtnRects.size() && m_folderBtnCount < kMaxChatFolderActions; ++i)
+            {
+                m_folderBtnRect[m_folderBtnCount] = m_cardBtnRects[i];
+                m_folderBtnAction[m_folderBtnCount] = m_cardButtons[i].m_action;
+                m_folderBtnEnabled[m_folderBtnCount] = m_cardButtons[i].m_enabled;
+                ++m_folderBtnCount;
+            }
+        }
+        //没有按钮时右侧写灰字说明（合并转发的「共 N 条」），字号与颜色与左侧类型标签相同
+        if (m_cardButtons.empty() && !parts.m_footerNote.IsEmpty())
+        {
+            const RECT noteRc = { footer.left + cardstyle::kCardPadH, footer.top, footer.right - cardstyle::kCardPadH, footer.bottom };
+            DrawGdiText(hdc, (LPCWSTR)parts.m_footerNote, noteRc, cardstyle::kFooterLabelPx, false, cardstyle::kFooterLabelText,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
+    }
 }
 
 bool ChatBubble::RelayTipAtPoint(POINT pt) const
@@ -2794,17 +2892,17 @@ void ChatBubble::PostGroupInviteJoin()
 int ChatBubble::SecretInviteButtonAt(POINT pt) const
 {
     if (m_msg.kind != kMsgSecretInvite || m_msg.secretInviteButtons <= 0 || m_msg.secretSessionId == 0
-        || ParentInMultiSelect() || !::PtInRect(&m_shareBtnRect, pt))
+        || ParentInMultiSelect())
     {
         return -1;
     }
-    //两个按钮时以按钮行正中为界，与绘制时的竖向分隔线同一口径；分界点归右侧的「忽略」
-    if (m_msg.secretInviteButtons > 1)
+    //按钮的矩形与编号取自最近一次绘制的底部一行（PaintStandardCard），与画出来的胶囊同一口径
+    for (size_t i = 0; i < m_cardBtnRects.size() && i < m_cardButtons.size(); ++i)
     {
-        const int midX = m_shareBtnRect.left + (m_shareBtnRect.right - m_shareBtnRect.left) / 2;
-        return (pt.x < midX) ? 0 : 1;
+        if (m_cardButtons[i].m_enabled && ::PtInRect(&m_cardBtnRects[i], pt))
+            return m_cardButtons[i].m_action;
     }
-    return 0;
+    return -1;
 }
 
 void ChatBubble::PostSecretInviteAction(int index)
@@ -2958,41 +3056,23 @@ int ChatBubble::GetRowHeight() const
         bubbleH = kEmojiBubbleH;
         break;
     case kMsgImage:
-        bubbleH = m_msg.imageH + kImageBubblePad;
+        // 图片不套气泡（docs/聊天气泡美化方案.md 第 1 节第 6 条），高就是图片的显示高
+        bubbleH = m_msg.imageH;
         break;
     case kMsgFile:
         // 文件气泡高随状态变化（有无进度条 / 按钮行）。
         bubbleH = FileCardHeight(m_msg);
         break;
     case kMsgFolder:
-        // 文件夹气泡高随状态变化（有无进度条 / 失败原因行 / 按钮行）。
-        bubbleH = FolderBubbleHeight(m_msg.folderState, m_msg.fromMe, m_msg.folderErrCode);
-        break;
     case kMsgMerged:
-        // 合并卡片高随预览行数变化。
-        bubbleH = MergedBubbleHeight(m_msg.mergedLines.size());
-        break;
     case kMsgRelay:
-        // 接龙卡片高随说明行数、接龙条数与有无按钮变化。说明行数由 Measure 算好。
-        bubbleH = RelayBubbleHeight(m_relayNoteLines.size(), m_msg.relayLines.size(),
-                                    RelayButtonLabel(m_msg.relayButton) != NULL);
-        break;
     case kMsgFileShare:
-        // 共享卡片高随有无路径行、有无按钮变化。
-        bubbleH = ShareBubbleHeight(!m_msg.sharePath.IsEmpty(), ShareCardButtonLabel(m_msg.shareButton) != NULL);
-        break;
     case kMsgScreenShare:
-        // 屏幕共享卡片：副标题行始终有，高随有无按钮变化。
-        bubbleH = ShareBubbleHeight(true, m_msg.screenShareHasButton, !m_msg.screenShareNotice.IsEmpty(),
-                                    m_shareDescLines.size());
-        break;
     case kMsgGroupInvite:
-        // 入群邀请卡片：与屏幕共享卡片同一套几何，副标题行（群名与成员数）始终有，高随有无按钮变化。
-        bubbleH = ShareBubbleHeight(true, m_msg.inviteHasButton);
-        break;
     case kMsgSecretInvite:
-        // 密聊邀请卡片：与入群邀请卡片同一套几何，说明行始终有，高随有无按钮变化。
-        bubbleH = ShareBubbleHeight(true, m_msg.secretInviteButtons > 0);
+        // 标准卡片：高随说明块、强制模式说明、条目列表、状态标签行与底部一行变化（与 PaintStandardCard 同一口径）；
+        // 屏幕共享的描述与接龙说明的折行由 Measure 算好
+        bubbleH = StandardCardHeight(m_msg, BuildStandardCardParts(m_msg, m_shareDescLines, m_relayNoteLines));
         break;
     case kMsgVoice:
         // 语音气泡：一行高，与单行文字气泡相同（高度由 Measure 按字体量出；还没测量时用回退值）
@@ -3006,9 +3086,9 @@ int ChatBubble::GetRowHeight() const
     int stackH = bubbleH;
     // 引用块现在画在气泡内部，其高度已由 Measure 计入 m_textBubbleH，这里不能再加
     // 一次，否则每条带引用的消息都会多留出一块空白。
-    if (!m_msg.fromMe && !m_msg.senderName.IsEmpty())
+    if (ShowsSenderName())
     {
-        // 群聊：对方气泡上方显示发送者名，占一行。
+        // 群聊：对方气泡上方显示发送者名，占一行（与前一条同组时不画）。
         stackH += kSenderNameHeight;
     }
     // 回执行只在开启回执的列表（单聊）里为自己的消息预留。尚未拿到 msgid 的消息同样
@@ -3024,11 +3104,32 @@ int ChatBubble::GetRowHeight() const
     {
         stackH += kFailReasonHeight;
     }
-    if (stackH < kAvatarSize)
+    // 画头像的行至少要放得下头像；与前一条同组的行不画头像，不受这个下限约束
+    if (ShowsAvatar() && stackH < kAvatarSize)
     {
         stackH = kAvatarSize;
     }
-    return stackH + kRowVMargin * 2;
+    return stackH + RowTopMargin() + RowBottomMargin();
+}
+
+int ChatBubble::RowTopMargin() const
+{
+    return m_groupedWithPrev ? bubblestyle::kGroupedHalfGap : kRowVMargin;
+}
+
+int ChatBubble::RowBottomMargin() const
+{
+    return m_groupedWithNext ? bubblestyle::kGroupedHalfGap : kRowVMargin;
+}
+
+bool ChatBubble::ShowsSenderName() const
+{
+    return !m_msg.fromMe && !m_msg.senderName.IsEmpty() && !m_groupedWithPrev;
+}
+
+bool ChatBubble::ShowsAvatar() const
+{
+    return !m_groupedWithPrev;
 }
 
 bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
@@ -3294,7 +3395,8 @@ void ChatBubble::HandleFileButton(int action)
 
 int ChatBubble::FileLinkAtPoint(POINT pt) const
 {
-    if (m_msg.kind != kMsgFile)
+    //多选模式下点击只切换选中态（OnLButtonDown 先处理），按钮也不给手型与悬停效果（docs/聊天卡片美化方案.md 5.6）
+    if (m_msg.kind != kMsgFile || ParentInMultiSelect())
     {
         return -1;
     }
@@ -3335,7 +3437,8 @@ void ChatBubble::HandleFolderButton(int action)
 
 int ChatBubble::FolderLinkAtPoint(POINT pt) const
 {
-    if (m_msg.kind != kMsgFolder)
+    //多选模式下同文件卡片，按钮不给手型与悬停效果
+    if (m_msg.kind != kMsgFolder || ParentInMultiSelect())
     {
         return -1;
     }
@@ -3380,24 +3483,15 @@ void ChatBubble::SetPinHover(bool hover, POINT ptHost)
     }
     m_pinHover = hover;
 
-    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
-    // 先复位：DuiToolTipMgr 对同一控件「已在等待显示」时会直接返回，不复位就无法
-    // 按新位置重新计时（做法与 ImageViewerToolbar::UpdateTooltip 相同）。
-    tips.OnLeave(this);
-    if (!hover)
-    {
-        tips.Unregister(this);
-        return;
-    }
-
-    tips.Register(this, TR(kPinTooltipText));
+    // 进入图钉时登记提示并按当前位置重新计时，离开时取消登记并收起提示；
+    // 复位与重新计时由 Retarget 完成
     POINT screen = ptHost;
     balloonwjui::DuiHost* host = GetHost();
     if (host != NULL && ::IsWindow(host->m_hWnd))
     {
         ::ClientToScreen(host->m_hWnd, &screen);
     }
-    tips.OnHover(this, screen);
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(this, hover ? TR(kPinTooltipText) : NULL, screen);
 }
 
 bool ChatBubble::OnMouseMove(POINT pt, UINT /*mkFlags*/)
@@ -3999,8 +4093,8 @@ bool ChatBubble::TryPopupMentionMenu(const POINT& pt, HWND hwnd)
 RECT ChatBubble::AvatarRectInHost() const
 {
     RECT rc = { 0, 0, 0, 0 };
-    // 时间分隔 / 撤回提示行整行只有一句居中文字，没有头像。
-    if (!IsRealMessage())
+    // 时间分隔 / 撤回提示行整行只有一句居中文字，没有头像；与前一条同组的消息不画头像，也就点不中
+    if (!IsRealMessage() || !ShowsAvatar())
     {
         return rc;
     }
@@ -4015,7 +4109,7 @@ RECT ChatBubble::AvatarRectInHost() const
     }
 
     const int avX = m_msg.fromMe ? (cx + cw - kEdgePad - kAvatarSize) : (cx + kEdgePad);
-    const int avY = m_rcItem.top + kRowVMargin;
+    const int avY = m_rcItem.top + RowTopMargin();
     rc.left   = avX;
     rc.top    = avY;
     rc.right  = avX + kAvatarSize;
@@ -4652,6 +4746,8 @@ void ChatBubble::RenderContent(HDC hdc)
     // 图钉区域每次绘制都重新记录：本次若不画图钉（未 Pin、已变成撤回提示等），就保持
     // 为空矩形，点击与悬停都不会再命中上一次的位置。
     ::SetRectEmpty(&m_pinRectRel);
+    // 气泡矩形同理：提示行不画气泡，保持为空
+    ::SetRectEmpty(&m_bubbleRectRel);
 
     const int x = m_rcItem.left;
     const int y = m_rcItem.top;
@@ -4665,42 +4761,79 @@ void ChatBubble::RenderContent(HDC hdc)
     // ---- 时间分隔 / 撤回提示 ----
     if (m_msg.kind == kMsgTime)
     {
-        // 本人撤回的文字类消息在 5 分钟内带「编辑」：提示文字照旧是灰色，后面隔一小段画链接色的「编辑」，
-        // 鼠标停在「编辑」上时加下划线；两段合起来居中（docs/撤回后重新编辑方案.md §3.2）
+        // 提示行画成浅灰底的小胶囊（docs/聊天气泡美化方案.md 第 1 节第 5 条）：胶囊按文字宽度加左右内边距、在行内居中，
+        // 最宽不超出行左右各 kTipPillSideMargin，放不下的文字末尾加省略号
+        const int pillTop = y + (h - bubblestyle::kTipPillH) / 2;
+        const int pillBottom = pillTop + bubblestyle::kTipPillH;
+
+        // 本人撤回的文字类消息在 5 分钟内带「编辑」：提示文字后面隔一小段画品牌橙的「编辑」，鼠标停在「编辑」上时加下划线；
+        // 两段合起来居中（docs/撤回后重新编辑方案.md §3.2），胶囊把两段一起包住
         if (HasRecallEdit(RecallEditNowMs()))
         {
             int tipLeft = 0;
             int linkLeft = 0;
             int linkWidth = 0;
             RecallEditLayout(hdc, tipLeft, linkLeft, linkWidth);
+            const RECT pill = { tipLeft - bubblestyle::kTipPillPadH, pillTop,
+                                linkLeft + linkWidth + bubblestyle::kTipPillPadH, pillBottom };
+            PaintTipPill(hdc, pill);
             RECT tipRc = m_rcItem;
             tipRc.left = tipLeft;
-            DrawGdiText(hdc, (LPCWSTR)m_msg.text, tipRc, kTimeTextPx, false, kTimeColor,
+            DrawGdiText(hdc, (LPCWSTR)m_msg.text, tipRc, kTimeTextPx, false, bubblestyle::kTipPillText,
                         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
             RECT linkRc = m_rcItem;
             linkRc.left = linkLeft;
-            DrawGdiText(hdc, TR(L"编辑"), linkRc, kTimeTextPx, false, kLinkFg,
+            DrawGdiText(hdc, TR(L"编辑"), linkRc, kTimeTextPx, false, bubblestyle::kRecallEditColor,
                         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
                         false /*italic*/, m_recallEditHover /*underline*/, false /*strike*/);
             return;
         }
+        // 没有文字的提示行（截图用例在列表顶端放的占位行等）什么都不画，不留一个空胶囊
+        if (m_msg.text.IsEmpty())
+        {
+            return;
+        }
+        int pillW = MeasureTextWidth(hdc, (LPCWSTR)m_msg.text, kTimeTextPx) + bubblestyle::kTipPillPadH * 2;
+        const int maxPillW = w - bubblestyle::kTipPillSideMargin * 2;
+        if (pillW > maxPillW)
+        {
+            pillW = (maxPillW > 0) ? maxPillW : 0;
+        }
+        const int pillLeft = x + (w - pillW) / 2;
+        const RECT pill = { pillLeft, pillTop, pillLeft + pillW, pillBottom };
+        PaintTipPill(hdc, pill);
         // 带 cardmsgid 的接龙提示行可以点击：鼠标停在文字上时加下划线
         const bool tipHover = (m_msg.relayCardMsgid > 0 && m_relayBtnHover);
-        DrawGdiText(hdc, (LPCWSTR)m_msg.text, m_rcItem, kTimeTextPx, false, kTimeColor,
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
+        const RECT textRc = { pill.left + bubblestyle::kTipPillPadH, pill.top, pill.right - bubblestyle::kTipPillPadH,
+                              pill.bottom };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.text, textRc, kTimeTextPx, false, bubblestyle::kTipPillText,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS,
                     false /*italic*/, tipHover /*underline*/, false /*strike*/);
         return;
     }
 
     const bool isMe = m_msg.fromMe;
-    // 群聊：对方气泡上方显示发送者名。
-    const bool showSender = (!isMe && !m_msg.senderName.IsEmpty());
+    // 群聊：对方气泡上方显示发送者名（与前一条同组时不画）。
+    const bool showSender = ShowsSenderName();
 
     // 多选模式：行首让出 kCheckColW 宽的勾选列，气泡内容整体右移。
     const bool multi = ParentInMultiSelect();
     const int  selW  = multi ? kCheckColW : 0;
     const int  cx    = x + selW;   // 内容区左边界
     const int  cw    = w - selW;   // 内容区宽
+
+    // 多选模式下被勾选的消息整行铺一层浅橙底（docs/聊天气泡美化方案.md 第 1 节第 8 条），一眼看出选了哪些；
+    // 画在最底下，头像、气泡与勾选圈都压在它上面。密聊内容不能多选，不画
+    if (multi && m_selected && IsRealMessage() && !IsSecretRow())
+    {
+        const RECT rowRc = { x, y, x + w, y + h };
+        HBRUSH rowBrush = ::CreateSolidBrush(bubblestyle::kSelectedRowFill);
+        if (rowBrush != NULL)
+        {
+            ::FillRect(hdc, &rowRc, rowBrush);
+            ::DeleteObject(rowBrush);
+        }
+    }
 
     // 头像底色 / 字：优先用消息自带的发送者头像（真实单聊每条都带本端/对端
     // 头像；群聊每条发送者不同）；无则回退到 mock 的 ChatMe / ChatPartner。
@@ -4729,7 +4862,7 @@ void ChatBubble::RenderContent(HDC hdc)
 
     // ---- 头像位置 ----
     const int avX = isMe ? (cx + cw - kEdgePad - kAvatarSize) : (cx + kEdgePad);
-    const int avY = y + kRowVMargin;
+    const int avY = y + RowTopMargin();
 
     // ---- 气泡尺寸 ----
     const int maxBubbleW = (int)(cw * kBubbleMaxWidthRatio);
@@ -4770,42 +4903,23 @@ void ChatBubble::RenderContent(HDC hdc)
         bubbleH = kEmojiBubbleH;
         break;
     case kMsgImage:
-        bubbleW = m_msg.imageW + kImageBubblePad;
-        bubbleH = m_msg.imageH + kImageBubblePad;
+        // 图片不套气泡，气泡矩形就是图片矩形（与 GetRowHeight 同一口径）
+        bubbleW = m_msg.imageW;
+        bubbleH = m_msg.imageH;
         break;
     case kMsgFile:
         bubbleW = kFileCardWidth;
         bubbleH = FileCardHeight(m_msg);
         break;
     case kMsgFolder:
-        bubbleW = kFolderBubbleW;
-        bubbleH = FolderBubbleHeight(m_msg.folderState, m_msg.fromMe, m_msg.folderErrCode);
-        break;
     case kMsgMerged:
-        bubbleW = kMergedBubbleW;
-        bubbleH = MergedBubbleHeight(m_msg.mergedLines.size());
-        break;
     case kMsgRelay:
-        bubbleW = kRelayBubbleW;
-        bubbleH = RelayBubbleHeight(m_relayNoteLines.size(), m_msg.relayLines.size(),
-                                    RelayButtonLabel(m_msg.relayButton) != NULL);
-        break;
     case kMsgFileShare:
-        bubbleW = kShareBubbleW;
-        bubbleH = ShareBubbleHeight(!m_msg.sharePath.IsEmpty(), ShareCardButtonLabel(m_msg.shareButton) != NULL);
-        break;
     case kMsgScreenShare:
-        bubbleW = kShareBubbleW;
-        bubbleH = ShareBubbleHeight(true, m_msg.screenShareHasButton, !m_msg.screenShareNotice.IsEmpty(),
-                                    m_shareDescLines.size());
-        break;
     case kMsgGroupInvite:
-        bubbleW = kShareBubbleW;
-        bubbleH = ShareBubbleHeight(true, m_msg.inviteHasButton);
-        break;
     case kMsgSecretInvite:
-        bubbleW = kShareBubbleW;
-        bubbleH = ShareBubbleHeight(true, m_msg.secretInviteButtons > 0);
+        bubbleW = cardstyle::kCardWidth;
+        bubbleH = StandardCardHeight(m_msg, BuildStandardCardParts(m_msg, m_shareDescLines, m_relayNoteLines));
         break;
     case kMsgVoice:
         //宽度随时长变化，不超过本行气泡的最大宽度
@@ -4826,7 +4940,7 @@ void ChatBubble::RenderContent(HDC hdc)
     const int colRight = avX - kAvatarGap;
     const int bubbleX  = isMe ? (colRight - bubbleW) : colLeft;
 
-    int contentTop = y + kRowVMargin;
+    int contentTop = y + RowTopMargin();
     // 群聊：对方气泡上方留出发送者名一行（名字本身在文字层绘制）。
     if (showSender)
     {
@@ -4837,8 +4951,9 @@ void ChatBubble::RenderContent(HDC hdc)
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
     // ---- 头像 ----
-    // 真图头像(facetype=2)命中本地缓存时画圆角真图，否则填底色 + 后面画字形。
+    // 真图头像(facetype=2)命中本地缓存时画圆角真图，否则填底色 + 后面画字形。与前一条同组的消息不画头像。
     bool drewAvatarImage = false;
+    if (ShowsAvatar())
     {
         Gdiplus::GraphicsPath av;
         AddRoundRect(av, (Gdiplus::REAL)avX, (Gdiplus::REAL)avY,
@@ -4892,11 +5007,23 @@ void ChatBubble::RenderContent(HDC hdc)
     }
 
     // ---- 气泡底 ----
+    // 已换成新版式的卡片自己画白色底板（docs/聊天卡片美化方案.md 3.2），这里不再填气泡底色。Markdown 卡片就是整个气泡；
+    // 代码卡片只在不带引用时去掉气泡（带引用时引用块画在气泡里，卡片接在下面，仍要气泡把两者包在一起）
     const int bubbleY = contentTop;
+    ::SetRect(&m_bubbleRectRel, bubbleX - x, bubbleY - y, bubbleX + bubbleW - x, bubbleY + bubbleH - y);
+    const bool cardIsBubble = MarkdownActive() || (CodeActive() && !m_msg.hasQuote);
+    // 图片与大表情不套气泡（docs/聊天气泡美化方案.md 第 1 节第 6 条）：图片自己裁成圆角、描细边框，大表情直接画在行上
+    const bool bareContent = (m_msg.kind == kMsgImage || m_msg.kind == kMsgEmoji);
+    if (!BubbleDrawsCardFrame(m_msg) && !cardIsBubble && !bareContent)
     {
         Gdiplus::GraphicsPath bub;
-        AddRoundRect(bub, (Gdiplus::REAL)bubbleX, (Gdiplus::REAL)bubbleY,
-                     (Gdiplus::REAL)bubbleW, (Gdiplus::REAL)bubbleH, kBubbleRadius);
+        // 每组第一条文字、语音气泡靠头像那一角收小（docs/聊天气泡美化方案.md 第 1 节第 3 条）：对方为左上角、本人为右上角
+        const bool pointed = !m_groupedWithPrev && (m_msg.kind == kMsgText || m_msg.kind == kMsgVoice);
+        const Gdiplus::REAL avatarCorner = pointed ? (Gdiplus::REAL)bubblestyle::kAvatarCornerRadius : kBubbleRadius;
+        AddRoundRectCorners(bub, (Gdiplus::REAL)bubbleX, (Gdiplus::REAL)bubbleY,
+                            (Gdiplus::REAL)bubbleW, (Gdiplus::REAL)bubbleH,
+                            isMe ? kBubbleRadius : avatarCorner, isMe ? avatarCorner : kBubbleRadius,
+                            kBubbleRadius, kBubbleRadius);
         // 文件"已删除 / 失效"态：整条气泡置灰（淡化），区别于正常发 / 收气泡。
         Gdiplus::Color bg = isMe ? kBubbleSelf : kBubbleOther;
         if (m_msg.kind == kMsgFile && m_msg.fileState == kFileDeleted)
@@ -4915,14 +5042,19 @@ void ChatBubble::RenderContent(HDC hdc)
     // ---- 图片占位 / 文件类型块（GDI+）----
     if (m_msg.kind == kMsgImage)
     {
-        const Gdiplus::Rect imgRect(bubbleX + 4, bubbleY + 4,
-                                    m_msg.imageW, m_msg.imageH);
+        // 图片不套气泡（docs/聊天气泡美化方案.md 第 1 节第 6 条）：图片就是整个气泡，下面各种画法都裁在圆角 8 以内，
+        // 最后沿图片最外一圈描 1 像素的淡黑细边框
+        const Gdiplus::Rect imgRect(bubbleX, bubbleY, m_msg.imageW, m_msg.imageH);
+        Gdiplus::GraphicsPath imgClip;
+        AddRoundRect(imgClip, (Gdiplus::REAL)bubbleX, (Gdiplus::REAL)bubbleY, (Gdiplus::REAL)m_msg.imageW,
+                     (Gdiplus::REAL)m_msg.imageH, (Gdiplus::REAL)bubblestyle::kImageRadius);
+        g.SetClip(&imgClip);
 
         // 记下图片在宿主坐标系里的矩形，供双击命中测试（双击图片打开看图窗）。
-        m_imageRect.left   = bubbleX + 4;
-        m_imageRect.top    = bubbleY + 4;
-        m_imageRect.right  = bubbleX + 4 + m_msg.imageW;
-        m_imageRect.bottom = bubbleY + 4 + m_msg.imageH;
+        m_imageRect.left   = bubbleX;
+        m_imageRect.top    = bubbleY;
+        m_imageRect.right  = bubbleX + m_msg.imageW;
+        m_imageRect.bottom = bubbleY + m_msg.imageH;
 
         // 先判断这张图是否失败：上传失败、下载失败，或状态正常但本地文件丢失 / 无法解码
         // （ChatImageCache 记过失败）。失败就画破图占位，保持原图的显示尺寸不变。
@@ -4947,9 +5079,8 @@ void ChatBubble::RenderContent(HDC hdc)
         }
         else if (ready != NULL)
         {
-            g.SetClip(imgRect);
+            //缓存位图未必正好是显示尺寸，外层的圆角裁剪区同时保证不画出图片矩形
             g.DrawImage(ready, imgRect);
-            g.ResetClip();
         }
         else
         {
@@ -4960,16 +5091,14 @@ void ChatBubble::RenderContent(HDC hdc)
             // 未就绪 / 无图：占位块 + 斜向纹理（后台缩放好后会重绘换成真图）。
             Gdiplus::SolidBrush imgBrush(Gdiplus::Color(255, 0xEC, 0xEA, 0xE6));
             g.FillRectangle(&imgBrush, imgRect);
-            g.SetClip(imgRect);
             Gdiplus::Pen hatch(Gdiplus::Color(40, 0, 0, 0), 1.0f);
-            for (int hx = bubbleX + 4 - m_msg.imageH; hx < bubbleX + 4 + m_msg.imageW;
+            for (int hx = bubbleX - m_msg.imageH; hx < bubbleX + m_msg.imageW;
                  hx += 14)
             {
-                g.DrawLine(&hatch, (Gdiplus::REAL)hx, (Gdiplus::REAL)(bubbleY + 4),
+                g.DrawLine(&hatch, (Gdiplus::REAL)hx, (Gdiplus::REAL)bubbleY,
                            (Gdiplus::REAL)(hx + m_msg.imageH),
-                           (Gdiplus::REAL)(bubbleY + 4 + m_msg.imageH));
+                           (Gdiplus::REAL)(bubbleY + m_msg.imageH));
             }
-            g.ResetClip();
         }
 
         // 上传中 / 下载中：盖一层半透明黑遮罩，衬白色"上传中 NN%" / "下载中"（状态文字在
@@ -4980,6 +5109,18 @@ void ChatBubble::RenderContent(HDC hdc)
             Gdiplus::SolidBrush mask(Gdiplus::Color(110, 0, 0, 0));
             g.FillRectangle(&mask, imgRect);
         }
+        g.ResetClip();
+
+        // 细边框：GDI+ 默认的像素偏移模式下像素中心在整数坐标上，沿 left / top 与 right - 1 / bottom - 1 描 1 像素宽的线
+        // 正好落满最外一圈像素（与 cardpaint 的 StrokeRound 同一做法）
+        const Gdiplus::REAL kHairlineInset = 0.5f;   // 描边路径的圆角比填充小半个像素，与最外一圈像素对齐
+        Gdiplus::GraphicsPath imgBorder;
+        AddRoundRect(imgBorder, (Gdiplus::REAL)bubbleX, (Gdiplus::REAL)bubbleY, (Gdiplus::REAL)(m_msg.imageW - 1),
+                     (Gdiplus::REAL)(m_msg.imageH - 1), (Gdiplus::REAL)bubblestyle::kImageRadius - kHairlineInset);
+        Gdiplus::Pen borderPen(Gdiplus::Color((BYTE)bubblestyle::kImageBorderAlpha, GetRValue(bubblestyle::kImageBorder),
+                                              GetGValue(bubblestyle::kImageBorder), GetBValue(bubblestyle::kImageBorder)),
+                               1.0f);
+        g.DrawPath(&borderPen, &imgBorder);
     }
     else if (m_msg.kind == kMsgFile)
     {
@@ -4992,120 +5133,6 @@ void ChatBubble::RenderContent(HDC hdc)
         m_fileBtnCount = 0;
         for (int bi = 0; bi < 3; ++bi)
             ::SetRectEmpty(&m_fileBtnRect[bi]);
-    }
-    else if (m_msg.kind == kMsgFolder)
-    {
-        const int st    = m_msg.folderState;
-        const int iconX = bubbleX + kFolderPadH;
-        const int iconY = bubbleY + kFolderIconTop;
-
-        // ---- 图标底块（圆角方块）+ 块内的文件夹图标 ----
-        // 与文件气泡的类型色块同尺寸同圆角，只是底色固定、块内画的是线性图标而不是
-        // 扩展名文字 —— 两种气泡并排时，形状一致而内容有别，一眼分得清。
-        {
-            Gdiplus::GraphicsPath blockPath;
-            AddRoundRect(blockPath, (Gdiplus::REAL)iconX, (Gdiplus::REAL)iconY,
-                         (Gdiplus::REAL)kFolderIconSize, (Gdiplus::REAL)kFolderIconSize, 6.0f);
-            Gdiplus::SolidBrush blockBrush(Gdiplus::Color(255,
-                GetRValue(kFolderBlockColor), GetGValue(kFolderBlockColor),
-                GetBValue(kFolderBlockColor)));
-            g.FillPath(&blockBrush, &blockPath);
-        }
-        {
-            //图标在底块内居中；描边宽度按 viewBox 24 的口径给（与工具栏那枚同一套画法）
-            const Gdiplus::REAL glyphX = (Gdiplus::REAL)(iconX + (kFolderIconSize - kFolderGlyphSize) / 2);
-            const Gdiplus::REAL glyphY = (Gdiplus::REAL)(iconY + (kFolderIconSize - kFolderGlyphSize) / 2);
-            DrawChatIcon(g, kChatIconFolder, glyphX, glyphY,
-                         (Gdiplus::REAL)kFolderGlyphSize,
-                         Gdiplus::Color(255, 255, 255, 255), 2.0f);
-        }
-
-        // ---- 进度条（传输中 / 失败 / 已过保留期 / 用户取消）----
-        // 画不画一律问 FolderStateHasProgress，绝不在这里另写一份状态判断 —— 它与
-        // FolderBubbleHeight 里留高度的那次判断必须是同一个答案。
-        if (FolderStateHasProgress(st))
-        {
-            const int barX = bubbleX + kFolderPadH;
-            const int barY = bubbleY + kFolderHeaderH;
-            const int barW = bubbleW - kFolderPadH * 2;
-            {
-                Gdiplus::GraphicsPath track;
-                AddRoundRect(track, (Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
-                             (Gdiplus::REAL)barW, (Gdiplus::REAL)kFolderProgressH, 2.5f);
-                Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 0xE3, 0xE0, 0xDC));
-                g.FillPath(&trackBrush, &track);
-            }
-            int pct = m_msg.folderProgress;
-            if (pct < 0)
-                pct = 0;
-            if (pct > 100)
-                pct = 100;
-            const int fillW = barW * pct / 100;
-            if (fillW > 0)
-            {
-                //传输中用主题橙，失败用红（停在中断处），已过保留期与用户取消用灰 ——
-                //后两者点不动续传了，颜色上就不该再显得"还在进行"
-                COLORREF pc = (st == kFolderTransferring) ? RGB(0xFF, 0x7A, 0x45)
-                            : (st == kFolderFailed)       ? RGB(0xE5, 0x39, 0x35)
-                            :                               RGB(0xB0, 0xAD, 0xA8);
-                Gdiplus::GraphicsPath fill;
-                AddRoundRect(fill, (Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
-                             (Gdiplus::REAL)fillW, (Gdiplus::REAL)kFolderProgressH, 2.5f);
-                Gdiplus::SolidBrush fb(Gdiplus::Color(255,
-                    GetRValue(pc), GetGValue(pc), GetBValue(pc)));
-                g.FillPath(&fb, &fill);
-            }
-        }
-
-        // ---- 底部操作与文件气泡同为文字超链接：文字与命中矩形在下面的 GDI 文字层
-        //      按各自文字宽度从左到右排布、就地填 m_folderBtnRect / m_folderBtnCount；
-        //      此处先清空（仅文件夹行需要）。----
-        m_folderBtnCount = 0;
-        for (int bi = 0; bi < kMaxChatFolderActions; ++bi)
-        {
-            ::SetRectEmpty(&m_folderBtnRect[bi]);
-            m_folderBtnEnabled[bi] = false;
-        }
-    }
-    else if (m_msg.kind == kMsgMerged)
-    {
-        // 合并卡片：预览行与底部文字之间画一条分隔线，文字在下面的 GDI 文字层画。
-        // 记下卡片矩形，供点击命中（点卡片任意位置打开聊天记录查看窗）。
-        m_mergedRect.left   = bubbleX;
-        m_mergedRect.top    = bubbleY;
-        m_mergedRect.right  = bubbleX + bubbleW;
-        m_mergedRect.bottom = bubbleY + bubbleH;
-        const Gdiplus::REAL lineY = (Gdiplus::REAL)(bubbleY + bubbleH - kMergedFooterH);
-        Gdiplus::Pen divider(kMergedDivider, 1.0f);
-        g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kMergedPadH), lineY,
-                   (Gdiplus::REAL)(bubbleX + bubbleW - kMergedPadH), lineY);
-    }
-    else if (m_msg.kind == kMsgRelay)
-    {
-        // 接龙卡片：标题前画接龙图标；有按钮时在按钮行上方画一条分隔线。文字在下面的 GDI
-        // 文字层画。记下整张卡片与按钮行的矩形，供点击命中。
-        m_relayRect.left   = bubbleX;
-        m_relayRect.top    = bubbleY;
-        m_relayRect.right  = bubbleX + bubbleW;
-        m_relayRect.bottom = bubbleY + bubbleH;
-        DrawChatIcon(g, kChatIconRelay, (Gdiplus::REAL)(bubbleX + kRelayPadH),
-                     (Gdiplus::REAL)(bubbleY + kRelayTitleTop + (kRelayTitleH - kRelayIconSize) / 2),
-                     (Gdiplus::REAL)kRelayIconSize, kRelayIconColor, kRelayIconStroke);
-        if (RelayButtonLabel(m_msg.relayButton) != NULL)
-        {
-            const int btnTop = bubbleY + bubbleH - kRelayBtnH;
-            Gdiplus::Pen divider(kRelayDivider, 1.0f);
-            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kRelayPadH), (Gdiplus::REAL)btnTop,
-                       (Gdiplus::REAL)(bubbleX + bubbleW - kRelayPadH), (Gdiplus::REAL)btnTop);
-            m_relayBtnRect.left   = bubbleX;
-            m_relayBtnRect.top    = btnTop;
-            m_relayBtnRect.right  = bubbleX + bubbleW;
-            m_relayBtnRect.bottom = bubbleY + bubbleH;
-        }
-        else
-        {
-            ::SetRectEmpty(&m_relayBtnRect);
-        }
     }
     else if (m_msg.kind == kMsgVoice)
     {
@@ -5125,134 +5152,28 @@ void ChatBubble::RenderContent(HDC hdc)
                                  (float)(bubbleY + bubbleH / 2), (float)kFailMarkSize);
         }
     }
-    else if (m_msg.kind == kMsgScreenShare)
+    else if (m_msg.kind == kMsgScreenShare || m_msg.kind == kMsgFileShare || m_msg.kind == kMsgGroupInvite
+             || m_msg.kind == kMsgSecretInvite || m_msg.kind == kMsgRelay || m_msg.kind == kMsgMerged
+             || m_msg.kind == kMsgFolder)
     {
-        // 屏幕共享卡片：标题前画屏幕共享图标；有按钮时在按钮行上方画一条分隔线，几何与文件共享卡片相同。
-        // 文字在下面的 GDI 文字层画。记下整张卡片与按钮行的矩形（与文件共享卡片共用这两个成员），供点击命中。
-        m_shareRect.left   = bubbleX;
-        m_shareRect.top    = bubbleY;
-        m_shareRect.right  = bubbleX + bubbleW;
-        m_shareRect.bottom = bubbleY + bubbleH;
-        //群通话卡片与一对一通话卡片复用这套版式，标题前按媒体类型画摄像机或电话
-        //群公告卡片画喇叭、群备忘卡片画日历（2026-10-05 起同样复用这套版式）
-        const bool callCard = m_msg.screenShareIsGroupCall || m_msg.screenShareIsCallCard;
-        int cardIcon = !callCard ? kChatIconScreenShare
-                       : (m_msg.groupCallMedia == kGroupCallCardVideo ? kChatIconVideo : kChatIconPhone);
-        if (m_msg.screenShareIsAnnouncement)
-            cardIcon = kChatIconAnnounce;
-        else if (m_msg.screenShareIsMemo)
-            cardIcon = kChatIconMemo;
-        else if (m_msg.screenShareIsCloudRecord)
-            cardIcon = m_msg.cloudRecordAudioOnly ? kChatIconMic : kChatIconRecord;
-        DrawChatIcon(g, cardIcon, (Gdiplus::REAL)(bubbleX + kSharePadH),
-                     (Gdiplus::REAL)(bubbleY + kShareTitleTop + (kShareTitleH - kShareIconSize) / 2),
-                     (Gdiplus::REAL)kShareIconSize, kShareIconColor, kShareIconStroke);
-        if (m_msg.screenShareHasButton)
-        {
-            const int btnTop = bubbleY + bubbleH - kShareBtnH;
-            Gdiplus::Pen divider(kShareDivider, 1.0f);
-            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
-                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
-            m_shareBtnRect.left   = bubbleX;
-            m_shareBtnRect.top    = btnTop;
-            m_shareBtnRect.right  = bubbleX + bubbleW;
-            m_shareBtnRect.bottom = bubbleY + bubbleH;
-        }
+        // 标准卡片（共享一族与邀请，docs/聊天卡片美化方案.md 5.2、5.4）：底板、图标块、文字、状态标签与底部一行都在
+        // PaintStandardCard 里画。记下整张卡片的矩形供点击命中（共享一族在按钮可点时点卡片任意位置都触发）；底部各按钮的
+        // 矩形由 PaintStandardCard 记在 m_cardBtnRects，第一个按钮的矩形同时记在 m_shareBtnRect
+        //接龙卡片记在 m_relayRect、合并卡片记在 m_mergedRect（点卡片打开详情窗 / 聊天记录查看窗），其余记在 m_shareRect
+        const RECT card = { bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH };
+        if (m_msg.kind == kMsgRelay)
+            m_relayRect = card;
+        else if (m_msg.kind == kMsgMerged)
+            m_mergedRect = card;
         else
-        {
-            ::SetRectEmpty(&m_shareBtnRect);
-        }
-    }
-    else if (m_msg.kind == kMsgGroupInvite)
-    {
-        // 入群邀请卡片：与屏幕共享卡片同一套几何。标题前画入群邀请图标；有按钮时在按钮行上方画一条分隔线。
-        // 文字在下面的 GDI 文字层画。记下整张卡片与按钮行的矩形（与共享卡片共用这两个成员），供点击命中。
-        m_shareRect.left   = bubbleX;
-        m_shareRect.top    = bubbleY;
-        m_shareRect.right  = bubbleX + bubbleW;
-        m_shareRect.bottom = bubbleY + bubbleH;
-        DrawChatIcon(g, kChatIconGroupInvite, (Gdiplus::REAL)(bubbleX + kSharePadH),
-                     (Gdiplus::REAL)(bubbleY + kShareTitleTop + (kShareTitleH - kShareIconSize) / 2),
-                     (Gdiplus::REAL)kShareIconSize, kShareIconColor, kShareIconStroke);
-        if (m_msg.inviteHasButton)
-        {
-            const int btnTop = bubbleY + bubbleH - kShareBtnH;
-            Gdiplus::Pen divider(kShareDivider, 1.0f);
-            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
-                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
-            m_shareBtnRect.left   = bubbleX;
-            m_shareBtnRect.top    = btnTop;
-            m_shareBtnRect.right  = bubbleX + bubbleW;
-            m_shareBtnRect.bottom = bubbleY + bubbleH;
-        }
-        else
-        {
-            ::SetRectEmpty(&m_shareBtnRect);
-        }
-    }
-    else if (m_msg.kind == kMsgSecretInvite)
-    {
-        // 密聊邀请卡片：与入群邀请卡片同一套几何。标题前画挂锁；有按钮时在按钮行上方画一条横向分隔线，两个按钮时
-        // 再在按钮行正中画一条竖向分隔线（左「同意」右「忽略」）。文字在下面的 GDI 文字层画。记下整张卡片与按钮行的
-        // 矩形（与共享卡片共用这两个成员），按钮的左右分界由 SecretInviteButtonAt 按同一口径计算。
-        m_shareRect.left   = bubbleX;
-        m_shareRect.top    = bubbleY;
-        m_shareRect.right  = bubbleX + bubbleW;
-        m_shareRect.bottom = bubbleY + bubbleH;
-        DrawChatIcon(g, kChatIconLock, (Gdiplus::REAL)(bubbleX + kSharePadH),
-                     (Gdiplus::REAL)(bubbleY + kShareTitleTop + (kShareTitleH - kShareIconSize) / 2),
-                     (Gdiplus::REAL)kShareIconSize, kShareIconColor, kShareIconStroke);
-        if (m_msg.secretInviteButtons > 0)
-        {
-            const int btnTop = bubbleY + bubbleH - kShareBtnH;
-            Gdiplus::Pen divider(kShareDivider, 1.0f);
-            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
-                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
-            if (m_msg.secretInviteButtons > 1)
-            {
-                const int midX = bubbleX + bubbleW / 2;
-                g.DrawLine(&divider, (Gdiplus::REAL)midX, (Gdiplus::REAL)(btnTop + kSecretBtnDividerInset),
-                           (Gdiplus::REAL)midX, (Gdiplus::REAL)(bubbleY + bubbleH - kSecretBtnDividerInset));
-            }
-            m_shareBtnRect.left   = bubbleX;
-            m_shareBtnRect.top    = btnTop;
-            m_shareBtnRect.right  = bubbleX + bubbleW;
-            m_shareBtnRect.bottom = bubbleY + bubbleH;
-        }
-        else
-        {
-            ::SetRectEmpty(&m_shareBtnRect);
-        }
-    }
-    else if (m_msg.kind == kMsgFileShare)
-    {
-        // 共享卡片：有按钮时在按钮行上方画一条分隔线。标题前的系统类型图标与文字在下面的 GDI 文字层画。
-        // 记下整张卡片与按钮行的矩形，供点击命中。
-        m_shareRect.left   = bubbleX;
-        m_shareRect.top    = bubbleY;
-        m_shareRect.right  = bubbleX + bubbleW;
-        m_shareRect.bottom = bubbleY + bubbleH;
-        if (ShareCardButtonLabel(m_msg.shareButton) != NULL)
-        {
-            const int btnTop = bubbleY + bubbleH - kShareBtnH;
-            Gdiplus::Pen divider(kShareDivider, 1.0f);
-            g.DrawLine(&divider, (Gdiplus::REAL)(bubbleX + kSharePadH), (Gdiplus::REAL)btnTop,
-                       (Gdiplus::REAL)(bubbleX + bubbleW - kSharePadH), (Gdiplus::REAL)btnTop);
-            m_shareBtnRect.left   = bubbleX;
-            m_shareBtnRect.top    = btnTop;
-            m_shareBtnRect.right  = bubbleX + bubbleW;
-            m_shareBtnRect.bottom = bubbleY + bubbleH;
-        }
-        else
-        {
-            ::SetRectEmpty(&m_shareBtnRect);
-        }
+            m_shareRect = card;
+        PaintStandardCard(hdc, g, card);
     }
 
     // ---- 文字层（GDI）----
 
-    // 头像字母（已画真图则跳过，避免字形盖在真图上）。
-    if (!drewAvatarImage && !avatarText.IsEmpty())
+    // 头像字母（已画真图则跳过，避免字形盖在真图上；不画头像的行也跳过）。
+    if (ShowsAvatar() && !drewAvatarImage && !avatarText.IsEmpty())
     {
         RECT avRc = { avX, avY, avX + kAvatarSize, avY + kAvatarSize };
         // 按字形笔画外框居中（见 AvatarGlyph.h），DrawText 按单元格居中会让字偏低
@@ -5262,8 +5183,8 @@ void ChatBubble::RenderContent(HDC hdc)
     // 群聊发送者名（对方气泡上方）。
     if (showSender)
     {
-        RECT snRc = { bubbleX + 2, y + kRowVMargin,
-                      cx + cw, y + kRowVMargin + kSenderNameHeight };
+        RECT snRc = { bubbleX + 2, y + RowTopMargin(),
+                      cx + cw, y + RowTopMargin() + kSenderNameHeight };
         DrawGdiText(hdc, (LPCWSTR)m_msg.senderName, snRc, 11, false,
                     RGB(0x8A, 0x8A, 0x8A),
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
@@ -5286,9 +5207,20 @@ void ChatBubble::RenderContent(HDC hdc)
         const int qTop    = bubbleY + kTextPadV;
         const int qRight = bubbleX + bubbleW - kTextPadH;
 
+        // 引用块底：半透明白，靠竖线一侧圆角小、另一侧圆角大（docs/聊天气泡美化方案.md 第 1 节第 7 条），把引用与正文区分开
+        {
+            Gdiplus::GraphicsPath fillPath;
+            AddRoundRectCorners(fillPath, (Gdiplus::REAL)qLeft, (Gdiplus::REAL)qTop, (Gdiplus::REAL)(qRight - qLeft),
+                                (Gdiplus::REAL)kQuoteBlockH, (Gdiplus::REAL)bubblestyle::kQuoteFillRadiusBar,
+                                (Gdiplus::REAL)bubblestyle::kQuoteFillRadius, (Gdiplus::REAL)bubblestyle::kQuoteFillRadius,
+                                (Gdiplus::REAL)bubblestyle::kQuoteFillRadiusBar);
+            Gdiplus::SolidBrush fillBrush(kQuoteFill);
+            g.FillPath(&fillBrush, &fillPath);
+        }
+
         // 左侧竖线：标明这一块是引用而不是正文。
         RECT barRc = { qLeft, qTop, qLeft + kQuoteBarW, qTop + kQuoteBlockH };
-        HBRUSH barBrush = ::CreateSolidBrush(kQuoteName);
+        HBRUSH barBrush = ::CreateSolidBrush(kQuoteBar);
         if (barBrush != NULL)
         {
             ::FillRect(hdc, &barRc, barBrush);
@@ -5341,8 +5273,10 @@ void ChatBubble::RenderContent(HDC hdc)
             }
             qTextL += kQuoteThumbSize + kQuoteThumbGap;
         }
-        RECT qnRc = { qTextL, qTop, qRight, qTop + kQuoteLineH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.quoteName, qnRc, 11, false, kQuoteName,
+        // 文字右边离白底边缘留一点距离，过长时省略号不贴着白底边缘
+        const int qTextR = qRight - bubblestyle::kQuoteFillPadR;
+        RECT qnRc = { qTextL, qTop, qTextR, qTop + kQuoteLineH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.quoteName, qnRc, 11, true, kQuoteName,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
         // 第二行：被引用内容。过长省略号收尾 —— 引用块高度固定，绝不因内容长短变形。
@@ -5353,17 +5287,17 @@ void ChatBubble::RenderContent(HDC hdc)
         m_quoteRectRel.right  = qRight - m_rcItem.left;
         m_quoteRectRel.bottom = qTop + kQuoteBlockH - m_rcItem.top;
 
-        RECT qcRc = { qTextL, qTop + kQuoteLineH + 4, qRight, qTop + kQuoteBlockH };
+        RECT qcRc = { qTextL, qTop + kQuoteLineH + 4, qTextR, qTop + kQuoteBlockH };
         DrawGdiText(hdc, (LPCWSTR)m_msg.quoteText, qcRc, 11, false, kQuoteText,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
     // 气泡内容文字。
     if (m_msg.kind == kMsgText && CodeActive())
     {
-        // 代码卡片：画在气泡里，四周留出 kCodeBubblePad 的气泡边；带引用时接在引用块下面（与 MeasureCode 同一口径）。
-        // 卡片位置记成行内相对坐标（理由同 m_quoteRectRel），供命中测试
-        const int cardLeft = bubbleX + kCodeBubblePad;
-        const int cardTop = bubbleY + (m_msg.hasQuote ? kTextPadV + kQuoteBlockH + kQuoteGap : kCodeBubblePad);
+        // 代码卡片：不带引用时卡片就是整个气泡；带引用时画在气泡里，四周留出 kCodeBubblePad 的气泡边、接在引用块下面
+        // （与 MeasureCode 同一口径）。卡片位置记成行内相对坐标（理由同 m_quoteRectRel），供命中测试
+        const int cardLeft = bubbleX + CodeBubblePad(m_msg);
+        const int cardTop = bubbleY + (m_msg.hasQuote ? kTextPadV + kQuoteBlockH + kQuoteGap : 0);
         PaintCodeBlock(hdc, m_codeLayout, cardLeft, cardTop, m_codeHover);
         ::SetRect(&m_codeCardRel, cardLeft - m_rcItem.left, cardTop - m_rcItem.top,
                   cardLeft - m_rcItem.left + m_codeLayout.m_size.cx, cardTop - m_rcItem.top + m_codeLayout.m_size.cy);
@@ -5374,7 +5308,7 @@ void ChatBubble::RenderContent(HDC hdc)
         // 卡片矩形记成行内相对坐标（理由同 m_quoteRectRel），供点击命中
         ::SetRect(&m_mdCardRel, bubbleX - m_rcItem.left, bubbleY - m_rcItem.top,
                   bubbleX + bubbleW - m_rcItem.left, bubbleY + bubbleH - m_rcItem.top);
-        // 卡片内容的绘制与消息记录窗的独立卡片控件共用（ChatMarkdownCard），底色就是气泡
+        // 整张卡片（含白色底板）的绘制与消息记录窗的独立卡片控件共用（ChatMarkdownCard）
         const RECT cardRc = { bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH };
         PaintMarkdownCardContent(hdc, cardRc, m_mdCardTitle, m_mdCardSummary, m_mdCardSummaryH);
     }
@@ -5418,7 +5352,8 @@ void ChatBubble::RenderContent(HDC hdc)
             {
                 const std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(m_msg.text);
                 m_textPlaced.clear();
-                LayoutInlineContentForStyle(hdc, segs, txW, kFaceDisplayPx, st, &m_textPlaced);
+                LayoutInlineContentForStyle(hdc, segs, txW, kFaceDisplayPx, st, BubbleLayoutOptions(st.sizePx),
+                                            &m_textPlaced);
             }
             m_textPlacedValid = true;
             m_textPlacedW = txW;
@@ -5472,8 +5407,7 @@ void ChatBubble::RenderContent(HDC hdc)
 
         if (!overlay.IsEmpty())
         {
-            RECT capRc = { bubbleX + 4, bubbleY + 4,
-                           bubbleX + 4 + m_msg.imageW, bubbleY + 4 + m_msg.imageH };
+            RECT capRc = { bubbleX, bubbleY, bubbleX + m_msg.imageW, bubbleY + m_msg.imageH };
             // 有遮罩（上传中 / 下载中）时用白字；正常占位文字用浅灰。
             COLORREF capColor = (m_msg.imageState != kChatImageStateReady)
                 ? RGB(255, 255, 255) : RGB(0x9A, 0x97, 0x92);
@@ -5497,494 +5431,12 @@ void ChatBubble::RenderContent(HDC hdc)
         }
     }
 
-    else if (m_msg.kind == kMsgFolder)
-    {
-        const int st      = m_msg.folderState;
-        const int iconX   = bubbleX + kFolderPadH;
-        const int textX   = iconX + kFolderIconSize + kFolderTextGap;   // 文件夹名 / 摘要行左
-        const int textR   = bubbleX + bubbleW - kFolderPadH;            // 气泡内文字右边界
-        const int rowLeft = bubbleX + kFolderPadH;                      // 状态行 / 失败原因行 / 按钮行左
-
-        // ---- 标题行：文件夹名 ----
-        RECT nameRc = { textX, bubbleY + kFolderNameTop,
-                        textR, bubbleY + kFolderNameTop + kFolderNameH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.folderName, nameRc, 14, false, kBubbleText,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-        // ---- 副标题行：文件数 / 目录数 / 总大小 ----
-        const CString summary = BuildFolderSummaryText(m_msg);
-        RECT sumRc = { textX, bubbleY + kFolderSummaryTop,
-                       textR, bubbleY + kFolderSummaryTop + kFolderSummaryH };
-        DrawGdiText(hdc, (LPCWSTR)summary, sumRc, 11, false, RGB(0x8A, 0x8A, 0x8A),
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-        // ---- 「P2P」徽章：数据经直连链路传输时画在摘要行文字之后（2026-10-04 起）----
-        if (FolderBubbleShowsP2PBadge(st, balloonmain::ShouldShowP2PBadge(m_msg.folderLinkPath)))
-        {
-            const int summaryW = MeasureTextWidth(hdc, (LPCWSTR)summary, 11);
-            chatpaint::DrawP2PBadgeInRow(hdc, textX + summaryW + chatpaint::kP2PBadgeGapPx, sumRc.top, sumRc.bottom,
-                                         textR);
-        }
-
-        // ---- 状态行：眼下进行到哪一步（传输中还带右端的百分比）----
-        // 有没有进度条一律问 FolderStateHasProgress，与上面 GDI+ 层画进度条、以及
-        // FolderBubbleHeight 里留高度问的是同一个函数，三处不会走偏。
-        const bool hasProgress   = FolderStateHasProgress(st);
-        const int  statusTop     = bubbleY + kFolderHeaderH
-                                 + (hasProgress ? kFolderProgressH : 0)
-                                 + kFolderStatusTopGap;
-        const int  statusBottom  = statusTop + kFolderStatusH;
-        const FolderStatusLine statusLine = BuildFolderStatusLine(m_msg);
-
-        //状态行从右往左分三段：百分比（有进度条时）、"第 i / 共 n 个"计数段、主文字。
-        //先把右侧两段的位置定下来，主文字用剩下的宽度并以省略号收尾 —— 这样被截断的
-        //只会是文件名，"传到第几个了"与百分比始终完整可见。
-        int statusRight = textR;
-        if (hasProgress)
-        {
-            statusRight -= kFolderPctW;
-        }
-        if (!statusLine.m_counter.IsEmpty())
-        {
-            const int counterW = MeasureTextWidth(hdc, (LPCWSTR)statusLine.m_counter, 11);
-            RECT counterRc = { statusRight - counterW, statusTop, statusRight, statusBottom };
-            DrawGdiText(hdc, (LPCWSTR)statusLine.m_counter, counterRc, 11, statusLine.m_bold,
-                        statusLine.m_color,
-                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-            statusRight -= counterW + kFolderCounterGap;
-        }
-        RECT stRc = { rowLeft, statusTop, statusRight, statusBottom };
-        DrawGdiText(hdc, (LPCWSTR)statusLine.m_text, stRc, 11, statusLine.m_bold,
-                    statusLine.m_color,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-        if (hasProgress)
-        {
-            int pct = m_msg.folderProgress;
-            if (pct < 0)
-                pct = 0;
-            if (pct > 100)
-                pct = 100;
-            CString pctText;
-            pctText.Format(_T("%d%%"), pct);
-            RECT pctRc = { textR - kFolderPctW, statusTop, textR, statusBottom };
-            DrawGdiText(hdc, (LPCWSTR)pctText, pctRc, 11, statusLine.m_bold,
-                        statusLine.m_color,
-                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-        }
-
-        // ---- 失败原因行：只在"没有正常传完 + 宿主带回了错误码"时出现 ----
-        // 文案一律取自 FolderErrorText：同一个错误码在收发两端映射出的是同一句话，
-        // 两个人对着屏幕说"我这边写着什么"时才对得上。
-        const bool hasErrorLine = FolderBubbleHasErrorLine(st, m_msg.folderErrCode);
-        if (hasErrorLine)
-        {
-            const int errTop = statusBottom + kFolderErrorTopGap;
-            RECT errRc = { rowLeft, errTop, textR, errTop + kFolderErrorH };
-            DrawGdiText(hdc, FolderErrorText(m_msg.folderErrCode), errRc, 11, false,
-                        RGB(0xE5, 0x39, 0x35),
-                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-        }
-
-        // ---- 底部操作：与文件气泡同为文字超链接，按各自文字宽度从左到右排布，
-        //      整行高度作命中矩形（便于点击），就地填 m_folderBtnRect / m_folderBtnAction /
-        //      m_folderBtnEnabled。按钮数与动作全部取自 FolderButtonActions，本处不做
-        //      任何状态判断 —— 这正是把那套映射抽成纯逻辑模块的目的。----
-        int acts[kMaxChatFolderActions];
-        m_folderBtnCount = FolderButtonActions(st, m_msg.fromMe, acts);
-        if (m_folderBtnCount > 0)
-        {
-            const int rowTop    = statusBottom
-                                + (hasErrorLine ? (kFolderErrorTopGap + kFolderErrorH) : 0)
-                                + kFolderBtnTopGap;
-            const int rowBottom = rowTop + kFolderBtnH;
-            int linkX = rowLeft;
-            for (int bi = 0; bi < m_folderBtnCount; ++bi)
-            {
-                const int act = acts[bi];
-                CString   label;
-                COLORREF  lblColor = RGB(0xFF, 0x7A, 0x45);   // 默认主题橙（可点链接）
-                bool      enabled  = true;                     // 默认可用；只有「重试」会被置灰
-                switch (act)
-                {
-                //接收：接收端同意接收，直接落到本机默认的文件夹接收目录，不再打断用户
-                //选位置。主动作，用主题橙
-                case kChatFolderAccept:
-                    label = TR(L"接收");
-                    break;
-
-                //另存为：同样是同意接收，但先由宿主弹出「选择保存位置」。它与「接收」
-                //只差落地目录从哪来，属于同一类动作的次要入口，故用灰色链接，把主题橙
-                //留给「接收」
-                case kChatFolderSaveAs:
-                    label    = TR(L"另存为");
-                    lblColor = RGB(0x8A, 0x8A, 0x8A);
-                    break;
-
-                //拒绝：次要动作，灰色链接，免得与「接收」抢注意力
-                case kChatFolderReject:
-                    label    = TR(L"拒绝");
-                    lblColor = RGB(0x8A, 0x8A, 0x8A);
-                    break;
-
-                //取消：邀请态是撤回邀请、传输中是中止传输，两端都可能出现。同为次要动作
-                case kChatFolderCancel:
-                    label    = TR(L"取消");
-                    lblColor = RGB(0x8A, 0x8A, 0x8A);
-                    break;
-
-                //打开文件夹：完成后两端都有。接收端开落地目录、发送端开源目录，
-                //开哪个由宿主按 fromMe 决定，气泡这一层不区分
-                case kChatFolderOpenFolder:
-                    label = TR(L"打开文件夹");
-                    break;
-
-                //重新发送：会话已不可续传（保留期过 / 被取消），从零发起一次完整传输。
-                //\x21BB = ↻ 循环箭头，与文件气泡的重试用同一枚字符
-                case kChatFolderResend:
-                    label = TR(L"\x21BB 重新发送");
-                    break;
-
-                //重试续传：仅失败态的发送端有。可用性问 FolderRetryEnabled ——
-                //保留期已过时按钮仍画出来（让用户知道有这条路），但置灰且点不动
-                case kChatFolderRetry:
-                default:
-                    label   = TR(L"\x21BB 重试");
-                    enabled = FolderRetryEnabled(st, m_msg.fromMe, m_msg.folderWithinRetry);
-                    lblColor = enabled ? RGB(0xE5, 0x39, 0x35) : RGB(0xB8, 0xB5, 0xB1);
-                    break;
-                }
-
-                const int linkW = MeasureTextWidth(hdc, (LPCWSTR)label, kFolderLinkPx);
-                RECT linkRc = { linkX, rowTop, linkX + linkW, rowBottom };
-                // 悬停的链接：颜色加深（×4/5）+ 加下划线，作 hover 反馈。置灰的按钮
-                // 不参与悬停（FolderLinkAtPoint 已把它排除），故这里恒为 false。
-                const bool hover = (bi == m_folderHoverIdx);
-                const COLORREF drawColor = hover
-                    ? RGB(GetRValue(lblColor) * 4 / 5, GetGValue(lblColor) * 4 / 5,
-                          GetBValue(lblColor) * 4 / 5)
-                    : lblColor;
-                //文字垂直居中于按钮行；命中矩形取满行高，整列可点
-                DrawGdiText(hdc, (LPCWSTR)label, linkRc, kFolderLinkPx, false, drawColor,
-                            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
-                            false /*italic*/, hover /*underline*/, false /*strike*/);
-                m_folderBtnRect[bi]    = linkRc;
-                m_folderBtnAction[bi]  = act;
-                m_folderBtnEnabled[bi] = enabled;
-                linkX += linkW + kFolderLinkGap;
-            }
-        }
-    }
-    else if (m_msg.kind == kMsgMerged)
-    {
-        const int textL = bubbleX + kMergedPadH;
-        const int textR = bubbleX + bubbleW - kMergedPadH;
-
-        // 标题：一行，过长以省略号收尾。
-        int lineTop = bubbleY + kMergedTitleTop;
-        RECT titleRc = { textL, lineTop, textR, lineTop + kMergedTitleH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.mergedTitle, titleRc, kMergedTitlePx, true, kBubbleText,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-
-        // 预览行：「发送者：摘要」，每行一条，过长以省略号收尾。
-        lineTop += kMergedTitleH + kMergedLinesGap;
-        for (size_t li = 0; li < m_msg.mergedLines.size(); ++li)
-        {
-            RECT lineRc = { textL, lineTop, textR, lineTop + kMergedLineH };
-            DrawGdiText(hdc, (LPCWSTR)m_msg.mergedLines[li], lineRc, kMergedLinePx, false,
-                        kMergedLineColor,
-                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-            lineTop += kMergedLineH;
-        }
-
-        // 底部：「聊天记录（共 N 条）」；内容不可用（条数为 0）时只写「聊天记录」。
-        CString footer;
-        if (m_msg.mergedCount > 0)
-        {
-            footer.Format(TR(L"聊天记录（共 %d 条）"), m_msg.mergedCount);
-        }
-        else
-        {
-            footer = TR(L"聊天记录");
-        }
-        RECT footRc = { textL, bubbleY + bubbleH - kMergedFooterH, textR, bubbleY + bubbleH };
-        DrawGdiText(hdc, (LPCWSTR)footer, footRc, kMergedFooterPx, false, kMergedLineColor,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
-    else if (m_msg.kind == kMsgRelay)
-    {
-        const int textL = bubbleX + kRelayPadH;
-        const int textR = bubbleX + bubbleW - kRelayPadH;
-        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
-
-        // 标题：画在图标右侧，一行，过长以省略号收尾
-        int lineTop = bubbleY + kRelayTitleTop;
-        RECT titleRc = { textL + kRelayIconSize + kRelayIconGap, lineTop, textR, lineTop + kRelayTitleH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.relayTitle, titleRc, kRelayTitlePx, true, kBubbleText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kRelayTitleH;
-
-        // 说明：Measure 已按卡片内宽折好行、截断处带了省略号，这里逐行画
-        if (!m_relayNoteLines.empty())
-        {
-            lineTop += kRelayNoteGap;
-            for (size_t li = 0; li < m_relayNoteLines.size(); ++li)
-            {
-                RECT noteRc = { textL, lineTop, textR, lineTop + kRelayNoteLineH };
-                DrawGdiText(hdc, (LPCWSTR)m_relayNoteLines[li], noteRc, kRelayNotePx, false,
-                            kRelayGrayText, kOneLine);
-                lineTop += kRelayNoteLineH;
-            }
-        }
-
-        // 接龙：每行一条「序号. 名字　内容」，过长以省略号收尾；一条都没有时写一行灰字
-        lineTop += kRelayEntriesGap;
-        if (m_msg.relayLines.empty())
-        {
-            RECT emptyRc = { textL, lineTop, textR, lineTop + kRelayEntryH };
-            DrawGdiText(hdc, TR(L"还没有人参与"), emptyRc, kRelayEntryPx, false, kRelayGrayText, kOneLine);
-            lineTop += kRelayEntryH;
-        }
-        else
-        {
-            for (size_t li = 0; li < m_msg.relayLines.size(); ++li)
-            {
-                RECT entryRc = { textL, lineTop, textR, lineTop + kRelayEntryH };
-                DrawGdiText(hdc, (LPCWSTR)m_msg.relayLines[li], entryRc, kRelayEntryPx, false,
-                            kBubbleText, kOneLine | DT_END_ELLIPSIS);
-                lineTop += kRelayEntryH;
-            }
-        }
-
-        // 状态行：「共 N 人参与 · 截止 10-03 18:00」之类，ChatRelayCard 已拼好
-        lineTop += kRelayStatusGap;
-        RECT statusRc = { textL, lineTop, textR, lineTop + kRelayStatusH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.relayStatus, statusRc, kRelayStatusPx, false, kRelayGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-
-        // 按钮：分隔线下方一整行居中写按钮文字，悬停时颜色加深并加下划线
-        LPCWSTR label = RelayButtonLabel(m_msg.relayButton);
-        if (label != NULL)
-        {
-            RECT btnRc = { bubbleX, bubbleY + bubbleH - kRelayBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
-            DrawGdiText(hdc, label, btnRc, kRelayBtnPx, true,
-                        m_relayBtnHover ? kRelayBtnHoverText : kRelayBtnText,
-                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
-                        false /*italic*/, m_relayBtnHover /*underline*/, false /*strike*/);
-        }
-    }
-
-    if (m_msg.kind == kMsgFileShare)
-    {
-        const int textL = bubbleX + kSharePadH;
-        const int textR = bubbleX + bubbleW - kSharePadH;
-        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
-
-        // 标题前的类型图标：本机的系统图标，单个文件按显示路径（没有时按名称）的扩展名取
-        int lineTop = bubbleY + kShareTitleTop;
-        const int iconTop = lineTop + (kShareTitleH - kShareTypeIconSize) / 2;
-        const RECT iconRc = { textL, iconTop, textL + kShareTypeIconSize, iconTop + kShareTypeIconSize };
-        const CString& iconName = m_msg.sharePath.IsEmpty() ? m_msg.shareName : m_msg.sharePath;
-        shellicon::DrawItemIcon(hdc, ShareCardIconItemKind(m_msg.shareKind), std::wstring((LPCWSTR)iconName), iconRc);
-
-        // 名称：画在图标右侧，一行，过长以省略号收尾
-        RECT titleRc = { textL + kShareTypeIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.shareName, titleRc, kShareTitlePx, true, kBubbleText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kShareTitleH;
-
-        // 显示路径：路径过长时省略中间部分
-        if (!m_msg.sharePath.IsEmpty())
-        {
-            lineTop += kSharePathGap;
-            RECT pathRc = { textL, lineTop, textR, lineTop + kSharePathH };
-            DrawGdiText(hdc, (LPCWSTR)m_msg.sharePath, pathRc, kSharePathPx, false, kShareGrayText,
-                        kOneLine | DT_PATH_ELLIPSIS);
-            lineTop += kSharePathH;
-        }
-
-        // 「某某的共享 · 状态」
-        lineTop += kShareStatusGap;
-        CString statusLine = m_msg.shareOwnerLine;
-        if (!m_msg.shareStatus.IsEmpty())
-        {
-            statusLine += L" · ";
-            statusLine += m_msg.shareStatus;
-        }
-        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
-        DrawGdiText(hdc, (LPCWSTR)statusLine, statusRc, kShareStatusPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-
-        // 按钮：分隔线下方一整行居中写按钮文字；可点时悬停加深并加下划线，不可点时为灰
-        LPCWSTR label = ShareCardButtonLabel(m_msg.shareButton);
-        if (label != NULL)
-        {
-            RECT btnRc = { bubbleX, bubbleY + bubbleH - kShareBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
-            const bool hover = m_shareBtnHover && m_msg.shareButtonEnabled;
-            const COLORREF color = !m_msg.shareButtonEnabled ? kShareBtnDisabledText
-                                                              : (hover ? kShareBtnHoverText : kShareBtnText);
-            DrawGdiText(hdc, label, btnRc, kShareBtnPx, true, color,
-                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
-                        false /*italic*/, hover /*underline*/, false /*strike*/);
-        }
-    }
 
     // 语音气泡：右侧的时长文字（与语音条控件共用 ChatVoicePaint 的画法）
     if (m_msg.kind == kMsgVoice)
     {
         const RECT voiceBar = { bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH };
         PaintVoiceBarText(hdc, voiceBar, m_msg);
-    }
-
-    if (m_msg.kind == kMsgScreenShare)
-    {
-        const int textL = bubbleX + kSharePadH;
-        const int textR = bubbleX + bubbleW - kSharePadH;
-        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
-
-        // 标题：画在图标右侧
-        int lineTop = bubbleY + kShareTitleTop;
-        RECT titleRc = { textL + kShareIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
-        //第 15 期起写共享标题；没有标题的旧卡片照旧写「屏幕共享」
-        const wchar_t* titleText =
-            m_msg.screenShareTitle.IsEmpty() ? TR(kScreenShareCardTitle) : (LPCWSTR)m_msg.screenShareTitle;
-        DrawGdiText(hdc, titleText, titleRc, kShareTitlePx, true, kBubbleText, kOneLine | DT_END_ELLIPSIS);
-        lineTop += kShareTitleH;
-
-        // 副标题：「某某发起的共享」，发起人名过长时省略
-        lineTop += kSharePathGap;
-        RECT subRc = { textL, lineTop, textR, lineTop + kSharePathH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.screenShareSubtitle, subRc, kSharePathPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kSharePathH;
-
-        // 描述块（第 15 期）：灰字，Measure 已按卡片内宽折成至多两行，超出部分以省略号收尾
-        if (!m_shareDescLines.empty())
-        {
-            lineTop += kShareDescGap;
-            for (size_t li = 0; li < m_shareDescLines.size(); ++li)
-            {
-                RECT descRc = { textL, lineTop, textR, lineTop + kShareDescLineH };
-                DrawGdiText(hdc, (LPCWSTR)m_shareDescLines[li], descRc, kShareDescPx, false, kShareGrayText,
-                            kOneLine | DT_END_ELLIPSIS);
-                lineTop += kShareDescLineH;
-            }
-        }
-
-        // 说明块（第 14 期）：强制模式时写明效果，最多两行、主题橙色提醒，自动换行
-        if (!m_msg.screenShareNotice.IsEmpty())
-        {
-            lineTop += kShareNoticeGap;
-            RECT noticeRc = { textL, lineTop, textR, lineTop + kShareNoticeLines * kShareNoticeLineH };
-            DrawGdiText(hdc, (LPCWSTR)m_msg.screenShareNotice, noticeRc, kShareNoticePx, false, kShareBtnText,
-                        DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
-            lineTop += kShareNoticeLines * kShareNoticeLineH;
-        }
-
-        // 状态
-        lineTop += kShareStatusGap;
-        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.screenShareStatus, statusRc, kShareStatusPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-
-        // 按钮：与文件共享卡片相同，可点时悬停加深并加下划线，共享已结束时为灰
-        if (m_msg.screenShareHasButton)
-        {
-            RECT btnRc = { bubbleX, bubbleY + bubbleH - kShareBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
-            const bool hover = m_shareBtnHover && m_msg.screenShareButtonEnabled;
-            const COLORREF color = !m_msg.screenShareButtonEnabled ? kShareBtnDisabledText
-                                                                    : (hover ? kShareBtnHoverText : kShareBtnText);
-            const bool infoCard = m_msg.screenShareIsAnnouncement || m_msg.screenShareIsMemo;
-            const wchar_t* btnText = infoCard ? TR(kInfoCardButton) : TR(kScreenShareCardButton);
-            if (m_msg.screenShareIsCloudRecord)
-                btnText = TR(kCloudRecordCardButton);
-            DrawGdiText(hdc, btnText, btnRc, kShareBtnPx, true, color,
-                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
-                        false /*italic*/, hover /*underline*/, false /*strike*/);
-        }
-    }
-
-    if (m_msg.kind == kMsgGroupInvite)
-    {
-        const int textL = bubbleX + kSharePadH;
-        const int textR = bubbleX + bubbleW - kSharePadH;
-        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
-
-        // 标题：画在图标右侧，名字过长时以省略号收尾
-        int lineTop = bubbleY + kShareTitleTop;
-        RECT titleRc = { textL + kShareIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.inviteTitle, titleRc, kShareTitlePx, true, kBubbleText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kShareTitleH;
-
-        // 副标题：「群名 · N 名成员」，群名过长时省略
-        lineTop += kSharePathGap;
-        RECT subRc = { textL, lineTop, textR, lineTop + kSharePathH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.inviteSubtitle, subRc, kSharePathPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kSharePathH;
-
-        // 状态
-        lineTop += kShareStatusGap;
-        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.inviteStatus, statusRc, kShareStatusPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-
-        // 按钮：「加入群聊」，点过之后等服务端应答期间写「正在加入…」且为灰；可点时悬停加深并加下划线
-        if (m_msg.inviteHasButton)
-        {
-            RECT btnRc = { bubbleX, bubbleY + bubbleH - kShareBtnH, bubbleX + bubbleW, bubbleY + bubbleH };
-            const bool clickable = GroupInviteButtonClickable();
-            const bool hover = m_shareBtnHover && clickable;
-            const COLORREF color = !clickable ? kShareBtnDisabledText : (hover ? kShareBtnHoverText : kShareBtnText);
-            const CString label = GroupInviteButtonText(m_msg.inviteJoining);
-            DrawGdiText(hdc, (LPCWSTR)label, btnRc, kShareBtnPx, true, color,
-                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
-                        false /*italic*/, hover /*underline*/, false /*strike*/);
-        }
-    }
-
-    if (m_msg.kind == kMsgSecretInvite)
-    {
-        const int textL = bubbleX + kSharePadH;
-        const int textR = bubbleX + bubbleW - kSharePadH;
-        const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
-
-        // 标题：画在挂锁右侧，名字过长时以省略号收尾
-        int lineTop = bubbleY + kShareTitleTop;
-        RECT titleRc = { textL + kShareIconSize + kShareIconGap, lineTop, textR, lineTop + kShareTitleH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.secretInviteTitle, titleRc, kShareTitlePx, true, kBubbleText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kShareTitleH;
-
-        // 说明：「密聊消息不会被记录，退出后全部清除」，对方无法防截图时写明
-        lineTop += kSharePathGap;
-        RECT subRc = { textL, lineTop, textR, lineTop + kSharePathH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.secretInviteSubtitle, subRc, kSharePathPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-        lineTop += kSharePathH;
-
-        // 剩余秒数
-        lineTop += kShareStatusGap;
-        RECT statusRc = { textL, lineTop, textR, lineTop + kShareStatusH };
-        DrawGdiText(hdc, (LPCWSTR)m_msg.secretInviteStatus, statusRc, kShareStatusPx, false, kShareGrayText,
-                    kOneLine | DT_END_ELLIPSIS);
-
-        // 按钮：一个时占满整行，两个时左右各占一半；悬停的那个加深并加下划线（多选模式下不给悬停效果）
-        const int buttons = m_msg.secretInviteButtons;
-        for (int bi = 0; bi < buttons; ++bi)
-        {
-            const int btnTop = bubbleY + bubbleH - kShareBtnH;
-            const int btnL = (buttons > 1 && bi == 1) ? (bubbleX + bubbleW / 2) : bubbleX;
-            const int btnR = (buttons > 1 && bi == 0) ? (bubbleX + bubbleW / 2) : (bubbleX + bubbleW);
-            RECT btnRc = { btnL, btnTop, btnR, bubbleY + bubbleH };
-            const bool hover = (m_secretBtnHover == bi);
-            const COLORREF color = hover ? kShareBtnHoverText : kShareBtnText;
-            const CString label = SecretInviteButtonText(buttons, bi);
-            DrawGdiText(hdc, (LPCWSTR)label, btnRc, kShareBtnPx, true, color,
-                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
-                        false /*italic*/, hover /*underline*/, false /*strike*/);
-        }
     }
 
     // ---- 已读回执（单聊里自己发出的消息）----
@@ -6045,7 +5497,8 @@ void ChatBubble::RenderContent(HDC hdc)
             const int rcY = bubbleY + bubbleH + kReceiptTopGap;
             //原因可能比气泡宽：右边与气泡对齐，向左可以一直延伸到本行左边
             RECT reasonRc = { x, rcY, bubbleX + bubbleW, rcY + kFailReasonHeight };
-            DrawGdiText(hdc, (LPCWSTR)m_msg.failReason, reasonRc, kReceiptTextPx, false, kReceiptText,
+            //原因用红字，与左侧的红色感叹号呼应（docs/聊天气泡美化方案.md 第 1 节第 10 条，原为灰色）
+            DrawGdiText(hdc, (LPCWSTR)m_msg.failReason, reasonRc, kReceiptTextPx, false, bubblestyle::kFailReasonText,
                         DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
         }
     }

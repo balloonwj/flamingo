@@ -225,7 +225,8 @@ void CBalloonCallDlg::EnsureWindow(HWND owner)
     if (IsWindow())
         return;
 
-    // owner 传 NULL：让子控件通知自路由回本对话框（与远程桌面 / 关闭确认对话框同处理）。
+    // owner 传 NULL（原为让控件通知发回本窗口；2026-10-14 起有无所有者，控件通知都发回本窗口，
+    // 见开发约定文档 UI 约定第 11 条）。
     // 窗口名先给个中性的"通话"，真正的标题（含通话类型与对端昵称）随后由 ApplyMode 设置。
     if (Create(NULL, CWindow::rcDefault, TR(L"通话"), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {

@@ -61,6 +61,11 @@ void PushRecordSettings(int quality, const wchar_t* folder)
     CScreenShareHub::GetInstance().SetRecordSettings(quality, CString(folder != NULL ? folder : L""));
 }
 
+void PushShareQuality(int quality)
+{
+    CScreenShareHub::GetInstance().SetShareQuality(quality);
+}
+
 void PushMouseEffectSettings(const wchar_t* text)
 {
     CScreenShareHub::GetInstance().SetMouseEffectSettings(CString(text != NULL ? text : L""));

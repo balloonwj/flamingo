@@ -35,7 +35,8 @@ void CBotDialogBase::BringToFront()
 bool CBotDialogBase::CreateFramed(HWND owner, const std::wstring& title, bool minimizable)
 {
     HWND validOwner = (owner != NULL && ::IsWindow(owner)) ? owner : NULL;
-    //有所有者的弹窗用 WS_OVERLAPPEDWINDOW：子控件的通知才会发回本窗口（UI 约定第 11 条）
+    //用 WS_OVERLAPPEDWINDOW 建窗，有无所有者，控件通知都发回本窗口（开发约定文档 UI 约定第 11 条）。2026-10-14 之前
+    //有所有者的 WS_POPUP 窗口的通知会发到所有者，当时为此选用重叠窗口；现在两种样式的通知都发回本窗口
     if (Create(validOwner, CWindow::rcDefault, title.c_str(), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR("bot dialog: Create failed, error=%lu.", ::GetLastError());

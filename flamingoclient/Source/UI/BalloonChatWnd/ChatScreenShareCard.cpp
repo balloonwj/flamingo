@@ -6,6 +6,7 @@
 
 #include "ChatScreenShareCard.h"
 
+#include "ChatCardModel.h"                     // ChatCardChipTone：卡片状态标签的语义
 #include "../../net/MessageProtocolClient.h"   // parseScreenShareCardContent
 #include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
@@ -106,6 +107,10 @@ void ApplyScreenShareState(ChatMessage& msg, int roomState)
         return;
     msg.screenShareState = roomState;
     msg.screenShareStatus = StatusText(roomState);
+    //状态标签就是这句状态文字：正在共享为绿，已结束与还不知道为灰（docs/聊天卡片美化方案.md 5.2）
+    msg.cardChipText = msg.screenShareStatus;
+    msg.cardChipTone = (roomState == kScreenShareRoomActive) ? kCardChipLive : kCardChipEnded;
+    msg.cardMetaText.Empty();
     //还不知道状态时也允许点：共享若已结束，服务端拒绝加入后卡片会被重填为已结束
     msg.screenShareButtonEnabled = msg.screenShareHasButton && roomState != kScreenShareRoomEnded;
 }

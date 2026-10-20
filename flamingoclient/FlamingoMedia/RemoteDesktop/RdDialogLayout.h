@@ -61,7 +61,8 @@ CString ShortenRdPeerName(const CString& name);
  *  组装提示文字。
  *    mode：    对话框形态，取 RdDialogMode 之一；
  *    peerName：对端显示名；为空时用「对方」代替。
- *  @return 呼叫形态为「正在呼叫 XXX，等待对方接受…」，授权形态为「XXX 请求远程控制你的电脑」
+ *  @return 呼叫形态为「正在呼叫 XXX，等待对方接受…」，授权形态为「XXX 请求查看你的桌面。接受后对方只能查看，
+ *          要控制你的电脑还需你另外同意」（2026-10-12 前为「XXX 请求远程控制你的电脑」）
  */
 CString MakeRdDialogText(int mode, const CString& peerName);
 

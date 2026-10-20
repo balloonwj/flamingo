@@ -85,6 +85,13 @@ void CScreenShareHub::SetRecordSettings(int quality, const CString& folder)
         m_module->SetRecordSettings(quality, folder.GetString());
 }
 
+void CScreenShareHub::SetShareQuality(int quality)
+{
+    if (m_module != NULL)
+        m_module->SetShareQuality(quality);
+    LOG_INFO("screenshare quality pushed: %d, module=%d.", quality, m_module != NULL ? 1 : 0);
+}
+
 void CScreenShareHub::SetMouseEffectSettings(const CString& text)
 {
     if (m_module == NULL)

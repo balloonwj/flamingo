@@ -24,6 +24,7 @@
 #include <atlstr.h>
 
 #include "ChatGroupInviteCard.h"
+#include "ChatCardModel.h"   // SetCardChip / ChatCardChipTone：卡片的状态标签
 
 #include <stdlib.h>
 
@@ -118,6 +119,13 @@ void FillStateFields(ChatMessage& msg)
     FillSubtitle(msg);
     msg.inviteStatus    = GroupInviteStatusText(msg.inviteState, isInvitee);
     msg.inviteHasButton = (msg.inviteId > 0) && GroupInviteHasButton(msg.inviteState, isInvitee);
+    //状态标签就是这句状态文字：待加入、等待审批为橙，已加入为绿，其余为灰（docs/聊天卡片美化方案.md 5.4）
+    int tone = kCardChipEnded;
+    if (msg.inviteState == group_invite_pending || msg.inviteState == group_invite_approving)
+        tone = kCardChipPending;
+    else if (msg.inviteState == group_invite_joined)
+        tone = kCardChipLive;
+    SetCardChip(msg, msg.inviteStatus, tone);
 }
 
 } // namespace
@@ -187,6 +195,7 @@ void ApplyGroupInviteCard(ChatMessage& msg, const std::string& contentJson)
         msg.inviteStatus.Empty();
         msg.inviteHasButton = false;
         msg.text = TR(kCardDigest);
+        SetCardChip(msg, CString(), kCardChipNone);
         return;
     }
 

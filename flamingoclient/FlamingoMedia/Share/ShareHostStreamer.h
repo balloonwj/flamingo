@@ -43,6 +43,7 @@
 #include "ShareAudioTransport.h"
 #include "ShareBitrateController.h"
 #include "ShareFraming.h"
+#include "ShareLocalPreview.h"
 #include "ShareScreenDecoders.h"
 #include "ShareScreenFeed.h"
 #include "ShareCursorSampler.h"
@@ -156,6 +157,20 @@ public:
     //要求下一帧编成关键帧（如本机刚改了画质）；可在任意线程调用
     void RequestKeyFrame();
 
+    /**
+     *  设置屏幕共享清晰度（docs/远程桌面H264与共享画质提升方案.md 4.2，2026-10-15）：任意线程可调用，Start 前后都可以；
+     *  推流途中修改时，工作线程下一次编码按新的长边上限重建编码器（那一帧编成关键帧），码率范围随之按比例换算。
+     *  @param quality ShareQualityLevel 的取值；未知取值按默认的 2K 档
+     */
+    void SetQuality(int quality);
+
+    /**
+     *  这块画面是否正被别人控制键鼠（2026-10-17）：任意线程可调用。被控制期间帧率上限提到 kShareControlledFps，
+     *  控制者看到的指针（画在视频里）更跟手；结束后回到 kShareMaxFps。工作线程下一轮生效，帧率变化时编码器重建、出一个关键帧。
+     *  @param controlled 正被控制时为 true
+     */
+    void SetControlled(bool controlled);
+
     //当前被采集内容在虚拟桌面上的矩形（边框窗口据此跟随）；可在任意线程调用
     RECT CurrentSourceRect() const;
 
@@ -198,6 +213,13 @@ public:
     void SetRecordTapEnabled(bool on);
 
     /**
+     *  本机预览（2026-10-12，见 ShareLocalPreview.h）：打开后工作线程按限帧率留下编码前的画面（带鼠标效果），
+     *  GetScreenFrame 按这个座位取到的就是它，每留一帧以 share_host_remote_screen 通知一次。任意线程可调用。
+     *  @param seat 本人画面在房间里的座位（主持人为成员座位，其他共享者为服务端分配的画面座位）；小于 0 关闭并丢掉画面
+     */
+    void SetLocalPreviewSeat(int seat);
+
+    /**
      *  换鼠标效果的设置（第 16 期，任意线程）：工作线程下一轮生效，画面随之更新。默认只开光圈。
      *  @param settings 新设置
      */
@@ -237,9 +259,11 @@ public:
      */
     bool GetRecordFrame(std::vector<uint8_t>& bgra, int& width, int& height, uint64_t& serial);
 
-    //IShareScreenFeed（第 22 期）：其他共享者的屏幕画面，主持人据此看别人的屏幕
+    //IShareScreenFeed（第 22 期）：其他共享者的屏幕画面，主持人据此看别人的屏幕；
+    //2026-10-12 起本机预览的座位取到的是本人的画面（SetLocalPreviewSeat）
     virtual bool GetScreenFrame(int seat, std::vector<uint8_t>& bgra, int& width, int& height,
                                 uint64_t& serial) const override;
+    virtual bool GetScreenSerial(int seat, uint64_t& serial) const override;
     virtual std::vector<int> ScreenSeats() const override;
     virtual int ScreenSourceState(int seat) const override;
 
@@ -287,6 +311,9 @@ private:
     //P2P 观看者发来的一个包体（转交线程上）：按他的座位号改写发送者座位后处理
     void onP2PBody(int seat, const unsigned char* data, size_t len);
     void sendSourceState(int state);
+    //改变共享内容状态（工作线程上）：写入 m_sourceState，发给观看端（1730），并通知界面。推流循环每轮用 ShareSourceStatus
+    //算出状态，与 m_sourceState 不同时才调用（2026-10-14 起）
+    void publishSourceState(int state);
     void copyLastFrame(const ShareCaptureFrame& f);
     void notify(int event, int value);
 
@@ -315,6 +342,8 @@ private:
     std::atomic<bool>              m_keyRequested;     //是否收到了关键帧请求
     std::atomic<int>               m_keyRequestCount;  //中转送来的画面关键帧请求次数（接收线程累加，工作线程取走交给码率自适应）
     ShareBitrateController         m_bitrate;          //码率自适应（只在工作线程上使用，每次开始推流时复位）
+    std::atomic<int>               m_quality;          //屏幕共享清晰度（ShareQualityLevel，SetQuality 写、工作线程每轮读）
+    std::atomic<bool>              m_controlled;       //这块画面是否正被别人控制键鼠（SetControlled 写、工作线程每轮读，决定帧率上限）
     std::atomic<bool>              m_relayLost;        //推流途中中转是否已断开
     mutable std::mutex             m_mutex;            //保护以下三项
     bool                           m_switchPending;    //是否有待生效的切换
@@ -325,7 +354,7 @@ private:
     std::vector<uint8_t>           m_lastFrame;        //最近一帧画面的拷贝（BGRA，行跨度 = 宽 × 4）
     int                            m_lastW;            //最近一帧的宽
     int                            m_lastH;            //最近一帧的高
-    int                            m_sourceState;      //当前的共享内容状态（只在工作线程上读写）
+    int                            m_sourceState;      //最近一次发给观看端的共享内容状态（只在工作线程上读写，每次推流开始时复位）
     std::atomic<uint64_t>          m_sentFrames;       //已发出的视频帧数
     std::atomic<uint64_t>          m_sentKeyFrames;    //已发出的关键帧数
     std::atomic<ShareAudioSession*> m_audio;           //房间语音会话（不拥有）；接收线程把声音帧交给它
@@ -336,11 +365,8 @@ private:
     std::atomic<ShareInputSink*>   m_inputSink;        //键鼠输入帧的接收方（第 18 期，不拥有）
     std::atomic<bool>              m_recordTap;        //录制旁路是否打开
     std::atomic<bool>              m_recordSeed;       //刚打开录制旁路：工作线程下一轮把最近一帧补给录制（画面不变时采集器不出新帧）
-    std::mutex                     m_recordMutex;      //保护以下四项
-    std::vector<uint8_t>           m_recordFrame;      //录制旁路的最新一帧（BGRA，行跨度 = 宽 × 4）
-    int                            m_recordW;          //该帧的宽
-    int                            m_recordH;          //该帧的高
-    uint64_t                       m_recordSerial;     //帧序号
+    ShareLatestFrame               m_recordFrame;      //录制旁路的最新一帧与帧序号（2026-10-14 起与本机预览共用这个类，内部加锁）
+    ShareLocalPreview              m_preview;          //本机预览（2026-10-12）：限帧率留下编码前的画面，供本人看自己那一块
     ShareMouseFxStage              m_mouseFx;          //鼠标效果（第 16 期）：设置任意线程可换，其余只在工作线程上使用
     ShareCursorSampler             m_cursorSampler;    //取光标位置与逻辑按键（第 16 期，工作线程；Debug 版可改读模拟光标文件）
 };

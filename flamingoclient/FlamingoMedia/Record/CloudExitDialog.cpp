@@ -164,7 +164,8 @@ bool CCloudExitDialog::Open(int kind, const std::vector<std::wstring>& titles)
     m_decided = false;
     m_check = NULL;
     const CloudExitDialogSpec spec = MakeCloudExitDialogSpec(kind);
-    //不设所有者窗口，按钮通知才会发回本窗口；出现在任务栏，关机时用户回到桌面能找到它
+    //不设所有者窗口（原为让按钮通知发回本窗口；2026-10-14 起有无所有者，控件通知都发回本窗口，见头文件说明）；
+    //出现在任务栏，关机时用户回到桌面能找到它
     if (Create(NULL, CWindow::rcDefault, spec.m_title.c_str(), WS_POPUP, WS_EX_TOPMOST | WS_EX_APPWINDOW) == NULL)
     {
         LOG_ERROR("cloud exit dialog: create failed, error %lu.", ::GetLastError());

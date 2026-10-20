@@ -143,9 +143,11 @@ void CEmojiPickerPopup::OpenAt(const RECT& anchorScreen, HWND /*owner*/)
 {
     BuildContentOnce();
 
-    // owner 故意传 NULL：DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，
-    // 传 owner 会让子控件点击通知被发到单聊窗而非本弹窗；传 NULL 让通知自路由
-    // 回本弹窗的 OnChildNotify（与搜索弹窗同一处理）。
+    // owner 传 NULL（与搜索弹窗同一处理）。原为让子控件的点击通知到达本弹窗的
+    // OnChildNotify 而不是单聊窗：当时 DuiHost::SendNotify 以 GetParent(m_hWnd)
+    // 为通知目标，而有所有者的 WS_POPUP 窗口的 GetParent 返回所有者。2026-10-14 起
+    // 浮层内容的通知先到本弹窗，OnChildNotify 没有处理的才转给 Show 时传入的所有者
+    // （DuiPopupHost::OnPopupNotify，见开发约定文档 UI 约定第 11 条），这一原因已不存在。
     Show(anchorScreen, NULL);
     LOG_INFO(_T("emoji 选择面板已打开。"));
 }

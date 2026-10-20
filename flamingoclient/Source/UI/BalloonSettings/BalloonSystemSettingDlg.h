@@ -51,8 +51,9 @@ public:
 
     /**
      *  创建并显示对话框（已创建则前置显示）。
-     *    owner：owner 窗口句柄（主面板）；内部 Create 传 NULL 让子控件通知自路由
-     *           回本对话框（与修改密码 / 新建群对话框同处理），owner 仅作语义留存。
+     *    owner：主面板窗口句柄，记入 m_ownerHwnd，供「修改密码」等操作向主面板转发消息；
+     *           内部 Create 时 owner 传 NULL（历史原因，见 .cpp；与修改密码 / 新建群对话框相同），
+     *           因此本对话框没有所有者窗口。
      */
     void OpenSettings(HWND owner);
 

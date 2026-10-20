@@ -79,6 +79,11 @@ enum ChatIconKind
     kChatIconMdAlert        = 53,   // 三角形 + 框内感叹号 —— Markdown 编辑器格式条：警告框
     kChatIconOrgTree        = 54,   // 组织架构图：上方一个框，经连接线分出下方两个框 —— 群聊窗成员搜索框右边的
                                     // 「按部门 / 平铺」切换按钮（部门树视图下高亮；2026-10-07 用户选定，取代原来的文字链接）
+    kChatIconChatRecord     = 55,   // 对话气泡 + 右侧一道弧线（表示后面还叠着一条）—— 合并转发的聊天记录卡片（docs/聊天卡片美化方案.md 3.1）
+    kChatIconCloudRecord    = 56,   // 圆角框 + 框内向右的播放三角 —— 云端录像卡片（同上）
+    kChatIconPhoneLine      = 57,   // 电话听筒的轮廓线（不填充）—— 语音通话、群语音通话卡片的图标块（同上）。与 kChatIconPhone 的实心
+                                    // 听筒不同：卡片里与其他线条图标并排，实心听筒显得偏重；聊天窗头部的语音通话按钮仍用 kChatIconPhone
+    kChatIconCopy           = 58,   // 两张错开叠放的圆角纸 —— 代码片段卡片头部的「复制」（docs/聊天卡片美化方案.md 3.7）
 };
 
 /**

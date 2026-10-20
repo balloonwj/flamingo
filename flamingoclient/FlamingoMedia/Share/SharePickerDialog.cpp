@@ -701,7 +701,13 @@ void CSharePickerDialog::BuildUi()
                                                     checkWidth(TR(L"只录声音"), kAudioOnlyW)));
     }
     std::unique_ptr<balloonwjui::DuiButton> ok(new balloonwjui::DuiButton());
-    ok->SetText(m_mode == share_picker_record ? TR(L"开始录制") : (m_switchMode ? TR(L"切换") : TR(L"开始共享")));
+    const int confirmKind = SharePickerConfirmKindFor(m_mode);
+    if (confirmKind == share_confirm_record)
+        ok->SetText(TR(L"开始录制"));
+    else if (confirmKind == share_confirm_switch)
+        ok->SetText(TR(L"切换"));
+    else
+        ok->SetText(TR(L"开始共享"));
     ok->SetCtrlId(kIdOk);
     ok->SetEnabled(false);
     m_okButton = ok.get();
@@ -935,7 +941,7 @@ void CSharePickerDialog::Open(HWND owner, HWND notifyWnd, int mode, const std::w
     m_notifyWnd = notifyWnd;
     m_selfName = selfName;
     m_mode = mode;
-    m_switchMode = (mode == share_picker_switch);
+    m_switchMode = SharePickerIsSwitchLayout(mode);
     m_owner = owner;
     m_hint = hint;
     m_selected = -1;

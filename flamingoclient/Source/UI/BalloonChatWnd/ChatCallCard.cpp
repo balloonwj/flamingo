@@ -10,6 +10,7 @@
 #include <stdlib.h>
 
 #include "../../third-party/jsoncpp-1.9.0/json.h"
+#include "ChatCardModel.h"                    // ChatCardChipTone：卡片状态标签的语义
 #include "ChatGroupCallCard.h"                // FormatGroupCallCardDuration：时长的写法与群通话卡片相同
 #include "../../Common/I18n/I18n.h"           // TR / TRF：界面文字的多语言查找
 
@@ -46,6 +47,32 @@ int64_t ToInt64(const Json::Value& v)
     if (v.isInt64())
         return static_cast<int64_t>(v.asInt64());
     return 0;
+}
+
+//按通话结果填卡片的状态标签与信息行（docs/聊天卡片美化方案.md 5.2）：通话中为绿，正在呼叫、邀请你通话为橙，被拒绝为红，
+//其余为灰；接通过的通话标签写「已结束」，原来的「通话时长 05:32」移到信息行。msg.screenShareStatus 须已填好
+void FillCallCardChip(ChatMessage& msg, const CallCardInfo& info, bool ok, int inCallMedia)
+{
+    msg.cardChipText = msg.screenShareStatus;
+    msg.cardMetaText.Empty();
+    if (!ok)
+    {
+        msg.cardChipTone = kCardChipEnded;
+        return;
+    }
+    if (!info.m_ended)
+    {
+        msg.cardChipTone = (inCallMedia != 0) ? kCardChipLive : kCardChipPending;
+        return;
+    }
+    if (info.m_connected)
+    {
+        msg.cardChipText = TR(L"已结束");
+        msg.cardMetaText = msg.screenShareStatus;
+        msg.cardChipTone = kCardChipEnded;
+        return;
+    }
+    msg.cardChipTone = (info.m_result == kResultRejected) ? kCardChipBad : kCardChipEnded;
 }
 
 } // namespace
@@ -133,6 +160,7 @@ void ApplyCallCard(ChatMessage& msg, const std::string& contentJson, const CStri
     msg.screenShareState = 0;
     //内容不可用：当作已结束的卡片
     msg.screenShareStatus = ok ? CallCardStatusText(info, msg.fromMe, inCallMedia) : CString(TR(L"通话已结束"));
+    FillCallCardChip(msg, info, ok, inCallMedia);
 }
 
 bool IsCallCardEnded(const std::string& contentJson)

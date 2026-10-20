@@ -6,7 +6,8 @@
  *      FlamingoUnit.exe "[calldlg]"
  *  覆盖：
  *    - CDB1 语音接通态：麦克风、音量、切到视频、共享屏幕、挂断五个圆形按钮，从左到右、尺寸正确、挂断贴右边距；
- *           点麦克风经控制器关麦、按钮外观变化，再点恢复；音量滑块调到 0 时音量按钮出现斜杠；点音量按钮弹出浮层；
+ *           点麦克风经控制器关麦、按钮外观变化，再点恢复；音量滑块调到 0 时音量按钮出现斜杠；点音量按钮弹出浮层，
+ *           发给浮层窗口的滑块通知经 DuiPopupHost 转给通话窗（2026-10-14）；
  *    - CDB2 视频接通态：多出摄像头按钮；窗口缩到最小宽度 776 时按钮之间、按钮与左侧的小画面、信号图标和时长都不重叠；
  *           共享状态变化时共享按钮的外观随之变化；「共享电脑声音」按钮在共享屏幕与挂断之间，开关时外观随之变化
  *           （2026-10-06，docs/音视频通话方案.md 第 10 节的 CSA9；最小宽度由 716 改为 776）；
@@ -452,6 +453,15 @@ TEST_CASE("CDB1 语音接通态：五个圆形按钮的顺序与尺寸；麦克�
         ::ClientToScreen(dlg.m_hWnd, reinterpret_cast<POINT*>(&btnRc.left));
         CHECK(popupRc.bottom <= btnRc.top);
         CdbShot(popup, L"volume_popup");
+        //浮层里滑块的通知走真实路径（2026-10-14，docs/远程桌面控制权限与观看工具条方案.md 8n）：balloonui 把有所有者的
+        //WS_POPUP 宿主的通知发回宿主自身，再由 DuiPopupHost 转给所有者。这里把滑块会发出的那条通知发给浮层窗口，
+        //通话窗照样收到：调到 0 时音量按钮出现斜杠，调回来斜杠消失
+        CdbNotify(popup, balloonwjui::DUIN_VALUECHANGED, kCdbVolumeSlider, 0);
+        CHECK(actions.m_volume == 0);
+        CHECK(CdbBitmap(dlg, kCdbVolume) != volNormal);
+        CdbNotify(popup, balloonwjui::DUIN_VALUECHANGED, kCdbVolumeSlider, 120);
+        CHECK(actions.m_volume == 120);
+        CHECK(CdbBitmap(dlg, kCdbVolume) == volNormal);
     }
     CdbPump(kCdbSettleMs);
     INFO("popup still showing after pumping: " << (CdbPopupShowing(dlg.m_hWnd) ? 1 : 0)

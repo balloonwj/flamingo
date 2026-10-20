@@ -373,7 +373,13 @@
     <ClCompile Include="RemoteDesktop\GdiScreenCapturer.cpp">
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdControlGate.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
     <ClCompile Include="RemoteDesktop\RdControlledBar.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdControlledControl.cpp">
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdControlledStreamer.cpp">
@@ -392,6 +398,12 @@
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdInputInjector.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdKeyframePolicy.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdPicture.cpp">
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdRelayClient.cpp">
@@ -415,7 +427,22 @@
     <ClCompile Include="RemoteDesktop\RdTransport.cpp">
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdViewerToolbar.cpp">
+    <ClCompile Include="RemoteDesktop\RdVideoFrameQueue.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdVideoFrames.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdVideoNegotiation.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdVideoPicture.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdViewFit.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdViewerControl.cpp">
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdViewerWindow.cpp">
@@ -469,6 +496,9 @@
     <ClCompile Include="Share\ShareAnnotationSessionSelect.cpp">
       <Filter>Share</Filter>
     </ClCompile>
+    <ClCompile Include="Share\ShareAspectFit.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
     <ClCompile Include="Share\ShareAudioSession.cpp">
       <Filter>Share</Filter>
     </ClCompile>
@@ -494,6 +524,9 @@
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareCameraWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareCaptureRetry.cpp">
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareConfirmDialog.cpp">
@@ -529,6 +562,9 @@
     <ClCompile Include="Share\ShareEndedToast.cpp">
       <Filter>Share</Filter>
     </ClCompile>
+    <ClCompile Include="Share\ShareFrameDrawer.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
     <ClCompile Include="Share\ShareFraming.cpp">
       <Filter>Share</Filter>
     </ClCompile>
@@ -547,10 +583,16 @@
     <ClCompile Include="Share\ShareInfoPopup.cpp">
       <Filter>Share</Filter>
     </ClCompile>
+    <ClCompile Include="Share\ShareLatestFrame.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
     <ClCompile Include="Share\ShareLinkInvite.cpp">
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareLocalAnnotator.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareLocalPreview.cpp">
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareMouseEffectMenu.cpp">
@@ -598,6 +640,9 @@
     <ClCompile Include="Share\ShareSourcePolicy.cpp">
       <Filter>Share</Filter>
     </ClCompile>
+    <ClCompile Include="Share\ShareSourceStatus.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
     <ClCompile Include="Share\ShareSources.cpp">
       <Filter>Share</Filter>
     </ClCompile>
@@ -605,6 +650,9 @@
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareTextInputDialog.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ShareTopBar.cpp">
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareTopBarCollapse.cpp">
@@ -629,6 +677,12 @@
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\ShareWhiteboardWindow.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ViewerFloatBar.cpp">
+      <Filter>Share</Filter>
+    </ClCompile>
+    <ClCompile Include="Share\ViewerMouseButtons.cpp">
       <Filter>Share</Filter>
     </ClCompile>
     <ClCompile Include="Share\WgcWindowCapturer.cpp">
@@ -1030,7 +1084,13 @@
     <ClInclude Include="RemoteDesktop\RdCaptureTypes.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdControlGate.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
     <ClInclude Include="RemoteDesktop\RdControlledBar.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdControlledControl.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
     <ClInclude Include="RemoteDesktop\RdControlledStreamer.h">
@@ -1057,7 +1117,13 @@
     <ClInclude Include="RemoteDesktop\RdInputInjector.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdKeyframePolicy.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
     <ClInclude Include="RemoteDesktop\RdMessages.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdPicture.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
     <ClInclude Include="RemoteDesktop\RdRelayClient.h">
@@ -1084,7 +1150,22 @@
     <ClInclude Include="RemoteDesktop\RdTransport.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
-    <ClInclude Include="RemoteDesktop\RdViewerToolbar.h">
+    <ClInclude Include="RemoteDesktop\RdVideoFrameQueue.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdVideoFrames.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdVideoNegotiation.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdVideoPicture.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdViewFit.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\RdViewerControl.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
     <ClInclude Include="RemoteDesktop\RdViewerWindow.h">
@@ -1132,6 +1213,9 @@
     <ClInclude Include="Share\ShareAnnotationSession.h">
       <Filter>Share</Filter>
     </ClInclude>
+    <ClInclude Include="Share\ShareAspectFit.h">
+      <Filter>Share</Filter>
+    </ClInclude>
     <ClInclude Include="Share\ShareAudioSession.h">
       <Filter>Share</Filter>
     </ClInclude>
@@ -1165,6 +1249,9 @@
     <ClInclude Include="Share\ShareCameraWindow.h">
       <Filter>Share</Filter>
     </ClInclude>
+    <ClInclude Include="Share\ShareCaptureRetry.h">
+      <Filter>Share</Filter>
+    </ClInclude>
     <ClInclude Include="Share\ShareCapturer.h">
       <Filter>Share</Filter>
     </ClInclude>
@@ -1195,6 +1282,9 @@
     <ClInclude Include="Share\ShareEndedToast.h">
       <Filter>Share</Filter>
     </ClInclude>
+    <ClInclude Include="Share\ShareFrameDrawer.h">
+      <Filter>Share</Filter>
+    </ClInclude>
     <ClInclude Include="Share\ShareFraming.h">
       <Filter>Share</Filter>
     </ClInclude>
@@ -1213,10 +1303,16 @@
     <ClInclude Include="Share\ShareInfoPopup.h">
       <Filter>Share</Filter>
     </ClInclude>
+    <ClInclude Include="Share\ShareLatestFrame.h">
+      <Filter>Share</Filter>
+    </ClInclude>
     <ClInclude Include="Share\ShareLinkInvite.h">
       <Filter>Share</Filter>
     </ClInclude>
     <ClInclude Include="Share\ShareLocalAnnotator.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareLocalPreview.h">
       <Filter>Share</Filter>
     </ClInclude>
     <ClInclude Include="Share\ShareMessages.h">
@@ -1270,6 +1366,9 @@
     <ClInclude Include="Share\ShareSourcePolicy.h">
       <Filter>Share</Filter>
     </ClInclude>
+    <ClInclude Include="Share\ShareSourceStatus.h">
+      <Filter>Share</Filter>
+    </ClInclude>
     <ClInclude Include="Share\ShareSources.h">
       <Filter>Share</Filter>
     </ClInclude>
@@ -1277,6 +1376,9 @@
       <Filter>Share</Filter>
     </ClInclude>
     <ClInclude Include="Share\ShareTextInputDialog.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ShareTopBar.h">
       <Filter>Share</Filter>
     </ClInclude>
     <ClInclude Include="Share\ShareTopBarCollapse.h">
@@ -1301,6 +1403,12 @@
       <Filter>Share</Filter>
     </ClInclude>
     <ClInclude Include="Share\ShareWhiteboardWindow.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ViewerFloatBar.h">
+      <Filter>Share</Filter>
+    </ClInclude>
+    <ClInclude Include="Share\ViewerMouseButtons.h">
       <Filter>Share</Filter>
     </ClInclude>
     <ClInclude Include="Record\CloudExitDialog.h">

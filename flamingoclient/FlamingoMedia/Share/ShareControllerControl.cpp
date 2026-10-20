@@ -19,17 +19,18 @@
 #include "ShareController.h"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
-#include "ShareSources.h"                         // ExcludeWindowFromCapture
+#include "ShareSources.h"                        // ExcludeWindowFromCapture
+#include "ShareRoomPolicy.h"                      // MakeShareControlStartNotice、DecideShareControlTarget
 #include "../RemoteDesktop/RdInputDef.h"          // rd_input_mouse
 #include "../RemoteDesktop/RdInputInjector.h"     // RdInputInjector::inject（注入复用远程桌面）
+#include "../RemoteDesktop/RdInputEncoder.h"      // RdInputEncoder：结束控制时补发的松开编成命令字节
 #include "../../Source/net/Protocol.h"
 #include "../../Source/Common/Log/IULog.h"
 #include "../../Source/Common/I18n/I18n.h"        // TR：界面文字的多语言查找
 
 namespace screenshare {
-
-CShareController* CShareController::s_hookOwner = NULL;
 
 namespace {
 
@@ -39,7 +40,18 @@ struct ShareInputFrameMsg
     int             m_senderSeat;   //发送者座位号
     int             m_targetSeat;   //帧里写的目标座位号
     ShareInputEvent m_event;        //输入
+    int64_t         m_postedUs;     //接收线程投递的时刻（inputQueueNowUs，微秒）；界面线程据此统计排队时长（2026-10-17）
 };
+
+//微秒与毫秒的换算（排队时长写日志时用）
+const double kInputQueueUsPerMs = 1000.0;
+
+//排队时长统计用的单调时钟，单位微秒（steady_clock 在 Windows 上基于 QueryPerformanceCounter，精度远好于 GetTickCount）
+int64_t inputQueueNowUs()
+{
+    return static_cast<int64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
 
 //在「座位号 → userid」表里找某人的座位号；找不到返回 -1
 int seatOfUser(const std::map<int, int64_t>& seatUsers, int64_t userId)
@@ -80,14 +92,21 @@ bool controlDryRun()
 }
 #endif
 
-//窗口是否属于本进程（Flamingo 自己的窗口不接受控制者的输入：里面有聊天内容等私人信息）
-bool isOwnProcessWindow(HWND hwnd)
+/**
+ *  把一条键鼠输入换成远程桌面的输入命令（RdControlGate 判定与记录用）。
+ *  @param ev 输入
+ *  @param pt 鼠标输入换回画面主人屏幕上的位置；键盘输入不用
+ */
+remotedesktop::RdInputCommand toRdInputCommand(const ShareInputEvent& ev, POINT pt)
 {
-    if (hwnd == NULL)
-        return false;
-    DWORD pid = 0;
-    ::GetWindowThreadProcessId(hwnd, &pid);
-    return pid == ::GetCurrentProcessId();
+    remotedesktop::RdInputCommand cmd;
+    cmd.type = ev.m_type;
+    cmd.message = ev.m_message;
+    cmd.x = pt.x;
+    cmd.y = pt.y;
+    cmd.wheel = ev.m_wheel;
+    cmd.vkey = ev.m_vkey;
+    return cmd;
 }
 
 } // namespace
@@ -191,7 +210,7 @@ void CShareController::applyControlState(const ShareStateNotify& n, bool asHost)
     setControlledBy(controller);
     if (prev == 0 && controller != 0)
     {
-        showNotice(TRF(L"{0} 正在控制你的屏幕，动一下鼠标即可收回", displayName(controller)).c_str());
+        showNotice(MakeShareControlStartNotice(displayName(controller)).c_str());
     }
     else if (prev != 0 && controller == 0)
     {
@@ -279,23 +298,38 @@ void CShareController::setControlledBy(int64_t controllerId)
     if (m_controllerId != 0)
     {
         releaseInjectedInput();
-        LOG_INFO("screenshare control: control by user %lld ended, injected=%u, dropped=%u.",
-                 static_cast<long long>(m_controllerId), m_injectedCount, m_droppedCount);
+        //键鼠帧在界面线程队列里的排队时长（2026-10-17）：平均与最长，单位毫秒
+        const double avgMs = (m_inputQueueFrames > 0)
+            ? static_cast<double>(m_inputQueueTotalUs) / m_inputQueueFrames / kInputQueueUsPerMs : 0.0;
+        const double maxMs = static_cast<double>(m_inputQueueMaxUs) / kInputQueueUsPerMs;
+        LOG_INFO("screenshare control: control by user %lld ended, injected=%u, dropped=%u, ui queue avg=%.2f ms, "
+                 "max=%.2f ms over %u frames.", static_cast<long long>(m_controllerId), m_injectedCount, m_droppedCount,
+                 avgMs, maxMs, m_inputQueueFrames);
     }
     m_controllerId = controllerId;
     m_injectedCount = 0;
     m_droppedCount = 0;
+    m_inputQueueTotalUs = 0;
+    m_inputQueueMaxUs = 0;
+    m_inputQueueFrames = 0;
+    //被控制期间推流帧率提到 kShareControlledFps，结束后恢复（2026-10-17）。本人这块画面由主持人推流管线或共享者推流管线
+    //之一推出，两条都设：没在推流的那条只记下状态，不产生任何效果
+    m_streamer.SetControlled(controllerId != 0);
+    m_publisher.SetControlled(controllerId != 0);
+    //主持人的控制条与非主持人共享者的共享者条都显示控制者与「收回控制」（2026-10-12）；没显示的那条只记下状态
     if (controllerId == 0)
     {
-        removeActivityHooks();
         m_bar.SetControlledBy(std::wstring());
+        m_sharerBar.SetControlledBy(std::wstring());
         return;
     }
-    m_localActivity.Reset();
-    m_localActivityPosted = false;
-    installActivityHooks();
     dropControlRequest(controllerId);
+    //开始被控制：打开控制把关，此后这位控制者的输入按规则注入并记下按着的键与按钮
+    const POINT notUsed = { 0, 0 };
+    std::vector<remotedesktop::RdInputCommand> noReleases;
+    m_controlGate.SetAllowed(true, notUsed, noReleases);
     m_bar.SetControlledBy(displayName(controllerId));
+    m_sharerBar.SetControlledBy(displayName(controllerId));
     //只共享一个窗口：控制前把它切到前台，键盘输入才落得到它上面（系统可能拒绝，点一下窗口同样会切过去）
     const ShareSourceSpec& source = ownSource();
     if (source.m_kind == share_source_window && ::IsWindow(source.m_hwnd))
@@ -309,34 +343,33 @@ void CShareController::setControlledBy(int64_t controllerId)
 
 void CShareController::releaseInjectedInput()
 {
-    //调试开关：没有真正注入过，也就不用补发
-    if (controlDryRun())
-    {
-        m_injectKeys.Reset();
-        m_injectedButtons.clear();
-        return;
-    }
-    //按键：按按下的逆序抬起，修饰键最后抬起
-    const std::vector<uint32_t> keys = m_injectKeys.HeldKeys();
+    //关闭控制把关，取回仍按着的键与按钮：按键按按下的逆序抬起（修饰键最后抬起），再在光标当前位置松开鼠标按钮
     POINT cursor = { 0, 0 };
     ::GetCursorPos(&cursor);
-    for (size_t i = keys.size(); i > 0; --i)
-    {
-        const std::string cmd = ShareRemoteInput::ToRdCommand(ShareInputEvent::Key(WM_KEYUP, keys[i - 1]), cursor);
-        remotedesktop::RdInputInjector::inject(reinterpret_cast<const BYTE*>(cmd.data()), cmd.size());
-    }
-    //鼠标按钮：在光标当前位置松开
-    for (size_t i = 0; i < m_injectedButtons.size(); ++i)
-    {
-        const std::string cmd = ShareRemoteInput::ToRdCommand(ShareInputEvent::Mouse(m_injectedButtons[i], 0, 0, 0),
-                                                              cursor);
-        remotedesktop::RdInputInjector::inject(reinterpret_cast<const BYTE*>(cmd.data()), cmd.size());
-    }
-    if (!keys.empty() || !m_injectedButtons.empty())
-        LOG_INFO("screenshare control: released %u keys and %u buttons.", static_cast<unsigned>(keys.size()),
-                 static_cast<unsigned>(m_injectedButtons.size()));
+    std::vector<remotedesktop::RdInputCommand> releases;
+    m_controlGate.SetAllowed(false, cursor, releases);
     m_injectKeys.Reset();
-    m_injectedButtons.clear();
+    //调试开关：没有真正注入过，也就不用补发
+    if (controlDryRun() || releases.empty())
+        return;
+    unsigned keys = 0;
+    for (size_t i = 0; i < releases.size(); ++i)
+    {
+        const remotedesktop::RdInputCommand& up = releases[i];
+        std::vector<BYTE> bytes;
+        if (up.type == remotedesktop::rd_input_key)
+        {
+            remotedesktop::RdInputEncoder::encodeKey(bytes, up.message, up.vkey);
+            ++keys;
+        }
+        else
+        {
+            remotedesktop::RdInputEncoder::encodeMouse(bytes, up.message, up.x, up.y, 0);
+        }
+        remotedesktop::RdInputInjector::inject(bytes.data(), bytes.size());
+    }
+    LOG_INFO("screenshare control: released %u keys and %u buttons.", keys,
+             static_cast<unsigned>(releases.size()) - keys);
 }
 
 void CShareController::OnInputFrame(int senderSeat, int targetSeat, const ShareInputEvent& ev)
@@ -348,6 +381,7 @@ void CShareController::OnInputFrame(int senderSeat, int targetSeat, const ShareI
     msg->m_senderSeat = senderSeat;
     msg->m_targetSeat = targetSeat;
     msg->m_event = ev;
+    msg->m_postedUs = inputQueueNowUs();
     if (!PostMessage(kMsgShareInputFrame, 0, reinterpret_cast<LPARAM>(msg)))
         delete msg;
 }
@@ -361,6 +395,15 @@ LRESULT CShareController::OnInputFrameMsg(UINT uMsg, WPARAM wParam, LPARAM lPara
     //只接收发给本人这块画面（建房间的主持人为自己的座位，共享者为画面座位）的输入
     if (!frame || !isScreenOwner() || m_controllerId == 0 || frame->m_targetSeat != ownScreenSeat())
         return 0;
+    //排队时长统计：从接收线程投递到这里开始处理（不论之后注入还是丢弃）
+    const int64_t queuedUs = inputQueueNowUs() - frame->m_postedUs;
+    if (queuedUs >= 0)
+    {
+        m_inputQueueTotalUs += static_cast<uint64_t>(queuedUs);
+        if (queuedUs > m_inputQueueMaxUs)
+            m_inputQueueMaxUs = queuedUs;
+        ++m_inputQueueFrames;
+    }
     //暂停期间观看者看不到画面，不注入
     if (ownScreenPaused())
     {
@@ -373,24 +416,22 @@ LRESULT CShareController::OnInputFrameMsg(UINT uMsg, WPARAM wParam, LPARAM lPara
     const HWND sharedRoot = windowShare ? rootOf(source.m_hwnd) : NULL;
     POINT pt = { 0, 0 };
     bool pointOnWindow = true;
-    bool ownWindow = false;
     if (ev.m_type == remotedesktop::rd_input_mouse)
     {
         pt = ShareRemoteInput::NormalizedToSource(ownSourceRect(), ev.m_x, ev.m_y);
         const HWND hit = ::WindowFromPoint(pt);
         pointOnWindow = !windowShare || (hit != NULL && rootOf(hit) == sharedRoot);
-        ownWindow = isOwnProcessWindow(hit);
     }
     const HWND fg = ::GetForegroundWindow();
     const bool windowForeground = !windowShare || (fg != NULL && rootOf(fg) == sharedRoot);
-    //键盘输入落在本进程的窗口上（画面主人刚点开了 Flamingo）：不注入
-    if (ev.m_type != remotedesktop::rd_input_mouse)
-        ownWindow = isOwnProcessWindow(fg);
-    //鼠标松开不受「本进程窗口」限制：按下时已经注入的按钮必须能松开
+    //落在本进程窗口上的输入不注入（Flamingo 自己的窗口里有聊天内容等私人信息）：鼠标按坐标处的窗口、键盘按前台窗口判定，
+    //判定方法与远程桌面相同。鼠标松开、按键抬起不受这一限制，按下时已经注入的按钮与键必须能松开。
+    //这一项须在系统级按键过滤之前：被丢掉的按键不能改变过滤器里修饰键的按下状态
+    const remotedesktop::RdInputCommand rdCmd = toRdInputCommand(ev, pt);
     const bool isButtonUp = (ev.m_message == WM_LBUTTONUP || ev.m_message == WM_RBUTTONUP ||
                              ev.m_message == WM_MBUTTONUP);
     const bool isKeyUp = (ev.m_message == WM_KEYUP || ev.m_message == WM_SYSKEYUP);
-    if (ownWindow && !isButtonUp && !isKeyUp)
+    if (!isButtonUp && !isKeyUp && remotedesktop::RdControlGate::IsOnOwnProcessWindow(rdCmd))
     {
         ++m_droppedCount;
         return 0;
@@ -407,30 +448,17 @@ LRESULT CShareController::OnInputFrameMsg(UINT uMsg, WPARAM wParam, LPARAM lPara
                         controllerSeat);
         return 0;
     }
-    //记下注入后按着的鼠标按钮，结束控制时补发松开
-    if (ev.m_type == remotedesktop::rd_input_mouse)
+    //控制把关：确认仍在被控制，并记下注入后按着的键与鼠标按钮，结束控制时补发松开（本进程窗口已在前面判定过）
+    if (!m_controlGate.Filter(rdCmd))
     {
-        uint32_t up = 0;
-        if (ev.m_message == WM_LBUTTONDOWN)
-            up = WM_LBUTTONUP;
-        else if (ev.m_message == WM_RBUTTONDOWN)
-            up = WM_RBUTTONUP;
-        else if (ev.m_message == WM_MBUTTONDOWN)
-            up = WM_MBUTTONUP;
-        if (up != 0 && std::find(m_injectedButtons.begin(), m_injectedButtons.end(), up) == m_injectedButtons.end())
-            m_injectedButtons.push_back(up);
-        if (isButtonUp)
-            m_injectedButtons.erase(std::remove(m_injectedButtons.begin(), m_injectedButtons.end(), ev.m_message),
-                                    m_injectedButtons.end());
-        //滚轮只滚光标所在处：先把光标挪过去（调试开关下不挪）
-        if (ev.m_message == WM_MOUSEWHEEL && !controlDryRun())
-        {
-            m_localActivity.NoteInjectedPosition(pt);
-            const std::string move = ShareRemoteInput::ToRdCommand(ShareInputEvent::Mouse(WM_MOUSEMOVE, 0, 0, 0), pt);
-            remotedesktop::RdInputInjector::inject(reinterpret_cast<const BYTE*>(move.data()), move.size());
-        }
-        //注入器用 SetCursorPos 挪光标：先记下位置，钩子据此不把这次挪动当成本机操作
-        m_localActivity.NoteInjectedPosition(pt);
+        ++m_droppedCount;
+        return 0;
+    }
+    //滚轮只滚光标所在处：先把光标挪过去（调试开关下不挪）
+    if (ev.m_type == remotedesktop::rd_input_mouse && ev.m_message == WM_MOUSEWHEEL && !controlDryRun())
+    {
+        const std::string move = ShareRemoteInput::ToRdCommand(ShareInputEvent::Mouse(WM_MOUSEMOVE, 0, 0, 0), pt);
+        remotedesktop::RdInputInjector::inject(reinterpret_cast<const BYTE*>(move.data()), move.size());
     }
     const std::string cmd = ShareRemoteInput::ToRdCommand(ev, pt);
     ++m_injectedCount;
@@ -445,96 +473,7 @@ LRESULT CShareController::OnInputFrameMsg(UINT uMsg, WPARAM wParam, LPARAM lPara
     return 0;
 }
 
-void CShareController::installActivityHooks()
-{
-    if (m_mouseHook != NULL || m_keyHook != NULL)
-        return;
-    //调试开关：共用桌面上联调时真实的鼠标属于用户，不据它收回控制
-    if (controlDryRun())
-    {
-        LOG_INFO("screenshare control: dry run, activity hooks not installed.");
-        return;
-    }
-    //低级钩子的回调在本 DLL 里：模块句柄取回调所在的模块
-    HMODULE module = NULL;
-    ::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                         reinterpret_cast<LPCWSTR>(&CShareController::lowLevelMouseProc), &module);
-    s_hookOwner = this;
-    m_mouseHook = ::SetWindowsHookExW(WH_MOUSE_LL, &CShareController::lowLevelMouseProc, module, 0);
-    m_keyHook = ::SetWindowsHookExW(WH_KEYBOARD_LL, &CShareController::lowLevelKeyboardProc, module, 0);
-    if (m_mouseHook == NULL || m_keyHook == NULL)
-        LOG_ERROR("screenshare control: install activity hooks failed, mouse=%d, key=%d, error=%lu.",
-                  m_mouseHook != NULL ? 1 : 0, m_keyHook != NULL ? 1 : 0, ::GetLastError());
-    else
-        LOG_INFO("screenshare control: activity hooks installed.");
-}
-
-void CShareController::removeActivityHooks()
-{
-    if (m_mouseHook != NULL)
-    {
-        ::UnhookWindowsHookEx(m_mouseHook);
-        m_mouseHook = NULL;
-    }
-    if (m_keyHook != NULL)
-    {
-        ::UnhookWindowsHookEx(m_keyHook);
-        m_keyHook = NULL;
-    }
-    if (s_hookOwner == this)
-        s_hookOwner = NULL;
-}
-
-LRESULT CALLBACK CShareController::lowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam)
-{
-    CShareController* owner = s_hookOwner;
-    if (code == HC_ACTION && owner != NULL && owner->m_controllerId != 0 && !owner->m_localActivityPosted)
-    {
-        const MSLLHOOKSTRUCT* info = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        const bool injected = (info->flags & LLMHF_INJECTED) != 0;
-        const bool local = (wParam == WM_MOUSEMOVE) ? owner->m_localActivity.OnMouseMove(info->pt, injected)
-                                                    : owner->m_localActivity.OnMouseButton(injected);
-        if (local)
-        {
-            owner->m_localActivityPosted = true;
-            ::PostMessage(owner->m_hWnd, kMsgShareLocalActivity, 0, 0);
-        }
-    }
-    return ::CallNextHookEx(NULL, code, wParam, lParam);
-}
-
-LRESULT CALLBACK CShareController::lowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam)
-{
-    CShareController* owner = s_hookOwner;
-    if (code == HC_ACTION && owner != NULL && owner->m_controllerId != 0 && !owner->m_localActivityPosted)
-    {
-        const KBDLLHOOKSTRUCT* info = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
-        const bool injected = (info->flags & LLKHF_INJECTED) != 0;
-        //只看按下：控制开始前就按着的键松开时不算
-        if ((wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) && owner->m_localActivity.OnKey(injected))
-        {
-            owner->m_localActivityPosted = true;
-            ::PostMessage(owner->m_hWnd, kMsgShareLocalActivity, 0, 0);
-        }
-    }
-    return ::CallNextHookEx(NULL, code, wParam, lParam);
-}
-
-LRESULT CShareController::OnLocalActivityMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
-{
-    (void)uMsg;
-    (void)wParam;
-    (void)lParam;
-    (void)bHandled;
-    if (!isScreenOwner() || m_controllerId == 0)
-        return 0;
-    LOG_INFO("screenshare control: local activity detected, revoking control of user %lld.",
-             static_cast<long long>(m_controllerId));
-    revokeControlNow(true);
-    return 0;
-}
-
-void CShareController::revokeControlNow(bool byLocalActivity)
+void CShareController::revokeControlNow()
 {
     if (m_controllerId == 0)
         return;
@@ -543,10 +482,8 @@ void CShareController::revokeControlNow(bool byLocalActivity)
     m_revokingId = controller;
     setControlledBy(0);
     sendControl(share_control_revoke, m_host->GetSelfUserId(), 0);
-    if (byLocalActivity)
-        showNotice(TRF(L"你动了鼠标或键盘，已收回 {0} 的控制", displayName(controller)).c_str());
-    else
-        showNotice(TRF(L"已收回 {0} 的控制", displayName(controller)).c_str());
+    LOG_INFO("screenshare control: revoked by the screen owner, controller %lld.", static_cast<long long>(controller));
+    showNotice(TRF(L"已收回 {0} 的控制", displayName(controller)).c_str());
 }
 
 void CShareController::showNextControlRequest()
@@ -625,7 +562,7 @@ void CShareController::toggleViewerControl()
 {
     switch (m_viewerControl)
     {
-    //还没申请：向当前那一块画面（放大的那块，没有放大时为第一块）的主人申请，等他答复；没有多人共享信息时为发起人
+    //还没申请：向当前那一块画面（放大的那块，没有放大时为第一块别人的画面）的主人申请，等他答复；没有多人共享信息时为发起人
     case share_viewer_control_none:
         {
             //主持人（2026-10-07，方案第 14.3 节第 4 条）在「其他人的屏幕」窗口里申请，画面取那个窗口当前那一块；
@@ -633,18 +570,25 @@ void CShareController::toggleViewerControl()
             const bool hosting = (m_hostPhase == host_streaming);
             const bool activeIsBoard = hosting ? m_screensWindow.ActiveIsBoard() : m_viewer.ActiveIsBoard();
             const int activeSeat = hosting ? m_screensWindow.ActiveScreenSeat() : m_viewer.ActiveScreenSeat();
-            //白板（第 23 期）没有电脑可控制
-            if (activeIsBoard)
-            {
-                showNotice(TR(L"白板不能申请控制"));
-                return;
-            }
-            //主持人不能申请控制自己：查不到画面时不发
+            //查不到画面时观看者按单人共享向发起人申请，主持人不发
             int64_t owner = hosting ? 0 : m_lastState.m_hostId;
             const int index = FindScreenBySeat(m_screens, activeSeat);
             if (index >= 0)
                 owner = m_screens[index].m_ownerId;
-            if (owner <= 0)
+            //白板（第 23 期）没有电脑可控制；2026-10-12 起清单里有本人自己的画面，它只能看、不能申请控制
+            const int64_t self = (m_host != NULL) ? m_host->GetSelfUserId() : 0;
+            const int target = DecideShareControlTarget(activeIsBoard, owner, self);
+            if (target == share_control_target_board)
+            {
+                showNotice(TR(L"白板不能申请控制"));
+                return;
+            }
+            if (target == share_control_target_self)
+            {
+                showNotice(TR(L"不能控制自己的屏幕"));
+                return;
+            }
+            if (target != share_control_target_ok)
                 return;
             m_controlOwner = owner;
             sendControl(share_control_request, owner, 0);
@@ -733,7 +677,6 @@ void CShareController::resetControlLocal()
     if (m_controllerId != 0)
         setControlledBy(0);
     m_revokingId = 0;
-    removeActivityHooks();
     m_controlRequests.clear();
     m_controlToast.Hide();
     //观看者一侧

@@ -34,6 +34,10 @@ const char* const kKeyDebugOpen = "p2pdebugopen";
 //p2pdebugopen 取这个值时受理 2306，其余取值一律不受理
 const char* const kDebugOpenOn = "1";
 
+//启动时地址检查的告警里写的用途（英文，日志用）：中转与地址探测
+const char* const kUsageRelay = "the relay of calls, remote desktop, screen share, group calls and the p2p fallback";
+const char* const kUsageProbe = "p2p address probing";
+
 //UDP / TCP 端口的上限
 const long long kMaxPort = 65535;
 
@@ -113,6 +117,16 @@ P2PSessionConfig P2PServerSetup::loadConfig(CConfigFileReader& config)
         cfg.m_probes.push_back(probe);
     }
     return cfg;
+}
+
+void P2PServerSetup::appendPublishedHosts(const P2PSessionConfig& cfg, bool probeHostConfigured,
+                                          std::vector<PublishedHost>& out)
+{
+    out.push_back(PublishedHost(kKeyImgServerHost, cfg.m_relayHost, cfg.m_relayPort, kUsageRelay));
+    //探测主机已按 loadConfig 的规则回落过；这里只决定告警里写哪个配置项，部署人员据此知道该改哪一行
+    const char* const probeKey = probeHostConfigured ? kKeyProbeHost : kKeyImgServerHost;
+    for (size_t i = 0; i < cfg.m_probes.size(); ++i)
+        out.push_back(PublishedHost(probeKey, cfg.m_probes[i].m_ip, cfg.m_probes[i].m_port, kUsageProbe));
 }
 
 P2PFeatureGate::P2PFeatureGate(FeatureSwitchManager& switches, EnterpriseLookup lookup)

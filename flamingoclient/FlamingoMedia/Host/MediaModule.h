@@ -147,6 +147,8 @@ public:
     virtual void OnConversationsPicked(uint32_t token, const MediaConversationRef* refs, uint32_t count) override;
     //见 IMediaModule::ConfirmCloudRecordExit（第 17 版，方案第 14.4 节）：弹「云端录像」对话框，选择放弃时请云端录像中心删除
     virtual int ConfirmCloudRecordExit(int kind) override;
+    //见 IMediaModule::SetShareQuality（第 18 版）：交给共享控制器，由它交给主持人与共享者两条推流管线
+    virtual void SetShareQuality(int quality) override;
 
 private:
     CMediaModule();

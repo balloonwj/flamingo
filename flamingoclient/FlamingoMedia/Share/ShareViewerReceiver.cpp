@@ -234,6 +234,11 @@ bool ShareViewerReceiver::GetScreenFrame(int seat, std::vector<uint8_t>& bgra, i
     return m_screens.GetLatestFrame(seat, bgra, width, height, serial);
 }
 
+bool ShareViewerReceiver::GetScreenSerial(int seat, uint64_t& serial) const
+{
+    return m_screens.LatestSerial(seat, serial);
+}
+
 std::vector<int> ShareViewerReceiver::ScreenSeats() const
 {
     return m_screens.Seats();
@@ -362,6 +367,14 @@ void ShareViewerReceiver::OnScreenDecoded(int seat)
     (void)seat;
     if (m_sink != NULL)
         m_sink->OnViewerFrame();
+}
+
+void ShareViewerReceiver::OnScreenUndecodable(int seat, bool undecodable)
+{
+    (void)seat;
+    //观看窗只关心「有没有任何一路解不出来」：按全部画面的现状报，不按这一路
+    if (m_sink != NULL)
+        m_sink->OnViewerEvent(share_viewer_undecodable, m_screens.AnyUndecodable() ? 1 : 0);
 }
 
 void ShareViewerReceiver::OnRelayClosed()

@@ -953,7 +953,8 @@ void CBalloonMainPanel::EnsureCreated()
         LOG_WARNING(_T("主面板标题栏图标位图创建失败，标题栏只显示文字。"));
     }
 
-    SetMinSize(kMainPanelMinWidth, kMainPanelMinHeight);
+    // 最小尺寸按建窗时的 DPI 设好，之后随 DPI 等比换算（见 OnPanelDpiChangedMsg）
+    m_minSize.Init(*this, kMainPanelMinWidth, kMainPanelMinHeight, GetDpi());
 
     // 开启双击合成：联系人树需要"双击联系人才开聊"。
     // （2026-10-06 更正：balloonui 窗口的窗口类其实带 CS_DBLCLKS，系统本就会投递双击，这里的双击合成实际不起作用，保留无害）
@@ -1963,6 +1964,18 @@ LRESULT CBalloonMainPanel::OnPanelSizeMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+LRESULT CBalloonMainPanel::OnPanelDpiChangedMsg(UINT /*uMsg*/, WPARAM wParam,
+                                                LPARAM /*lParam*/, BOOL& bHandled)
+{
+    // 只换算最小尺寸，建议矩形照常交给 DuiHost 处理
+    bHandled = FALSE;
+    const int newDpi = LOWORD(wParam);
+    m_minSize.OnDpiChanged(*this, newDpi);
+    LOG_INFO("MainPanel: dpi changed to %d, min size %dx%d.", newDpi, m_minSize.ScaledWidth(newDpi),
+             m_minSize.ScaledHeight(newDpi));
+    return 0;
+}
+
 LRESULT CBalloonMainPanel::OnPanelExitSizeMoveMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                                   LPARAM /*lParam*/, BOOL& bHandled)
 {
@@ -2411,7 +2424,8 @@ LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     const balloonwjui::DuiNotify* pNotify =
         reinterpret_cast<const balloonwjui::DuiNotify*>(lParam);
 
-    // 说明：搜索结果下拉是<u>独立的顶层浮窗</u>（owner 为空、通知自路由），其结果行 /
+    // 说明：搜索结果下拉是<u>独立的顶层浮窗</u>（不是 WS_CHILD 宿主，控件通知发回下拉自身，
+    // 开发约定文档 UI 约定第 11 条），其结果行 /
     // 筛选标签的点击在下拉自己的 OnChildNotify 内处理，<u>不会</u>冒泡到这里，故主
     // 面板无需为它分发。命中结果时下拉通过回调（OnSearchPick / OnSearchPickGroup）
     // 反过来调本面板开聊 / 开群。

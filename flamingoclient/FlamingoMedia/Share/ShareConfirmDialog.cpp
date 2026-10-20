@@ -78,7 +78,7 @@ void CShareConfirmDialog::OpenCentered(HWND anchor, HWND notifyWnd, const ShareC
     m_finished = false;
     m_check = NULL;
 
-    //不设所有者窗口，按钮通知才会发回本窗口（见头文件说明）
+    //不设所有者窗口（原为让按钮通知发回本窗口；2026-10-14 起有无所有者，控件通知都发回本窗口，见头文件说明）
     if (Create(NULL, CWindow::rcDefault, spec.m_title.c_str(), WS_POPUP, WS_EX_TOOLWINDOW | WS_EX_TOPMOST) == NULL)
     {
         LOG_ERROR("screenshare: create confirm dialog failed.");

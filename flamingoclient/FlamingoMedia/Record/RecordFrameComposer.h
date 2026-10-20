@@ -3,7 +3,9 @@
  *
  *  录制的每一帧由三部分合成（docs/屏幕共享与录制方案.md 6.1）：画面来源（采集到的或解码出的画面）等比缩放进输出尺寸、
  *  四周留黑边；共享录制时在画面上叠标注（与观看端用同一套绘制）；需要时在右下角叠摄像头画中画（带一圈白边）。
- *  合成在一块 32 位 DIB 上用 GDI 完成，结果是自上而下的 BGRA，直接交给 RecordMp4Writer。
+ *  合成在一块 32 位 DIB 上完成，结果是自上而下的 BGRA，直接交给 RecordMp4Writer。画面来源原尺寸时逐行复制、缩小时用
+ *  BgraDownscaler 直接写进画布，只有放大才用 GDI 的 HALFTONE 缩放（2026-10-15，docs/远程桌面H264与共享画质提升方案.md A7）；
+ *  标注与画中画仍用 GDI 绘制。
  *
  *  线程：只在录制的写入线程上使用。
  *
@@ -16,6 +18,7 @@
 #include <windows.h>
 
 #include "../Share/ShareAnnotation.h"
+#include "../Share/ShareFrameDrawer.h"   // BgraDownscaler：缩小进画布时代替 HALFTONE（2026-10-15）
 #include "RecordPolicy.h"   // RecordPipPlacement
 
 namespace screenrecord {
@@ -70,6 +73,7 @@ private:
     int      m_height;    //画布高
     RECT     m_content;   //画面来源所占的矩形
     RecordPipPlacement m_pipPlacement;   //画中画的摆放（2026-10-05）；默认右下角
+    screenshare::BgraDownscaler m_scaler;   //画面缩小进画布时用的快速缩放（2026-10-15），列映射表与中间缓冲按尺寸复用
 };
 
 } // namespace screenrecord

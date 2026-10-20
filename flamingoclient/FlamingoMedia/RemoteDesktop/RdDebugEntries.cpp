@@ -70,11 +70,7 @@ void CRdDebugEntries::DestroyWindows()
     m_selfTestWindow.Destroy();
     if (m_controlledBar.IsWindow())
     {
-        m_controlledBar.Hide();
-    }
-    if (m_toolbar.IsWindow())
-    {
-        m_toolbar.Hide();
+        m_controlledBar.Close();
     }
     if (IsWindow())
     {
@@ -82,10 +78,17 @@ void CRdDebugEntries::DestroyWindows()
     }
 }
 
-LRESULT CRdDebugEntries::OnControlledEndByUserMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+LRESULT CRdDebugEntries::OnControlledBarCommandMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
+    //预览：「允许控制 / 收回控制」依次切换三种控制状态，核对状态文字与按钮外观
+    if (static_cast<UINT>(wParam) == static_cast<UINT>(kRdBarControl))
+    {
+        const int kStateCount = 3;
+        m_controlledBar.SetControlState((m_controlledBar.ControlState() + 1) % kStateCount);
+        return 0;
+    }
     LOG_INFO("RdDebugEntries: controlled bar end clicked, hide the preview bar.");
-    m_controlledBar.Hide();
+    m_controlledBar.Close();
     return 0;
 }
 
@@ -136,15 +139,7 @@ int CRdDebugEntries::Run(const wchar_t* commandLine, HWND hwndHost, flamingomedi
         {
             LOG_ERROR("RdDebugEntries: create message window failed, err=%lu.", ::GetLastError());
         }
-        m_controlledBar.Show(kMockControllerName, m_hWnd);
-        return flamingomedia::media_debug_handled;
-    }
-    //--rdtoolbar：在主显示器顶部弹出控制端全屏工具条，核对外观 / 布局 / 两个按钮（实际运行时它只在观看窗全屏态出现）。
-    //命令消息传 WM_NULL：点了按钮也只是给宿主窗口投递一条无副作用的空消息。
-    if (HasSwitch(commandLine, L"--rdtoolbar"))
-    {
-        HMONITOR mon = ::MonitorFromWindow(hwndHost, MONITOR_DEFAULTTOPRIMARY);
-        m_toolbar.ShowOnMonitor(mon, hwndHost, WM_NULL);
+        m_controlledBar.Open(kMockControllerName, m_hWnd);
         return flamingomedia::media_debug_handled;
     }
     //--dxgicap：用 DXGI Desktop Duplication 抓一帧屏幕存成 exe 同目录的 dxgicap.bmp，弹框报结果。

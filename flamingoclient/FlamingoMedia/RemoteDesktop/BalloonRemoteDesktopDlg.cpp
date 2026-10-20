@@ -64,7 +64,8 @@ void CBalloonRemoteDesktopDlg::EnsureWindow(HWND owner)
     if (IsWindow())
         return;
 
-    // owner 传 NULL：让子控件通知自路由回本对话框（与关闭确认 / 改密对话框同处理）。
+    // owner 传 NULL（原为让控件通知发回本窗口；2026-10-14 起有无所有者，控件通知都发回本窗口，
+    // 见开发约定文档 UI 约定第 11 条）。
     if (Create(NULL, CWindow::rcDefault, TR(L"远程桌面"), WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
         LOG_ERROR(_T("远程桌面对话框 Create 失败。"));

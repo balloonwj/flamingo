@@ -39,41 +39,68 @@ public:
         , m_latestH(0)
         , m_serial(0)
         , m_sourceState(screenshare_source_sharing)
+        , m_keysWithoutOutput(0)
+        , m_undecodable(false)
     {
     }
 
     //解一帧（接收线程）
-    void Decode(int w, int h, const char* h264, size_t len, uint64_t timestamp)
+    void Decode(int w, int h, const char* h264, size_t len, uint64_t timestamp, bool keyframe)
     {
         m_cropW = w;
         m_cropH = h;
+        if (keyframe)
+            ++m_keysWithoutOutput;
         if (!m_decoder.IsReady() && !m_decoder.Init(kInitialDecodeW, kInitialDecodeH))
-        {
             LOG_ERROR("screenshare screens: decoder init failed, seat=%d.", m_seat);
-            return;
+        else
+            m_decoder.DecodePacket(reinterpret_cast<const uint8_t*>(h264), len, static_cast<int64_t>(timestamp), this);
+        //解完这一包仍没解出画面：大尺寸的码流连续几个关键帧都解不出，多半是本机系统的解码器不支持这个分辨率（Win7）
+        if (m_keysWithoutOutput > 0 && !m_undecodable && ShareLooksUndecodable(w, h, m_keysWithoutOutput))
+        {
+            {
+                std::lock_guard<std::mutex> guard(m_owner->m_mutex);
+                m_undecodable = true;
+            }
+            LOG_WARNING("screenshare screens: %dx%d stream not decodable after %d keyframes, seat=%d.", w, h,
+                        m_keysWithoutOutput, m_seat);
+            if (m_owner->m_listener != NULL)
+                m_owner->m_listener->OnScreenUndecodable(m_seat, true);
         }
-        m_decoder.DecodePacket(reinterpret_cast<const uint8_t*>(h264), len, static_cast<int64_t>(timestamp), this);
     }
 
-    //MfH264DecoderSink：解出一帧 NV12，转成 BGRA、裁掉解码补齐的部分后存为最新一帧
+    //MfH264DecoderSink：解出一帧 NV12，按载荷里的真实尺寸转成 BGRA（裁掉解码补齐的部分）后存为最新一帧。
+    //2026-10-15 起直接转换裁剪后的区域、写进备用缓冲，在锁内与最新一帧交换：原来先转整幅再逐行拷贝，每帧多一次整帧拷贝
     virtual void OnDecodedNv12(const uint8_t* nv12, int width, int height, int stride, int64_t ptsHns) override
     {
         (void)ptsHns;
         const int w = (m_cropW > 0 && m_cropW <= width) ? m_cropW : width;
         const int h = (m_cropH > 0 && m_cropH <= height) ? m_cropH : height;
-        m_convert.resize(static_cast<size_t>(width) * height * kBytesPerPixel);
-        call::Nv12ToBgra(nv12, width, height, stride, &m_convert[0], width * kBytesPerPixel);
+        m_staging.resize(static_cast<size_t>(w) * h * kBytesPerPixel);
+        call::Nv12ToBgraCropped(nv12, height, stride, w, h, &m_staging[0], w * kBytesPerPixel);
         {
             std::lock_guard<std::mutex> guard(m_owner->m_mutex);
-            m_latest.resize(static_cast<size_t>(w) * h * kBytesPerPixel);
-            const size_t rowBytes = static_cast<size_t>(w) * kBytesPerPixel;
-            for (int y = 0; y < h; ++y)
-                memcpy(&m_latest[rowBytes * y], &m_convert[static_cast<size_t>(y) * width * kBytesPerPixel], rowBytes);
+            //交换后备用缓冲里是上一帧的内存，下一帧直接复用，不再分配
+            m_latest.swap(m_staging);
             m_latestW = w;
             m_latestH = h;
             ++m_serial;
         }
         m_owner->m_decoded.fetch_add(1);
+        //解出了画面：关键帧计数从头算；之前判为超出解码能力的（例如对方改小了分辨率），判定清除
+        m_keysWithoutOutput = 0;
+        bool cleared = false;
+        {
+            std::lock_guard<std::mutex> guard(m_owner->m_mutex);
+            cleared = m_undecodable;
+            m_undecodable = false;
+        }
+        if (cleared)
+        {
+            LOG_INFO("screenshare screens: stream decodable again, seat=%d.", m_seat);
+            if (m_owner->m_listener != NULL)
+                m_owner->m_listener->OnScreenUndecodable(m_seat, false);
+        }
         if (m_owner->m_listener != NULL)
             m_owner->m_listener->OnScreenDecoded(m_seat);
     }
@@ -83,12 +110,14 @@ public:
     call::MfH264Decoder   m_decoder;       //这一路的解码器（只在接收线程上用）
     int                   m_cropW;         //当前帧的真实宽（载荷里带的）
     int                   m_cropH;         //当前帧的真实高
-    std::vector<uint8_t>  m_convert;       //NV12 转出的整幅 BGRA（含补齐部分，只在接收线程上用）
+    std::vector<uint8_t>  m_staging;       //备用缓冲：转换出的下一帧 BGRA，转好后与 m_latest 交换（只在接收线程上用）
     std::vector<uint8_t>  m_latest;        //最新一帧（BGRA，已裁剪；受 owner 的互斥量保护）
     int                   m_latestW;       //最新一帧的宽
     int                   m_latestH;       //最新一帧的高
     uint64_t              m_serial;        //最新一帧的序号
     int                   m_sourceState;   //共享内容状态（受 owner 的互斥量保护）
+    int                   m_keysWithoutOutput;   //自上次解出画面以来收到的关键帧个数（只在接收线程上用）
+    bool                  m_undecodable;   //是否判为超出本机解码能力（接收线程写，受 owner 的互斥量保护）
 };
 
 ShareScreenDecoders::ShareScreenDecoders()
@@ -133,7 +162,7 @@ void ShareScreenDecoders::OnScreenFrame(const ShareMediaFrame& frame)
             stream = it->second;
         }
     }
-    stream->Decode(w, h, h264, h264Len, frame.m_timestamp);
+    stream->Decode(w, h, h264, h264Len, frame.m_timestamp, frame.m_keyframe);
 }
 
 void ShareScreenDecoders::SetSourceState(int seat, int state)
@@ -218,6 +247,32 @@ void ShareScreenDecoders::Clear()
 uint64_t ShareScreenDecoders::DecodedCount() const
 {
     return m_decoded.load();
+}
+
+bool ShareScreenDecoders::IsUndecodable(int seat) const
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    std::map<int, std::shared_ptr<Stream> >::const_iterator it = m_streams.find(seat);
+    return it != m_streams.end() && it->second->m_undecodable;
+}
+
+bool ShareScreenDecoders::AnyUndecodable() const
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (std::map<int, std::shared_ptr<Stream> >::const_iterator it = m_streams.begin(); it != m_streams.end(); ++it)
+    {
+        if (it->second->m_undecodable)
+            return true;
+    }
+    return false;
+}
+
+bool ShareLooksUndecodable(int frameW, int frameH, int keyframesWithoutOutput)
+{
+    if (frameW <= 0 || frameH <= 0)
+        return false;
+    const bool tooLarge = (frameW > kShareLegacyDecodeMaxW || frameH > kShareLegacyDecodeMaxH);
+    return tooLarge && keyframesWithoutOutput >= kShareUndecodableKeyframes;
 }
 
 } // namespace screenshare

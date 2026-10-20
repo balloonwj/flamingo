@@ -341,7 +341,8 @@ void CBalloonAboutDlg::OpenAbout(HWND /*owner*/)
 {
     if (!IsWindow())
     {
-        // owner 传 NULL：让子控件通知自路由回本对话框（与改密 / 建群对话框同处理）。
+        // owner 传 NULL，与改密 / 建群对话框相同。原先这样做是为了让控件通知发回本对话框；
+        // 2026-10-14 起有无所有者，控件通知都发回本窗口（开发约定文档 UI 约定第 11 条）。
         if (Create(NULL, CWindow::rcDefault, TR(L"关于"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {

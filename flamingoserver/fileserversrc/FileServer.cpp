@@ -19,18 +19,11 @@ bool FileServer::init(const char* ip, short port, EventLoop* loop,
     m_serverKind     = serverKind;
     m_relayTokenKey  = (relayTokenKey != NULL) ? relayTokenKey : "";
 
-    //中转密钥缺失时本服务只做上传下载，不承载文件夹传输。这不是错误（imgserver 就不需要
-    //中转，fileserver 若尚未在配置里补上 relaytokenkey 也照常提供上传下载），但必须留下
-    //一条日志——否则客户端连上来做中转握手被拒时，服务端这边看不出是配置没配
-    if (m_relayTokenKey.empty())
-    {
-        LOGW("folder relay is disabled on this server: relay token key is empty, "
-             "cmd_folder_relay_hello will be rejected. "
-             "set relaytokenkey in the config file to enable it.");
-    }
+    //中转密钥为空时本服务只做上传下载，不承载文件夹传输，中转握手一律被拒。空密钥算不算漏配只有调用方知道
+    //（imgserver 按设计传空串，fileserver 为空说明配置缺了这一项），相应的日志由两个服务的 main.cpp 在读配置时记录
 
     InetAddress addr(ip, port);
-    m_server.reset(new TcpServer(loop, addr, "ZYL-MYImgAndFileServer", TcpServer::kReusePort));
+    m_server.reset(new TcpServer(loop, addr, "FlamingoImgAndFileServer", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&FileServer::onConnected, this, std::placeholders::_1));
     //启动侦听。线程数由调用方从各自 .conf 的配置项 iothreadnum 取得（fileserver 与
     //imgserver 共用本类但各读各的），非法取值已在那里回落成 kDefaultIoThreadCount
@@ -52,10 +45,10 @@ void FileServer::onConnected(std::shared_ptr<TcpConnection> conn)
         LOGI("client connected: %s", conn->peerAddress().toIpPort().c_str());
         std::shared_ptr<FileSession> spSession(
             new FileSession(conn, m_strFileBaseDir.c_str(), m_tokenKey, m_serverKind,
-                            m_relayTokenKey, &m_folderRelayHub));
+                m_relayTokenKey, &m_folderRelayHub));
         conn->setMessageCallback(std::bind(&FileSession::onRead, spSession.get(),
-                                           std::placeholders::_1, std::placeholders::_2,
-                                           std::placeholders::_3));
+            std::placeholders::_1, std::placeholders::_2,
+            std::placeholders::_3));
 
         std::lock_guard<std::mutex> guard(m_sessionMutex);
         m_sessions.push_back(spSession);
@@ -82,12 +75,12 @@ void FileServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
     std::string relaySessionId;
     std::vector<std::shared_ptr<FileSession>> relaySurvivors;
     if (FolderRelayEndpoint::detachByConnection(m_folderRelayHub, conn,
-                                                relaySessionId, relaySurvivors))
+        relaySessionId, relaySurvivors))
     {
         LOGI("folder relay lane closed, session: %s, closing %u remaining lane(s) of this "
-             "transfer, client: %s",
-             relaySessionId.c_str(), static_cast<unsigned>(relaySurvivors.size()),
-             conn->peerAddress().toIpPort().c_str());
+            "transfer, client: %s",
+            relaySessionId.c_str(), static_cast<unsigned>(relaySurvivors.size()),
+            conn->peerAddress().toIpPort().c_str());
 
         for (size_t i = 0; i < relaySurvivors.size(); ++i)
         {
@@ -112,6 +105,6 @@ void FileServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
     {
         //连接断开却找不到对应会话：会话尚未登记或已被提前移除，属异常情况，记录下来便于排查
         LOGW("client disconnected but no matching session found: %s",
-             conn->peerAddress().toIpPort().c_str());
+            conn->peerAddress().toIpPort().c_str());
     }
 }

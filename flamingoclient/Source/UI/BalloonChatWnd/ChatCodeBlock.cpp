@@ -40,6 +40,9 @@ extern CAppModule _Module;
 #include <vector>
 
 #include "ChatCodeBlock.h"
+#include "ChatCardPaint.h"            // PaintCardFrame：与其他聊天卡片同一套白色底板（docs/聊天卡片美化方案.md 3.7）
+#include "ChatCardStyle.h"            // 卡片样式常量
+#include "ChatIcons.h"                // DrawChatIcon / kChatIconCopy：「复制」前的图标
 #include "ChatPaintUtil.h"            // AddRoundRect / DrawGdiText / MeasureTextWidth
 #include "../../Common/I18n/I18n.h"   // TR / TRF：界面文字的多语言查找；UiFontName：回退字体
 
@@ -61,8 +64,7 @@ const int kDefaultCollapsedLines = 15;   // 折叠时最多显示的行数
 const wchar_t* const kCodeFontName = L"Consolas";
 
 // ---- 几何常量（逻辑像素）----
-const Gdiplus::REAL kCardRadius = 8.0f;   // 卡片圆角半径
-const int kHeaderH          = 30;   // 顶部一行（语言名、行数、复制）的高度
+const int kHeaderH          = 34;   // 顶部一行（语言名、行数、复制）的高度（2026-10-14 起由 30 改为 34，聊天卡片美化方案 3.7）
 const int kPadH             = 12;   // 卡片左右内边距
 const int kHeaderTextPx     = 12;   // 顶部与底栏文字的字号
 const int kHeaderGap        = 6;    // 语言名与行数说明之间的间距
@@ -78,17 +80,24 @@ const int kMinTextColumns   = 8;    // 代码区至少能放下几列字符；�
 const int kWrapIndentColumns = 2;   // 续行在原缩进之外再缩进的列数，表明它是上一行的延续
 const int kWrapPreferPercent = 60;  // 折行时，最后一个空格之后的位置不少于可用宽度的这个百分比，就在空格之后折行
 const int kDecimalBase      = 10;   // 计算行号位数用的进制
+const int kLangChipPx       = 11;   // 语言名小胶囊的字号（半粗）
+const int kLangChipPadH     = 6;    // 语言名小胶囊左右内边距（每侧）
+const int kLangChipH        = 18;   // 语言名小胶囊的高度
+const int kLangChipRadius   = 4;    // 语言名小胶囊的圆角半径
+const int kCopyIconSize     = 13;   // 「复制」前图标的边长
+const int kCopyIconGap      = 4;    // 「复制」图标与文字之间的间距
+const Gdiplus::REAL kCopyIconStroke = 2.0f;   // 「复制」图标的描边宽度（以 viewBox 24 为基准）
 
 // ---- 配色 ----
-const Gdiplus::Color kCardBorderColor(255, 0xE3, 0xE1, 0xDC);   // 卡片描边
-const Gdiplus::Color kCardBodyColor(255, 0xFF, 0xFF, 0xFF);     // 代码区底色
-const Gdiplus::Color kCardHeaderColor(255, 0xF3, 0xF2, 0xEF);   // 顶部与底栏底色（与对方气泡同色）
-const COLORREF kSeparatorColor   = RGB(0xE3, 0xE1, 0xDC);   // 顶部、底栏与代码区之间的分隔线
-const COLORREF kTitleColor       = RGB(0x55, 0x55, 0x55);   // 语言名
-const COLORREF kInfoColor        = RGB(0x8A, 0x8A, 0x8A);   // 行数说明、「已复制」
-const COLORREF kLinkColor        = RGB(0xFF, 0x7A, 0x45);   // 「复制」与底栏文字（主题橙，与其它卡片的按钮一致）
-const COLORREF kLinkHoverColor   = RGB(0xCC, 0x62, 0x37);   // 鼠标悬停时的链接文字
-const COLORREF kLineNumberColor  = RGB(0xA8, 0xA6, 0xA2);   // 行号
+// 底板、边框与投影由 cardpaint::PaintCardFrame 画（白底、暖灰边框、圆角 10）；下面是卡片里各部分的颜色（方案 3.7）
+const Gdiplus::Color kCardHeaderColor(255, 0xF7, 0xF5, 0xF2);   // 顶部与底栏底色（与说明块同色）
+const COLORREF kSeparatorColor   = RGB(0xEE, 0xEA, 0xE5);   // 顶部、底栏与代码区之间的分隔线
+const COLORREF kTitleColor       = RGB(0x5E, 0x5E, 0x62);   // 语言名
+const COLORREF kLangChipFill     = RGB(0xEC, 0xE8, 0xE3);   // 语言名小胶囊的底色
+const COLORREF kInfoColor        = RGB(0x9A, 0x9A, 0x9F);   // 行数说明、「已复制」
+const COLORREF kLinkColor        = RGB(0xF2, 0x6A, 0x33);   // 「复制」与底栏文字（与查看按钮的文字同色）
+const COLORREF kLinkHoverColor   = RGB(0xC8, 0x52, 0x22);   // 鼠标悬停时的链接文字
+const COLORREF kLineNumberColor  = RGB(0xB4, 0xB1, 0xAC);   // 行号
 const COLORREF kNoteLineColor    = RGB(0xFF, 0xF4, 0xD0);   // 被批注的行的底色（与 CodeNotesPane.h 的 kCodeNoteLineBg 相同）
 const COLORREF kNoteMarkColor    = RGB(0xF0, 0x9A, 0x3E);   // 被批注的行左侧的竖条（与代码查看窗行号栏的竖条相同）
 const int kNoteBarLeft = 4;   // 竖条离卡片左边的距离（像素）
@@ -589,9 +598,10 @@ void LayoutCodeBlock(HDC hdc, const CodeBlockContent& content, const CodeBlockOp
     //卡片宽度：按最宽的视觉行收窄，但要放得下顶部一行与底栏，且不超过 maxWidth
     const int textNeeded = (widest < availText) ? widest : availText;
     int width = out.m_textLeft + textNeeded + kPadH;
-    const int titleW = MeasureTextWidth(hdc, out.m_title.c_str(), kHeaderTextPx, true);
+    //语言名画成小胶囊，「复制」前带图标，量宽时把胶囊内边距与图标一并算进去
+    const int titleW = MeasureTextWidth(hdc, out.m_title.c_str(), kLangChipPx, true) + kLangChipPadH * 2;
     const int infoW = MeasureTextWidth(hdc, out.m_info.c_str(), kHeaderTextPx, false);
-    const int copyW = MeasureTextWidth(hdc, out.m_copyText.c_str(), kHeaderTextPx, false);
+    const int copyW = kCopyIconSize + kCopyIconGap + MeasureTextWidth(hdc, out.m_copyText.c_str(), kHeaderTextPx, false);
     const int headerNeeded = kPadH + titleW + kHeaderGap + infoW + kHeaderMinGap + copyW + kPadH;
     const int footerNeeded = out.m_collapsible
         ? kPadH + MeasureTextWidth(hdc, out.m_footerText.c_str(), kHeaderTextPx, false) + kPadH
@@ -627,23 +637,21 @@ void PaintCodeBlock(HDC hdc, const CodeBlockLayout& layout, int left, int top, i
     if (width <= 0 || height <= 0)
         return;
 
-    //底色、顶部与底栏的底色、描边：GDI+ 抗锯齿画圆角
+    //白色底板、边框与投影（与其他聊天卡片同一套），再在边框以内铺顶部与底栏的底色
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        Gdiplus::GraphicsPath path;
-        AddRoundRect(path, (Gdiplus::REAL)left + 0.5f, (Gdiplus::REAL)top + 0.5f,
-                     (Gdiplus::REAL)width - 1.0f, (Gdiplus::REAL)height - 1.0f, kCardRadius);
-        Gdiplus::SolidBrush bodyBrush(kCardBodyColor);
-        g.FillPath(&bodyBrush, &path);
-        g.SetClip(&path);
+        const RECT card = { left, top, left + width, top + height };
+        cardpaint::PaintCardFrame(g, card);
+        Gdiplus::GraphicsPath inner;
+        AddRoundRect(inner, (Gdiplus::REAL)left + 1.0f, (Gdiplus::REAL)top + 1.0f, (Gdiplus::REAL)width - 2.0f,
+                     (Gdiplus::REAL)height - 2.0f, (Gdiplus::REAL)(cardstyle::kCardRadius - 1));
+        g.SetClip(&inner);
         Gdiplus::SolidBrush headerBrush(kCardHeaderColor);
         g.FillRectangle(&headerBrush, left, top, width, kHeaderH);
         if (layout.m_collapsible)
             g.FillRectangle(&headerBrush, left, top + height - kFooterH, width, kFooterH);
         g.ResetClip();
-        Gdiplus::Pen borderPen(kCardBorderColor, 1.0f);
-        g.DrawPath(&borderPen, &path);
     }
 
     //分隔线：一像素宽，用 GDI 画以保证清晰
@@ -657,21 +665,41 @@ void PaintCodeBlock(HDC hdc, const CodeBlockLayout& layout, int left, int top, i
     }
     ::DeleteObject(separator);
 
-    //顶部：语言名、行数、复制
+    //顶部：语言名（灰底小胶囊）、行数、复制
     const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
-    const int titleW = MeasureTextWidth(hdc, layout.m_title.c_str(), kHeaderTextPx, true);
-    RECT rc = { left + kPadH, top, left + kPadH + titleW + 1, top + kHeaderH };
-    DrawGdiText(hdc, layout.m_title.c_str(), rc, kHeaderTextPx, true, kTitleColor, kOneLine);
+    const int titleW = MeasureTextWidth(hdc, layout.m_title.c_str(), kLangChipPx, true) + kLangChipPadH * 2;
+    RECT rc = { left + kPadH, top, left + kPadH + titleW, top + kHeaderH };
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        Gdiplus::GraphicsPath chip;
+        const int chipTop = top + (kHeaderH - kLangChipH) / 2;
+        AddRoundRect(chip, (Gdiplus::REAL)rc.left, (Gdiplus::REAL)chipTop, (Gdiplus::REAL)titleW, (Gdiplus::REAL)kLangChipH,
+                     (Gdiplus::REAL)kLangChipRadius);
+        Gdiplus::SolidBrush chipBrush(Gdiplus::Color(255, GetRValue(kLangChipFill), GetGValue(kLangChipFill),
+                                                     GetBValue(kLangChipFill)));
+        g.FillPath(&chipBrush, &chip);
+    }
+    DrawGdiText(hdc, layout.m_title.c_str(), rc, kLangChipPx, true, kTitleColor, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     ::SetRect(&rc, rc.right + kHeaderGap, top, left + layout.m_copyRect.left, top + kHeaderH);
     DrawGdiText(hdc, layout.m_info.c_str(), rc, kHeaderTextPx, false, kInfoColor, kOneLine | DT_END_ELLIPSIS);
     //按实际文字宽度右对齐：「已复制」比排版时按「复制」算出的点击区宽，矩形不够宽时 DrawText 会把多出的部分裁掉
     const int copyTextW = MeasureTextWidth(hdc, layout.m_copyText.c_str(), kHeaderTextPx, false);
     int copyLeft = left + width - kPadH - copyTextW;
-    if (copyLeft > left + layout.m_copyRect.left)
-        copyLeft = left + layout.m_copyRect.left;
+    if (copyLeft > left + layout.m_copyRect.left + kCopyIconSize + kCopyIconGap)
+        copyLeft = left + layout.m_copyRect.left + kCopyIconSize + kCopyIconGap;
     ::SetRect(&rc, copyLeft, top, left + width - kPadH, top + kHeaderH);
     const bool copied = layout.m_copied;
     const COLORREF copyColor = copied ? kInfoColor : (hoverPart == kCodePartCopy ? kLinkHoverColor : kLinkColor);
+    {
+        //「复制」前的图标，颜色随文字
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        const Gdiplus::REAL iconX = (Gdiplus::REAL)(copyLeft - kCopyIconGap - kCopyIconSize);
+        const Gdiplus::REAL iconY = (Gdiplus::REAL)(top + (kHeaderH - kCopyIconSize) / 2);
+        DrawChatIcon(g, kChatIconCopy, iconX, iconY, (Gdiplus::REAL)kCopyIconSize,
+                     Gdiplus::Color(255, GetRValue(copyColor), GetGValue(copyColor), GetBValue(copyColor)), kCopyIconStroke);
+    }
     DrawGdiText(hdc, layout.m_copyText.c_str(), rc, kHeaderTextPx, false, copyColor,
                 DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX, false, !copied && hoverPart == kCodePartCopy);
 

@@ -22,6 +22,7 @@
 
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "ChatMockData.h"
+#include "ChatCardModel.h"        // ChatCardButton（标准卡片底部按钮，成员需完整类型）
 #include "ChatFolderStateModel.h"  // kMaxChatFolderActions（文件夹按钮命中矩形数组的长度）
 #include "ChatTextSelection.h"   // SelLayout（成员需完整类型）
 #include "ChatInlineText.h"      // InlinePlaced（正文排版结果缓存，成员需完整类型）
@@ -32,7 +33,7 @@
 #include <string>
 
 //图片气泡解码用的 GDI+ 位图前置声明，避免在头文件引入 <gdiplus.h>。
-namespace Gdiplus { class Bitmap; }
+namespace Gdiplus { class Bitmap; class Graphics; }
 
 namespace balloonchatwnd {
 
@@ -297,6 +298,24 @@ public:
     // 高度取自最近一次 Measure() 的折行结果（未测量则回退到单行高）。
     int GetRowHeight() const;
 
+    /**
+     *  设置本行在「同一人连续消息」组里的位置（docs/聊天气泡美化方案.md 第 1 节第 1 条）。由 ChatMessageList 在排版时
+     *  按相邻两行调用 ChatBubblesGroupable 算出后设置；与前一条同组时不画头像与发送者名、上外边距收窄，与后一条同组时
+     *  下外边距收窄。状态变了会作废本行的渲染缓存，行高随之变化，调用方须重排（排版本身就在重排的过程中）。
+     *    withPrev：是否与前一条消息同组。
+     *    withNext：是否与后一条消息同组。
+     */
+    void SetGroupPosition(bool withPrev, bool withNext);
+    // 本行是否与前一条消息同组（为 true 时不画头像与发送者名），见 SetGroupPosition
+    bool IsGroupedWithPrev() const { return m_groupedWithPrev; }
+    // 本行是否与后一条消息同组，见 SetGroupPosition
+    bool IsGroupedWithNext() const { return m_groupedWithNext; }
+
+    /**
+     *  最近一次绘制时气泡（或卡片、图片）在宿主坐标系里的矩形。提示行、尚未绘制过的行返回空矩形。供命中测试与用例使用。
+     */
+    RECT BubbleRectInHost() const;
+
     // ---- 性能探针（测试 / 排查用）-------------------------------------
     // 统计"重量级折行测量"（GetDC + 建字体 + DrawText(DT_CALCRECT|
     // DT_WORDBREAK)）实际执行的次数。Measure 命中缓存时会在该路径之前
@@ -479,6 +498,17 @@ private:
     void MeasureScreenShareDesc();
 
     /**
+     *  画标准卡片（屏幕共享、一对一通话、群通话、群公告、群备忘、云端录像、文件共享、入群邀请、密聊邀请，
+     *  docs/聊天卡片美化方案.md 5.2、5.4）：白色底板、图标块、标题与副标题、说明块、强制模式说明、状态标签行与底部一行。
+     *  顺带把底部按钮与各自的矩形记在 m_cardButtons / m_cardBtnRects，第一个按钮的矩形记在 m_shareBtnRect（没有按钮时置空），
+     *  供悬停与点击判断。由 RenderContent 在形状层调用。
+     *    hdc：  目标设备上下文
+     *    g：    同一设备上下文上的 Graphics（已开启抗锯齿）
+     *    card： 卡片矩形（宽为 cardstyle::kCardWidth，高为 StandardCardHeight）
+     */
+    void PaintStandardCard(HDC hdc, Gdiplus::Graphics& g, const RECT& card);
+
+    /**
      *  请宿主聊天窗打开某张接龙卡片的详情窗（投 WM_CHAT_RELAY_ACTION，msgid 放在堆上，
      *  宿主处理后 delete）。
      *    cardMsgid：卡片消息的服务器 msgid——卡片行取本行 msgid，接龙提示行取 relayCardMsgid；
@@ -633,8 +663,17 @@ private:
 
     // 本行发送者头像的矩形（宿主客户区坐标）。几何与 RenderContent 里画头像那段
     // 逐字一致：自己发的靠右、别人发的靠左，边长 kAvatarSize。
-    // 时间分隔 / 撤回提示行没有头像，此时返回空矩形。
+    // 时间分隔 / 撤回提示行没有头像，与前一条同组的消息不画头像，此时都返回空矩形。
     RECT AvatarRectInHost() const;
+
+    // 本行上、下外边距（像素）：不在组内时各 kRowVMargin；与前一条 / 后一条同组时那一侧收窄为 kGroupedHalfGap。
+    // GetRowHeight、RenderContent、TextOriginInHost、AvatarRectInHost 都按它们定位，几处不能各自推算
+    int RowTopMargin() const;
+    int RowBottomMargin() const;
+    // 是否在气泡上方画发送者名：群聊里对方的消息，且不与前一条同组
+    bool ShowsSenderName() const;
+    // 是否画头像：不与前一条同组
+    bool ShowsAvatar() const;
 
     // 若落点命中本行的发送者头像，则弹出该发送者的右键菜单（与 @某人 片段、群成员
     // 侧栏共用同一套模型与分发消息）并把选中项投给宿主聊天窗。
@@ -782,6 +821,13 @@ private:
 
     // 本行头像是否画成灰度（发送者离线，或本端掉线时本人的气泡），见 SetAvatarGray。默认 false。
     bool        m_avatarGray;
+    // 本行是否与前一条消息同组（不画头像与发送者名、上外边距收窄），由 SetGroupPosition 设置。默认 false。
+    bool        m_groupedWithPrev;
+    // 本行是否与后一条消息同组（下外边距收窄），由 SetGroupPosition 设置。默认 false。
+    bool        m_groupedWithNext;
+    // 最近一次绘制时气泡矩形相对本行左上角的坐标（理由同 m_quoteRectRel：绘制可能发生在渲染缓存里，那时 m_rcItem
+    // 被临时移到原点）。尚未绘制或本行是提示行时为空矩形；BubbleRectInHost 据它换算宿主坐标
+    RECT        m_bubbleRectRel;
 
     // 注：图片（kMsgImage）的"解码原图 + 缩放到展示尺寸"已移到后台线程的
     // ChatImageCache（按路径 + 展示尺寸缓存）。气泡绘制时只查缓存、命中即画，未命中
@@ -837,6 +883,10 @@ private:
     // 仍在同一个按钮上才算一次单击
     int              m_secretBtnHover;
     int              m_secretBtnPressed;
+    // 标准卡片（共享一族与邀请，docs/聊天卡片美化方案.md）最近一次绘制时底部一行的按钮与各自的矩形（宿主客户区坐标），
+    // 两者一一对应、顺序与显示顺序相同；密聊邀请卡片据此判断点在哪个按钮上。没有底部一行或没有按钮时为空
+    std::vector<ChatCardButton> m_cardButtons;
+    std::vector<RECT>           m_cardBtnRects;
 
     // kMsgVoice 行最近一次绘制时语音气泡、发送失败的红色感叹号在宿主客户区坐标系里的矩形，供点击命中测试；
     // 没有发送失败时 m_voiceFailRect 为空（语音消息第 3d 步）

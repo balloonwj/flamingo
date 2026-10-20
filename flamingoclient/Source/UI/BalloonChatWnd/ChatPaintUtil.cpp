@@ -51,6 +51,63 @@ void AddRoundRect(Gdiplus::GraphicsPath& path,
     path.CloseFigure();
 }
 
+namespace {
+
+// 把一个角的半径限制在宽、高各一半以内，负数按 0 处理
+Gdiplus::REAL ClampCornerRadius(Gdiplus::REAL r, Gdiplus::REAL w, Gdiplus::REAL h)
+{
+    if (r < 0.0f)
+    {
+        r = 0.0f;
+    }
+    if (r > w / 2.0f)
+    {
+        r = w / 2.0f;
+    }
+    if (r > h / 2.0f)
+    {
+        r = h / 2.0f;
+    }
+    return r;
+}
+
+// 往路径里加一个角：半径为 0 时只加一个点（直角），否则加一段 90 度的圆弧
+//   cornerX / cornerY：圆弧外接正方形的左上角；startAngle：圆弧起始角（度）
+void AddCorner(Gdiplus::GraphicsPath& path, Gdiplus::REAL cornerX, Gdiplus::REAL cornerY, Gdiplus::REAL r,
+               Gdiplus::REAL startAngle, Gdiplus::REAL pointX, Gdiplus::REAL pointY)
+{
+    const Gdiplus::REAL kQuarterTurn = 90.0f;   // 一个角的圆弧所跨的角度（度）
+    if (r <= 0.0f)
+    {
+        path.AddLine(pointX, pointY, pointX, pointY);
+        return;
+    }
+    path.AddArc(cornerX, cornerY, r * 2.0f, r * 2.0f, startAngle, kQuarterTurn);
+}
+
+} // namespace
+
+void AddRoundRectCorners(Gdiplus::GraphicsPath& path,
+                         Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL w, Gdiplus::REAL h,
+                         Gdiplus::REAL rTopLeft, Gdiplus::REAL rTopRight,
+                         Gdiplus::REAL rBottomRight, Gdiplus::REAL rBottomLeft)
+{
+    //各角起始角（度），与 AddRoundRect 相同：左上 180、右上 270、右下 0、左下 90
+    const Gdiplus::REAL kTopLeftStart = 180.0f;
+    const Gdiplus::REAL kTopRightStart = 270.0f;
+    const Gdiplus::REAL kBottomRightStart = 0.0f;
+    const Gdiplus::REAL kBottomLeftStart = 90.0f;
+    const Gdiplus::REAL tl = ClampCornerRadius(rTopLeft, w, h);
+    const Gdiplus::REAL tr = ClampCornerRadius(rTopRight, w, h);
+    const Gdiplus::REAL br = ClampCornerRadius(rBottomRight, w, h);
+    const Gdiplus::REAL bl = ClampCornerRadius(rBottomLeft, w, h);
+    AddCorner(path, x, y, tl, kTopLeftStart, x, y);
+    AddCorner(path, x + w - tr * 2.0f, y, tr, kTopRightStart, x + w, y);
+    AddCorner(path, x + w - br * 2.0f, y + h - br * 2.0f, br, kBottomRightStart, x + w, y + h);
+    AddCorner(path, x, y + h - bl * 2.0f, bl, kBottomLeftStart, x, y + h);
+    path.CloseFigure();
+}
+
 void DrawGdiText(HDC hdc, LPCWSTR text, const RECT& rc,
                  int pixelHeight, bool bold, COLORREF color, UINT dtFlags,
                  bool italic, bool underline, bool strike)

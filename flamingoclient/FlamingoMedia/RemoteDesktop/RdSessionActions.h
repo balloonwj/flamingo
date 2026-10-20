@@ -2,7 +2,7 @@
  *  远程桌面会话窗口把用户操作交给远程桌面控制器的接口。
  *
  *  会话对话框（CBalloonRemoteDesktopDlg：发起方取消、被控端接受 / 拒绝）与控制端观看窗
- *  （CRdViewerWindow：关窗或工具条「断开」）只负责显示与收集用户操作，不直接发信令：
+ *  （CRdViewerWindow：关窗或工具条「断开」、2026-10-12 起还有「申请控制」）只负责显示与收集用户操作，不直接发信令：
  *  这几项操作都经本接口交给远程桌面控制器（CRdController），由它编好信令包体再经宿主接口
  *  IMediaHost::SendSignal 从 exe 的主连接发出。迁入 DLL 之前这几处直接调用 CIUSocket 单例，DLL 里没有它。
  *
@@ -37,6 +37,13 @@ public:
      *  @param sessionId 会话 id，为空时忽略
      */
     virtual void CloseSession(const std::string& sessionId) = 0;
+
+    /**
+     *  控制端发一个控制动作（cmd_rd_control，2026-10-12）：观看窗浮动工具条上的申请、撤回申请、结束控制。
+     *  @param sessionId 会话 id，为空时忽略
+     *  @param action    动作，取值见 net::rd_control_action（控制端只用 request、cancel、release）
+     */
+    virtual void SendControl(const std::string& sessionId, int action) = 0;
 
 protected:
     ~IRdSessionActions()

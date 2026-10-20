@@ -3,12 +3,12 @@
  *
  *  观看者得到控制权后，在观看窗里的鼠标、键盘操作编成「键鼠输入控制帧」经房间中转只发给画面主人；画面主人核对
  *  发送者确实是当前控制者之后，把坐标换回自己屏幕上的位置，过滤掉系统级按键，再交给远程桌面的 RdInputInjector 注入。
- *  画面主人自己动了鼠标或键盘（不是注入出来的输入）即收回控制。本文件包含：
+ *  2026-10-12 起画面主人在被控制期间可以照常操作，不再因本机动静自动收回控制，只在点「收回控制」或控制者自己结束时
+ *  才结束（原来判定本机动静的类与低级钩子随之删除）。本文件包含：
  *    - ShareRemoteInput：输入控制帧的组帧与解析、观看窗坐标与归一化坐标的换算、归一化坐标换回共享内容的屏幕坐标；
  *    - ShareInputKeyFilter：跟踪注入过的按键，拦下 Win 键、Alt+Tab、Ctrl+Esc、Ctrl+Alt+Del 等系统级按键，
  *      结束控制时列出仍按着的键以便补发抬起；
- *    - DecideShareInput：一条输入该不该注入（发送者是不是控制者、只共享一个窗口时点在不在窗口上、窗口在不在前台）；
- *    - ShareLocalActivityDetector：判断画面主人本机有没有动静。
+ *    - DecideShareInput：一条输入该不该注入（发送者是不是控制者、只共享一个窗口时点在不在窗口上、窗口在不在前台）。
  *  全部为纯逻辑，不调用任何注入或钩子 API，单元测试见 Source/Tests/ShareRemoteControlTests.cpp（标签 [sharectl]）。
  *
  *  帧格式：1860 包体 = 11 字节帧头（轨道为控制帧）+ 载荷 [screenshare_control_input][目标座位号][一条输入命令]，
@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include "ViewerMouseButtons.h"   // ViewerMouseButtons：观看端鼠标按钮的记录与是否发送（与远程桌面共用）
 #include <windows.h>
 
 #include "ShareFraming.h"
@@ -140,7 +141,9 @@ private:
  *    - 画面以外按下的鼠标按钮不发送；已发送过按下的按钮，松开时即使在画面以外也照发（坐标夹到画面边缘），
  *      避免画面主人那边的按钮一直按着；没发送过按下的松开不发送；
  *    - 双击消息当作一次按下发送：画面主人那边的系统会按两次点击的间隔自己合成双击；
- *    - 鼠标移动限频：距上次发送移动不足 kShareMoveIntervalMs 或位置没变时不发送；按钮与滚轮不限频；
+ *    - 鼠标移动限频：距上次发送移动不足 kShareMoveIntervalMs 或位置没变时不发送；按钮与滚轮不限频。被限频挡下的移动
+ *      记为待补发，到间隔后由 TakePendingMove 取出补发（2026-10-17），鼠标快速移动后停下时对方的指针也停在最终位置；
+ *      之后又发出了移动、按下、松开或滚轮，或者移回上次发出的位置时，待补发的移动作废；
  *    - 键盘的按下与抬起（含系统键）原样发送，字符消息不发送（画面主人那边由按键自己产生字符）。
  *  不加锁，只在观看窗的界面线程上使用。
  */
@@ -161,7 +164,8 @@ public:
      *  @param video    画面在观看窗里实际占的矩形
      *  @param nowMs    当前时刻，单位毫秒（单调递增即可）
      *  @param out      [出参] 返回 true 时为要发送的输入
-     *  @return 要发送返回 true；画面以外、限频、无关消息返回 false
+     *  @return 要发送返回 true；限频、无关消息、以及 ViewerMouseButtons 判定不发的鼠标消息（画面外按下、没按住时画面外的
+     *          移动与滚轮等）返回 false。按住按钮拖出画面的移动与画面外的松开照发，坐标夹到画面边缘（2026-10-14 起）
      */
     bool Translate(UINT msg, WPARAM wParam, POINT clientPt, const RECT& video, uint32_t nowMs, ShareInputEvent& out);
 
@@ -170,7 +174,18 @@ public:
      */
     std::vector<uint32_t> PendingButtonUps() const;
 
-    //清空状态（开始或结束控制时调用）
+    /**
+     *  取出被限频挡下、已到补发时刻的最后一次鼠标移动（2026-10-17）。取出后视同这一刻发出了移动，限频从这一刻重新计时。
+     *  @param nowMs 当前时刻，单位毫秒（与 Translate 用同一时钟）
+     *  @param out   [出参] 返回 true 时为要补发的移动（归一化坐标按被挡下时的画面矩形换算）
+     *  @return 有待补发的移动且距上次发送移动已满 kShareMoveIntervalMs 时返回 true；没有或还没到时刻返回 false
+     */
+    bool TakePendingMove(uint32_t nowMs, ShareInputEvent& out);
+
+    //是否有被限频挡下、还没补发的鼠标移动（调用方据此决定要不要启动补发定时器）
+    bool HasPendingMove() const;
+
+    //清空状态（开始或结束控制时调用）；待补发的移动一并作废
     void Reset();
 
     /**
@@ -180,10 +195,17 @@ public:
     static bool IsControlMessage(UINT msg);
 
 private:
-    bool     m_hasMove;        //是否发送过鼠标移动
-    POINT    m_lastMovePt;     //上次发送的移动位置（客户区坐标）
-    uint32_t m_lastMoveMs;     //上次发送移动的时刻，单位毫秒
-    std::vector<uint32_t> m_pressed;   //已发送过按下、还没发送松开的按钮，存它们的松开消息（WM_LBUTTONUP 等）
+    //鼠标消息的换算：先由 m_buttons 判定发不发，再把坐标夹到画面里换成归一化坐标；移动另外限频
+    bool translateMouse(UINT msg, WPARAM wParam, POINT clientPt, const RECT& video, uint32_t nowMs,
+                        ShareInputEvent& out);
+
+    bool               m_hasMove;      //是否发送过鼠标移动
+    POINT              m_lastMovePt;   //上次发送的移动位置（客户区坐标）
+    uint32_t           m_lastMoveMs;   //上次发送移动的时刻，单位毫秒
+    ViewerMouseButtons m_buttons;      //已发送过按下、还没发送松开的按钮与「要不要发」的判断（与远程桌面共用，2026-10-14）
+    bool               m_hasPendingMove;   //是否有被限频挡下、还没补发的移动（2026-10-17）
+    ShareInputEvent    m_pendingMove;      //被限频挡下的最后一次移动（坐标已换算好）；m_hasPendingMove 为 false 时无意义
+    POINT              m_pendingMovePt;    //这次移动的客户区坐标，补发后作为「上次发送的移动位置」
 };
 
 /**
@@ -244,58 +266,5 @@ enum share_input_decision
 int DecideShareInput(const ShareInputEvent& ev, int senderSeat, int controllerSeat, bool windowShare,
                      bool pointOnWindow, bool windowForeground, ShareInputKeyFilter& filter);
 
-/**
- *  画面主人一侧判断本机有没有动静（第 25 条：画面主人动自己的鼠标即收回控制）。低级鼠标、键盘钩子看到的每条输入
- *  都交给它：系统标记为注入的输入（控制者经 RdInputInjector 注入的）一律不算；本机的按键、鼠标按钮立即算；
- *  本机的鼠标移动累计超过 kShareLocalMoveThresholdPx 才算，避免桌面轻微震动造成的一两个像素误判。
- */
-class ShareLocalActivityDetector
-{
-public:
-    //本机鼠标移动累计多少像素算画面主人自己在动，单位像素（横纵位移之和）
-    static const int kShareLocalMoveThresholdPx = 24;
-
-    ShareLocalActivityDetector();
-
-    /**
-     *  鼠标移动。
-     *  @param pt       光标的屏幕坐标
-     *  @param injected 是否为注入的输入（钩子结构里的 LLMHF_INJECTED 标志）
-     *  @return 判定为画面主人本机操作时返回 true（此后一直返回 true，直到 Reset）
-     */
-    bool OnMouseMove(POINT pt, bool injected);
-
-    /**
-     *  鼠标按钮或滚轮。
-     *  @param injected 是否为注入的输入
-     *  @return 判定为本机操作时返回 true
-     */
-    bool OnMouseButton(bool injected);
-
-    /**
-     *  键盘按键。
-     *  @param injected 是否为注入的输入（LLKHF_INJECTED 标志）
-     *  @return 判定为本机操作时返回 true
-     */
-    bool OnKey(bool injected);
-
-    /**
-     *  记下注入时把光标挪到的屏幕位置。远程桌面的注入器用 SetCursorPos 挪光标，系统可能把这次挪动报给低级钩子而不带
-     *  注入标志；此后落在这个位置上的不带标志的移动按注入处理，并从这个位置起算本机位移。
-     *  @param pt 光标被挪到的屏幕坐标
-     */
-    void NoteInjectedPosition(POINT pt);
-
-    //清空状态（开始控制时调用）
-    void Reset();
-
-private:
-    bool  m_hasInjected; //m_injectedPt 是否有效
-    POINT m_injectedPt;  //最近一次注入时光标被挪到的位置
-    bool  m_triggered;   //是否已判定为本机操作
-    bool  m_hasLast;     //m_last 是否有效：Reset 之后第一条本机鼠标移动只记位置、不计位移
-    POINT m_last;        //上一条本机鼠标移动的位置
-    int   m_movedPx;     //Reset 以来本机鼠标移动的累计位移（横纵位移之和），单位像素
-};
 
 } // namespace screenshare

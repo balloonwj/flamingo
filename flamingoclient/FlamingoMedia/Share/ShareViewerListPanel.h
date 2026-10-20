@@ -7,8 +7,9 @@
  *  wParam 为 Command，lParam 为被操作的观看者的座位号。
  *
  *  形态：balloonui DuiFrameWindow 的 WS_POPUP 小窗，标题「观看者（N）」带关闭按钮，置顶、不进任务栏、不抢焦点，
- *  贴在「N 人观看 ▾」按钮下方，落点限制在工作区内。不设所有者窗口：balloonui 把按钮通知发给 GetParent 返回的窗口，
- *  弹出窗口设了所有者，通知就会发到所有者那里（见 ShareAnnotationBar.h）。发起人一侧排除在屏幕采集之外。
+ *  贴在「N 人观看 ▾」按钮下方，落点限制在工作区内。不设所有者窗口：2026-10-14 之前这样做是因为 balloonui 会把有所有者的
+ *  WS_POPUP 窗口的控件通知发给所有者；现在控件通知一律发回本窗口（开发约定文档 UI 约定第 11 条），设不设所有者只看
+ *  窗口关系（是否总在所有者之上、是否随它最小化、是否进任务栏）。发起人一侧排除在屏幕采集之外。
  *  内容全部用 balloonui 现成控件组合（DuiLabel、DuiButton、DuiScrollView），不新写自绘控件。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（即在 .cpp 里先 #include "stdafx.h"）。

@@ -10,10 +10,15 @@
  *    - SSKM3 系统级按键过滤：Win 键、Alt+Tab、Alt+Esc、Ctrl+Esc、Ctrl+Shift+Esc、Ctrl+Alt+Del 拦下（抬起也拦下），
  *            Ctrl+C、Alt+F4 等普通组合键放行；记下仍按着的键，Reset 后清空；
  *    - SSKM4 注入判定：发送者不是控制者丢弃；只共享窗口时点在窗口外、窗口不在前台时的键盘输入丢弃；系统级按键丢弃；
- *    - SSKM5 本机动静：注入的输入一律不算，本机按键与鼠标按钮立即算，本机鼠标移动累计超过阈值才算；
+ *    - SSKM5（2026-10-12 删除）：原来测判定画面主人本机有没有动静的 ShareLocalActivityDetector。被控制期间画面主人
+ *            可以照常操作，不再因本机动静自动收回控制，这个类连同低级钩子一起删除，见 ShareControlRevokeTests.cpp；
  *    - SSKM6 信令：1735 的五种动作、1736 的解析、1725 成员的 controlledby 与事件 11 / 12；
  *    - SSKM7 观看端换算窗口消息：画面外按下不发、已按下的按钮松开照发，双击当按下，鼠标移动限频，字符不发；
- *    - SSKM8 观看者名单：发起人每一行都能授予或收回控制，正在控制的那一行标出来、状态文字为「正在控制」。
+ *    - SSKM8 观看者名单：发起人每一行都能授予或收回控制，正在控制的那一行标出来、状态文字为「正在控制」；
+ *    - SCTL-D1（2026-10-14）控制中在画面内按下、拖到画面外：移动按限频夹到画面边缘发出（原来不发）。按钮记录与是否发送
+ *      改用与远程桌面共用的 ViewerMouseButtons 之后，SSKM7 里「画面内松开一个没按过的按钮」也随之改为照发；
+ *    - SSKM9～SSKM11（2026-10-17）被限频挡下的最后一次鼠标移动到间隔后补发一次；之后发出了移动、按下、松开、滚轮，
+ *      移回上次发出的位置或 Reset 时作废；按住拖出画面时补发的坐标同样夹到画面边缘。
  *  纯逻辑，不注入、不装钩子。框架 Catch2 v3。
  *
  *  典型用法：FlamingoUnit.exe "[sharectl]"
@@ -273,52 +278,6 @@ TEST_CASE("SSKM4 注入判定：只注入当前控制者的输入，只共享窗
     CHECK(g.HeldKeys().empty());
 }
 
-TEST_CASE("SSKM5 本机动静：注入的输入不算，本机按键与按钮立即算，鼠标移动累计超过阈值才算", "[sharectl]")
-{
-    ShareLocalActivityDetector d;
-    POINT p = { 500, 500 };
-    //注入的输入一律不算，哪怕移动很远
-    CHECK_FALSE(d.OnMouseMove(p, true));
-    POINT distant = { 1500, 900 };
-    CHECK_FALSE(d.OnMouseMove(distant, true));
-    CHECK_FALSE(d.OnMouseButton(true));
-    CHECK_FALSE(d.OnKey(true));
-
-    //本机鼠标轻微移动（累计不超过阈值）不算
-    const int step = ShareLocalActivityDetector::kShareLocalMoveThresholdPx / 4;
-    POINT q = { 500, 500 };
-    CHECK_FALSE(d.OnMouseMove(q, false));
-    q.x += step;
-    CHECK_FALSE(d.OnMouseMove(q, false));
-    q.y += step;
-    CHECK_FALSE(d.OnMouseMove(q, false));
-    //继续移动，累计超过阈值：算，此后一直为 true
-    q.x += ShareLocalActivityDetector::kShareLocalMoveThresholdPx;
-    CHECK(d.OnMouseMove(q, false));
-    CHECK(d.OnMouseMove(q, true));
-
-    //Reset 之后：本机鼠标按钮、按键立即算
-    d.Reset();
-    CHECK_FALSE(d.OnMouseMove(q, false));
-    CHECK(d.OnMouseButton(false));
-    d.Reset();
-    CHECK(d.OnKey(false));
-
-    //注入时把光标挪到的位置：系统可能把这次挪动报成不带注入标志的移动，落在这个位置上的移动不算本机操作，
-    //此后从这个位置起算位移
-    d.Reset();
-    POINT start = { 100, 100 };
-    CHECK_FALSE(d.OnMouseMove(start, false));
-    POINT injectedAt = { 900, 700 };
-    d.NoteInjectedPosition(injectedAt);
-    CHECK_FALSE(d.OnMouseMove(injectedAt, false));
-    POINT nudge = { 905, 700 };
-    CHECK_FALSE(d.OnMouseMove(nudge, false));
-    //离开那个位置之后照常累计
-    POINT moved = { 905 + ShareLocalActivityDetector::kShareLocalMoveThresholdPx, 700 };
-    CHECK(d.OnMouseMove(moved, false));
-}
-
 TEST_CASE("SSKM7 观看端换算窗口消息：画面外按下不发、松开照发，双击当按下，鼠标移动限频，字符不发", "[sharectl]")
 {
     ShareViewerInputTranslator t;
@@ -327,9 +286,12 @@ TEST_CASE("SSKM7 观看端换算窗口消息：画面外按下不发、松开照
     POINT in = { 500, 250 };
     POINT out = { 1200, 600 };
 
-    //画面外按下：不发；没发过按下的松开：不发
+    //画面外按下：不发；没发过按下的松开：画面外不发，画面内照发（2026-10-14 起与远程桌面相同，ViewerMouseButtons）
     CHECK_FALSE(t.Translate(WM_LBUTTONDOWN, MK_LBUTTON, out, video, 0, ev));
-    CHECK_FALSE(t.Translate(WM_LBUTTONUP, 0, in, video, 1, ev));
+    CHECK_FALSE(t.Translate(WM_LBUTTONUP, 0, out, video, 1, ev));
+    REQUIRE(t.Translate(WM_LBUTTONUP, 0, in, video, 1, ev));
+    CHECK(ev.m_message == (uint32_t)WM_LBUTTONUP);
+    CHECK(t.PendingButtonUps().empty());
     //画面内按下：发，坐标归一化
     REQUIRE(t.Translate(WM_LBUTTONDOWN, MK_LBUTTON, in, video, 2, ev));
     CHECK(ev.m_type == remotedesktop::rd_input_mouse);
@@ -394,6 +356,158 @@ TEST_CASE("SSKM7 观看端换算窗口消息：画面外按下不发、松开照
     CHECK(ShareViewerInputTranslator::IsControlMessage(WM_LBUTTONDBLCLK));
     CHECK_FALSE(ShareViewerInputTranslator::IsControlMessage(WM_PAINT));
     CHECK_FALSE(ShareViewerInputTranslator::IsControlMessage(WM_TIMER));
+}
+
+TEST_CASE("SCTL-D1 观看端控制中在画面内按下、拖到画面外：移动按限频夹到画面边缘发出", "[sharectl]")
+{
+    ShareViewerInputTranslator t;
+    const RECT video = sskmRect(0, 0, 1000, 500);
+    ShareInputEvent ev;
+    POINT in = { 500, 250 };
+    POINT farRight = { 1500, 250 };
+    POINT farBottom = { 500, 900 };
+    const uint32_t gap = ShareViewerInputTranslator::kShareMoveIntervalMs;
+
+    //画面内按下左键
+    REQUIRE(t.Translate(WM_LBUTTONDOWN, MK_LBUTTON, in, video, 0, ev));
+    //拖到画面右边外面：发出移动，横坐标夹到右边缘，纵坐标不变
+    REQUIRE(t.Translate(WM_MOUSEMOVE, MK_LBUTTON, farRight, video, gap, ev));
+    CHECK(ev.m_message == (uint32_t)WM_MOUSEMOVE);
+    CHECK(ev.m_x > kAnnotCoordMax - 100);
+    CHECK(ev.m_y == kAnnotCoordMax / 2);
+    //不足间隔：限频，不发
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, MK_LBUTTON, farBottom, video, gap + gap - 1, ev));
+    //过了间隔、拖到画面下边外面：发出，纵坐标夹到下边缘
+    REQUIRE(t.Translate(WM_MOUSEMOVE, MK_LBUTTON, farBottom, video, gap * 3, ev));
+    CHECK(ev.m_x == kAnnotCoordMax / 2);
+    CHECK(ev.m_y > kAnnotCoordMax - 200);
+    //在画面外松开：照发；之后画面外的移动不再发
+    REQUIRE(t.Translate(WM_LBUTTONUP, 0, farBottom, video, gap * 4, ev));
+    CHECK(ev.m_message == (uint32_t)WM_LBUTTONUP);
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, farRight, video, gap * 6, ev));
+}
+
+TEST_CASE("SSKM9 观看端快速移动后停下：被限频挡下的最后位置到间隔后补发一次", "[sharectl]")
+{
+    ShareViewerInputTranslator t;
+    const RECT video = sskmRect(0, 0, 1000, 500);
+    const uint32_t gap = ShareViewerInputTranslator::kShareMoveIntervalMs;
+    const uint32_t t0 = 1000;
+    ShareInputEvent ev;
+    POINT a = { 100, 100 };
+    POINT b = { 250, 400 };
+    POINT c = { 300, 120 };
+
+    //第一次移动发出，没有待补发的移动
+    REQUIRE(t.Translate(WM_MOUSEMOVE, 0, a, video, t0, ev));
+    CHECK_FALSE(t.HasPendingMove());
+    //5 毫秒后又移动：被限频挡下，记为待补发
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, b, video, t0 + 5, ev));
+    CHECK(t.HasPendingMove());
+    //10 毫秒时还没到补发时刻：取不到，仍待补发
+    CHECK_FALSE(t.TakePendingMove(t0 + 10, ev));
+    CHECK(t.HasPendingMove());
+    //满间隔：取到 b 的位置
+    ShareInputEvent flushed;
+    REQUIRE(t.TakePendingMove(t0 + gap, flushed));
+    int nx = 0;
+    int ny = 0;
+    REQUIRE(ShareRemoteInput::ViewToNormalized(video, b, nx, ny));
+    CHECK(flushed.m_type == remotedesktop::rd_input_mouse);
+    CHECK(flushed.m_message == (uint32_t)WM_MOUSEMOVE);
+    CHECK(flushed.m_x == nx);
+    CHECK(flushed.m_y == ny);
+    //只补发一次
+    CHECK_FALSE(t.HasPendingMove());
+    CHECK_FALSE(t.TakePendingMove(t0 + gap * 2, ev));
+
+    //补发视同这一刻发出了移动：限频从补发时刻重新计时，再挡下的移动在下一个间隔后补发
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, c, video, t0 + gap + gap - 1, ev));
+    CHECK(t.HasPendingMove());
+    REQUIRE(t.TakePendingMove(t0 + gap * 2, flushed));
+    REQUIRE(ShareRemoteInput::ViewToNormalized(video, c, nx, ny));
+    CHECK(flushed.m_x == nx);
+    CHECK(flushed.m_y == ny);
+    //补发的位置成为「上次发出的位置」：再移到同一处不发、也不待补发
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, c, video, t0 + gap * 4, ev));
+    CHECK_FALSE(t.HasPendingMove());
+}
+
+TEST_CASE("SSKM10 观看端待补发的移动被更新的输入取代：之后发出了移动、按下、松开、滚轮，回到原位或 Reset 时不再补发", "[sharectl]")
+{
+    ShareViewerInputTranslator t;
+    const RECT video = sskmRect(0, 0, 1000, 500);
+    const uint32_t gap = ShareViewerInputTranslator::kShareMoveIntervalMs;
+    const uint32_t t0 = 1000;
+    ShareInputEvent ev;
+    POINT a = { 100, 100 };
+    POINT b = { 200, 100 };
+    POINT c = { 300, 100 };
+    POINT d = { 400, 100 };
+    POINT e = { 500, 200 };
+
+    //挡下 b 之后，过了间隔又发出了 c：b 作废
+    REQUIRE(t.Translate(WM_MOUSEMOVE, 0, a, video, t0, ev));
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, b, video, t0 + 1, ev));
+    REQUIRE(t.HasPendingMove());
+    REQUIRE(t.Translate(WM_MOUSEMOVE, 0, c, video, t0 + gap, ev));
+    CHECK_FALSE(t.HasPendingMove());
+    CHECK_FALSE(t.TakePendingMove(t0 + gap * 3, ev));
+
+    //挡下之后发出了按下：按下带着自己的坐标，挡下的移动作废，不能在按下之后把指针拉回去
+    const uint32_t t1 = t0 + gap;
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, d, video, t1 + 1, ev));
+    REQUIRE(t.HasPendingMove());
+    REQUIRE(t.Translate(WM_LBUTTONDOWN, MK_LBUTTON, e, video, t1 + 2, ev));
+    CHECK_FALSE(t.HasPendingMove());
+    //挡下之后发出了松开：同样作废
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, MK_LBUTTON, d, video, t1 + 3, ev));
+    REQUIRE(t.HasPendingMove());
+    REQUIRE(t.Translate(WM_LBUTTONUP, 0, e, video, t1 + 4, ev));
+    CHECK_FALSE(t.HasPendingMove());
+    //挡下之后发出了滚轮：同样作废
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, d, video, t1 + 5, ev));
+    REQUIRE(t.HasPendingMove());
+    REQUIRE(t.Translate(WM_MOUSEWHEEL, MAKEWPARAM(0, WHEEL_DELTA), e, video, t1 + 6, ev));
+    CHECK_FALSE(t.HasPendingMove());
+    //挡下之后又移回上次发出的位置（c）：对方的指针本来就在那里，作废
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, d, video, t1 + 7, ev));
+    REQUIRE(t.HasPendingMove());
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, c, video, t1 + 8, ev));
+    CHECK_FALSE(t.HasPendingMove());
+    //键盘输入不移动指针：不影响待补发的移动
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, 0, d, video, t1 + 9, ev));
+    REQUIRE(t.HasPendingMove());
+    REQUIRE(t.Translate(WM_KEYDOWN, 'A', e, video, t1 + 10, ev));
+    CHECK(t.HasPendingMove());
+    //Reset（开始或结束控制）：作废
+    t.Reset();
+    CHECK_FALSE(t.HasPendingMove());
+    CHECK_FALSE(t.TakePendingMove(t1 + gap * 3, ev));
+}
+
+TEST_CASE("SSKM11 观看端按住拖出画面时被挡下的移动，补发时同样夹到画面边缘", "[sharectl]")
+{
+    ShareViewerInputTranslator t;
+    const RECT video = sskmRect(0, 0, 1000, 500);
+    const uint32_t gap = ShareViewerInputTranslator::kShareMoveIntervalMs;
+    ShareInputEvent ev;
+    POINT in = { 500, 250 };
+    POINT farRight = { 1500, 250 };
+    POINT farBottom = { 500, 900 };
+
+    //画面内按下，拖到右边外面发出一次
+    REQUIRE(t.Translate(WM_LBUTTONDOWN, MK_LBUTTON, in, video, 0, ev));
+    REQUIRE(t.Translate(WM_MOUSEMOVE, MK_LBUTTON, farRight, video, gap, ev));
+    //紧接着拖到下边外面：被限频挡下
+    CHECK_FALSE(t.Translate(WM_MOUSEMOVE, MK_LBUTTON, farBottom, video, gap + 1, ev));
+    REQUIRE(t.HasPendingMove());
+    //补发：纵坐标夹到下边缘，与 SCTL-D1 直接发出时的规则相同
+    REQUIRE(t.TakePendingMove(gap * 2, ev));
+    CHECK(ev.m_message == (uint32_t)WM_MOUSEMOVE);
+    CHECK(ev.m_x == kAnnotCoordMax / 2);
+    CHECK(ev.m_y > kAnnotCoordMax - 200);
+    CHECK(ev.m_y <= kAnnotCoordMax);
 }
 
 TEST_CASE("SSKM8 观看者名单：发起人每一行都能授予或收回控制，正在控制的那一行标出来；观看者看到的名单没有这一项", "[sharectl]")

@@ -291,6 +291,11 @@ void TcpConnection::setTcpNoDelay(bool on)
     m_socket->setTcpNoDelay(on);
 }
 
+bool TcpConnection::isTcpNoDelay() const
+{
+    return m_socket->getTcpNoDelay();
+}
+
 void TcpConnection::connectEstablished()
 {
     m_loop->assertInLoopThread();

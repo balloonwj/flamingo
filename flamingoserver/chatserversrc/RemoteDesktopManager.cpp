@@ -3,7 +3,8 @@
  *  balloonwj@qq.com   2026-06-08
  */
 #include "RemoteDesktopManager.h"
-#include "RemoteDesktopProtocol.h"      // enum rd_state
+#include "RemoteDesktopProtocol.h"      // enum rd_state、rd_control_action、rd_control_state
+#include "Protocol.h"                   // error_code_rd_*（applyControl 的返回值）
 #include "../utils/RelayToken.h"
 
 //初始化列表的书写顺序必须与头文件里成员的声明顺序一致，
@@ -112,7 +113,6 @@ std::string RemoteDesktopManager::createSession(int64_t controllerId, int64_t co
     info.sessionid    = sid;
     info.controllerId = controllerId;
     info.controlledId = controlledId;
-    info.state        = rd_state_ringing;
     info.createTime   = now;
 
     m_sessions[sid] = info;
@@ -129,20 +129,96 @@ bool RemoteDesktopManager::getSession(const std::string& sessionid, RemoteDeskto
     return true;
 }
 
-bool RemoteDesktopManager::setState(const std::string& sessionid, int state)
+bool RemoteDesktopManager::removeSession(const std::string& sessionid)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    return m_sessions.erase(sessionid) > 0;
+}
+
+bool RemoteDesktopManager::markConnected(const std::string& sessionid)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     std::map<std::string, RemoteDesktopSessionInfo>::iterator it = m_sessions.find(sessionid);
     if (it == m_sessions.end())
         return false;
-    it->second.state = state;
+    it->second.connected = true;
+    it->second.controlState = rd_control_none;
     return true;
 }
 
-bool RemoteDesktopManager::removeSession(const std::string& sessionid)
+int RemoteDesktopManager::applyControl(const std::string& sessionid, int64_t actorId, int action,
+                                       RemoteDesktopControlResult& out)
 {
+    out = RemoteDesktopControlResult();
     std::lock_guard<std::mutex> guard(m_mutex);
-    return m_sessions.erase(sessionid) > 0;
+    std::map<std::string, RemoteDesktopSessionInfo>::iterator it = m_sessions.find(sessionid);
+    if (it == m_sessions.end())
+        return error_code_rd_not_exist;
+
+    RemoteDesktopSessionInfo& s = it->second;
+    out.m_control = s.controlState;
+    if (action < rd_control_request || action > rd_control_release)
+        return error_code_bad_request;
+
+    const bool isController = (actorId == s.controllerId);
+    const bool isControlled = (actorId == s.controlledId);
+    //申请、撤回、放弃属于控制端的动作，其余三种属于被控端
+    const bool controllerAction = (action == rd_control_request || action == rd_control_cancel
+                                   || action == rd_control_release);
+    if (controllerAction ? !isController : !isControlled)
+        return error_code_rd_not_participant;
+    if (!s.connected)
+        return error_code_rd_control_state;
+
+    //控制端的动作通知被控端，被控端的动作通知控制端
+    const int64_t peerId = controllerAction ? s.controlledId : s.controllerId;
+    int next = s.controlState;
+    switch (action)
+    {
+    //申请：未授权时转为申请中；已在申请或已授权时按成功处理，不再打扰被控端
+    case rd_control_request:
+        if (s.controlState == rd_control_none)
+            next = rd_control_requested;
+        break;
+
+    //撤回：只撤得回尚未处理的申请
+    case rd_control_cancel:
+        if (s.controlState != rd_control_requested)
+            return error_code_rd_control_state;
+        next = rd_control_none;
+        break;
+
+    //授予：有无申请都可以（被控端直接允许）；已授权时按成功处理
+    case rd_control_grant:
+        next = rd_control_granted;
+        break;
+
+    //拒绝：只能拒绝尚未处理的申请
+    case rd_control_deny:
+        if (s.controlState != rd_control_requested)
+            return error_code_rd_control_state;
+        next = rd_control_none;
+        break;
+
+    //收回（被控端）、放弃（控制端）：只在控制进行中有效
+    case rd_control_revoke:
+    case rd_control_release:
+        if (s.controlState != rd_control_granted)
+            return error_code_rd_control_state;
+        next = rd_control_none;
+        break;
+
+    //取值已在函数开头校验过，不会走到这里
+    default:
+        return error_code_bad_request;
+    }
+
+    //状态有变化才通知对方
+    if (next != s.controlState)
+        out.m_notifyUser = peerId;
+    s.controlState = next;
+    out.m_control = next;
+    return error_code_ok;
 }
 
 bool RemoteDesktopManager::signTokenFor(const std::string& sessionid, int role,

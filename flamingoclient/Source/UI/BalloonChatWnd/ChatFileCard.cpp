@@ -1,8 +1,8 @@
 /**
  *  ChatFileCard.cpp
  *
- *  文件卡片的尺寸计算、绘制与点击判断，见 ChatFileCard.h。绘制代码原样取自 ChatBubble.cpp
- *  的文件气泡分支，几何常量、配色与文字均未改动。
+ *  文件卡片的尺寸计算、绘制与点击判断，见 ChatFileCard.h。2026-10-14 起按聊天卡片美化方案换成新版式
+ *  （docs/聊天卡片美化方案.md 3.2～3.7、5.1）：白色底板、文档图标、状态标签、品牌橙进度条与底部一行。
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 它要被 Flamingo.vcxproj 与
  *  FlamingoUnit.vcxproj 共用。在 Flamingo.vcxproj 里需标记 PrecompiledHeader=NotUsing。
@@ -36,6 +36,14 @@ extern CAppModule _Module;
 
 #include "ChatFileCard.h"
 #include "ChatPaintUtil.h"     // AddRoundRect / DrawGdiText / MeasureTextWidth
+#include "ChatCardModel.h"     // ChatCardButtonsOf / ChatCardTypeStyleOf：底部按钮与类型标签
+#include "ChatCardPaint.h"     // 卡片底板、状态标签、进度条与底部一行的绘制
+#include "ChatCardStyle.h"     // 卡片样式常量
+#include "FileBubbleFormat.h"  // FormatFileSize：进度条下方「已传 / 总大小」的写法
+#include "ChatCardModel.h"     // ChatCardButtonsOf / ChatCardTypeStyleOf：底部按钮与类型标签
+#include "ChatCardPaint.h"     // 卡片底板、状态标签、进度条与底部一行的绘制
+#include "ChatCardStyle.h"     // 卡片样式常量
+#include "FileBubbleFormat.h"  // FormatFileSize：进度条下方「已传 / 总大小」的写法
 #include "ChatFileVisual.h"    // FileTypeColor（与消息记录窗共用同一套配色）
 #include "ChatFileAction.h"    // ChatFileActionKind
 #include "ChatDirectFileModel.h"   // DirectFileStatusKey：在线直传特有的状态文字（2026-10-04 起）
@@ -50,23 +58,78 @@ using chatpaint::AddRoundRect;
 using chatpaint::DrawGdiText;
 using chatpaint::MeasureTextWidth;
 
-// 文件卡片几何常量（逻辑像素），与聊天窗文件气泡一致。
-const int kFilePadH         = 14;   // 卡片水平内边距（每侧）
-const int kFileIconSize     = 40;   // 类型图标边长（圆角方块）
-const int kFileIconTop      = 10;   // 图标距卡片顶
-const int kFileNameTop      = 12;   // 文件名距卡片顶
-const int kFileNameH        = 20;   // 文件名行高
-const int kFileStatusTop    = 34;   // "大小 · 状态"行距卡片顶
-const int kFileStatusH      = 18;   // 状态行高
-const int kFileHeaderH      = 60;   // 头部区高（图标 + 名 + 状态）
-const int kFileProgressH    = 5;    // 进度条厚
-const int kFileBtnTopGap    = 10;   // 按钮行距上方
-const int kFileBtnH         = 34;   // 按钮高
-const int kFileBtnBottomPad = 12;   // 按钮行下边距
-const int kFileBadgeR       = 9;    // 图标角标半径
+// ---- 文件卡片几何（逻辑像素，docs/聊天卡片美化方案.md 3.2～3.7，2026-10-14 起）----
 
-// 文件名的颜色，与聊天气泡正文同色
-const COLORREF kFileCardText = RGB(0x2A, 0x2A, 0x2A);
+const int kFileDocW = 36;            // 文档图标宽
+const int kFileDocH = 44;            // 文档图标高
+const int kFileDocFold = 12;         // 文档图标右上角折角的边长
+const int kFileDocFoldInner = 8;     // 折角内侧的弯折处距折角两端的长度
+const int kFileDocRadius = 4;        // 文档图标其余三个角的圆角半径
+const int kFileDocTextPx = 9;        // 文档图标上类型字（扩展名）的字号，加粗
+const int kFileDocTextBottom = 4;    // 类型字底边距文档图标底边
+const int kFileDocTextH = 14;        // 类型字的行高
+const BYTE kFileDocFoldAlpha = 97;   // 折角上白色叠加的不透明度（约 38%）
+const COLORREF kFileDocText = RGB(0xFF, 0xFF, 0xFF);     // 类型字颜色
+const COLORREF kFileGoneColor = RGB(0xB8, 0xB5, 0xB1);   // 本机没有这份文件时文档图标的灰色
+const COLORREF kFileDeletedName = RGB(0x9A, 0x97, 0x92); // 服务器上已删除的文件名颜色（另加删除线）
+const int kFileSubtitleRowH = 20;    // 副标题行（大小 + 状态标签 + P2P 徽章）的行高，与状态标签同高
+// 头部高：文档图标与「标题 + 副标题行」取较高者，两者在其中垂直居中
+const int kFileHeaderH = (kFileDocH > cardstyle::kTitleLineH + kFileSubtitleRowH)
+                       ? kFileDocH : (cardstyle::kTitleLineH + kFileSubtitleRowH);
+// 进度块：头部与进度条的间距、进度条、进度条与下方一行文字的间距、那一行文字
+const int kFileProgressBlockH = cardstyle::kProgressTopGap + cardstyle::kProgressH + cardstyle::kProgressTextGap
+                              + cardstyle::kProgressTextLineH;
+// 卡片底部：下内边距、分隔线与底部一行。底部一行常驻（左边是类型标签「文件」），没有按钮时也有
+const int kFileBottomH = cardstyle::kCardPadBottom + cardstyle::kFooterDividerH + cardstyle::kFooterH;
+const int kFullPercent = 100;        // 进度的满值
+const wchar_t* const kSizeSeparator = L" / ";   // 进度条下方「已传 / 总大小」中间的分隔
+const wchar_t* const kPercentSuffix = L"%";     // 百分比后缀
+
+// 已删除时文档图标上白色垃圾桶的几何（相对文档图标中心与盖子所在的 y）
+const float kTrashStroke = 1.6f;     // 线宽
+const float kTrashLidHalf = 9.0f;    // 盖子半宽
+const float kTrashHandleHalf = 3.0f; // 提手半宽
+const float kTrashHandleH = 3.0f;    // 提手高
+const float kTrashBodyHalf = 7.0f;   // 桶身上沿半宽
+const float kTrashBodyTaper = 1.5f;  // 桶身每侧向下收窄的量
+const float kTrashBodyGap = 3.0f;    // 盖子与桶身上沿的间距
+const float kTrashBodyH = 12.0f;     // 桶身高
+const float kTrashRibInset = 2.0f;   // 竖纹上下各缩进的量
+const int kTrashLidTop = 14;         // 盖子距文档图标顶边
+
+// 不透明的 GDI+ 颜色
+Gdiplus::Color FileGdip(COLORREF c, BYTE alpha)
+{
+    return Gdiplus::Color(alpha, GetRValue(c), GetGValue(c), GetBValue(c));
+}
+
+// 文档图标左上角：在头部里垂直居中
+POINT FileDocOrigin(const RECT& card)
+{
+    POINT pt;
+    pt.x = card.left + cardstyle::kCardPadH;
+    pt.y = card.top + cardstyle::kCardPadTop + (kFileHeaderH - kFileDocH) / 2;
+    return pt;
+}
+
+// 进度条矩形（卡片显示进度时有效）
+RECT FileProgressRect(const RECT& card)
+{
+    const int top = card.top + cardstyle::kCardPadTop + kFileHeaderH + cardstyle::kProgressTopGap;
+    const RECT rc = { card.left + cardstyle::kCardPadH, top, card.right - cardstyle::kCardPadH, top + cardstyle::kProgressH };
+    return rc;
+}
+
+// 进度（0~100）
+int FilePercent(const ChatMessage& m)
+{
+    int pct = m.fileProgress;
+    if (pct < 0)
+        pct = 0;
+    if (pct > kFullPercent)
+        pct = kFullPercent;
+    return pct;
+}
 
 } // anonymous namespace
 
@@ -94,18 +157,13 @@ bool FileCardCanResend(const ChatMessage& m)
 
 int FileCardHeight(const ChatMessage& m)
 {
-    //是否带进度条、是否有按钮行都随状态变化；fromMe 只影响待接收态的按钮个数，只要还有
-    //按钮，行高就是同一份
-    const int st = m.fileState;
-    int h = kFileHeaderH;
-    if (FileCardShowsProgress(st, m.fileDirect))
+    //是否带进度块随状态变化；头部与卡片底部（含常驻的底部一行）固定
+    int h = cardstyle::kCardPadTop + kFileHeaderH;
+    if (FileCardShowsProgress(m.fileState, m.fileDirect))
     {
-        h += kFileProgressH;
+        h += kFileProgressBlockH;
     }
-    if (FileStateButtonCount(st, FileCardSkipsReject(m)) > 0)
-    {
-        h += kFileBtnTopGap + kFileBtnH + kFileBtnBottomPad;
-    }
+    h += kFileBottomH;
     return h;
 }
 
@@ -142,355 +200,277 @@ CString FileCardLinkLabel(const ChatMessage& m, int act)
     }
 }
 
+int FileCardActionLevel(int act)
+{
+    switch (act)
+    {
+    //接收 / 下载、发送离线文件：改变状态的操作
+    case kChatFileAccept:
+    case kChatFileSendOffline:
+        return kCardButtonPrimary;
+    //打开文件、重新发送 / 重新下载：查看类的操作
+    case kChatFileOpen:
+    case kChatFileRetry:
+        return kCardButtonView;
+    //打开所在文件夹、另存为、取消、拒绝：次要操作
+    default:
+        return kCardButtonSecondary;
+    }
+}
+
+std::vector<ChatCardButton> FileCardButtons(const ChatMessage& m)
+{
+    //FileButtonActions 给出的顺序是最常用的在前，ChatCardArrangeButtons 把它重排成显示顺序，让主要按钮落在最右
+    //（如「拒绝、接收」「另存为、打开所在文件夹、打开文件」「取消、发送离线文件」）
+    int acts[kMaxChatFileActions];
+    const int count = FileButtonActions(m.fileState, FileCardSkipsReject(m), acts);
+    std::vector<ChatCardButton> buttons;
+    for (int i = 0; i < count; ++i)
+        buttons.push_back(ChatCardButton(FileCardLinkLabel(m, acts[i]), FileCardActionLevel(acts[i]), true, acts[i]));
+    ChatCardArrangeButtons(buttons);
+    return buttons;
+}
+
+void FileCardStatus(const ChatMessage& m, CString& text, int& tone)
+{
+    const int st = m.fileState;
+    tone = kCardChipEnded;
+    switch (st)
+    {
+    //上传中
+    case kFileUploading:
+        text = TR(L"传送中");
+        tone = kCardChipPending;
+        break;
+    //下载中
+    case kFileDownloading:
+        text = TR(L"下载中");
+        tone = kCardChipPending;
+        break;
+    //完成
+    case kFileNormal:
+        text = m.fromMe ? TR(L"传送完成") : TR(L"已完成");
+        tone = kCardChipLive;
+        break;
+    //传输失败
+    case kFileFailed:
+        text = TR(L"传输失败");
+        tone = kCardChipBad;
+        break;
+    //已取消
+    case kFileCancelled:
+        text = TR(L"已取消");
+        break;
+    //待接收：群聊或聊天记录里的文件没有接收流程，只说明本地还没有这份文件；单聊要用户自己决定收不收
+    case kFilePendingAccept:
+        if (m.fileDirectDownload)
+        {
+            text = TR(L"未下载");
+        }
+        else
+        {
+            text = TR(L"等待接收");
+            tone = kCardChipPending;
+        }
+        break;
+    //已拒绝接收
+    case kFileRejected:
+        text = TR(L"已拒绝接收");
+        break;
+    //已删除；在线直传的等待与作废状态由下面的直传写法覆盖
+    default:
+        text = TR(L"文件已删除，无法下载");
+        break;
+    }
+
+    //在线直传特有的状态文字（等待对方接收、作废原因、历史里本机没有文件、接收中），覆盖上面按普通文件算出的文字；
+    //接收中不带百分比，百分比画在进度条下面那一行
+    const wchar_t* directKey = DirectFileStatusKey(st, m.fileDirectEnd, m.fromMe, m.fileDirect);
+    if (directKey != NULL)
+    {
+        if (st == kFileDownloading)
+        {
+            text = TR(L"接收中");
+            tone = kCardChipPending;
+        }
+        else
+        {
+            text = TR(directKey);
+            tone = (st == kFileDirectWaiting) ? kCardChipPending : kCardChipEnded;
+        }
+    }
+
+    //本端发出的文件：只要对方有过动作，状态就改说对方那边的进展 —— 自己传完了不等于对方收了
+    if (m.fromMe && m.filePeerState != 0)
+    {
+        if (m.filePeerState == kFilePeerReceiving)
+        {
+            text = TR(L"对方正在接收");
+            tone = kCardChipPending;
+        }
+        else if (m.filePeerState == kFilePeerReceived)
+        {
+            text = TR(L"对方已接收");
+            tone = kCardChipLive;
+        }
+        else if (m.filePeerState == kFilePeerRejected)
+        {
+            text = TR(L"对方已拒绝接收");
+            tone = kCardChipEnded;
+        }
+    }
+}
+
 void PaintFileCardShapes(Gdiplus::Graphics& g, const RECT& card, const ChatMessage& m)
 {
-    const int  bubbleX = card.left;
-    const int  bubbleY = card.top;
-    const int  bubbleW = card.right - card.left;
     const int  st      = m.fileState;
     //本机没有这份文件：普通文件是服务器上已删除（画垃圾桶），在线直传是服务器上本来就没有（只把图标置灰）
     const bool gone    = (st == kFileDeleted);
     const bool deleted = gone && !m.fileDirect;
-    const int  iconX   = bubbleX + kFilePadH;
-    const int  iconY   = bubbleY + kFileIconTop;
+    cardpaint::PaintCardFrame(g, card);
 
-    // ---- 类型图标（圆角方块）：正常用类型色，本机没有文件用灰 ----
-    COLORREF ftc = gone ? RGB(0xB8, 0xB5, 0xB1) : FileTypeColor(m.fileType);
+    // ---- 文档图标：右上角折起的纸张，正常用类型色，本机没有文件用灰 ----
+    const POINT doc = FileDocOrigin(card);
+    const Gdiplus::REAL x = (Gdiplus::REAL)doc.x;
+    const Gdiplus::REAL y = (Gdiplus::REAL)doc.y;
+    const Gdiplus::REAL w = (Gdiplus::REAL)kFileDocW;
+    const Gdiplus::REAL h = (Gdiplus::REAL)kFileDocH;
+    const Gdiplus::REAL fold = (Gdiplus::REAL)kFileDocFold;
+    const Gdiplus::REAL d = (Gdiplus::REAL)(kFileDocRadius * 2);
     {
-        Gdiplus::GraphicsPath ftPath;
-        AddRoundRect(ftPath, (Gdiplus::REAL)iconX, (Gdiplus::REAL)iconY,
-                     (Gdiplus::REAL)kFileIconSize, (Gdiplus::REAL)kFileIconSize, 6.0f);
-        Gdiplus::SolidBrush ftBrush(Gdiplus::Color(255,
-            GetRValue(ftc), GetGValue(ftc), GetBValue(ftc)));
-        g.FillPath(&ftBrush, &ftPath);
+        Gdiplus::GraphicsPath sheet;
+        sheet.AddLine(x + d / 2, y, x + w - fold, y);
+        sheet.AddLine(x + w - fold, y, x + w, y + fold);
+        sheet.AddLine(x + w, y + fold, x + w, y + h - d / 2);
+        sheet.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+        sheet.AddLine(x + w - d / 2, y + h, x + d / 2, y + h);
+        sheet.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+        sheet.AddLine(x, y + h - d / 2, x, y + d / 2);
+        sheet.AddArc(x, y, d, d, 180.0f, 90.0f);
+        sheet.CloseFigure();
+        Gdiplus::SolidBrush sheetBrush(FileGdip(gone ? kFileGoneColor : FileTypeColor(m.fileType), 255));
+        g.FillPath(&sheetBrush, &sheet);
+
+        const Gdiplus::REAL inner = (Gdiplus::REAL)kFileDocFoldInner;
+        Gdiplus::PointF flap[4] =
+        {
+            Gdiplus::PointF(x + w - fold, y),
+            Gdiplus::PointF(x + w, y + fold),
+            Gdiplus::PointF(x + w - fold + inner / 2, y + fold),
+            Gdiplus::PointF(x + w - fold, y + inner),
+        };
+        Gdiplus::SolidBrush flapBrush(FileGdip(kFileDocText, kFileDocFoldAlpha));
+        g.FillPolygon(&flapBrush, flap, 4);
     }
 
-    // 已删除：图标上画一个白色垃圾桶轮廓（盖 + 提手 + 桶身 + 竖纹）。
+    // 已删除：文档图标上画一个白色垃圾桶轮廓（盖 + 提手 + 桶身 + 竖纹）
     if (deleted)
     {
-        Gdiplus::Pen   trash(Gdiplus::Color(255, 255, 255, 255), 1.6f);
-        Gdiplus::REAL  cx = (Gdiplus::REAL)(iconX + kFileIconSize / 2);
-        Gdiplus::REAL  ty = (Gdiplus::REAL)(iconY + 14);   // 盖的 y
-        g.DrawLine(&trash, cx - 9, ty, cx + 9, ty);                 // 盖
-        g.DrawLine(&trash, cx - 3, ty - 3, cx + 3, ty - 3);         // 提手
-        g.DrawLine(&trash, cx - 3, ty - 3, cx - 3, ty);
-        g.DrawLine(&trash, cx + 3, ty - 3, cx + 3, ty);
-        const Gdiplus::REAL bx = cx - 7;
-        const Gdiplus::REAL bw = 14;
-        const Gdiplus::REAL byTop = ty + 3;
-        const Gdiplus::REAL bh = 12;
-        g.DrawLine(&trash, bx, byTop, bx + 1.5f, byTop + bh);       // 桶身左壁
-        g.DrawLine(&trash, bx + bw, byTop, bx + bw - 1.5f, byTop + bh);  // 右壁
-        g.DrawLine(&trash, bx + 1.5f, byTop + bh, bx + bw - 1.5f, byTop + bh);  // 底
-        g.DrawLine(&trash, cx - 3, byTop + 2, cx - 3, byTop + bh - 2);   // 竖纹
-        g.DrawLine(&trash, cx + 3, byTop + 2, cx + 3, byTop + bh - 2);
+        Gdiplus::Pen  trash(FileGdip(kFileDocText, 255), kTrashStroke);
+        const Gdiplus::REAL cx = x + w / 2;
+        const Gdiplus::REAL ty = y + (Gdiplus::REAL)kTrashLidTop;
+        g.DrawLine(&trash, cx - kTrashLidHalf, ty, cx + kTrashLidHalf, ty);
+        g.DrawLine(&trash, cx - kTrashHandleHalf, ty - kTrashHandleH, cx + kTrashHandleHalf, ty - kTrashHandleH);
+        g.DrawLine(&trash, cx - kTrashHandleHalf, ty - kTrashHandleH, cx - kTrashHandleHalf, ty);
+        g.DrawLine(&trash, cx + kTrashHandleHalf, ty - kTrashHandleH, cx + kTrashHandleHalf, ty);
+        const Gdiplus::REAL bx = cx - kTrashBodyHalf;
+        const Gdiplus::REAL bw = kTrashBodyHalf * 2;
+        const Gdiplus::REAL byTop = ty + kTrashBodyGap;
+        g.DrawLine(&trash, bx, byTop, bx + kTrashBodyTaper, byTop + kTrashBodyH);
+        g.DrawLine(&trash, bx + bw, byTop, bx + bw - kTrashBodyTaper, byTop + kTrashBodyH);
+        g.DrawLine(&trash, bx + kTrashBodyTaper, byTop + kTrashBodyH, bx + bw - kTrashBodyTaper, byTop + kTrashBodyH);
+        g.DrawLine(&trash, cx - kTrashHandleHalf, byTop + kTrashRibInset, cx - kTrashHandleHalf, byTop + kTrashBodyH - kTrashRibInset);
+        g.DrawLine(&trash, cx + kTrashHandleHalf, byTop + kTrashRibInset, cx + kTrashHandleHalf, byTop + kTrashBodyH - kTrashRibInset);
     }
 
-    // ---- 状态角标（图标左下角小圆）：完成绿✓、失败红×、已取消灰停 ----
-    if (st == kFileNormal || st == kFileFailed || st == kFileCancelled)
-    {
-        const Gdiplus::REAL bcx = (Gdiplus::REAL)(iconX + 3);
-        const Gdiplus::REAL bcy = (Gdiplus::REAL)(iconY + kFileIconSize - 3);
-        const Gdiplus::REAL r   = (Gdiplus::REAL)kFileBadgeR;
-        COLORREF badgeCol = (st == kFileNormal) ? RGB(0x3F, 0xB9, 0x50)
-                          : (st == kFileFailed) ? RGB(0xE5, 0x39, 0x35)
-                          :                       RGB(0x9A, 0x97, 0x92);
-        Gdiplus::SolidBrush white(Gdiplus::Color(255, 255, 255, 255));
-        g.FillEllipse(&white, bcx - r - 1.5f, bcy - r - 1.5f, (r + 1.5f) * 2, (r + 1.5f) * 2);
-        Gdiplus::SolidBrush bb(Gdiplus::Color(255,
-            GetRValue(badgeCol), GetGValue(badgeCol), GetBValue(badgeCol)));
-        g.FillEllipse(&bb, bcx - r, bcy - r, r * 2, r * 2);
-        Gdiplus::Pen mark(Gdiplus::Color(255, 255, 255, 255), 1.8f);
-        if (st == kFileNormal)
-        {
-            g.DrawLine(&mark, bcx - 4, bcy, bcx - 1, bcy + 3);       // ✓
-            g.DrawLine(&mark, bcx - 1, bcy + 3, bcx + 4, bcy - 3);
-        }
-        else if (st == kFileFailed)
-        {
-            g.DrawLine(&mark, bcx - 3, bcy - 3, bcx + 3, bcy + 3);   // ×
-            g.DrawLine(&mark, bcx + 3, bcy - 3, bcx - 3, bcy + 3);
-        }
-        else
-        {
-            Gdiplus::SolidBrush sq(Gdiplus::Color(255, 255, 255, 255));
-            g.FillRectangle(&sq, bcx - 3, bcy - 3, 6.0f, 6.0f);       // 停（白方块）
-        }
-    }
-
-    // ---- 进度条（上传 / 下载 / 失败 / 已取消）----
+    // ---- 进度条（上传 / 下载 / 失败 / 已取消）：一律品牌橙（方案 3.7）----
     if (FileCardShowsProgress(st, m.fileDirect))
     {
-        const int barX = bubbleX + kFilePadH;
-        const int barY = bubbleY + kFileHeaderH;
-        const int barW = bubbleW - kFilePadH * 2;
-        {
-            Gdiplus::GraphicsPath track;
-            AddRoundRect(track, (Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
-                         (Gdiplus::REAL)barW, (Gdiplus::REAL)kFileProgressH, 2.5f);
-            Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 0xE3, 0xE0, 0xDC));
-            g.FillPath(&trackBrush, &track);
-        }
-        int pct = m.fileProgress;
-        if (pct < 0)
-        {
-            pct = 0;
-        }
-        if (pct > 100)
-        {
-            pct = 100;
-        }
-        const int fillW = barW * pct / 100;
-        if (fillW > 0)
-        {
-            COLORREF pc = (st == kFileUploading)   ? RGB(0xFF, 0x7A, 0x45)   // 橙
-                        : (st == kFileDownloading) ? RGB(0x2F, 0x80, 0xED)   // 蓝
-                        : (st == kFileFailed)      ? RGB(0xE5, 0x39, 0x35)   // 红
-                        :                            RGB(0xB0, 0xAD, 0xA8);  // 灰（已取消）
-            Gdiplus::GraphicsPath fill;
-            AddRoundRect(fill, (Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
-                         (Gdiplus::REAL)fillW, (Gdiplus::REAL)kFileProgressH, 2.5f);
-            Gdiplus::SolidBrush fb(Gdiplus::Color(255,
-                GetRValue(pc), GetGValue(pc), GetBValue(pc)));
-            g.FillPath(&fb, &fill);
-        }
+        cardpaint::PaintCardProgress(g, FileProgressRect(card), FilePercent(m));
     }
 }
 
 void PaintFileCardText(HDC hdc, Gdiplus::Graphics& g, const RECT& card, const ChatMessage& m,
                        int hoverIdx, FileCardLinks& links)
 {
-    const int  bubbleX = card.left;
-    const int  bubbleY = card.top;
-    const int  bubbleW = card.right - card.left;
     const int  st      = m.fileState;
     //含义同 PaintFileCardShapes：在线直传在本机没有文件时不画垃圾桶、不划删除线，只说明服务器未保存
     const bool gone    = (st == kFileDeleted);
     const bool deleted = gone && !m.fileDirect;
-    const int  iconX   = bubbleX + kFilePadH;
-    const int  iconY   = bubbleY + kFileIconTop;
-    const int  textX   = iconX + kFileIconSize + 12;          // 名 / 状态左
-    const int  textR   = bubbleX + bubbleW - kFilePadH;       // 名 / 状态右
+    const UINT kOneLine = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+    const POINT doc = FileDocOrigin(card);
+    const int right = card.right - cardstyle::kCardPadH;
 
-    // 类型字（已删除处是垃圾桶，不画类型字）。
+    // 文档图标下部的类型字（扩展名大写；已删除处是垃圾桶，不画）
     if (!deleted)
     {
         CString typeUpper = m.fileType;
         typeUpper.MakeUpper();
-        RECT ftRc = { iconX, iconY, iconX + kFileIconSize, iconY + kFileIconSize };
-        DrawGdiText(hdc, (LPCWSTR)typeUpper, ftRc, 10, true, RGB(255, 255, 255),
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        const RECT ftRc = { doc.x, doc.y + kFileDocH - kFileDocTextBottom - kFileDocTextH,
+                            doc.x + kFileDocW, doc.y + kFileDocH - kFileDocTextBottom };
+        DrawGdiText(hdc, (LPCWSTR)typeUpper, ftRc, kFileDocTextPx, true, kFileDocText,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
     }
 
-    // 文件名（已删除：灰 + 删除线）。
-    const COLORREF nameColor = deleted ? RGB(0x9A, 0x97, 0x92) : kFileCardText;
-    RECT fnRc = { textX, bubbleY + kFileNameTop, textR, bubbleY + kFileNameTop + kFileNameH };
-    DrawGdiText(hdc, (LPCWSTR)m.fileName, fnRc, 14, false, nameColor,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
-                false, false, deleted /*strike*/);
+    // 标题：文件名，加粗；服务器上已删除的灰色加删除线
+    const int textLeft = doc.x + kFileDocW + cardstyle::kTileTextGap;
+    const int titleTop = card.top + cardstyle::kCardPadTop + (kFileHeaderH - cardstyle::kTitleLineH - kFileSubtitleRowH) / 2;
+    const RECT nameRc = { textLeft, titleTop, right, titleTop + cardstyle::kTitleLineH };
+    DrawGdiText(hdc, (LPCWSTR)m.fileName, nameRc, cardstyle::kTitlePx, true, deleted ? kFileDeletedName : cardstyle::kTitleColor,
+                kOneLine | DT_END_ELLIPSIS, false, false, deleted /*strike*/);
 
-    // 状态行："{大小} · {状态}"：大小段灰，状态段按态着色；失败 / 删除前带小图标。
-    const int statusY = bubbleY + kFileStatusTop;
-    const int statusB = statusY + kFileStatusH;
-    CString sizePrefix = m.fileSize + _T(" · ");
-    RECT spRc = { textX, statusY, textR, statusB };
-    DrawGdiText(hdc, (LPCWSTR)sizePrefix, spRc, 11, false, RGB(0x8A, 0x8A, 0x8A),
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-    int sx = textX + MeasureTextWidth(hdc, (LPCWSTR)sizePrefix, 11);
-
-    if (st == kFileFailed)
-    {
-        // 警告三角（红底白叹号）。
-        const Gdiplus::REAL tcx = (Gdiplus::REAL)(sx + 6);
-        const Gdiplus::REAL tcy = (Gdiplus::REAL)((statusY + statusB) / 2);
-        Gdiplus::PointF tri[3] = {
-            Gdiplus::PointF(tcx, tcy - 6),
-            Gdiplus::PointF(tcx - 6, tcy + 5),
-            Gdiplus::PointF(tcx + 6, tcy + 5) };
-        Gdiplus::SolidBrush warn(Gdiplus::Color(255, 0xE5, 0x39, 0x35));
-        g.FillPolygon(&warn, tri, 3);
-        Gdiplus::Pen excl(Gdiplus::Color(255, 255, 255, 255), 1.4f);
-        g.DrawLine(&excl, tcx, tcy - 2, tcx, tcy + 1);
-        sx += 16;
-    }
-    else if (gone)
-    {
-        // 信息圆（灰底白 i）。
-        const Gdiplus::REAL icx = (Gdiplus::REAL)(sx + 6);
-        const Gdiplus::REAL icy = (Gdiplus::REAL)((statusY + statusB) / 2);
-        Gdiplus::SolidBrush info(Gdiplus::Color(255, 0x9A, 0x97, 0x92));
-        g.FillEllipse(&info, icx - 6, icy - 6, 12.0f, 12.0f);
-        Gdiplus::Pen ip(Gdiplus::Color(255, 255, 255, 255), 1.4f);
-        g.DrawLine(&ip, icx, icy - 1, icx, icy + 3);
-        Gdiplus::SolidBrush dot(Gdiplus::Color(255, 255, 255, 255));
-        g.FillRectangle(&dot, icx - 0.7f, icy - 4.0f, 1.4f, 1.4f);
-        sx += 16;
-    }
-
-    CString  statusText;
-    COLORREF statusColor = RGB(0x8A, 0x8A, 0x8A);
-    bool     statusBold  = false;
-    if (st == kFileUploading)
-    {
-        statusText.Format(TR(L"传送中 %d%%"), m.fileProgress);
-        statusColor = RGB(0xFF, 0x6A, 0x3D);
-        statusBold  = true;
-    }
-    else if (st == kFileDownloading)
-    {
-        statusText.Format(TR(L"下载中 %d%%"), m.fileProgress);
-    }
-    else if (st == kFileNormal)
-    {
-        statusText  = m.fromMe ? TR(L"传送完成") : TR(L"已完成");
-        statusColor = RGB(0xFF, 0x7A, 0x45);
-        statusBold  = true;
-    }
-    else if (st == kFileFailed)
-    {
-        statusText  = TR(L"传输失败");
-        statusColor = RGB(0xE5, 0x39, 0x35);
-        statusBold  = true;
-    }
-    else if (st == kFileCancelled)
-    {
-        statusText = TR(L"已取消");
-    }
-    else if (st == kFilePendingAccept && m.fileDirectDownload)
-    {
-        //群聊或聊天记录里的文件还没下载：没有接收流程，只说明本地还没有这份文件
-        statusText = TR(L"未下载");
-    }
-    else if (st == kFilePendingAccept)
-    {
-        //还没开始下载，提示用户需要自己决定收不收
-        statusText  = TR(L"等待接收");
-        statusColor = RGB(0xFF, 0x7A, 0x45);
-        statusBold  = true;
-    }
-    else if (st == kFileRejected)
-    {
-        statusText  = TR(L"已拒绝接收");
-        statusColor = RGB(0x9A, 0x97, 0x92);
-    }
-    else   // deleted
-    {
-        statusText  = TR(L"文件已删除，无法下载");
-        statusColor = RGB(0x9A, 0x97, 0x92);
-    }
-
-    // 在线直传特有的状态文字（等待对方接收、作废原因、历史里本机没有文件、接收中），覆盖上面按普通文件算出的文字
-    const wchar_t* directKey = DirectFileStatusKey(st, m.fileDirectEnd, m.fromMe, m.fileDirect);
-    if (directKey != NULL)
-    {
-        if (st == kFileDownloading)
-        {
-            statusText.Format(TR(directKey), m.fileProgress);
-        }
-        else
-        {
-            statusText = TR(directKey);
-        }
-        if (st == kFileDirectWaiting)
-        {
-            statusColor = RGB(0xFF, 0x7A, 0x45);
-            statusBold  = true;
-        }
-        else if (st == kFileDirectToOffline || gone || st == kFileCancelled)
-        {
-            //作废、服务器未保存、发送方已取消发送：都是灰色常规字
-            statusColor = RGB(0x9A, 0x97, 0x92);
-            statusBold  = false;
-        }
-    }
-
-    // 本端发出的文件：只要对方有过动作，状态行就改说对方那边的进展 —— 自己传完了
-    // 不等于对方收了，后者才是发送方真正关心的。覆盖上面按 fileState 算出的文字。
-    if (m.fromMe && m.filePeerState != 0)
-    {
-        if (m.filePeerState == kFilePeerReceiving)
-        {
-            statusText  = TR(L"对方正在接收");
-            statusColor = RGB(0xFF, 0x7A, 0x45);
-            statusBold  = true;
-        }
-        else if (m.filePeerState == kFilePeerReceived)
-        {
-            statusText  = TR(L"对方已接收");
-            statusColor = RGB(0x3B, 0xA5, 0x5D);   // 绿：这条文件已经安全送达
-            statusBold  = true;
-        }
-        else if (m.filePeerState == kFilePeerRejected)
-        {
-            statusText  = TR(L"对方已拒绝接收");
-            statusColor = RGB(0x9A, 0x97, 0x92);
-            statusBold  = false;
-        }
-    }
-
-    RECT stRc = { sx, statusY, textR, statusB };
-    DrawGdiText(hdc, (LPCWSTR)statusText, stRc, 11, statusBold, statusColor,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-
-    // 「P2P」徽章：在线直传的数据经直连链路传输时画在状态文字之后（2026-10-04 起）
+    // 副标题行：大小、状态标签、「P2P」徽章（在线直传经直连链路传输时，2026-10-04 起）
+    const int rowTop = nameRc.bottom;
+    const int rowBottom = rowTop + kFileSubtitleRowH;
+    const RECT sizeRc = { textLeft, rowTop, right, rowBottom };
+    DrawGdiText(hdc, (LPCWSTR)m.fileSize, sizeRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor, kOneLine);
+    int x = textLeft;
+    if (!m.fileSize.IsEmpty())
+        x += MeasureTextWidth(hdc, (LPCWSTR)m.fileSize, cardstyle::kSubtitlePx) + cardstyle::kMetaGap;
+    CString statusText;
+    int statusTone = kCardChipNone;
+    FileCardStatus(m, statusText, statusTone);
+    const int chipRight = cardpaint::PaintCardChip(hdc, g, x, rowTop, rowBottom, statusText, statusTone);
     if (FileCardShowsP2PBadge(st, m.fileDirect, balloonmain::ShouldShowP2PBadge(m.fileLinkPath)))
     {
-        const int statusW = MeasureTextWidth(hdc, (LPCWSTR)statusText, 11, statusBold);
-        chatpaint::DrawP2PBadgeInRow(hdc, sx + statusW + chatpaint::kP2PBadgeGapPx, statusY, statusB, textR);
+        chatpaint::DrawP2PBadgeInRow(hdc, chipRight + chatpaint::kP2PBadgeGapPx, rowTop, rowBottom, right);
     }
 
-    // ---- 底部操作：文字超链接（无按钮底 / 边框）。按各自文字宽度从左到右排布，
-    //      整行高度作点击矩形（便于点击），写进 links。----
-    links = FileCardLinks();
-    int acts[kMaxChatFileActions];
-    links.m_count = FileButtonActions(st, FileCardSkipsReject(m), acts);
-    if (links.m_count <= 0)
+    // 进度条下方一行：左边「已传 / 总大小」，右边百分比
+    if (FileCardShowsProgress(st, m.fileDirect))
     {
-        links.m_count = 0;
-        return;
-    }
-    const int kLinkPx  = 13;   // 超链接文字字号
-    const int kLinkGap = 18;   // 相邻超链接水平间距
-    const int rowTop    = bubbleY + kFileHeaderH
-                        + (FileCardShowsProgress(st, m.fileDirect) ? kFileProgressH : 0)
-                        + kFileBtnTopGap;
-    const int rowBottom = rowTop + kFileBtnH;
-    int linkX = bubbleX + kFilePadH;
-    for (int bi = 0; bi < links.m_count; ++bi)
-    {
-        const int     act      = acts[bi];
-        const CString label    = FileCardLinkLabel(m, act);
-        COLORREF      lblColor = RGB(0xFF, 0x7A, 0x45);   // 默认主题橙（可点链接）
-        switch (act)
+        const RECT bar = FileProgressRect(card);
+        const int lineTop = bar.bottom + cardstyle::kProgressTextGap;
+        const int pct = FilePercent(m);
+        CString pctText;
+        pctText.Format(L"%d", pct);
+        pctText += kPercentSuffix;
+        const RECT pctRc = { bar.left, lineTop, bar.right, lineTop + cardstyle::kProgressTextLineH };
+        DrawGdiText(hdc, (LPCWSTR)pctText, pctRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor,
+                    DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (m.fileSizeBytes > 0)
         {
-        //取消与拒绝是次要动作，用灰色链接
-        case kChatFileCancel:
-        case kChatFileReject:
-            lblColor = RGB(0x8A, 0x8A, 0x8A);
-            break;
-        //失败、已取消、已拒绝后的重试：失败态用红，其余用主题橙
-        case kChatFileRetry:
-            lblColor = (st == kFileFailed) ? RGB(0xE5, 0x39, 0x35) : RGB(0xFF, 0x7A, 0x45);
-            break;
-        //其余动作（打开、打开所在文件夹、另存为、接收 / 下载、发送离线文件）都用主题橙
-        default:
-            break;
+            CString bytesText = FormatFileSize(m.fileSizeBytes * pct / kFullPercent).c_str();
+            bytesText += kSizeSeparator;
+            bytesText += FormatFileSize(m.fileSizeBytes).c_str();
+            RECT bytesRc = pctRc;
+            bytesRc.right -= MeasureTextWidth(hdc, (LPCWSTR)pctText, cardstyle::kSubtitlePx) + cardstyle::kMetaGap;
+            DrawGdiText(hdc, (LPCWSTR)bytesText, bytesRc, cardstyle::kSubtitlePx, false, cardstyle::kSubtitleColor,
+                        kOneLine | DT_END_ELLIPSIS);
         }
-        const int linkW = MeasureTextWidth(hdc, (LPCWSTR)label, kLinkPx);
-        RECT linkRc = { linkX, rowTop, linkX + linkW, rowBottom };
-        // 悬停的链接：颜色加深（×4/5）+ 加下划线，作悬停反馈。
-        const bool hover = (bi == hoverIdx);
-        const COLORREF drawColor = hover
-            ? RGB(GetRValue(lblColor) * 4 / 5, GetGValue(lblColor) * 4 / 5,
-                  GetBValue(lblColor) * 4 / 5)
-            : lblColor;
-        //文字垂直居中于按钮行；点击矩形取满行高，整列可点。
-        DrawGdiText(hdc, (LPCWSTR)label, linkRc, kLinkPx, false, drawColor,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
-                    false /*italic*/, hover /*underline*/, false /*strike*/);
-        links.m_rect[bi]   = linkRc;
-        links.m_action[bi] = act;
-        linkX += linkW + kLinkGap;
+    }
+
+    // 底部一行：左边类型标签「文件」，右边按钮；按钮的矩形与动作写进 links 供点击判断与悬停反馈
+    links = FileCardLinks();
+    const std::vector<ChatCardButton> buttons = ChatCardButtonsOf(m);
+    const RECT footer = { card.left, card.bottom - cardstyle::kFooterH, card.right, card.bottom };
+    const cardpaint::CardFooterLayout lay =
+        cardpaint::PaintCardFooter(hdc, g, footer, ChatCardTypeStyleOf(m), ChatCardTypeLabel(m), buttons, hoverIdx);
+    for (size_t i = 0; i < buttons.size() && i < lay.m_buttonRects.size() && links.m_count < kMaxChatFileActions; ++i)
+    {
+        links.m_rect[links.m_count] = lay.m_buttonRects[i];
+        links.m_action[links.m_count] = buttons[i].m_action;
+        ++links.m_count;
     }
 }
 

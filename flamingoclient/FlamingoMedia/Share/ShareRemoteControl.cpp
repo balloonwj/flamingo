@@ -15,8 +15,6 @@
 
 namespace screenshare {
 
-const int ShareLocalActivityDetector::kShareLocalMoveThresholdPx;
-
 namespace {
 
 //载荷里各字段的偏移：控制类型、目标座位、输入命令
@@ -224,9 +222,12 @@ const uint32_t ShareViewerInputTranslator::kShareMoveIntervalMs;
 ShareViewerInputTranslator::ShareViewerInputTranslator()
     : m_hasMove(false)
     , m_lastMoveMs(0)
+    , m_hasPendingMove(false)
 {
     m_lastMovePt.x = 0;
     m_lastMovePt.y = 0;
+    m_pendingMovePt.x = 0;
+    m_pendingMovePt.y = 0;
 }
 
 bool ShareViewerInputTranslator::Translate(UINT msg, WPARAM wParam, POINT clientPt, const RECT& video,
@@ -242,86 +243,19 @@ bool ShareViewerInputTranslator::Translate(UINT msg, WPARAM wParam, POINT client
         out = ShareInputEvent::Key(msg, static_cast<uint32_t>(wParam));
         return true;
 
-    //鼠标移动：画面内、位置变了、距上次发送超过间隔才发
+    //鼠标的移动、滚轮、按下（含双击）与松开：要不要发由与远程桌面共用的按钮记录决定（2026-10-14 起）
     case WM_MOUSEMOVE:
-        {
-            int nx = 0;
-            int ny = 0;
-            if (!ShareRemoteInput::ViewToNormalized(video, clientPt, nx, ny))
-                return false;
-            if (m_hasMove && (nowMs - m_lastMoveMs < kShareMoveIntervalMs ||
-                              (clientPt.x == m_lastMovePt.x && clientPt.y == m_lastMovePt.y)))
-                return false;
-            m_hasMove = true;
-            m_lastMovePt = clientPt;
-            m_lastMoveMs = nowMs;
-            out = ShareInputEvent::Mouse(WM_MOUSEMOVE, nx, ny, 0);
-            return true;
-        }
-
-    //滚轮：画面内才发，不限频
     case WM_MOUSEWHEEL:
-        {
-            int nx = 0;
-            int ny = 0;
-            if (!ShareRemoteInput::ViewToNormalized(video, clientPt, nx, ny))
-                return false;
-            out = ShareInputEvent::Mouse(WM_MOUSEWHEEL, nx, ny, GET_WHEEL_DELTA_WPARAM(wParam));
-            return true;
-        }
-
-    //按钮按下（双击当作按下，由画面主人那边的系统按点击间隔自己合成双击）：画面内才发，记下待松开的按钮
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
     case WM_RBUTTONDOWN:
     case WM_RBUTTONDBLCLK:
     case WM_MBUTTONDOWN:
     case WM_MBUTTONDBLCLK:
-        {
-            int nx = 0;
-            int ny = 0;
-            if (!ShareRemoteInput::ViewToNormalized(video, clientPt, nx, ny))
-                return false;
-            uint32_t down = WM_LBUTTONDOWN;
-            uint32_t up = WM_LBUTTONUP;
-            if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK)
-            {
-                down = WM_RBUTTONDOWN;
-                up = WM_RBUTTONUP;
-            }
-            else if (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK)
-            {
-                down = WM_MBUTTONDOWN;
-                up = WM_MBUTTONUP;
-            }
-            if (std::find(m_pressed.begin(), m_pressed.end(), up) == m_pressed.end())
-                m_pressed.push_back(up);
-            out = ShareInputEvent::Mouse(down, nx, ny, 0);
-            return true;
-        }
-
-    //按钮松开：只发发过按下的；画面外松开时坐标夹到画面边缘
     case WM_LBUTTONUP:
     case WM_RBUTTONUP:
     case WM_MBUTTONUP:
-        {
-            std::vector<uint32_t>::iterator it = std::find(m_pressed.begin(), m_pressed.end(), static_cast<uint32_t>(msg));
-            if (it == m_pressed.end())
-                return false;
-            m_pressed.erase(it);
-            const int w = video.right - video.left;
-            const int h = video.bottom - video.top;
-            if (w <= 0 || h <= 0)
-                return false;
-            POINT inside;
-            inside.x = clampInt(clientPt.x, video.left, video.right - 1);
-            inside.y = clampInt(clientPt.y, video.top, video.bottom - 1);
-            int nx = 0;
-            int ny = 0;
-            ShareRemoteInput::ViewToNormalized(video, inside, nx, ny);
-            out = ShareInputEvent::Mouse(msg, nx, ny, 0);
-            return true;
-        }
+        return translateMouse(msg, wParam, clientPt, video, nowMs, out);
 
     //其余消息（字符、绘制等）：不发送
     default:
@@ -329,16 +263,99 @@ bool ShareViewerInputTranslator::Translate(UINT msg, WPARAM wParam, POINT client
     }
 }
 
+bool ShareViewerInputTranslator::translateMouse(UINT msg, WPARAM wParam, POINT clientPt, const RECT& video,
+                                                uint32_t nowMs, ShareInputEvent& out)
+{
+    if (video.right <= video.left || video.bottom <= video.top)
+        return false;
+    //画面外按下不发、按住时拖出画面照发、记过的按钮在哪里松开都发、滚轮只在画面内发（规则见 ViewerMouseButtons.h）
+    const bool inside = (::PtInRect(&video, clientPt) != FALSE);
+    if (!m_buttons.Decide(msg, inside))
+        return false;
+    //画面外的消息坐标夹到画面边缘，再换成归一化坐标
+    POINT pt;
+    pt.x = clampInt(clientPt.x, video.left, video.right - 1);
+    pt.y = clampInt(clientPt.y, video.top, video.bottom - 1);
+    int nx = 0;
+    int ny = 0;
+    ShareRemoteInput::ViewToNormalized(video, pt, nx, ny);
+
+    //鼠标移动：位置变了、距上次发送超过间隔才发
+    if (msg == WM_MOUSEMOVE)
+    {
+        //回到上次发出的位置：不发，被挡下的移动也作废（对方的指针本来就停在这里）
+        if (m_hasMove && clientPt.x == m_lastMovePt.x && clientPt.y == m_lastMovePt.y)
+        {
+            m_hasPendingMove = false;
+            return false;
+        }
+        const ShareInputEvent move = ShareInputEvent::Mouse(WM_MOUSEMOVE, nx, ny, 0);
+        //不足间隔：记为待补发，到间隔后由 TakePendingMove 取出（2026-10-17 之前直接丢弃，鼠标停下时对方的指针
+        //停在离最终位置差一点的地方，要等下一次移动或点击才对上）
+        if (m_hasMove && nowMs - m_lastMoveMs < kShareMoveIntervalMs)
+        {
+            m_pendingMove = move;
+            m_pendingMovePt = clientPt;
+            m_hasPendingMove = true;
+            return false;
+        }
+        m_hasMove = true;
+        m_lastMovePt = clientPt;
+        m_lastMoveMs = nowMs;
+        m_hasPendingMove = false;
+        out = move;
+        return true;
+    }
+    //滚轮、按下与松开都带着自己的坐标：被挡下的移动作废，不能在它们之后把指针拉回更早的位置
+    m_hasPendingMove = false;
+    //滚轮：带增量，不限频
+    if (msg == WM_MOUSEWHEEL)
+    {
+        out = ShareInputEvent::Mouse(WM_MOUSEWHEEL, nx, ny, GET_WHEEL_DELTA_WPARAM(wParam));
+        return true;
+    }
+    //按下（双击当作按下，由画面主人那边的系统按点击间隔自己合成双击）
+    const int down = ViewerButtonOfDown(msg);
+    if (down == kViewerButtonRight)
+        out = ShareInputEvent::Mouse(WM_RBUTTONDOWN, nx, ny, 0);
+    else if (down == kViewerButtonMiddle)
+        out = ShareInputEvent::Mouse(WM_MBUTTONDOWN, nx, ny, 0);
+    else if (down == kViewerButtonLeft)
+        out = ShareInputEvent::Mouse(WM_LBUTTONDOWN, nx, ny, 0);
+    //松开：原样发送
+    else
+        out = ShareInputEvent::Mouse(msg, nx, ny, 0);
+    return true;
+}
+
 std::vector<uint32_t> ShareViewerInputTranslator::PendingButtonUps() const
 {
-    return m_pressed;
+    return m_buttons.PendingButtonUps();
+}
+
+bool ShareViewerInputTranslator::TakePendingMove(uint32_t nowMs, ShareInputEvent& out)
+{
+    if (!m_hasPendingMove || nowMs - m_lastMoveMs < kShareMoveIntervalMs)
+        return false;
+    out = m_pendingMove;
+    //视同这一刻发出了移动：限频从这一刻重新计时，补发的位置成为「上次发出的位置」
+    m_hasPendingMove = false;
+    m_lastMovePt = m_pendingMovePt;
+    m_lastMoveMs = nowMs;
+    return true;
+}
+
+bool ShareViewerInputTranslator::HasPendingMove() const
+{
+    return m_hasPendingMove;
 }
 
 void ShareViewerInputTranslator::Reset()
 {
     m_hasMove = false;
     m_lastMoveMs = 0;
-    m_pressed.clear();
+    m_hasPendingMove = false;
+    m_buttons.Reset();
 }
 
 bool ShareViewerInputTranslator::IsControlMessage(UINT msg)
@@ -429,70 +446,6 @@ int DecideShareInput(const ShareInputEvent& ev, int senderSeat, int controllerSe
     if (windowShare && !windowForeground)
         return share_input_not_foreground;
     return filter.Allow(ev.m_message, ev.m_vkey) ? share_input_inject : share_input_system_key;
-}
-
-ShareLocalActivityDetector::ShareLocalActivityDetector()
-    : m_hasInjected(false)
-    , m_triggered(false)
-    , m_hasLast(false)
-    , m_movedPx(0)
-{
-    m_injectedPt.x = 0;
-    m_injectedPt.y = 0;
-    m_last.x = 0;
-    m_last.y = 0;
-}
-
-void ShareLocalActivityDetector::NoteInjectedPosition(POINT pt)
-{
-    m_injectedPt = pt;
-    m_hasInjected = true;
-}
-
-bool ShareLocalActivityDetector::OnMouseMove(POINT pt, bool injected)
-{
-    if (m_triggered || injected)
-        return m_triggered;
-    //落在注入时挪到的位置上：按注入处理，并从这里起算之后的本机位移
-    if (m_hasInjected && pt.x == m_injectedPt.x && pt.y == m_injectedPt.y)
-    {
-        m_last = pt;
-        m_hasLast = true;
-        return false;
-    }
-    if (!m_hasLast)
-    {
-        m_last = pt;
-        m_hasLast = true;
-        return false;
-    }
-    m_movedPx += abs(pt.x - m_last.x) + abs(pt.y - m_last.y);
-    m_last = pt;
-    if (m_movedPx > kShareLocalMoveThresholdPx)
-        m_triggered = true;
-    return m_triggered;
-}
-
-bool ShareLocalActivityDetector::OnMouseButton(bool injected)
-{
-    if (!injected)
-        m_triggered = true;
-    return m_triggered;
-}
-
-bool ShareLocalActivityDetector::OnKey(bool injected)
-{
-    if (!injected)
-        m_triggered = true;
-    return m_triggered;
-}
-
-void ShareLocalActivityDetector::Reset()
-{
-    m_hasInjected = false;
-    m_triggered = false;
-    m_hasLast = false;
-    m_movedPx = 0;
 }
 
 } // namespace screenshare

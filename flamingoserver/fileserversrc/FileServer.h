@@ -38,7 +38,8 @@ public:
      *  @param relayTokenKey 单聊文件夹传输中转令牌的 HMAC 校验密钥（fileserver.conf 的
      *                       relaytokenkey，须与 chatserver.conf 的同名项一致）。传 NULL 或
      *                       空串表示本服务<u>不承载</u>文件夹中转，届时 cmd_folder_relay_hello
-     *                       一律被拒并记日志——imgserver 复用本类，正是走这条
+     *                       一律被拒。imgserver 复用本类时按设计固定传空串；fileserver 传空串
+     *                       说明配置缺了这一项。本函数不区分这两种情况，日志由各自的 main.cpp 记录
      *  @param ioThreadCount 网络 I/O 工作线程数，单位：条线程，取值范围见
      *                       serverconfig::MIN_IO_THREAD_COUNT / MAX_IO_THREAD_COUNT。
      *                       调用方须先用 serverconfig::ReadIoThreadCountConfig 把配置里

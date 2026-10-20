@@ -173,7 +173,8 @@ bool CGroupAtDropdown::EnsureCreated()
 
     // 顶层无边框浮窗：WS_POPUP；WS_EX_TOOLWINDOW 不进任务栏；WS_EX_NOACTIVATE
     // 点击不抢激活（关键 —— 否则一点浮层，输入框就失焦、插入位置就丢了）。
-    // owner 传 NULL：让 DuiHost::SendNotify 的 GetParent 为空、通知自路由回本窗口。
+    // owner 传 NULL（原为让 DuiHost::SendNotify 取到的 GetParent 为空、控件通知发回本窗口；
+    // 2026-10-14 起有无所有者，控件通知都发回本窗口，见开发约定文档 UI 约定第 11 条）。
     HWND hWnd = ::CreateWindowEx(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kAtDropdownClassName, NULL,

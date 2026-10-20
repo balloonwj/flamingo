@@ -140,11 +140,11 @@ CShareController::CShareController()
     , m_p2pBroker(kShareP2PPurpose)
     , m_controllerId(0)
     , m_revokingId(0)
-    , m_mouseHook(NULL)
-    , m_keyHook(NULL)
-    , m_localActivityPosted(false)
     , m_injectedCount(0)
     , m_droppedCount(0)
+    , m_inputQueueTotalUs(0)
+    , m_inputQueueMaxUs(0)
+    , m_inputQueueFrames(0)
     , m_viewerControl(share_viewer_control_none)
     , m_annotCursor(NULL)
     , m_annotCursorTool(0)
@@ -829,6 +829,14 @@ void CShareController::SetMouseEffects(const ShareMouseEffectSettings& settings)
     m_bar.SetMouseEffects(settings);
 }
 
+void CShareController::SetQuality(int quality)
+{
+    //推流器记住档位、跨推流保持：两条管线不论是否正在推流都设上，下一次开始推流时直接生效
+    m_streamer.SetQuality(quality);
+    m_publisher.SetQuality(quality);
+    LOG_INFO("screenshare: quality set to %d.", quality);
+}
+
 void CShareController::OnScreenLockChanged(bool locked)
 {
     if (locked)
@@ -920,8 +928,12 @@ void CShareController::onStartResult(const std::string& json)
     }
     m_hostRoomId = r.m_roomId;
     m_hostPhase = host_waiting;
-    //结束提示的名单从这里开始记录
+    //结束提示的名单从这里开始记录。服务端发起成功时不给发起人推 1721 与 1725，没人加入的共享一条推送都收不到：
+    //本人在这里记为发起人，本人填的标题与描述也在这里记进房间信息，否则结束提示的分享人一行为空、也不写标题
+    //（2026-10-15 实机检查发现，用例 [shareended] SSET7、SSET8）。之后收到的 1725 与修改标题的结果照常覆盖房间信息
     m_participantLog.Reset(m_hostRoomId, inCallShare());
+    m_participantLog.SetInitiator(m_host->GetSelfUserId());
+    m_roomInfo.Remember(m_hostRoomId, m_hostTitle, m_hostDesc);
     LOG_INFO("screenshare: started, room=%s, waiting for relay info.", m_hostRoomId.c_str());
     reportStatus(m_hostCtype, m_hostCid, m_hostRoomId, m_host->GetSelfUserId(), std::wstring(), true,
                  !m_hostPassword.empty(), m_hostForced, m_hostTitle);
@@ -1227,6 +1239,18 @@ void CShareController::setBarCapture(bool allowed)
         ApplyBarCaptureState(m_sharerBar.m_hWnd);
     if (m_annotBar.IsWindow() && (m_annotBar.IsHostMode() || m_annotOwnScreen))
         ApplyBarCaptureState(m_annotBar.m_hWnd);
+    //看画面的窗口也跟随这个开关（2026-10-12）
+    applyViewCaptureState();
+}
+
+void CShareController::applyViewCaptureState()
+{
+    const bool allowed = IsBarCaptureAllowed();
+    //观看窗：本人经共享者推流管线共享自己的屏幕时（原主持人没有观看窗）
+    m_viewer.SetCaptureExcluded(ShouldExcludeShareView(m_publishPhase == share_publish_streaming, allowed));
+    //「共享画面」窗口：原主持人推流中、且没有停掉自己的画面时
+    m_screensWindow.SetCaptureExcluded(
+        ShouldExcludeShareView(m_hostPhase == host_streaming && !m_hostScreenStopped, allowed));
 }
 
 void CShareController::onHostMenu(int item)
@@ -1571,7 +1595,7 @@ LRESULT CShareController::OnBarCommandMsg(UINT uMsg, WPARAM wParam, LPARAM lPara
     {
     //收回控制（第 18 期）：控制条上的「收回控制」，有人在控制时才出现
     case CShareControlBar::kCmdRevokeControl:
-        revokeControlNow(false);
+        revokeControlNow();
         break;
     //结束共享：还有别人在共享时先问移交还是结束（第 22 期第 30 条），没有时直接结束、本地立即收尾
     case CShareControlBar::kCmdStop:
@@ -1591,9 +1615,9 @@ LRESULT CShareController::OnBarCommandMsg(UINT uMsg, WPARAM wParam, LPARAM lPara
         if (m_hostScreenStopped)
             sendSharing(share_sharing_request, 0);
         break;
-    //「更多」菜单的「其他人的屏幕」：重新打开看其他共享者画面的窗口
+    //「更多」菜单的「共享画面」（2026-10-12 前叫「其他人的屏幕」）：有别人在共享时重新打开看全部画面的窗口
     case CShareControlBar::kCmdOtherScreens:
-        if (!m_screens.empty())
+        if (m_host != NULL && CountOtherScreens(m_screens, m_host->GetSelfUserId()) > 0)
         {
             m_screensWindow.Open(mainWindow(), &m_streamer, m_hWnd);
             m_screensWindow.SetControlInput(this);
@@ -1895,10 +1919,12 @@ LRESULT CShareController::OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL&
             annotationChanged();
         return 0;
     }
-    //共享者的边框跟随被共享的窗口（第 22 期）
+    //共享者的边框、标注层跟随被共享的内容（第 22 期）
     if (wParam == kPublishFollowTimerId)
     {
-        followPublishedSource();
+        if (m_publishPhase == share_publish_streaming)
+            followStreamSource(m_publisher, m_publishSource, m_publishBorder, m_publishOverlay, false,
+                               m_annotMode && m_annotOwnScreen, "screenshare multi");
         return 0;
     }
     //本人的白板广播视野（第 23 期）
@@ -1924,24 +1950,50 @@ LRESULT CShareController::OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL&
         bHandled = FALSE;
         return 0;
     }
-    //边框跟随被共享的窗口：移动、缩放时重画，最小化时隐藏
-    if (m_hostPhase == host_streaming && m_hostSource.m_kind == share_source_window)
-    {
-        const HWND hwnd = m_hostSource.m_hwnd;
-        const bool hidden = !::IsWindow(hwnd) || ::IsIconic(hwnd) || m_hostPaused || m_hostScreenStopped;
-        m_border.Follow(hidden ? RECT() : GetShareWindowBounds(hwnd), hidden);
-        //标注层与工具条跟着被共享的窗口移动、缩放
-        const RECT bounds = hidden ? RECT() : GetShareWindowBounds(hwnd);
-        const RECT& old = m_annotOverlay.Rect();
-        if (hidden || !::EqualRect(&bounds, &old))
-        {
-            m_annotOverlay.Place(hidden ? old : bounds, !hidden);
-            //工具条按当前的锚点挪：在本人的白板上标注时锚在白板上，不跟着共享的窗口走
-            if (m_annotMode && !hidden)
-                m_annotBar.MoveTo(annotAnchorRect());
-        }
-    }
+    //发起人的边框、标注层跟随共享的内容；暂停或停止共享屏幕时不显示边框
+    if (m_hostPhase == host_streaming)
+        followStreamSource(m_streamer, m_hostSource, m_border, m_annotOverlay, m_hostPaused || m_hostScreenStopped,
+                           m_annotMode, "screenshare");
     return 0;
+}
+
+void CShareController::followStreamSource(const ShareHostStreamer& streamer, ShareSourceSpec& source,
+                                          CShareBorderWindow& border, CShareAnnotationOverlay& overlay, bool suppressed,
+                                          bool moveAnnotBar, const char* logTag)
+{
+    //共享整块显示器时显示器矩形可能变了（分辨率变化后采集器重建，2026-10-12）：边框、标注层、控制坐标跟着换
+    if (source.m_kind == share_source_monitor)
+    {
+        const RECT now = streamer.CurrentSourceRect();
+        if (::IsRectEmpty(&now) || ::EqualRect(&now, &source.m_monitorRect))
+            return;
+        LOG_INFO("%s: shared monitor rect changed to (%ld,%ld)-(%ld,%ld).", logTag, now.left, now.top, now.right,
+                 now.bottom);
+        source.m_monitorRect = now;
+        if (!suppressed)
+            border.Show(now, true);
+        overlay.Place(now, true);
+        //工具条按当前的锚点挪（锚点由 source 算出，须在更新矩形之后取）
+        if (moveAnnotBar)
+            m_annotBar.MoveTo(annotAnchorRect());
+        return;
+    }
+    if (source.m_kind != share_source_window)
+        return;
+    //边框跟随被共享的窗口：移动、缩放时重画，最小化、已关闭或共享暂停时隐藏
+    const HWND hwnd = source.m_hwnd;
+    const bool hidden = !::IsWindow(hwnd) || ::IsIconic(hwnd) || suppressed;
+    const RECT bounds = hidden ? RECT() : GetShareWindowBounds(hwnd);
+    border.Follow(bounds, hidden);
+    //标注层与工具条跟着被共享的窗口移动、缩放
+    const RECT& old = overlay.Rect();
+    if (hidden || !::EqualRect(&bounds, &old))
+    {
+        overlay.Place(hidden ? old : bounds, !hidden);
+        //工具条按当前的锚点挪：在本人的白板上标注时锚在白板上，不跟着共享的窗口走
+        if (moveAnnotBar && !hidden)
+            m_annotBar.MoveTo(annotAnchorRect());
+    }
 }
 
 //==================== 内部 ====================
@@ -2335,7 +2387,7 @@ LRESULT CShareController::OnViewerListCommandMsg(UINT uMsg, WPARAM wParam, LPARA
         if (it == m_seatUsers.end())
             break;
         if (it->second == m_controllerId)
-            revokeControlNow(false);
+            revokeControlNow();
         else
             sendControl(share_control_grant, m_host->GetSelfUserId(), it->second);
         //他还在排队等答复：从队列里去掉，免得授予之后再弹一次
@@ -2533,11 +2585,12 @@ void CShareController::showError(const wchar_t* text)
     ::MessageBoxW(mainWindow(), text, TR(kCaption), MB_OK | MB_ICONINFORMATION);
 }
 
-void CShareController::openPicker(bool switchMode, const std::wstring& hint)
+void CShareController::openPicker(bool switchMode, const std::wstring& hint, bool startsShare)
 {
     int mode = share_picker_start;
+    //切换模式：本人已在共享时换内容；多人共享里经主持人同意、还没开始共享时界面相同，但按钮为「开始共享」
     if (switchMode)
-        mode = share_picker_switch;
+        mode = startsShare ? share_picker_switch_to_start : share_picker_switch;
     else if (inCallShare())
         mode = share_picker_start_in_call;
     //为我的发言生成字幕（2026-10-07）：发起共享时字幕可用的话在选择窗里提供，默认值为上次的选择（字幕模块记住的偏好）

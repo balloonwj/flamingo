@@ -16,8 +16,10 @@
  *    CAPTL4 —— 时间轴缩放、滚动范围与刻度间隔；
  *    CAPTL5 —— 时间轴横向滚动条：内容超过一屏时的最大位置、页大小、当前位置；滚动条位置换回时刻并夹在合法范围内；
  *              内容放得下时不显示；
- *    CAPED9 —— 有所有者的三个弹窗（导出、替换表、表单）建窗时不用 WS_POPUP：balloonui 按 GetParent 决定控件通知发给谁，
- *              有所有者的 WS_POPUP 窗口的通知会发到编辑器，按钮全部失灵（2026-10-06 导出窗口点不动、关不掉）。按源码检查。
+ *    CAPED9 —— 有所有者的三个弹窗（导出、替换表、表单）建窗时用 WS_OVERLAPPEDWINDOW、不用 WS_POPUP。按源码检查。
+ *              2026-10-14 之前这样做是为了让控件通知回到弹窗：当时 balloonui 按 GetParent 决定通知目标，有所有者的
+ *              WS_POPUP 窗口的通知会发到编辑器，按钮全部失灵（2026-10-06 导出窗口点不动、关不掉）。现在两种样式的通知
+ *              都回到弹窗（开发约定文档 UI 约定第 11 条），本用例只固定现有样式。
  *
  *  CAPED2 在 E:\flamingo\tmp（取不到时用系统临时目录）下建临时文件，用完删除。
  *
@@ -414,7 +416,7 @@ std::string Caped9ReadSource(const char* relative)
 
 } // namespace
 
-TEST_CASE("CAPED9 有所有者的弹窗建窗时不用 WS_POPUP（否则按钮通知发到编辑器、全部失灵）", "[captioneditor]")
+TEST_CASE("CAPED9 有所有者的弹窗建窗时用 WS_OVERLAPPEDWINDOW、不用 WS_POPUP（固定现有样式）", "[captioneditor]")
 {
     const char* const files[] = { "CaptionExportDialog.cpp", "CaptionReplaceDialog.cpp", "CaptionFormDialog.cpp" };
     for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); ++i)
@@ -422,7 +424,8 @@ TEST_CASE("CAPED9 有所有者的弹窗建窗时不用 WS_POPUP（否则按钮�
         INFO(files[i]);
         const std::string src = Caped9ReadSource(files[i]);
         REQUIRE_FALSE(src.empty());
-        //逐行找建窗语句「Create(owner, ...」，它不能带 WS_POPUP
+        //逐行找建窗语句「Create(owner, ...」，检查它仍是现有样式：带 WS_OVERLAPPEDWINDOW、不带 WS_POPUP
+        //（2026-10-14 起两种样式的控件通知都回到弹窗，本检查已与通知路由无关，见文件头 CAPED9 的说明）
         std::istringstream lines(src);
         std::string line;
         int creates = 0;

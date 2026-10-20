@@ -171,14 +171,24 @@ ChatMessage MakePinnedText(bool fromMe, long long msgid)
     return m;
 }
 
-// 取列表里第 idx 行气泡。
+// 取列表里第 idx 条真实消息的气泡（断言存在）。时间分隔行等 kMsgTime 行不计数：本人回显前面也会插时间行
+// （docs/聊天消息时间显示方案.md 第 7 节，2026-10-14），按子控件下标取会取到时间行。
 ChatBubble* BubbleAt(ChatMessageList& list, size_t idx)
 {
     const std::vector<std::unique_ptr<DuiControl> >& kids = list.Children();
-    REQUIRE(idx < kids.size());
-    ChatBubble* b = dynamic_cast<ChatBubble*>(kids[idx].get());
-    REQUIRE(b != NULL);
-    return b;
+    size_t seen = 0;
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        REQUIRE(b != NULL);
+        if (b->GetMessage().kind == kMsgTime)
+            continue;
+        if (seen == idx)
+            return b;
+        ++seen;
+    }
+    FAIL("no real message at index " << idx);
+    return NULL;
 }
 
 // 把列表画到白底离屏位图上，求出图钉颜色像素的外接矩形。

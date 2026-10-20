@@ -16,6 +16,8 @@
  *    - SPW7 发起共享时字幕可用：按钮一行多「为我的发言生成字幕」（2026-10-07），默认勾选与 SetCaptionOptions 给的一致，
  *      放得下文字、在窗口内、与密码、取消、开始共享互不重叠；通话中发起时同样提供；不提供时没有；切换内容时没有；
  *    - SPW8 窗口开着时换了用途：标题与最小尺寸按新用途重设（2026-10-07 修正：原先只在新建窗口时设置）。
+ *    - SPW9 切换模式的确认按钮（2026-10-13）：本人已在共享时为「切换」；多人共享里经主持人同意后第一次选择时为「开始共享」，
+ *      仍不显示发起共享才有的选项。
  *  缩略图只在内存里，不写盘。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-10-05
@@ -397,5 +399,26 @@ TEST_CASE("SPW8 an open picker adopts the title and minimum size of a new mode",
     wchar_t title[kSpwTitleChars] = { 0 };
     ::GetWindowTextW(dlg.m_hWnd, title, kSpwTitleChars);
     CHECK(std::wstring(title) == std::wstring(TR(L"选择要录制的内容")));
+    dlg.CloseDialog();
+}
+
+TEST_CASE("SPW9 the confirm button says start when an approved sharer picks for the first time", "[.][sharepicker-wnd]")
+{
+    CSharePickerDialog dlg;
+    //共享过程中切换内容：「切换」
+    dlg.Open(NULL, NULL, share_picker_switch, std::wstring());
+    REQUIRE(dlg.IsWindow());
+    balloonwjui::DuiButton* ok =
+        dynamic_cast<balloonwjui::DuiButton*>(dlg.GetClientContent()->FindCtrlById(CSharePickerDialog::kCtrlOk));
+    REQUIRE(ok != NULL);
+    CHECK(std::wstring(ok->GetText().GetString()) == std::wstring(TR(L"切换")));
+    dlg.CloseDialog();
+    //多人共享里经主持人同意后第一次选择（share_picker_switch_to_start）：界面同切换内容（没有标题与选项），按钮为「开始共享」
+    dlg.Open(NULL, NULL, share_picker_switch_to_start, std::wstring(L"approved"));
+    REQUIRE(dlg.IsWindow());
+    ok = dynamic_cast<balloonwjui::DuiButton*>(dlg.GetClientContent()->FindCtrlById(CSharePickerDialog::kCtrlOk));
+    REQUIRE(ok != NULL);
+    CHECK(std::wstring(ok->GetText().GetString()) == std::wstring(TR(L"开始共享")));
+    CHECK(dlg.GetClientContent()->FindCtrlById(CSharePickerDialog::kCtrlPasswordCheck) == NULL);
     dlg.CloseDialog();
 }

@@ -31,6 +31,22 @@
 
 namespace screenshare {
 
+//Win7 自带 H.264 解码器能解的最大画面（宽、高，单位像素；据推测，来自微软对系统编解码器的说明，没有 Win7 实机核对）
+const int kShareLegacyDecodeMaxW = 1920;
+const int kShareLegacyDecodeMaxH = 1088;
+//连续收到这么多个关键帧仍一帧也没解出时，才判为超出本机解码能力（第一个关键帧可能只是刚开始解码）
+const int kShareUndecodableKeyframes = 2;
+
+/**
+ *  「这一路画面解不出来，是因为分辨率超出本机系统的解码能力」的判定（2026-10-15，docs/远程桌面H264与共享画质提升方案.md
+ *  4.2「Win7 观看者」，Q6 取乙）：画面宽或高超过 kShareLegacyDecodeMaxW × kShareLegacyDecodeMaxH，且自上次解出画面以来已经收到
+ *  kShareUndecodableKeyframes 个关键帧。不超过这个尺寸的画面解不出来是别的原因，不归到分辨率上。
+ *  @param frameW / frameH          画面的编码宽高（载荷里带的），单位像素
+ *  @param keyframesWithoutOutput   自上次解出画面以来收到的关键帧个数
+ *  @return 判为超出本机解码能力返回 true
+ */
+bool ShareLooksUndecodable(int frameW, int frameH, int keyframesWithoutOutput);
+
 //解出了某一路的新一帧（接收线程上调用）
 class ShareScreenDecodersListener
 {
@@ -44,6 +60,17 @@ public:
      *  @param seat 发送者座位（画面座位）
      */
     virtual void OnScreenDecoded(int seat) = 0;
+
+    /**
+     *  某个座位的画面「超出本机解码能力」的判定变了（2026-10-15，接收线程上调用；默认什么都不做）。
+     *  @param seat        发送者座位
+     *  @param undecodable true：判为超出本机解码能力（见 ShareLooksUndecodable）；false：又解出了画面，判定清除
+     */
+    virtual void OnScreenUndecodable(int seat, bool undecodable)
+    {
+        (void)seat;
+        (void)undecodable;
+    }
 };
 
 //多路屏幕画面的解码
@@ -94,6 +121,12 @@ public:
 
     //累计解出的帧数（各路合计，日志与测试用）
     uint64_t DecodedCount() const;
+
+    //某个座位的画面是否判为超出本机解码能力（见 ShareLooksUndecodable）；任意线程
+    bool IsUndecodable(int seat) const;
+
+    //是否有任何一路判为超出本机解码能力；任意线程
+    bool AnyUndecodable() const;
 
 private:
     class Stream;

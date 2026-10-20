@@ -102,11 +102,12 @@ void CSignatureEditPopup::OpenForSignature(const RECT& signRectScreen, HWND /*ow
 
     m_handled = false;
 
-    // owner 传 NULL 而不是调用方给的那个句柄：DuiHost::SendNotify 以
-    // GetParent(m_hWnd) 为通知目标，而 WS_POPUP 窗口的 GetParent 返回的正是
-    // owner —— 传了 owner，编辑框的回车通知就会发到主面板而不是本弹层。传 NULL
-    // 让 SendNotify 走"自路由"分支把通知送回本弹层的 OnChildNotify。与
-    // EmojiPickerPopup / FontSettingPopup 同一口径。
+    // owner 传 NULL 而不是调用方给的那个句柄，与 EmojiPickerPopup / FontSettingPopup
+    // 同一口径。原先这样做是因为 DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，
+    // 而有所有者的 WS_POPUP 窗口的 GetParent 返回所有者，传了 owner 编辑框的回车通知就会
+    // 发到主面板。2026-10-14 起浮层内容的通知先到本弹层自身，由 OnChildNotify 处理；本类
+    // 没处理的再由基类 DuiPopupHost::OnPopupNotify 转给所有者，owner 为 NULL 时不转
+    // （开发约定文档 UI 约定第 11 条）。
     Show(anchor, NULL);
 
     if (m_edit != NULL)

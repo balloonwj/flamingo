@@ -31,6 +31,15 @@ public:
      */
     virtual bool GetScreenFrame(int seat, std::vector<uint8_t>& bgra, int& width, int& height, uint64_t& serial) const = 0;
 
+    /**
+     *  只取某个画面座位最新一帧的帧序号，不拷贝画面。整屏一帧有十几 MB，观看窗每收到一条帧通知都要逐座位检查，
+     *  先用本函数比较序号，序号变了才调 GetScreenFrame。
+     *  @param seat   画面座位
+     *  @param serial [出参] 帧序号，与 GetScreenFrame 带回的是同一个编号
+     *  @return 这一路解出过画面返回 true
+     */
+    virtual bool GetScreenSerial(int seat, uint64_t& serial) const = 0;
+
     //解出过画面的画面座位，升序
     virtual std::vector<int> ScreenSeats() const = 0;
 

@@ -9,7 +9,8 @@
  *  更旧的一条"—— 后者靠手工点界面基本不可能复现。
  *
  *  AP11（2026-10-08）：入群必读弹窗以群聊窗为所有者，不会被随后激活的群聊窗压在下面（实测出过）；
- *  有所有者、风格为 WS_OVERLAPPEDWINDOW 时 GetParent 为空，控件点击通知仍发回弹窗自身（UI 约定第 11 条）。
+ *  弹窗不带 WS_CHILD 样式，有所有者时控件点击通知仍发回弹窗自身（开发约定文档 UI 约定第 11 条：只有 WS_CHILD
+ *  宿主的通知发给父窗口）。
  *  主面板的「新群公告」弹窗仍不设所有者，主面板收在托盘里时它照样能弹出来。
  *
  *  balloonwj@qq.com   2026-08-03
@@ -167,7 +168,8 @@ TEST_CASE("AP11 入群必读弹窗以宿主窗口为所有者，点击通知仍�
         dlg.ShowAnnouncement(host, 268435456, L"讨论小组", L"开会", L"大家来501开会。", 0, L"韩晓燕888", L"刚刚");
         REQUIRE(dlg.IsWindow());
         CHECK(::GetWindow(dlg.m_hWnd, GW_OWNER) == host);
-        //有所有者的重叠窗口 GetParent 为空，DuiHost 的控件通知因此发回弹窗自身（UI 约定第 11 条）
+        //有所有者的重叠窗口 GetParent 仍为空（Win32 行为）；弹窗不带 WS_CHILD 样式，DuiHost 的控件通知发回弹窗
+        //自身（开发约定文档 UI 约定第 11 条：只有 WS_CHILD 宿主的通知发给父窗口）
         CHECK(::GetParent(dlg.m_hWnd) == NULL);
         CHECK((dlg.GetStyle() & WS_CHILD) == 0);
         dlg.DestroyWindow();

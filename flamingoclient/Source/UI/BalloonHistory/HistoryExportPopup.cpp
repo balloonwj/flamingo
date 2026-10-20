@@ -95,7 +95,8 @@ void CHistoryExportPopup::OpenAbove(const RECT& anchorScreen, const std::vector<
 
     SetSize(kHistoryExportPopupW, kHistoryExportPopupH);
     SetEdge(balloonwjui::DuiPopupHost::EdgeAbove);
-    //owner 传 NULL：理由同搜索范围浮层（子控件的通知要发给本浮层，而不是消息记录窗口）
+    //owner 传 NULL，与搜索范围浮层同一做法（原为让子控件的通知发给本浮层而不是消息记录窗口；2026-10-14 起
+    //浮层内容的通知先到浮层自身，本类没有处理的才转给所有者，见开发约定文档 UI 约定第 11 条）
     Show(anchorScreen, NULL);
     ApplyHistoryExportPopupState(GetRoot(), m_opts);
     RebuildRows();

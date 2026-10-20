@@ -300,7 +300,8 @@ bool CBalloonUpdateWindow::EnsureWindowCreated()
         return true;
     }
 
-    // owner 传 NULL：让子控件通知自路由回本窗口（与关于框 / 改密框同处理）。
+    // owner 传 NULL，与关于框 / 改密框相同。原先这样做是为了让控件通知发回本窗口；
+    // 2026-10-14 起有无所有者，控件通知都发回本窗口（开发约定文档 UI 约定第 11 条）。
     const std::wstring windowTitle = TRF(kWindowTitleTemplate, g_strAppTitle);
     if (Create(NULL, CWindow::rcDefault, windowTitle.c_str(),
                WS_OVERLAPPEDWINDOW, 0) == NULL)

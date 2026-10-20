@@ -629,6 +629,18 @@ void CMediaModule::SetRecordSettings(int quality, const wchar_t* folder)
     m_record->SetSettings(quality, folder != NULL ? folder : L"");
 }
 
+void CMediaModule::SetShareQuality(int quality)
+{
+    if (!m_initialized)
+    {
+        return;
+    }
+    if (m_share)
+    {
+        m_share->SetQuality(quality);
+    }
+}
+
 void CMediaModule::SetMouseEffectSettings(const char* settingsText)
 {
     if (!m_initialized)

@@ -7,6 +7,8 @@
  *  （2026-08-05，见 docs/消息记录内容交互方案.md §4），除了给 LayoutInlineContent /
  *  PlaceOverlongToken / DrawInlineContent 增加"最多排几行"这个入参之外，没有改动
  *  任何一行既有逻辑 —— 气泡侧一律传 0（不限行），渲染结果与平移前完全一致。
+ *  2026-10-14 起增加带选项的 LayoutInlineContentEx（逐行行高、避头尾，docs/聊天气泡美化方案.md 第 1 节第 4 条），只有聊天窗的
+ *  气泡使用；LayoutInlineContent 以缺省选项转调它，结果与之前完全相同。
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 它要被 Flamingo.vcxproj 与
  *  FlamingoUnit.vcxproj 两个工程逐字共用，故自己把 balloonui / ATL 所需的前置依赖
@@ -420,6 +422,75 @@ void PlaceOverlongToken(HDC hdc, const CString& tok, int tokCharBegin,
     }
 }
 
+// 避头标点：折行时不放在行首（docs/聊天气泡美化方案.md 第 1 节第 4 条）。中文句读、右引号、右括号、省略号，以及对应的 ASCII 与全角标点
+const wchar_t kNoLineStartPunct[] = L"。，、；：？！）》」』】〕〉〗”’…．］｝％,.;:?!)]}%";
+// 避尾标点：折行时不留在行尾。左引号、左括号，以及对应的 ASCII 与全角标点
+const wchar_t kNoLineEndPunct[] = L"（《「『【〔〈〖“‘［｛([{";
+
+// 字符 c 是否为避头标点
+bool IsNoLineStartPunct(wchar_t c)
+{
+    return c != 0 && ::wcschr(kNoLineStartPunct, c) != NULL;
+}
+
+// 字符 c 是否为避尾标点
+bool IsNoLineEndPunct(wchar_t c)
+{
+    return c != 0 && ::wcschr(kNoLineEndPunct, c) != NULL;
+}
+
+// 量一个词元的宽高：单字走本次排版内的记录表，其余走进程级测宽缓存（与 LayoutInlineContentEx 放置时的口径相同）
+SIZE TokenExtent(HDC hdc, const TextExtentFontKey& fontKey, ChatTextExtentCache& extentCache, SingleCharMemo& charMemo,
+                 LPCWSTR text, int len)
+{
+    return (len == 1) ? charMemo.Extent(hdc, fontKey, extentCache, text[0])
+                      : extentCache.TextExtent(hdc, fontKey, text, len);
+}
+
+// 避头尾：当前词元 tokens[ti] 在本行放得下（放完后游标到 xAfter），是否仍应当把它换到下一行。
+//   一、避头：紧随其后的避头标点（可能连着几个）在本行放不下，就连同当前词元一起换行，标点不会落在下一行行首；
+//   二、避尾：当前词元以避尾标点结尾，而下一个词元在本行放不下，就提前换行，左括号不会留在本行行尾。
+// 只看同一段文字里的后续词元（表情另成一段，不是标点）；显式换行与空白不参与判断。
+bool KinsokuWantsWrap(HDC hdc, const TextExtentFontKey& fontKey, ChatTextExtentCache& extentCache,
+                      SingleCharMemo& charMemo, const std::vector<WrapToken>& tokens, size_t ti, LPCWSTR segText,
+                      int xAfter, int maxW)
+{
+    const WrapToken& cur = tokens[ti];
+    const LPCWSTR curText = segText + cur.m_srcBegin;
+    if (!IsNoLineStartPunct(curText[0]))
+    {
+        int punctW = 0;
+        size_t k = ti + 1;
+        while (k < tokens.size() && !tokens[k].m_newline)
+        {
+            const LPCWSTR nextText = segText + tokens[k].m_srcBegin;
+            if (!IsNoLineStartPunct(nextText[0]))
+            {
+                break;
+            }
+            punctW += TokenExtent(hdc, fontKey, extentCache, charMemo, nextText, tokens[k].m_srcCount).cx;
+            ++k;
+        }
+        if (k > ti + 1 && xAfter + punctW > maxW)
+        {
+            return true;
+        }
+    }
+    if (IsNoLineEndPunct(curText[cur.m_srcCount - 1]) && ti + 1 < tokens.size() && !tokens[ti + 1].m_newline)
+    {
+        const LPCWSTR nextText = segText + tokens[ti + 1].m_srcBegin;
+        if (nextText[0] != L' ' && nextText[0] != L'\t')
+        {
+            const int nextW = TokenExtent(hdc, fontKey, extentCache, charMemo, nextText, tokens[ti + 1].m_srcCount).cx;
+            if (xAfter + nextW > maxW)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 } // 匿名 namespace（本文件私有的排版细节）
 
 CString FaceImagePathFromId(int faceId)
@@ -427,12 +498,26 @@ CString FaceImagePathFromId(int faceId)
     return FacePathForId(faceId);
 }
 
-// 把消息段序列按 maxW 折行排版。调用前须已把目标字体 select 进 hdc（测量按该字体）。
-//   outPlaced：非 NULL 时填入各放置项（绘制用）；NULL 时只测尺寸。
-//   返回：内容整体尺寸（不含内边距）。
 SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
                          int maxW, int faceSize, std::vector<InlinePlaced>* outPlaced,
                          int maxLines, bool* outTruncated)
+{
+    //缺省选项就是原有规则：每行同高、不处理标点
+    const InlineLayoutOptions defaults;
+    return LayoutInlineContentEx(hdc, segs, maxW, faceSize, defaults, outPlaced, maxLines, outTruncated);
+}
+
+// 把消息段序列按 maxW 折行排版。调用前须已把目标字体 select 进 hdc（测量按该字体）。
+//   opts：     排版选项；缺省值时与原 LayoutInlineContent 完全相同。
+//   outPlaced：非 NULL 时填入各放置项（绘制用）；NULL 时只测尺寸。
+//   返回：内容整体尺寸（不含内边距）。
+//
+// 逐行行高（opts.m_textLineH > 0）的做法：折行照旧按一个固定的名义行高推进（行号 = 纵坐标 / 名义行高），同时记下
+// 哪些行放了表情；排完之后按每行的实际行高（纯文字行取 m_textLineH，含表情的行再与表情格比较）算出各行的上沿，
+// 把放置项的纵坐标改写过去。只测尺寸（outPlaced 为 NULL）时同样按记下的表情行算高度。
+SIZE LayoutInlineContentEx(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                           int maxW, int faceSize, const InlineLayoutOptions& opts,
+                           std::vector<InlinePlaced>* outPlaced, int maxLines, bool* outTruncated)
 {
     ++g_inlineLayoutCalls;
 
@@ -451,7 +536,16 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
     ::ZeroMemory(&tm, sizeof(tm));
     ::GetTextMetricsW(hdc, &tm);
     const int textH = tm.tmHeight;
-    const int lineH = (textH > faceSize) ? textH : faceSize;
+    // 名义行高：原有规则下就是每一行的行高；逐行计算时只用来推进折行游标，取各种行高里最大的那个
+    int lineH = (textH > faceSize) ? textH : faceSize;
+    const bool perLineHeight = (opts.m_textLineH > 0);
+    if (perLineHeight && opts.m_textLineH > lineH)
+    {
+        lineH = opts.m_textLineH;
+    }
+    // 逐行计算行高时记下哪些行放了表情（下标为行号，非 0 表示有）；放置项从 outPlaced 的这个位置开始是本次排出的
+    std::vector<char> faceLines;
+    const size_t placedBegin = (outPlaced != NULL) ? outPlaced->size() : 0;
     //逐词元测宽走缓存：中文每个字单独成一个词元，逐个调 GDI 是排版的主要开销
     //（50 条消息的首次测量里约占一半以上）。缓存键取自当前选入 hdc 的字体，每次排版取一次
     const TextExtentFontKey fontKey = TextExtentFontKey::FromDc(hdc);
@@ -506,6 +600,15 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                 p.charCount = 1;          // 表情在扁平文本里占一个占位字符
                 outPlaced->push_back(p);
             }
+            if (perLineHeight)
+            {
+                const size_t line = (size_t)(y / lineH);
+                if (faceLines.size() <= line)
+                {
+                    faceLines.resize(line + 1, 0);
+                }
+                faceLines[line] = 1;
+            }
             x += faceSize;
             ++charPos;
         }
@@ -549,7 +652,11 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                                 ? charMemo.Extent(hdc, fontKey, extentCache, tokText[0])
                                 : extentCache.TextExtent(hdc, fontKey, tokText, tokLen);
                 const bool isSpace = (tokText[0] == L' ' || tokText[0] == L'\t');
-                if (x > 0 && x + ts.cx > maxW)
+                // 避头尾（opts.m_kinsoku）：本词元放得下，但放下之后会让紧随的标点落到下一行行首、或让左括号留在行尾时，
+                // 把本词元提前换到下一行
+                const bool kinsokuWrap = opts.m_kinsoku && x > 0 && !isSpace && x + ts.cx <= maxW
+                    && KinsokuWantsWrap(hdc, fontKey, extentCache, charMemo, tokens, ti, segText, x + ts.cx, maxW);
+                if (x > 0 && (x + ts.cx > maxW || kinsokuWrap))
                 {
                     if (x > maxLineW)
                     {
@@ -613,6 +720,47 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
     SIZE size;
     size.cx = maxLineW;
     size.cy = y + lineH;
+    if (!perLineHeight)
+    {
+        return size;
+    }
+
+    // 逐行行高：纯文字行取 m_textLineH（字体本身更高时取字体行高），含表情的行再与表情格边长比较取较大的一个
+    const int plainH = (opts.m_textLineH > textH) ? opts.m_textLineH : textH;
+    const int faceLineH = (plainH > faceSize) ? plainH : faceSize;
+    const size_t lineCount = (size_t)(y / lineH) + 1;
+    std::vector<int> lineTop(lineCount + 1, 0);
+    for (size_t i = 0; i < lineCount; ++i)
+    {
+        const bool hasFace = (i < faceLines.size() && faceLines[i] != 0);
+        lineTop[i + 1] = lineTop[i] + (hasFace ? faceLineH : plainH);
+    }
+    if (outPlaced != NULL)
+    {
+        for (size_t i = placedBegin; i < outPlaced->size(); ++i)
+        {
+            InlinePlaced& p = (*outPlaced)[i];
+            // 名义行高下表情格的上沿落在本行之内（行高不小于表情格），整除即得行号
+            size_t line = (size_t)(p.rc.top / lineH);
+            if (line >= lineCount)
+            {
+                line = lineCount - 1;
+            }
+            const int rowTop = lineTop[line];
+            const int rowH = lineTop[line + 1] - rowTop;
+            if (p.isFace)
+            {
+                p.rc.top = rowTop + (rowH - faceSize) / 2;
+                p.rc.bottom = p.rc.top + faceSize;
+            }
+            else
+            {
+                p.rc.top = rowTop;
+                p.rc.bottom = rowTop + rowH;
+            }
+        }
+    }
+    size.cy = lineTop[lineCount];
     return size;
 }
 
@@ -835,6 +983,24 @@ SIZE LayoutInlineContentForStyle(HDC hdc, const std::vector<balloonchat::ChatSeg
     }
     HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
     const SIZE sz = LayoutInlineContent(hdc, segs, maxW, faceSize, outPlaced, maxLines);
+    ::SelectObject(hdc, hOldFont);
+    ::DeleteObject(hFont);
+    return sz;
+}
+
+SIZE LayoutInlineContentForStyle(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                                 int maxW, int faceSize, const InlineTextStyle& st,
+                                 const InlineLayoutOptions& opts,
+                                 std::vector<InlinePlaced>* outPlaced, int maxLines)
+{
+    SIZE none = { 0, 0 };
+    HFONT hFont = CreateInlineFont(st);
+    if (hFont == NULL)
+    {
+        return none;
+    }
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+    const SIZE sz = LayoutInlineContentEx(hdc, segs, maxW, faceSize, opts, outPlaced, maxLines);
     ::SelectObject(hdc, hOldFont);
     ::DeleteObject(hFont);
     return sz;

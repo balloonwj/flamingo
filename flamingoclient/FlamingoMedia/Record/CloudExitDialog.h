@@ -9,8 +9,9 @@
  *  本文件分两部分：
  *    - 纯逻辑（单元测试 Source/Tests/CloudExitDialogTests.cpp，标签 [cloudexit]）：各场合的文字与按钮、按钮与结果的对应、
  *      录像清单的写法；
- *    - CCloudExitDialog：balloonui DuiFrameWindow 的模态对话框。不设所有者窗口（balloonui 把按钮通知发给 GetParent 返回的
- *      窗口，见 ShareConfirmDialog.h），模态期间禁用调用方给的窗口；置顶并出现在任务栏，关机时用户回到桌面能找到它。
+ *    - CCloudExitDialog：balloonui DuiFrameWindow 的模态对话框。不设所有者窗口（2026-10-14 之前这样做是因为 balloonui
+ *      会把有所有者的 WS_POPUP 窗口的控件通知发给所有者；现在控件通知一律发回本窗口，见开发约定文档 UI 约定第 11 条），
+ *      模态期间禁用调用方给的窗口；置顶并出现在任务栏，关机时用户回到桌面能找到它。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（即在 .cpp 里先 #include "stdafx.h"）。
  *

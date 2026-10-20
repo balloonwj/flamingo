@@ -52,7 +52,8 @@ CString MakeRdDialogText(int mode, const CString& peerName)
     const CString name = peerName.IsEmpty() ? CString(TR(L"对方")) : ShortenRdPeerName(peerName);
     if (mode == kRdModeAuth)
     {
-        return CString(TRF(L"{0} 请求远程控制你的电脑", name).c_str());
+        //2026-10-12 起接受后对方只能查看，控制键鼠要另行同意（docs/远程桌面控制权限与观看工具条方案.md 第 4.2 节）
+        return CString(TRF(L"{0} 请求查看你的桌面。接受后对方只能查看，要控制你的电脑还需你另外同意", name).c_str());
     }
     return CString(TRF(L"正在呼叫 {0}，等待对方接受…", name).c_str());
 }

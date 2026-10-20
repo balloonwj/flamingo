@@ -524,8 +524,8 @@ DuiControl* FindContactBodyRoot(DuiControl* from)
 void ShowContactCopyToast(DuiControl* from, LPCTSTR text)
 {
     // 先把"点击复制 xxx"的悬停提示收掉：它就浮在鼠标附近，不收的话正好压在
-    // 提示条上，用户看不清刚复制了什么。用 OnLeave 而不是 HideNow —— 后者只关
-    // 已经弹出来的浮窗，不清等待中的计时，于是点击后半秒提示又自己冒出来压上去。
+    // 提示条上，用户看不清刚复制了什么。OnLeave 既关闭已经弹出来的浮窗，也停掉
+    // 等待中的计时，点击后提示不会再自己冒出来压上去。
     DuiToolTipMgr::Inst().OnLeave(from);
 
     DuiControl* root = FindContactBodyRoot(from);
@@ -543,11 +543,10 @@ void ShowContactCopyToast(DuiControl* from, LPCTSTR text)
 // 把 ctrl 当前的悬停提示切换成 text，并按当前鼠标位置重新开始计时。
 //
 // DuiToolTipMgr 的注册粒度是"一个控件一段文字"，而头部资料块这一个控件里
-// 姓名与账号是两块不同热区，文字得随热区切换。OnHover 对同一控件有"已在等待
-// 中则直接返回"的短路，因此必须先 OnLeave 复位再 Register 新文字，最后 OnHover
-// 重新计时。做法与 ImageViewerToolbar::UpdateTooltip 一致。
+// 姓名与账号是两块不同热区，文字得随热区切换。切换由 DuiToolTipMgr::Retarget
+// 完成：先复位，再按新文字登记并重新计时。本函数只负责换算坐标。
 //   ctrl：目标控件，本函数不持有；
-//   text：提示文字；空指针 / 空串表示当前位置没有可提示的内容，只做复位；
+//   text：提示文字；空指针 / 空串表示当前位置没有可提示的内容，取消登记并收起提示；
 //   ptHost：鼠标位置（host 客户区坐标），用于换算浮窗弹出的屏幕坐标。
 void SwitchHoverTooltip(DuiControl* ctrl, LPCTSTR text, POINT ptHost)
 {
@@ -555,21 +554,13 @@ void SwitchHoverTooltip(DuiControl* ctrl, LPCTSTR text, POINT ptHost)
     {
         return;
     }
-    DuiToolTipMgr& tips = DuiToolTipMgr::Inst();
-    tips.OnLeave(ctrl);
-    if (text == NULL || text[0] == _T('\0'))
-    {
-        return;
-    }
-    tips.Register(ctrl, text);
-
     POINT screen = ptHost;
     balloonwjui::DuiHost* host = ctrl->GetHost();
     if (host != NULL)
     {
         ::ClientToScreen(host->m_hWnd, &screen);
     }
-    tips.OnHover(ctrl, screen);
+    DuiToolTipMgr::Inst().Retarget(ctrl, text, screen);
 }
 
 // 把 UTF-8 字节串转成 CString（宽字符）。内嵌 XML 是 u8 字面量（UTF-8），

@@ -114,13 +114,32 @@ void RecordFrameComposer::Compose(const uint8_t* src, int srcW, int srcH, int sr
         m_content.top = (m_height - drawH) / 2;
         m_content.right = m_content.left + drawW;
         m_content.bottom = m_content.top + drawH;
-        //行跨度不是宽 × 4 时，按行跨度当作更宽的图、只取左边 srcW 列
-        BITMAPINFO bi;
-        fillBitmapInfo(bi, srcStride / kBgraBytes, srcH);
-        ::SetStretchBltMode(m_dc, HALFTONE);
-        ::SetBrushOrgEx(m_dc, 0, 0, NULL);
-        ::StretchDIBits(m_dc, m_content.left, m_content.top, drawW, drawH, 0, 0, srcW, srcH, src, &bi, DIB_RGB_COLORS,
-                        SRCCOPY);
+        //2026-10-15（docs/远程桌面H264与共享画质提升方案.md A7）：原尺寸逐行复制、缩小用 BgraDownscaler 直接写进画布，
+        //只有放大才走 HALFTONE。HALFTONE 的 StretchDIBits 在 2560×1440 原尺寸时每帧约 15 毫秒、缩到 1080p 约 30 毫秒（A0 实测）。
+        //直接写像素之前先让上面的 FillRect 落到画布上
+        ::GdiFlush();
+        uint8_t* origin = m_bits + (static_cast<size_t>(m_content.top) * m_width + m_content.left) * kBgraBytes;
+        if (drawW == srcW && drawH == srcH)
+        {
+            const size_t rowBytes = static_cast<size_t>(srcW) * kBgraBytes;
+            for (int y = 0; y < srcH; ++y)
+                memcpy(origin + static_cast<size_t>(y) * m_width * kBgraBytes, src + static_cast<size_t>(y) * srcStride,
+                       rowBytes);
+        }
+        else if (screenshare::ShareUsesFastDownscale(srcW, srcH, drawW, drawH))
+        {
+            m_scaler.Scale(src, srcStride, srcW, srcH, origin, m_width * kBgraBytes, drawW, drawH);
+        }
+        else
+        {
+            //放大：行跨度不是宽 × 4 时，按行跨度当作更宽的图、只取左边 srcW 列
+            BITMAPINFO bi;
+            fillBitmapInfo(bi, srcStride / kBgraBytes, srcH);
+            ::SetStretchBltMode(m_dc, HALFTONE);
+            ::SetBrushOrgEx(m_dc, 0, 0, NULL);
+            ::StretchDIBits(m_dc, m_content.left, m_content.top, drawW, drawH, 0, 0, srcW, srcH, src, &bi, DIB_RGB_COLORS,
+                            SRCCOPY);
+        }
     }
     //标注：画在画面来源所占的矩形里
     if (strokes != NULL && !strokes->empty())

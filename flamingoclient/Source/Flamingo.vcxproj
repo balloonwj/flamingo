@@ -452,6 +452,9 @@
     <ClCompile Include="UI\BalloonChatWnd\ChatPaintUtil.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCardPaint.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatBubble.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -485,6 +488,8 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFileVisual.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatCardModel.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatBubbleGroup.cpp" />
     <ClCompile Include="UI\BalloonChatWnd\ChatFontMap.cpp" />
     <ClCompile Include="UI\BalloonChatWnd\ChatFontUtil.cpp" />
     <ClCompile Include="UI\BalloonChatWnd\ChatHeaderInfo.cpp">
@@ -920,6 +925,7 @@
     <ClCompile Include="UI\BalloonMain\MainPanelTrayController.cpp" />
     <ClCompile Include="UI\BalloonMain\MainPanelAutoAwayController.cpp" />
     <ClCompile Include="UI\BalloonMain\MainPanelDockController.cpp" />
+    <ClCompile Include="UI\BalloonMain\DpiScaledMinSize.cpp" />
     <ClCompile Include="UI\BalloonMain\MainPanelSessionController.cpp" />
     <ClCompile Include="UI\BalloonMain\SendModeConfigStore.cpp" />
     <ClCompile Include="UI\BalloonMain\MainPanelStressData.cpp" />
@@ -1564,6 +1570,7 @@
     <ClInclude Include="net\FrameCrypto.h" />
     <ClInclude Include="net\FramePayload.h" />
     <ClInclude Include="net\HandshakeRunner.h" />
+    <ClInclude Include="net\TcpConnectWait.h" />
     <ClInclude Include="Common\Util\Buffer.h" />
     <ClInclude Include="Threading\CheckNetworkStatusTask.h" />
     <ClInclude Include="Common\Util\ClipboardText.h" />
@@ -1685,6 +1692,11 @@
     <ClInclude Include="UI\BalloonChatWnd\ChatFileStateModel.h" />
     <ClInclude Include="UI\BalloonChatWnd\ChatDirectFileModel.h" />
     <ClInclude Include="UI\BalloonChatWnd\ChatFileVisual.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatCardModel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatCardStyle.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatBubbleGroup.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatBubbleStyle.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatCardPaint.h" />
     <ClInclude Include="UI\BalloonChatWnd\ChatFontUtil.h" />
     <ClInclude Include="UI\BalloonChatWnd\ChatHeaderInfo.h" />
     <ClInclude Include="UI\BalloonChatWnd\ChatHistoryPaging.h" />
@@ -1883,6 +1895,7 @@
     <ClInclude Include="UI\BalloonMain\MainPanelSessionHost.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelAutoAwayController.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelDockController.h" />
+    <ClInclude Include="UI\BalloonMain\DpiScaledMinSize.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelSessionController.h" />
     <ClInclude Include="UI\BalloonMain\SendModeConfigStore.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelStressData.h" />

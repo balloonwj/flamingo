@@ -523,6 +523,9 @@
     <ClCompile Include="UI\BalloonChatWnd\ChatPaintUtil.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCardPaint.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatBubble.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
@@ -560,6 +563,12 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFileVisual.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatCardModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonChatWnd\ChatBubbleGroup.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonChatWnd\ChatFontMap.cpp">
@@ -1157,6 +1166,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelDockController.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\DpiScaledMinSize.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelSessionController.cpp">
@@ -2016,6 +2028,9 @@
     <ClInclude Include="net\HandshakeRunner.h">
       <Filter>net</Filter>
     </ClInclude>
+    <ClInclude Include="net\TcpConnectWait.h">
+      <Filter>net</Filter>
+    </ClInclude>
     <ClInclude Include="Common\Util\Buffer.h">
       <Filter>Common\Util</Filter>
     </ClInclude>
@@ -2373,6 +2388,21 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatFileVisual.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCardModel.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCardStyle.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatBubbleGroup.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatBubbleStyle.h">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonChatWnd\ChatCardPaint.h">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonChatWnd\ChatFontUtil.h">
@@ -2967,6 +2997,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelDockController.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\DpiScaledMinSize.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelSessionController.h">

@@ -235,8 +235,13 @@ void CFaceImagePickerPopup::OpenAt(const RECT& anchorScreen, HWND /*owner*/)
         LOG_WARNING(_T("图片表情面板无可用表情（表情库为空或全部解码失败）。"));
     }
 
-    // owner 传 NULL：与 CEmojiPickerPopup 一致 —— 让面板自己的 pick 回调直达本浮层，
-    // 不把子控件通知误路由到聊天窗。
+    // owner 传 NULL，与 CEmojiPickerPopup 一致。选中的表情经 DuiEmojiPanel 的 pick 回调
+    // 直接交给本浮层，不经过控件通知。原先传 NULL 是为了不让子控件通知被发到聊天窗：当时
+    // DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，而有所有者的 WS_POPUP 窗口的
+    // GetParent 返回所有者。2026-10-14 起浮层内容的通知先到本浮层，本类没有处理的才转给
+    // Show 时传入的所有者（DuiPopupHost::OnPopupNotify，见开发约定文档 UI 约定第 11 条）；
+    // 本类不处理任何控件通知，所以传了所有者时，面板发出的通知（如 DUIN_VALUECHANGED）
+    // 仍会被转给聊天窗。
     Show(anchorScreen, NULL);
     LOG_INFO(_T("图片表情选择面板已打开（共 %d 个表情）。"), (int)m_faceInfos.size());
 }
@@ -291,25 +296,21 @@ LRESULT CFaceImagePickerPopup::OnPanelMouseMove(UINT /*uMsg*/, WPARAM /*wParam*/
     }
     m_lastTipIdx = idx;
 
-    balloonwjui::DuiToolTipMgr& mgr = balloonwjui::DuiToolTipMgr::Inst();
-    mgr.OnLeave(m_pPanel);   // 关旧格 tip / 取消未弹出的计时
-
+    CString tip;
     if (idx >= 0 && idx < (int)m_faceInfos.size() && m_faceInfos[idx] != NULL)
     {
         // 表情库的 tip 形如 "/呲牙"，展示时去掉斜杠前缀（那是老协议的输入习惯）。
-        CString tip = m_faceInfos[idx]->m_strTip.c_str();
+        tip = m_faceInfos[idx]->m_strTip.c_str();
         if (!tip.IsEmpty() && tip[0] == _T('/'))
         {
             tip = tip.Mid(1);
         }
-        if (!tip.IsEmpty())
-        {
-            POINT screenPt = pt;
-            ::ClientToScreen(m_hWnd, &screenPt);
-            mgr.Register(m_pPanel, tip);     // 重复 Register 同控件 = 覆盖文字
-            mgr.OnHover(m_pPanel, screenPt); // 重新计时，延时后在新格位置弹出
-        }
     }
+    // 关旧格 tip、取消未弹出的计时，再按新格的文字登记并重新计时，延时后在新格位置弹出；
+    // 新格没有文字（空白处）时只取消登记
+    POINT screenPt = pt;
+    ::ClientToScreen(m_hWnd, &screenPt);
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(m_pPanel, tip, screenPt);
     return 0;
 }
 

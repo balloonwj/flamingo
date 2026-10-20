@@ -369,8 +369,20 @@ public:
     bool ScrollToMsgid(long long msgid);
 
     // 追加一条消息 —— 新建一个 ChatBubble 挂到末尾，重新布局并滚到底部。
+    // 与上一条真实消息间隔满 5 分钟或不在同一个本地日期时，先插一行时间分隔；本人刚发出、时间戳仍为 0 的回显
+    // 按本机当前时间判定（翻页加载历史期间除外），消息本身的时间戳不改（docs/聊天消息时间显示方案.md 第 7 节）。
     //   msg：要追加的消息。
     void AppendMessage(const ChatMessage& msg);
+
+    // 取当前时刻的函数：返回 Unix 毫秒。
+    typedef long long (*NowMsFn)();
+
+    /**
+     *  替换消息列表取当前时刻的函数，只供单元测试固定「现在」（时间分隔行的判定与文案依赖当前时刻）。
+     *  作用于进程内全部消息列表，用例结束时须传 NULL 恢复。
+     *  @param fn 新的取时函数；传 NULL 恢复为读系统时钟
+     */
+    static void SetNowProviderForTest(NowMsFn fn);
 
     /**
      *  设置本列表是否显示已读回执。单聊窗建列表后调用一次开启；群聊窗不调用（默认关闭）
@@ -929,7 +941,7 @@ public:
      *
      *  删除是本人视角的真删除（docs/清理聊天记录方案.md §10），按该行有没有服务器 msgid 分两种：
      *    · msgid 非正（发送中、发送失败，服务器上没有这条）：直接从列表移除并销毁该 ChatBubble，
-     *      随后重排，与改造前的行为相同；
+     *      因此孤立的时间分隔行一并移除、时间行的判定基准按剩下的行重算（2026-10-14），随后重排；
      *    · msgid 为正：本方法<u>不</u>就地改界面，只把 msgid 经 WM_CHAT_DELETE_REQUEST 投给
      *      宿主聊天窗，由宿主确认后发 cmd_delete_message；气泡等服务端推来
      *      cmd_messages_deleted_notify 后走 RemoveMessagesByMsgid 移除。
@@ -944,8 +956,8 @@ public:
      *  删除多选模式下选中的全部消息行（多选操作条上的「删除 N」）。
      *
      *  与 RequestDeleteBubble 同一口径：选中行里 msgid 非正的立即移除；msgid 为正的留在列表里，
-     *  它们的 msgid 一次性经 WM_CHAT_DELETE_REQUEST 投给宿主，等删除推送到达后再移除。
-     *  无论选中行是哪一种，都会退出多选模式并重排。未处于多选模式或一行都没选中时什么都不做。
+     *  它们的 msgid 一次性经 WM_CHAT_DELETE_REQUEST 投给宿主，等删除推送到达后再移除。立即移除时同样清理孤立的
+     *  时间分隔行、重算判定基准。无论选中行是哪一种，都会退出多选模式并重排。未处于多选模式或一行都没选中时什么都不做。
      *
      *  @return 投给宿主、等待服务端删除的 msgid（按列表顺序）；没有这类行时返回空数组。
      *          列表不在窗口里（单元测试）时照样返回，只是投递这一步会跳过。
@@ -1086,7 +1098,7 @@ public:
      *  移除之后，若某个时间分隔行后面紧跟的是另一个时间分隔行、或已到列表末尾（即它下面的
      *  消息全被删光了），这个分隔行也一并移除，免得留下一行孤零零的时间。撤回提示行虽然也是
      *  居中样式，但它带着原消息的 msgid，属于内容而不是分隔，不会被当成孤立的分隔行。
-     *  全部移除完只重排、重绘一次。
+     *  随后按剩下的行重新确定时间行的判定基准（2026-10-14）。全部移除完只重排、重绘一次。
      *
      *  @param msgids 要移除的服务器 msgid；非正的项忽略
      *  @return 实际移除的消息行数（不含顺带移除的时间分隔行）；列表里没有的 msgid 不计入
@@ -1101,6 +1113,8 @@ public:
     //   timestampMs： 服务器消息时间（Unix 毫秒）。
     // clientMsgId 全局唯一，故调用方可向所有已打开的聊天窗广播、由本方法自行筛选。
     // 找到并回填返回 true，本列表里没有该 clientMsgId 时返回 false（不是错误）。
+    // 副作用：回填的时间使这一行与前后行的合组改变时重排、重绘列表（原来停在底部的仍停在底部）；
+    // 合组不变时不重排。
     bool BackfillSentMessage(const std::string& clientMsgId, long long msgid,
                              long long timestampMs);
 
@@ -1284,7 +1298,38 @@ private:
     // 上一条<u>真实</u>消息的时间（Unix 毫秒），供时间分隔行判定用；0=还没有过。
     // 只记真实消息：分隔行自身不参与判定，时间未知（0）的消息也不更新它，否则
     // 后面一条正常消息会与 0 相比、被判成"没有上一条"而多插一行。
+    // 本人回显先记本机时间，回执回填时若它仍是最后一条真实消息，换成服务端时间（2026-10-14）。
     long long m_lastMsgTimestampMs;
+
+    // 当前时刻（Unix 毫秒）：默认读系统时钟，测试经 SetNowProviderForTest 替换。
+    static long long NowMs();
+
+    // 时间分隔行的文字最近一次按哪一天格式化（本地日期，YYYYMMDD）；0 表示还没有格式化过。
+    // OnPaint 发现本地日期与它不同时调 RefreshTimeSeparatorTexts，「今天」「昨天」随日期变化（2026-10-14）
+    int m_separatorDayKey;
+
+    // 本地日期变了（或第一次绘制）时，按当前时刻重新格式化全部时间分隔行的文字；文字有变化的行重画
+    void RefreshTimeSeparatorTexts();
+
+    // 插入一行时间分隔：标注 markMs 那条消息的时间，文字按 nowMs 格式化；文字为空（时间不可用）时不插
+    void AppendTimeSeparatorRow(long long markMs, long long nowMs);
+
+    // 第 index 个子控件之后是否不再有真实消息（时间行、撤回提示等 kMsgTime 行不算）。
+    // BackfillSentMessage 据此判断回填的这条是不是消息流末尾那条，是才更新时间行基准
+    bool IsLastRealMessage(size_t index) const;
+
+    // 按第 index 个子控件当前的消息内容重新判定它与前后两行的合组（口径同 Layout），结果与它记着的
+    // IsGroupedWithPrev / IsGroupedWithNext 不同时返回 true。BackfillSentMessage 回填了时间后据此决定要不要重排。
+    // index 越界或该行不是消息行时返回 false。无副作用
+    bool GroupingChangedAt(size_t index) const;
+
+    // 移除孤立的时间分隔行：后面紧跟另一个分隔行、或已到列表末尾的那些（它下面的消息都已移除）。
+    // 撤回提示行带着原消息的 msgid，不算分隔行。只移除、不重排，调用方随后自行重排
+    void RemoveOrphanTimeSeparators();
+
+    // 移除消息行之后，按列表里剩下的行重新确定 m_lastMsgTimestampMs（2026-10-14）：否则基准停在被删的那条上，
+    // 紧接着追加的消息与它比较，可能漏插时间行
+    void RecomputeLastMsgTimestamp();
 
     // 向上翻页期间临时寄存的原基准（BeginPrependBatch 存、EndPrependBatch 还原）。
     // 翻页批次会被整体挪到列表最前面，判定基准必须临时清零，收尾后再还给实时消息用。

@@ -15,7 +15,8 @@
  *    - ShareBarButtonArtCache：按外观缓存四态位图并装到按钮上。DuiButton 不持有位图，缓存须比用到它的按钮活得久，
  *      一般作为窗口的成员变量。
  *  图标取自 ChatIcons（麦克风、电脑声音、字幕、摄像机、三个点、共享屏幕）与 MainPanelIcons（人形），其余（暂停、继续、
- *  停止、录制、画笔、鼠标、收起、固定）由本文件按同样的线性风格画。
+ *  停止、录制、画笔、鼠标、收起、固定，以及 2026-10-12 为浮动观看工具条新增的白板、共享说明、皇冠、全屏、退出全屏、
+ *  离开）由本文件按同样的线性风格画。申请类按钮在等待对方同意期间为橙底（share_bar_tone_pending）。
  *
  *  典型用法：
  *      m_art.Apply(button, ShareBarLookFor(share_bar_mic, micOn), ShareBarTooltipFor(share_bar_mic, micOn));
@@ -42,8 +43,27 @@ namespace screenshare {
 const int kShareBarBtnPx = 30;
 //相邻两个图标按钮之间的间距（像素）
 const int kShareBarBtnGap = 6;
+//红色文字按钮「收回控制」的最小宽（像素），译文较长时按文字加宽；主持人控制条与共享者控制条共用（第 18 期）
+const int kShareRevokeBtnMinW = 88;
 //录制红点闪烁的半周期（毫秒）：亮 500 毫秒、暗 500 毫秒
 const int kShareRecordBlinkMs = 500;
+
+//顶部浮动条（主持人控制条、共享者控制条、观看端浮动条，见 ShareTopBar.h）共用的尺寸与颜色（2026-10-14 起集中在这里）：
+//标题条高、内容横条高（像素）
+const int kShareTopBarTitleH = 18;
+const int kShareTopBarContentH = 46;
+//内容横条的左右内边距（像素）
+const int kShareTopBarRowPadLeft = 14;
+const int kShareTopBarRowPadRight = 10;
+//按钮上下留白（像素），让 kShareBarBtnPx 的按钮在内容横条里上下居中
+const int kShareTopBarBtnVMargin = (kShareTopBarContentH - kShareBarBtnPx) / 2;
+//工具条顶边距摆放区域顶边的距离（像素）
+const int kShareTopBarTopMarginPx = 8;
+//状态点（文字「●」）所占的宽（像素）
+const int kShareTopBarDotW = 14;
+//条的底色与文字色
+const COLORREF kShareTopBarBgColor = RGB(44, 48, 56);
+const COLORREF kShareTopBarTextColor = RGB(255, 255, 255);
 
 //按钮的种类（决定图标与提示文字）
 enum ShareBarAction
@@ -63,7 +83,23 @@ enum ShareBarAction
     share_bar_viewers = 12,       //观看者名单（只画人形，人数由按钮文字给出）
     share_bar_collapse = 13,      //收起 / 固定（on 表示已收起或临时展开，此时图标为「固定」）
     share_bar_hide = 14,          //隐藏工具条（2026-10-07，方案第 14.2 节）：工具条与把手都不显示，鼠标到屏幕边缘时重新出现
-    share_bar_action_count = 15,  //种类个数（不是一种按钮）
+    //以下为浮动观看工具条（CViewerFloatBar，2026-10-12）新增；三态按钮用 ShareBarLookForTriState 取外观
+    share_bar_control = 15,       //申请控制（三态：未申请 / 申请中 / 控制中），屏幕共享观看者与远程桌面控制端都用
+    share_bar_share_mine = 16,    //共享我的屏幕（三态：未申请 / 申请中 / 共享中），屏幕共享观看者用
+    share_bar_board = 17,         //新建白板（三态：未申请 / 申请中 / 白板开着），屏幕共享观看者用
+    share_bar_info = 18,          //共享说明（点开说明浮窗），共享有描述时才有
+    share_bar_host = 19,          //主持人菜单（点开菜单，带下拉三角），经移交成为主持人时才有
+    share_bar_fullscreen = 20,    //全屏 / 退出全屏（on 表示正在全屏，此时图标为「退出全屏」）
+    share_bar_leave = 21,         //离开共享 / 断开远程桌面：红底
+    share_bar_action_count = 22,  //种类个数（不是一种按钮）
+};
+
+//三态按钮的状态（ShareBarLookForTriState 的 state）：申请类按钮在发出申请、等对方处理期间显示橙底
+enum ShareBarTriState
+{
+    share_bar_tri_off = 0,       //没有申请：常态灰底
+    share_bar_tri_pending = 1,   //已申请、等待对方同意：橙底
+    share_bar_tri_on = 2,        //已生效（在控制、在共享、白板开着）：蓝底
 };
 
 //按钮配色
@@ -72,6 +108,7 @@ enum ShareBarTone
     share_bar_tone_normal = 0,   //常态：比条底色略亮的灰底、浅色图标
     share_bar_tone_active = 1,   //打开的开关：蓝底、白色图标
     share_bar_tone_danger = 2,   //结束、停止、正在录制：红底、白色图标
+    share_bar_tone_pending = 3,  //已申请、等待对方同意（2026-10-12）：橙底、白色图标
 };
 
 //按钮的交互状态，对应 DuiButton::SetBgBitmap 的四个槽位
@@ -105,6 +142,12 @@ enum ShareBarIcon
     share_bar_icon_pin = 15,      //向下的尖括号（固定，展开后不再收起）
     share_bar_icon_pushpin = 16,  //图钉（ChatIcons；标注工具条临时展开时的「固定工具条」）
     share_bar_icon_hide = 17,     //眼睛轮廓加一道斜线（隐藏工具条，2026-10-07）
+    share_bar_icon_board = 18,    //一块白板加一支斜放的笔（新建白板，2026-10-12）
+    share_bar_icon_info = 19,     //圆圈里一个 i（共享说明）
+    share_bar_icon_crown = 20,    //皇冠（主持人菜单）
+    share_bar_icon_fullscreen = 21,      //四角向外的折线（全屏）
+    share_bar_icon_exit_fullscreen = 22, //四角向内的折线（退出全屏）
+    share_bar_icon_leave = 23,    //半开的门框加一支向右的箭头（离开 / 断开）
 };
 
 //一个图标按钮的外观
@@ -127,6 +170,15 @@ struct ShareBarButtonLook
 ShareBarButtonLook ShareBarLookFor(int action, bool on);
 
 /**
+ *  三态按钮（申请控制、共享我的屏幕、新建白板）按状态算出外观（纯函数，2026-10-12）：图标不变，常态灰底、申请中橙底、
+ *  已生效蓝底。其余种类的申请中按关着处理，已生效等同 ShareBarLookFor(action, true)。
+ *  @param action 按钮种类，取值见 ShareBarAction
+ *  @param state  取值见 ShareBarTriState；越界按 share_bar_tri_off 处理
+ *  @return 外观
+ */
+ShareBarButtonLook ShareBarLookForTriState(int action, int state);
+
+/**
  *  按钮的悬停提示文字（已经过 TR 翻译），就是改版前按钮上的文字（纯函数）。
  *  @param action    按钮种类
  *  @param on        开关状态
@@ -134,6 +186,16 @@ ShareBarButtonLook ShareBarLookFor(int action, bool on);
  *  @return 提示文字；未知种类返回空串
  */
 std::wstring ShareBarTooltipFor(int action, bool on, bool recordBar);
+
+/**
+ *  浮动观看工具条（CViewerFloatBar）上按钮的默认悬停提示，按三态取（纯函数，2026-10-14）。三态按钮在申请中时提示撤回：
+ *  申请控制为「取消申请」、共享我的屏幕为「取消共享申请」、新建白板为「取消白板申请」；其余情况等同
+ *  ShareBarTooltipFor(action, state == share_bar_tri_on, false)。屏幕共享观看窗与远程桌面观看窗的按钮共用这一份文字。
+ *  @param action 按钮种类，取值见 ShareBarAction
+ *  @param state  取值见 ShareBarTriState
+ *  @return 提示文字（已经过 TR 翻译）；未知种类返回空串
+ */
+std::wstring ShareBarTooltipForTriState(int action, int state);
 
 //录制红点（闪烁徽章）的状态
 enum ShareRecordDotState
@@ -177,6 +239,15 @@ HBITMAP MakeShareBarButtonBitmap(const ShareBarButtonLook& look, int state, int 
  *  @return 位图，所有权交给调用方；创建失败返回 NULL
  */
 HBITMAP MakeShareBarIconBitmap(int icon, int size, COLORREF color);
+
+/**
+ *  画一张不透明的纯色小位图（2026-10-12），用作工具条窗口的背景（DuiFrameWindow::SetBgImage 九宫格拉伸铺满）。
+ *  共享控制条、共享者控制条、标注工具条与浮动观看工具条都用这一个（2026-10-14 起，原来各写一份同样的函数）；
+ *  录制条另有一份可指定边长的同类函数，它的小把手红点图标要画在任意边长的底图上。
+ *  @param color 颜色
+ *  @return 位图，所有权交给调用方（用完 DeleteObject）；创建失败返回 NULL
+ */
+HBITMAP MakeShareBarBackgroundBitmap(COLORREF color);
 
 /**
  *  按外观缓存四态位图，并把位图与提示文字装到 DuiButton 上。同一外观只画一次，之后复用。只在 UI 线程上使用。

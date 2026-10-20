@@ -9,8 +9,8 @@
  *  窗口形态：与 CSearchDropdown 同一套路 —— 顶层无边框浮窗（WS_POPUP），窗口类带
  *  CS_DROPSHADOW 系统投影使其明显浮于内容之上；WS_EX_NOACTIVATE 故弹出 / 点击都<u>不
  *  抢</u>前台与键盘焦点。宿主能力复用 balloonui DuiHost（SubclassWindow 接管自建 HWND）。
- *  通知自路由（owner 传 NULL）：行点击在本类 OnChildNotify 内处理，经回调把 (ctype,cid)
- *  交回托盘控制器打开会话。
+ *  控件通知发回本窗口（本窗口不是 WS_CHILD 宿主，开发约定文档 UI 约定第 11 条）：行点击
+ *  在本类 OnChildNotify 内处理，经回调把 (ctype,cid) 交回托盘控制器打开会话。
  *
  *  自动隐藏：展示后起一个轮询定时器，每拍检查光标是否仍落在"弹窗矩形 ∪ 托盘图标矩形"
  *  内；都不在则隐藏（与旧 CMsgTipDlg 的 leave 轮询同思路，避免一移开就消失导致点不到）。
@@ -93,7 +93,7 @@ public:
     END_MSG_MAP()
 
 private:
-    // 自路由的 DUI 通知处理：会话行单击 → 回调 (ctype,cid) 并隐藏；其余放行。
+    // 本窗口控件发出的 DUI 通知处理：会话行单击 → 回调 (ctype,cid) 并隐藏；其余放行。
     LRESULT OnChildNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     // 自动隐藏轮询：光标离开"弹窗 ∪ 托盘图标"矩形则隐藏。
     LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);

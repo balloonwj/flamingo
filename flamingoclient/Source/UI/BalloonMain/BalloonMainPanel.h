@@ -35,6 +35,7 @@
 #include "../BalloonContact/ContactWindowSet.h"  // 联系人资料窗（一人一窗，多个并存，2026-10-07）
 #include "MainPanelAutoAwayController.h"            // 自动离开 / 禁止休眠控制器（本面板按值持有）
 #include "MainPanelDockController.h"               // 贴边自动隐藏控制器（本面板按值持有）与 IPanelDockHost
+#include "DpiScaledMinSize.h"                      // 最小尺寸随 DPI 等比换算（2026-10-17）
 #include "MainPanelTrayController.h"                // 托盘控制器（本面板按值持有）
 #include "MainPanelSessionController.h"             // 会话控制器（本面板按值持有）
 #include "../BalloonNetSettings/BalloonNetSettingsWindow.h"  // 网络设置窗（本面板按值持有）
@@ -1502,6 +1503,9 @@ public:
         // 原有的最大化态维护与客户区重排）。
         MESSAGE_HANDLER(WM_MOVE, OnPanelMoveMsg)
         MESSAGE_HANDLER(WM_SIZE, OnPanelSizeMsg)
+        // WM_DPICHANGED：先按新 DPI 换算最小尺寸，再交给 DuiHost 按系统的建议矩形摆窗口（置 bHandled=FALSE）。
+        // 须排在 CHAIN_MSG_MAP 之前，否则下限还是旧 DPI 的值，缩放来回变一次主面板就变宽（2026-10-17）。
+        MESSAGE_HANDLER(WM_DPICHANGED, OnPanelDpiChangedMsg)
         // WM_EXITSIZEMOVE：用户拖动或拉伸结束，记下主面板的位置与大小（处理后放行）。
         MESSAGE_HANDLER(WM_EXITSIZEMOVE, OnPanelExitSizeMoveMsg)
         // WM_ENTERSIZEMOVE：用户开始拖动或拉伸，停掉贴边的滑动动画（处理后放行）。
@@ -1904,6 +1908,9 @@ private:
     // 上面的 CHAIN_MSG_MAP_MEMBER 派发；拖动结束、外部唤出、登出由本面板分别通知它。
     balloonmain::CMainPanelDockController m_dockController;
 
+    // 主面板的最小尺寸（建窗时按当时的 DPI 设好，DPI 变化时等比换算，见 OnPanelDpiChangedMsg；2026-10-17）
+    balloonmain::CDpiScaledMinSize m_minSize;
+
     // 托盘控制器：托盘图标本身、悬停提示、新消息闪烁、登录动画、右键菜单与未读提示
     // 浮窗都归它。托盘图标挂在本窗口句柄上，四条托盘消息经上面的 CHAIN_MSG_MAP_MEMBER
     // 直接派发给它。
@@ -2076,6 +2083,13 @@ private:
      *  状态维护与 DuiHost 的客户区重排照常进行。
      */
     LRESULT OnPanelSizeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_DPICHANGED 处理（2026-10-17）：按新 DPI（LOWORD(wParam)）换算主面板的最小尺寸，然后置 bHandled=FALSE，
+     *  由 DuiHost 照常按系统的建议矩形（lParam）摆窗口。不换算时，缩放由 125% 变成 100% 再变回来，主面板会被
+     *  300 像素的下限抬宽，最后从 338 宽变成 375 宽。
+     */
+    LRESULT OnPanelDpiChangedMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_EXITSIZEMOVE 处理：用户用鼠标（或系统菜单的键盘移动）拖动、拉伸主面板结束。

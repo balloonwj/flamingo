@@ -25,7 +25,7 @@ const Gdiplus::Color kVoiceInkColor(255, 0x55, 0x55, 0x55);
 //时长文字的颜色
 const COLORREF kVoiceDurationColor = RGB(0x55, 0x55, 0x55);
 //未听红点的颜色：与发送失败的红色感叹号同一种红（ImagePlaceholder.h 的 kImagePlaceholderCaptionRed）
-const Gdiplus::Color kVoiceDotColor(255, 0xD9, 0x53, 0x4F);
+const Gdiplus::Color kVoiceDotColor(255, 0xE5, 0x48, 0x4D);   // 2026-10-14 起与卡片体系的红色统一（docs/聊天卡片美化方案.md 3.7）
 
 } // namespace
 

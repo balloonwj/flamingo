@@ -561,8 +561,11 @@ void CFontSettingPopup::OpenAt(const RECT& anchorScreen, HWND /*owner*/)
 {
     BuildContentOnce();
     RefreshControls();
-    // owner 传 NULL：DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，与
-    // EmojiPickerPopup 同口径。
+    // owner 传 NULL，与 EmojiPickerPopup 同一做法。原为让控件通知发到本浮层而不是聊天窗：
+    // 当时 DuiHost::SendNotify 以 GetParent(m_hWnd) 为通知目标，而有所有者的 WS_POPUP
+    // 窗口的 GetParent 返回所有者。2026-10-14 起浮层内容的通知先到本浮层，OnChildNotify
+    // 没有处理的才转给 Show 时传入的所有者（DuiPopupHost::OnPopupNotify，见开发约定文档
+    // UI 约定第 11 条），这一原因已不存在。
     Show(anchorScreen, NULL);
     LOG_INFO(_T("字体设置面板已打开。"));
 }

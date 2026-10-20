@@ -13,6 +13,9 @@
  *       逐像素比较平均差值（两次有损编码有小误差；画面错位、全黑、上下颠倒时差值会大得多），要求低于 kCcbMaxMeanDiff。
  *  时长可用环境变量 CCB_SECONDS 改（秒），便于先跑一段短的核对流程；环境变量 CCB_CONTENT 为 static 时画面改为「接近真实」的
  *  内容（条纹不动、只有一个色块在动），否则为最吃力的整屏运动画面。临时文件写在系统临时目录，用完删除。
+ *  环境变量 CCB_SIZE（2026-10-15，docs/远程桌面H264与共享画质提升方案.md A0 ⑤）为「宽x高」时画面改用这个尺寸（如 2560x1440、
+ *  3840x2160），编码器按 4K 档原尺寸编码，用来测大尺寸码流的合成速度；此时合成输出仍是 1080p 画布，不逐像素核对画面。
+ *  CCB2（隐藏标签 [.cloudcomposesizes]）在用例里依次用 1920×1080、2560×1440、3840×2160 各合成 60 秒，不需要环境变量。
  *  本用例要跑十几分钟以上，挂隐藏标签，只在显式指定时运行：FlamingoUnit.exe "[.cloudcomposebench]"。
  *  只断言合成成功、输出文件非空，不断言具体快慢。框架 Catch2 v3。
  *  balloonwj@qq.com   2026-10-07
@@ -56,9 +59,11 @@ using namespace screenrecord;
 
 namespace {
 
-//合成画面：尺寸、帧率、编码的片段长度（帧）、码率
-const int kCcbWidth = 1920;
-const int kCcbHeight = 1080;
+//合成画面：默认尺寸、帧率、编码的片段长度（帧）、码率
+const int kCcbDefaultWidth = 1920;
+const int kCcbDefaultHeight = 1080;
+//画面尺寸的环境变量（2026-10-15，docs/远程桌面H264与共享画质提升方案.md A0 ⑤）：值形如 2560x1440，用来测 2K、4K 输入的合成速度
+const char* const kCcbSizeEnv = "CCB_SIZE";
 const int kCcbFps = 15;
 const int kCcbClipFrames = 150;
 //默认录像时长（秒）与环境变量名
@@ -120,6 +125,57 @@ const double kCcbMaxMeanDiff = 24.0;
 //100 纳秒为单位的时间每秒的个数（Media Foundation 的时间戳）
 const int64_t kCcbHnsPerSecond = 10000000;
 
+//CCB2 指定的画面尺寸（2026-10-15）：不为 0 时优先于环境变量 CCB_SIZE，用例逐个尺寸合成时设置
+int g_ccbForceW = 0;
+int g_ccbForceH = 0;
+
+//画面尺寸：CCB2 指定了尺寸时用它；否则环境变量 CCB_SIZE 给出合法的「宽x高」（宽高为正偶数）时用它，否则 1920×1080。
+//环境变量只在第一次调用时读
+void ccbSize(int& w, int& h)
+{
+    if (g_ccbForceW > 0 && g_ccbForceH > 0)
+    {
+        w = g_ccbForceW;
+        h = g_ccbForceH;
+        return;
+    }
+    static int s_w = 0;
+    static int s_h = 0;
+    if (s_w == 0)
+    {
+        s_w = kCcbDefaultWidth;
+        s_h = kCcbDefaultHeight;
+        char buf[32] = { 0 };
+        size_t len = 0;
+        int pw = 0;
+        int ph = 0;
+        if (getenv_s(&len, buf, sizeof(buf), kCcbSizeEnv) == 0 && len > 0 && sscanf_s(buf, "%dx%d", &pw, &ph) == 2 &&
+            pw > 0 && ph > 0 && pw % 2 == 0 && ph % 2 == 0)
+        {
+            s_w = pw;
+            s_h = ph;
+        }
+    }
+    w = s_w;
+    h = s_h;
+}
+
+int ccbWidth()
+{
+    int w = 0;
+    int h = 0;
+    ccbSize(w, h);
+    return w;
+}
+
+int ccbHeight()
+{
+    int w = 0;
+    int h = 0;
+    ccbSize(w, h);
+    return h;
+}
+
 void ccbPutLe(std::string& out, uint64_t v, size_t bytes)
 {
     for (size_t i = 0; i < bytes; ++i)
@@ -158,11 +214,13 @@ void ccbDrawFrame(int index, bool staticContent, std::vector<uint8_t>& bgra)
 {
     const int stripeShift = staticContent ? 0 : index * kCcbStripeStep;
     const int movingBlocks = staticContent ? 1 : kCcbBlocks;
-    bgra.assign(static_cast<size_t>(kCcbWidth) * kCcbHeight * kCcbBpp, kCcbBackground);
-    for (int y = 0; y < kCcbHeight; ++y)
+    const int width = ccbWidth();
+    const int height = ccbHeight();
+    bgra.assign(static_cast<size_t>(width) * height * kCcbBpp, kCcbBackground);
+    for (int y = 0; y < height; ++y)
     {
-        uint8_t* row = &bgra[static_cast<size_t>(y) * kCcbWidth * kCcbBpp];
-        for (int x = 0; x < kCcbWidth; ++x)
+        uint8_t* row = &bgra[static_cast<size_t>(y) * width * kCcbBpp];
+        for (int x = 0; x < width; ++x)
         {
             if (((x + y + stripeShift) / (kCcbStripePeriod / 2)) % 2 == 0)
             {
@@ -174,15 +232,15 @@ void ccbDrawFrame(int index, bool staticContent, std::vector<uint8_t>& bgra)
     }
     for (int b = 0; b < movingBlocks; ++b)
     {
-        const int range = kCcbWidth - kCcbBlockSide;
+        const int range = width - kCcbBlockSide;
         const int left = (b * kCcbBlockSide + index * kCcbBlockStep * (b + 1)) % range;
-        const int top = (b * (kCcbHeight / kCcbBlocks)) % (kCcbHeight - kCcbBlockSide);
+        const int top = (b * (height / kCcbBlocks)) % (height - kCcbBlockSide);
         const uint8_t red = static_cast<uint8_t>(b * kCcbRedStep);
         const uint8_t green = static_cast<uint8_t>(kCcbGreenTop - b * kCcbGreenStep);
         const uint8_t blue = static_cast<uint8_t>((b * kCcbBlueStep + index) & kCcbByteMask);
         for (int y = top; y < top + kCcbBlockSide; ++y)
         {
-            uint8_t* row = &bgra[static_cast<size_t>(y) * kCcbWidth * kCcbBpp];
+            uint8_t* row = &bgra[static_cast<size_t>(y) * width * kCcbBpp];
             for (int x = left; x < left + kCcbBlockSide; ++x)
             {
                 row[x * kCcbBpp] = blue;
@@ -224,6 +282,8 @@ void ccbEncodeClip(bool staticContent, std::vector<CcbUnit>& units, int& encW, i
     ::MFStartup(MF_VERSION);
     {
         screenshare::ShareVideoEncoder enc;
+        //4K 档：2560、3840 的输入都按原尺寸编码（A0 ⑤ 要测的就是大尺寸码流的合成速度）
+        enc.SetParams(screenshare::ShareVideoParamsForQuality(screenshare::share_quality_4k));
         CcbEncodedSink sink;
         std::vector<uint8_t> bgra;
         for (int i = 0; i < kCcbClipFrames; ++i)
@@ -231,9 +291,9 @@ void ccbEncodeClip(bool staticContent, std::vector<CcbUnit>& units, int& encW, i
             ccbDrawFrame(i, staticContent, bgra);
             screenshare::ShareCaptureFrame frame;
             frame.m_data = &bgra[0];
-            frame.m_stride = kCcbWidth * kCcbBpp;
-            frame.m_width = kCcbWidth;
-            frame.m_height = kCcbHeight;
+            frame.m_stride = ccbWidth() * kCcbBpp;
+            frame.m_width = ccbWidth();
+            frame.m_height = ccbHeight();
             enc.Encode(frame, i == 0, static_cast<uint64_t>(i) * kCcbUsPerSecond / kCcbFps, &sink);
         }
         encW = enc.EncodeWidth();
@@ -439,8 +499,8 @@ void ccbCheckOutput(const std::wstring& mp4Path, bool staticContent, int clipFra
         int h = 0;
         if (ccbReadMp4Frame(mp4Path, kCcbCheckSeconds, out, w, h, sampleHns) && clipFrames > 0)
         {
-            const int cmpW = (w < kCcbWidth) ? w : kCcbWidth;
-            const int cmpH = (h < kCcbHeight) ? h : kCcbHeight;
+            const int cmpW = (w < ccbWidth()) ? w : ccbWidth();
+            const int cmpH = (h < ccbHeight()) ? h : ccbHeight();
             const int64_t frameIndex = sampleHns * kCcbFps / kCcbHnsPerSecond;
             std::vector<uint8_t> expect;
             for (int64_t d = -1; d <= 1; ++d)
@@ -451,7 +511,7 @@ void ccbCheckOutput(const std::wstring& mp4Path, bool staticContent, int clipFra
                 ccbDrawFrame(static_cast<int>(idx % clipFrames), staticContent, expect);
                 for (int flip = 0; flip < 2; ++flip)
                 {
-                    const double diff = ccbMeanDiff(out, w, h, flip != 0, expect, kCcbWidth, cmpW, cmpH);
+                    const double diff = ccbMeanDiff(out, w, h, flip != 0, expect, ccbWidth(), cmpW, cmpH);
                     if (bestDiff < 0 || diff < bestDiff)
                         bestDiff = diff;
                 }
@@ -475,12 +535,14 @@ int ccbSeconds()
     return kCcbDefaultSeconds;
 }
 
-} // namespace
-
-TEST_CASE("CCB1 compose a synthetic long recording", "[.cloudcomposebench]")
+/**
+ *  生成一份 seconds 秒的原始帧文件、离线合成并打印耗时、内存与画面核对结果（CCB1、CCB2 共用，2026-10-15 由 CCB1 的正文提出）。
+ *  画面尺寸取 ccbSize。
+ *  @param seconds       录像时长（秒）
+ *  @param staticContent 用「接近真实」的画面（见 ccbDrawFrame）
+ */
+void ccbRunBench(int seconds, bool staticContent)
 {
-    const int seconds = ccbSeconds();
-    const bool staticContent = ccbStaticContent();
     //1. 编画面片段与声音
     const ULONGLONG gen0 = ::GetTickCount64();
     std::vector<CcbUnit> clip;
@@ -615,10 +677,14 @@ TEST_CASE("CCB1 compose a synthetic long recording", "[.cloudcomposebench]")
        << ", audio " << (stages.m_audioMs / kCcbMs) << ", frames " << stages.m_videoFrames << " (reused canvas "
        << stages.m_reusedFrames << ", direct " << stages.m_directFrames << ")\n"
        << "  mp4 " << (mp4Bytes / kCcbMb) << " MB";
-    //核对画面内容：录像不足 kCcbCheckSeconds 秒时不核对
+    //核对画面内容：录像不足 kCcbCheckSeconds 秒时不核对；输入不是 1920×1080 时合成器会缩放到 1080p 的画布，与原始画面
+    //不能逐像素比较，也不核对（2026-10-15，A0 ⑤ 只看速度）
     double meanDiff = -1.0;
     int64_t checkHns = 0;
-    if (result == kCloudComposeOk && seconds > kCcbCheckSeconds)
+    const bool checkContent = (ccbWidth() == kCcbDefaultWidth && ccbHeight() == kCcbDefaultHeight);
+    if (!checkContent)
+        os << "\n  input " << ccbWidth() << "x" << ccbHeight() << " is not 1920x1080, output content not compared";
+    if (result == kCloudComposeOk && seconds > kCcbCheckSeconds && checkContent)
     {
         std::thread checker(&ccbCheckOutput, std::cref(mp4Path), staticContent, static_cast<int>(clip.size()),
                             std::ref(meanDiff), std::ref(checkHns));
@@ -630,11 +696,35 @@ TEST_CASE("CCB1 compose a synthetic long recording", "[.cloudcomposebench]")
     CHECK(done);
     CHECK(result == kCloudComposeOk);
     CHECK(mp4Bytes > 0);
-    if (seconds > kCcbCheckSeconds)
+    if (seconds > kCcbCheckSeconds && checkContent)
     {
         CHECK(meanDiff >= 0.0);
         CHECK(meanDiff < kCcbMaxMeanDiff);
     }
     ::DeleteFileW(frecPath.c_str());
     ::DeleteFileW(mp4Path.c_str());
+}
+
+//CCB2 每种尺寸合成的录像时长（秒）
+const int kCcbSizeBenchSeconds = 60;
+
+} // namespace
+
+TEST_CASE("CCB1 compose a synthetic long recording", "[.cloudcomposebench]")
+{
+    ccbRunBench(ccbSeconds(), ccbStaticContent());
+}
+
+TEST_CASE("CCB2 compose 60 s recordings at 1080p, 2K and 4K input sizes", "[.cloudcomposesizes]")
+{
+    //2026-10-15，docs/远程桌面H264与共享画质提升方案.md A0 ⑤：在用例里依次指定尺寸，不靠环境变量传参
+    const int sizes[][2] = { { 1920, 1080 }, { 2560, 1440 }, { 3840, 2160 } };
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i)
+    {
+        g_ccbForceW = sizes[i][0];
+        g_ccbForceH = sizes[i][1];
+        ccbRunBench(kCcbSizeBenchSeconds, false);
+    }
+    g_ccbForceW = 0;
+    g_ccbForceH = 0;
 }

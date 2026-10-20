@@ -110,16 +110,67 @@ void CRdController::Shutdown()
 void CRdController::ResetForLogout()
 {
     m_rdDlg.CloseDlg();
-    m_rdStreamer.Stop();
-    m_rdControlledBar.Hide();
+    endControlledSide();
     m_rdViewer.CloseViewer();
-    m_rdControlledSessionId.clear();
     m_rdControlledPeerName.clear();
+}
+
+void CRdController::endControlledSide()
+{
+    //先关闭把关与申请提示，再停推流：推流线程上仍可能有正在注入的输入
+    applyControlledEffects(m_controlFlow.Reset());
+    m_rdStreamer.Stop();
+    m_rdControlledBar.Close();
+    m_rdControlledSessionId.clear();
+}
+
+void CRdController::applyControlledEffects(const RdControlledEffects& effects)
+{
+    //把关开关：收回控制时先在本地关闭，再发 revoke
+    if (effects.m_gate == rd_gate_open)
+        m_rdStreamer.SetControlAllowed(true);
+    else if (effects.m_gate == rd_gate_close)
+        m_rdStreamer.SetControlAllowed(false);
+    //发 1718（会话号为空时 SendControl 不发）
+    if (effects.m_sendAction != 0)
+        SendControl(m_rdControlledSessionId, effects.m_sendAction);
+    if (effects.m_toast == rd_toast_show)
+        m_controlToast.Show(RdControlRequestToastText(m_rdControlledPeerName), 0, m_hWnd, 1,
+                            MakeRdControlRequestToastTexts());
+    else if (effects.m_toast == rd_toast_hide)
+        m_controlToast.Hide();
+    m_rdControlledBar.SetControlState(m_controlFlow.State());
+}
+
+void CRdController::HandleControlResponse(const net::RDControlResponse& resp)
+{
+    if (!m_rdControlledSessionId.empty() && resp.m_sessionId == m_rdControlledSessionId)
+    {
+        if (resp.m_code != 0)
+            LOG_WARNING("RdController: control action %d failed, code=%d, control=%d.", resp.m_action, resp.m_code,
+                        resp.m_control);
+        applyControlledEffects(m_controlFlow.OnResponse(resp.m_action, resp.m_code, resp.m_control));
+        return;
+    }
+    m_rdViewer.OnControlResponse(resp);
+}
+
+void CRdController::HandleControlNotify(const net::RDControlNotify& notify)
+{
+    if (!m_rdControlledSessionId.empty() && notify.m_sessionId == m_rdControlledSessionId)
+    {
+        applyControlledEffects(m_controlFlow.OnNotify(notify.m_action, notify.m_control));
+        return;
+    }
+    m_rdViewer.OnControlNotify(notify);
 }
 
 bool CRdController::IsRdSignal(uint16_t cmd)
 {
-    return cmd >= cmd_rd_invite && cmd <= cmd_rd_relay_info;
+    //1710~1716 是邀请到中转参数的会话信令；1718、1719 是控制权限（2026-10-12），中间的 1717 归一对一通话卡片
+    if (cmd >= cmd_rd_invite && cmd <= cmd_rd_relay_info)
+        return true;
+    return cmd == cmd_rd_control || cmd == cmd_rd_control_notify;
 }
 
 HWND CRdController::MainWindow() const
@@ -213,6 +264,39 @@ bool CRdController::OnSignal(uint16_t cmd, const std::string& body)
             else
             {
                 LOG_ERROR("Parse v2 rd state-notify failed, body=%s.", body.c_str());
+            }
+            break;
+        }
+    //控制动作的应答（2026-10-12）：被控端的授予、拒绝、收回，或控制端的申请、撤回、放弃
+    case cmd_rd_control:
+        {
+            net::RDControlResponse resp;
+            if (net::RemoteDesktopProtocolClient::parseControlResponse(body, resp))
+            {
+                LOG_INFO("Recv v2 rd control-ack, code=%d, session=%s, action=%d, control=%d.", resp.m_code,
+                         resp.m_sessionId.c_str(), resp.m_action, resp.m_control);
+                HandleControlResponse(resp);
+            }
+            else
+            {
+                LOG_ERROR("Parse v2 rd control-ack failed, body=%s.", body.c_str());
+            }
+            break;
+        }
+    //控制动作推送（2026-10-12）：对方做了一个控制动作
+    case cmd_rd_control_notify:
+        {
+            net::RDControlNotify notify;
+            if (net::RemoteDesktopProtocolClient::parseControlNotify(body, notify))
+            {
+                LOG_INFO("Recv v2 rd control-notify, session=%s, action=%d, control=%d, from=%lld.",
+                         notify.m_sessionId.c_str(), notify.m_action, notify.m_control,
+                         static_cast<long long>(notify.m_fromId));
+                HandleControlNotify(notify);
+            }
+            else
+            {
+                LOG_ERROR("Parse v2 rd control-notify failed, body=%s.", body.c_str());
             }
             break;
         }
@@ -326,9 +410,12 @@ void CRdController::HandleRelayInfo(const net::RDRelayInfo& info)
         //推流已起：记下会话 id（被控方主动结束时发 cmd_rd_close 用），并在屏幕顶部弹出受控提示条，
         //让被控方随时知情、可随手终止远程控制。提示条的「结束控制」投到本类的消息窗口。
         m_rdControlledSessionId = info.m_sessionId;
+        //控制权限每次接通都从未授权开始（推流器 Start 时把关已复位为关闭）
+        m_controlFlow = RdControlledControlState();
+        m_controlToast.Hide();
         //提示条每秒问推流器一次链路路径：画面经直连链路发出时显示「P2P」徽章
         m_rdControlledBar.SetLinkPathSource(&m_rdStreamer);
-        m_rdControlledBar.Show(m_rdControlledPeerName, m_hWnd);
+        m_rdControlledBar.Open(m_rdControlledPeerName, m_hWnd);
     }
     else if (info.m_role == net::rd_role_controller)
     {
@@ -346,9 +433,7 @@ void CRdController::HandleStateNotify(const net::RDStateNotify& state)
     //对端：呼叫中或授权中的对话框对应的对方（关对话框之前取，对话框关了也记着）
     const int64_t peerId = m_rdDlg.GetPeerUserId();
     m_rdDlg.CloseDlg();
-    m_rdStreamer.Stop();
-    m_rdControlledBar.Hide();
-    m_rdControlledSessionId.clear();
+    endControlledSide();
     m_rdViewer.CloseViewer();
 
     //据状态提示；disconnected（正常断开）静默，避免与观看窗 / 推流器自身的断开提示重复
@@ -418,6 +503,18 @@ void CRdController::CloseSession(const std::string& sessionId)
     }
 }
 
+void CRdController::SendControl(const std::string& sessionId, int action)
+{
+    if (sessionId.empty())
+    {
+        return;
+    }
+    if (SendRdSignal(cmd_rd_control, net::RemoteDesktopProtocolClient::buildControl(sessionId, action), "rd control"))
+    {
+        LOG_INFO("Send v2 rd control, session=%s, action=%d.", sessionId.c_str(), action);
+    }
+}
+
 void CRdController::OnScreenLockChanged(bool locked)
 {
     //锁屏开始时本机若正被远程控制，立即结束控制：控制方用模拟键鼠操作本机，能直接在锁屏界面上打字
@@ -428,20 +525,30 @@ void CRdController::OnScreenLockChanged(bool locked)
     LOG_INFO("RdController: screen locked while being controlled, ending the session, sessionId=%s.",
              m_rdControlledSessionId.c_str());
     CloseSession(m_rdControlledSessionId);
-    m_rdStreamer.Stop();
-    m_rdControlledBar.Hide();
-    m_rdControlledSessionId.clear();
+    endControlledSide();
 }
 
-LRESULT CRdController::OnControlledEndByUserMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+LRESULT CRdController::OnControlledBarCommandMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    //被控端用户点受控提示条「结束控制」：主动发 cmd_rd_close 结束会话（服务端会广播 cmd_rd_state_notify 给
-    //控制端收尾），随后停本端推流、关受控条、清会话 id。与服务端推来的 state_notify 收尾走同一组动作，重复调用幂等。
-    LOG_INFO("RdController: controlled side ended the session by user, sessionId=%s.", m_rdControlledSessionId.c_str());
-    CloseSession(m_rdControlledSessionId);
-    m_rdStreamer.Stop();
-    m_rdControlledBar.Hide();
-    m_rdControlledSessionId.clear();
+    switch (static_cast<UINT>(wParam))
+    {
+    //「结束远程桌面」：主动发 cmd_rd_close 结束会话（服务端会广播 cmd_rd_state_notify 给控制端收尾），随后停本端推流、
+    //关顶部条、清会话 id。与服务端推来的 state_notify 收尾走同一组动作，重复调用幂等
+    case kRdBarEnd:
+        LOG_INFO("RdController: controlled side ended the session by user, sessionId=%s.",
+                 m_rdControlledSessionId.c_str());
+        CloseSession(m_rdControlledSessionId);
+        endControlledSide();
+        break;
+    //「允许控制 / 收回控制」：未授权或有人申请时发 grant（应答成功后才打开把关），已授权时先关闭把关再发 revoke
+    case kRdBarControl:
+        LOG_INFO("RdController: control button clicked, state=%d.", m_controlFlow.State());
+        applyControlledEffects(m_controlFlow.OnControlButton());
+        break;
+    //其余编号：顶部条只有这两个按钮，不会走到这里
+    default:
+        break;
+    }
     return 0;
 }
 
@@ -453,10 +560,20 @@ LRESULT CRdController::OnStreamerConnectFailedMsg(UINT /*uMsg*/, WPARAM wParam, 
     //P2P 与中转都没连上：结束会话（服务端广播状态推送，控制端随之关观看窗），停推流、关提示条，再提示用户
     LOG_ERROR("RdController: streamer connect failed, ending session %s.", m_rdControlledSessionId.c_str());
     CloseSession(m_rdControlledSessionId);
-    m_rdStreamer.Stop();
-    m_rdControlledBar.Hide();
-    m_rdControlledSessionId.clear();
+    endControlledSide();
     ::MessageBox(MainWindow(), TR(L"启动屏幕推流失败。"), TR(kRdTitle), MB_OK | MB_ICONWARNING);
+    return 0;
+}
+
+LRESULT CRdController::OnControlRequestAnswerMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    //会话已结束后才到的答复：提示已随会话关闭，不再发送
+    if (m_rdControlledSessionId.empty())
+        return 0;
+    const bool accept = (static_cast<int>(wParam) == screenshare::CShareCornerToast::kCmdJoin);
+    LOG_INFO("RdController: control request %s by user, sessionId=%s.", accept ? "accepted" : "denied",
+             m_rdControlledSessionId.c_str());
+    applyControlledEffects(m_controlFlow.OnToastAnswer(accept));
     return 0;
 }
 

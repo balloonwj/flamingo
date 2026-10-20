@@ -111,6 +111,21 @@ bool SharePickerOffersCaption(int mode)
     return mode == share_picker_record || mode == share_picker_start || mode == share_picker_start_in_call;
 }
 
+int SharePickerConfirmKindFor(int mode)
+{
+    if (mode == share_picker_record)
+        return share_confirm_record;
+    //本人已在共享时是换内容；经主持人同意、还没开始共享时（share_picker_switch_to_start）是开始共享
+    if (mode == share_picker_switch)
+        return share_confirm_switch;
+    return share_confirm_start;
+}
+
+bool SharePickerIsSwitchLayout(int mode)
+{
+    return mode == share_picker_switch || mode == share_picker_switch_to_start;
+}
+
 bool SharePickerCanSubmit(bool hasSelection, bool passwordOn, const std::wstring& password)
 {
     if (!hasSelection)

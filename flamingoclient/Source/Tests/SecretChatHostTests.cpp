@@ -99,12 +99,13 @@ ChatBubble* LayoutAndPaint(ChatMessageList& list, const ChatMessage& msg)
     return dynamic_cast<ChatBubble*>(list.Children().back().get());
 }
 
-//扫描一行里所有点，收集命中到的按钮下标；同时记下下标 0 的最右与下标 1 的最左横坐标
-std::set<int> ScanButtons(const ChatBubble* bubble, int& maxX0, int& minX1)
+//扫描一行里所有点，收集命中到的按钮下标；同时记下下标 0 的最左与下标 1 的最右横坐标
+//（2026-10-14 起被邀请方的「忽略」（下标 1）在左、「同意」（下标 0）在右，docs/聊天卡片美化方案.md 5.4）
+std::set<int> ScanButtons(const ChatBubble* bubble, int& minX0, int& maxX1)
 {
     std::set<int> hits;
-    maxX0 = -1;
-    minX1 = INT_MAX;
+    minX0 = INT_MAX;
+    maxX1 = -1;
     const RECT rc = bubble->GetRect();
     for (int y = rc.top; y < rc.bottom; y += kScanStep)
     {
@@ -115,10 +116,10 @@ std::set<int> ScanButtons(const ChatBubble* bubble, int& maxX0, int& minX1)
             if (idx < 0)
                 continue;
             hits.insert(idx);
-            if (idx == 0 && x > maxX0)
-                maxX0 = x;
-            if (idx == 1 && x < minX1)
-                minX1 = x;
+            if (idx == 0 && x < minX0)
+                minX0 = x;
+            if (idx == 1 && x > maxX1)
+                maxX1 = x;
         }
     }
     return hits;
@@ -392,36 +393,37 @@ TEST_CASE("SCE5 卡片在消息列表里：按会话号查找、改写、移除�
         CHECK(list.Children().size() == 2);
         CHECK_FALSE(list.RemoveSecretInviteMessage(kSessionA));
 
-        //按钮行计入卡片高度
+        //卡片底部一行常驻（左边是类型标签「密聊」，docs/聊天卡片美化方案.md 3.6、第 9 节），有没有按钮行高都一样
         ChatMessage noButton = InviteCard(false, kSessionA, 58, kProtectExclude);
         noButton.secretInviteButtons = 0;
-        CHECK(RowHeight(InviteCard(false, kSessionA, 58, kProtectExclude)) > RowHeight(noButton));
+        CHECK(RowHeight(InviteCard(false, kSessionA, 58, kProtectExclude)) == RowHeight(noButton));
         CHECK(RowHeight(InviteCard(true, kSessionB, 60, kProtectExclude))
               == RowHeight(InviteCard(false, kSessionA, 58, kProtectExclude)));
     }
     Gdiplus::GdiplusShutdown(gdipToken);
 }
 
-TEST_CASE("SCE6 卡片按钮：左同意右忽略、发起方只有取消，多选不命中，没有右键菜单", "[secretchat]")
+TEST_CASE("SCE6 卡片按钮：左忽略右同意、发起方只有取消，多选不命中，没有右键菜单", "[secretchat]")
 {
     ULONG_PTR gdipToken = 0;
     Gdiplus::GdiplusStartupInput gdipInput;
     REQUIRE(Gdiplus::GdiplusStartup(&gdipToken, &gdipInput, NULL) == Gdiplus::Ok);
     {
-        SECTION("被邀请方：两个按钮以按钮行正中为界")
+        SECTION("被邀请方：两个按钮各有自己的矩形")
         {
             ChatMessageList list;
             ChatBubble* bubble = LayoutAndPaint(list, InviteCard(false, kSessionA, 58, kProtectExclude));
             REQUIRE(bubble != NULL);
             CHECK(bubble->IsSecretRow());
-            int maxX0 = 0;
-            int minX1 = 0;
-            const std::set<int> hits = ScanButtons(bubble, maxX0, minX1);
+            int minX0 = 0;
+            int maxX1 = 0;
+            const std::set<int> hits = ScanButtons(bubble, minX0, maxX1);
             CHECK(hits.size() == 2);
             CHECK(hits.count(0) == 1);
             CHECK(hits.count(1) == 1);
-            //「同意」全在「忽略」左边
-            CHECK(maxX0 < minX1);
+            //「忽略」（编号 1）全在「同意」（编号 0）左边：底部一行的按钮从右往左排，主要按钮「同意」在最右
+            //（docs/聊天卡片美化方案.md 5.4、第 9 节；按钮编号的含义不变）
+            CHECK(maxX1 < minX0);
         }
 
         SECTION("发起方：只有一个按钮")
@@ -429,9 +431,9 @@ TEST_CASE("SCE6 卡片按钮：左同意右忽略、发起方只有取消，多�
             ChatMessageList list;
             ChatBubble* bubble = LayoutAndPaint(list, InviteCard(true, kSessionB, 60, kProtectExclude));
             REQUIRE(bubble != NULL);
-            int maxX0 = 0;
-            int minX1 = 0;
-            const std::set<int> hits = ScanButtons(bubble, maxX0, minX1);
+            int minX0 = 0;
+            int maxX1 = 0;
+            const std::set<int> hits = ScanButtons(bubble, minX0, maxX1);
             CHECK(hits.size() == 1);
             CHECK(hits.count(0) == 1);
         }
@@ -445,14 +447,14 @@ TEST_CASE("SCE6 卡片按钮：左同意右忽略、发起方只有取消，多�
             ChatBubble* bubble = LayoutAndPaint(list, text);
             REQUIRE(bubble != NULL);
             CHECK_FALSE(bubble->IsSecretRow());
-            int maxX0 = 0;
-            int minX1 = 0;
-            CHECK(ScanButtons(bubble, maxX0, minX1).empty());
+            int minX0 = 0;
+            int maxX1 = 0;
+            CHECK(ScanButtons(bubble, minX0, maxX1).empty());
 
             ChatMessageList list2;
             ChatBubble* dead = LayoutAndPaint(list2, InviteCard(false, 0, 58, kProtectExclude));
             REQUIRE(dead != NULL);
-            CHECK(ScanButtons(dead, maxX0, minX1).empty());
+            CHECK(ScanButtons(dead, minX0, maxX1).empty());
         }
 
         SECTION("多选模式下：按钮不命中，点击也不能选中")
@@ -461,9 +463,9 @@ TEST_CASE("SCE6 卡片按钮：左同意右忽略、发起方只有取消，多�
             ChatBubble* bubble = LayoutAndPaint(list, InviteCard(false, kSessionA, 58, kProtectExclude));
             REQUIRE(bubble != NULL);
             list.SetMultiSelectMode(true);
-            int maxX0 = 0;
-            int minX1 = 0;
-            CHECK(ScanButtons(bubble, maxX0, minX1).empty());
+            int minX0 = 0;
+            int maxX1 = 0;
+            CHECK(ScanButtons(bubble, minX0, maxX1).empty());
             const RECT rc = bubble->GetRect();
             POINT center = { (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2 };
             CHECK_FALSE(bubble->OnLButtonDown(center, 0));

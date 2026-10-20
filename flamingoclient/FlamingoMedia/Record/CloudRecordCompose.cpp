@@ -5,6 +5,8 @@
 #include "CloudRecordCompose.h"
 #include "RecordPolicy.h"   //RecordVideoBitrate：合成码率按录制画质换算
 #include "../Share/ShareAnnotation.h"   // AnnotationStroke、annot_tool_laser：按时间变化的笔迹（2026-10-08）
+#include "../Share/ShareAspectFit.h"    // FitRectKeepAspect：CloudFitRect 转调的等比放置
+#include "../Share/ShareFrameDrawer.h"  // ShareUsesFastDownscale / BgraDownscaler：何时走快速缩放、怎样缩，与观看窗共用（2026-10-15）
 
 #include <math.h>
 #include <string.h>   // memcpy：CloudCopyFrameRows
@@ -212,25 +214,8 @@ uint32_t CloudComposeVideoBitrate()
 
 RECT CloudFitRect(int srcW, int srcH, const RECT& cell)
 {
-    const int cw = cell.right - cell.left;
-    const int ch = cell.bottom - cell.top;
-    RECT dst = cell;
-    if (srcW <= 0 || srcH <= 0 || cw <= 0 || ch <= 0)
-        return dst;
-    //画面比格子扁：宽撑满、上下留黑；否则高撑满、左右留黑
-    if (static_cast<int64_t>(srcW) * ch > static_cast<int64_t>(srcH) * cw)
-    {
-        const int dh = static_cast<int>(static_cast<int64_t>(srcH) * cw / srcW);
-        dst.top = cell.top + (ch - dh) / 2;
-        dst.bottom = dst.top + dh;
-    }
-    else
-    {
-        const int dw = static_cast<int>(static_cast<int64_t>(srcW) * ch / srcH);
-        dst.left = cell.left + (cw - dw) / 2;
-        dst.right = dst.left + dw;
-    }
-    return dst;
+    //画面比格子扁：宽撑满、上下留黑；否则高撑满、左右留黑。与远程桌面、屏幕共享观看窗共用一份（2026-10-14）
+    return screenshare::FitRectKeepAspect(cell, srcW, srcH);
 }
 
 bool CloudFitIsOneToOne(int srcW, int srcH, const RECT& dst)
@@ -256,6 +241,28 @@ void CloudCopyFrameRows(uint8_t* dst, int dstW, int dstH, const uint8_t* src, in
         memcpy(dst + (static_cast<size_t>(dy) * dstW + left + x0) * bpp,
                src + (static_cast<size_t>(y) * srcW + x0) * bpp, static_cast<size_t>(x1 - x0) * bpp);
     }
+}
+
+bool CloudFitUsesFastScale(int srcW, int srcH, const RECT& dst)
+{
+    //与观看窗的绘制器共用一条规则：缩小且两个方向都不小于一半
+    return screenshare::ShareUsesFastDownscale(srcW, srcH, dst.right - dst.left, dst.bottom - dst.top);
+}
+
+bool CloudScaleFrameInto(screenshare::BgraDownscaler& scaler, uint8_t* canvas, int canvasW, int canvasH, const uint8_t* src,
+                         int srcW, int srcH, const RECT& dst)
+{
+    const int bpp = 4;
+    const int dstW = dst.right - dst.left;
+    const int dstH = dst.bottom - dst.top;
+    if (canvas == NULL || src == NULL || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0)
+        return false;
+    //只处理完全落在画布内的矩形；越界的交给 GDI 裁剪
+    if (dst.left < 0 || dst.top < 0 || dst.right > canvasW || dst.bottom > canvasH)
+        return false;
+    uint8_t* origin = canvas + (static_cast<size_t>(dst.top) * canvasW + dst.left) * bpp;
+    scaler.Scale(src, srcW * bpp, srcW, srcH, origin, canvasW * bpp, dstW, dstH);
+    return true;
 }
 
 CloudCanvasKey::CloudCanvasKey()

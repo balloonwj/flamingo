@@ -8,6 +8,8 @@
 
 #include "ChatGroupCallCard.h"
 
+#include "ChatCardModel.h"                                   // ChatCardChipTone：卡片状态标签的语义
+
 #include <stdlib.h>
 #include "../../third-party/jsoncpp-1.9.0/json.h"
 #include "../../Feature/GroupCall/GroupCallStatusCache.h"   // GroupCallRoomState
@@ -51,11 +53,17 @@ int64_t ToInt64(const Json::Value& v)
 void FillState(ChatMessage& msg, const GroupCallCardInfo& info, bool ok, int roomState, int joinedCount)
 {
     msg.screenShareState = roomState;
+    //卡片的状态标签与信息行（docs/聊天卡片美化方案.md 5.2）：正在通话为绿、信息行写人数，其余为灰、结束后信息行写时长
+    msg.cardMetaText.Empty();
+    msg.cardChipTone = kCardChipEnded;
     //服务端改写过的卡片：一定已结束，写上时长
     if (ok && info.m_ended)
     {
-        msg.screenShareStatus = TRF(L"通话已结束 · 时长 {0}", FormatGroupCallCardDuration(info.m_durationSeconds)).c_str();
+        const CString duration = FormatGroupCallCardDuration(info.m_durationSeconds);
+        msg.screenShareStatus = TRF(L"通话已结束 · 时长 {0}", duration).c_str();
         msg.screenShareButtonEnabled = false;
+        msg.cardChipText = TR(L"通话已结束");
+        msg.cardMetaText = TRF(L"时长 {0}", duration).c_str();
         return;
     }
     switch (roomState)
@@ -64,14 +72,20 @@ void FillState(ChatMessage& msg, const GroupCallCardInfo& info, bool ok, int roo
     case balloongroupcall::kGroupCallRoomActive:
         msg.screenShareStatus = joinedCount > 0 ? CString(TRF(L"正在通话 · {0} 人", joinedCount).c_str())
                                                 : CString(TR(L"正在通话"));
+        msg.cardChipText = TR(L"正在通话");
+        msg.cardChipTone = kCardChipLive;
+        if (joinedCount > 0)
+            msg.cardMetaText = TRF(L"{0} 人", joinedCount).c_str();
         break;
     //该群已没有群通话，或进行中的是另一场
     case balloongroupcall::kGroupCallRoomEnded:
         msg.screenShareStatus = TR(L"通话已结束");
+        msg.cardChipText = msg.screenShareStatus;
         break;
     //本次登录还没有收到该群的状态
     default:
         msg.screenShareStatus = TR(L"正在获取状态");
+        msg.cardChipText = msg.screenShareStatus;
         break;
     }
     //还不知道状态时也允许点：通话若已结束，服务端拒绝加入，DLL 随即回报「没有群通话」，卡片被重填为已结束

@@ -91,6 +91,10 @@ struct ChatMessage
 
     CString  text;          // kMsgText/kMsgEmoji 的内容；kMsgTime 的文字
 
+    // 是否为消息列表自动插入的时间分隔行（仅 kMsgTime 用，2026-10-14）。为 true 时 timestampMs 是这一行所标注的那条消息的
+    // 时间，本地日期变化后消息列表据此重新格式化 text（如「21:30」变为「昨天 21:30」）；系统提示、撤回提示等其他 kMsgTime 行为 false
+    bool     isTimeSeparator = false;
+
     // 本条文本消息里的 @ 片段（仅 kMsgText 用，按出现顺序）。偏移是 text 的
     // UTF-16 字符口径，由收发两侧在组装本结构时用 ConvertSpansForRender 从协议的
     // UTF-8 字节口径换算好，并顺带标好 m_isMe —— 气泡只管按它画高亮，不再查身份。
@@ -223,6 +227,7 @@ struct ChatMessage
     int                  relayState = 0;       // 按填写时刻的本机时间换算后的状态，取值见 enum relay_state
     int                  relayButton = 0;      // 底部按钮，取值见 ChatRelayCard.h 的 RelayCardButton；0=不显示
     long long            relayDeadline = 0;    // 截止时间，Unix 毫秒；0=不限。宿主据它判断何时要把卡片重填为已截止
+    CString              relayDeadlineText;    // 卡片副标题「截止 10-16 14:05」（docs/聊天卡片美化方案.md 5.3）；不限截止时间时为空
     std::string          relayContent;         // 卡片当前内容（紧凑 JSON，UTF-8），已合并收到过的变更推送；
                                                // 再收到推送时在它的基础上合并，打开详情窗时原样交给详情窗
     CString              relayCopyBody;        // 「复制」要放进剪贴板的正文（标题、说明、完整名单，行与行之间用回车换行分隔），
@@ -372,6 +377,12 @@ struct ChatMessage
     int64_t  senderUserId = 0;       // 发送者 userid（0=未知；真图下载完成按它刷新本行）
     CString  senderAvatarImagePath;  // 发送者真图本地路径（空=画字形，非空=画真图）
     bool     senderIsBot = false;    // 发送者是机器人账号（群聊）：名字后面画「机器人」徽章（docs/机器人方案.md §4.2）
+
+    // ---- 卡片的状态标签与信息行（docs/聊天卡片美化方案.md 3.4 节，2026-10-14）。由各卡片的 ApplyXxx 与状态刷新函数
+    //      在写原有状态文字时一并填写，ChatBubble 只照它们画；原有的 xxxStatus 字段照旧保留（复制、摘要等处仍在用）----
+    int      cardChipTone = 0;   // 状态标签的语义，取值见 ChatCardModel.h 的 ChatCardChipTone；0 表示不画标签
+    CString  cardChipText;       // 状态标签的文字；为空时不画标签
+    CString  cardMetaText;       // 标签右侧的信息行文字（时长、人数、大小）；为空时没有
 
     // 消息发出时间（Unix 毫秒，服务器时间）。用于判断本条是否还在可撤回时限内 ——
     // 右键菜单据此决定要不要出现"撤回"项（见 net::MessageProtocolClient::canRecallMessage）。

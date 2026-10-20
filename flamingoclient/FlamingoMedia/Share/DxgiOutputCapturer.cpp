@@ -87,6 +87,11 @@ public:
             safeRelease(adapter);
             return false;
         }
+        //每次建立都重新读取显示器在虚拟桌面上的矩形（2026-10-12）：分辨率变化后采集器重建，指针位置、控制坐标、
+        //标注与边框都按新矩形换算；之前一直沿用开始共享时的矩形
+        DXGI_OUTPUT_DESC outDesc;
+        if (SUCCEEDED(output->GetDesc(&outDesc)))
+            m_monitorRect = outDesc.DesktopCoordinates;
         IDXGIOutput1* output1 = NULL;
         hr = output->QueryInterface(__uuidof(IDXGIOutput1), reinterpret_cast<void**>(&output1));
         safeRelease(output);

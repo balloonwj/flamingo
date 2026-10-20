@@ -28,8 +28,9 @@
 namespace screenshare {
 
 //发给 P2P 观看者的数据在链路上积压超过这么多字节（字节）时，这路视频进入「等关键帧」：与 imgserver 给每个观看者的
-//积压上限 screenshareviewerbufferbytes 的默认值相同
-const uint64_t kShareP2PViewerBacklogBytes = 1024 * 1024;
+//积压上限 screenshareviewerbufferbytes 的默认值相同（2026-10-15 两处一起由 1 MiB 调到 4 MiB，
+//docs/远程桌面H264与共享画质提升方案.md 4.8）
+const uint64_t kShareP2PViewerBacklogBytes = 4 * 1024 * 1024;
 
 //等关键帧期间请求关键帧的最短间隔（毫秒）：与 imgserver 的限频相同
 const int64_t kShareP2PKeyRequestIntervalMs = 2000;

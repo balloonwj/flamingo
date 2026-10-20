@@ -54,6 +54,22 @@ void Socket::setTcpNoDelay(bool on)
     // FIXME CHECK
 }
 
+bool Socket::getTcpNoDelay() const
+{
+    //先清零：Windows 的 getsockopt 对 TCP_NODELAY 可能只写回 1 个字节，其余字节须为 0 才能按整数判断
+    int optval = 0;
+#ifdef WIN32
+    int optlen = static_cast<int>(sizeof(optval));
+    if (::getsockopt(m_sockfd, IPPROTO_TCP, TCP_NODELAY, (char*)&optval, &optlen) != 0)
+        return false;
+#else
+    socklen_t optlen = static_cast<socklen_t>(sizeof(optval));
+    if (::getsockopt(m_sockfd, IPPROTO_TCP, TCP_NODELAY, &optval, &optlen) != 0)
+        return false;
+#endif
+    return optval != 0;
+}
+
 void Socket::setReuseAddr(bool on)
 {
     sockets::setReuseAddr(m_sockfd, on);

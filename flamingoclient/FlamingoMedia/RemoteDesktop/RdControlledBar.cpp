@@ -1,272 +1,174 @@
 /**
- *  远程桌面被控端受控提示条实现，RdControlledBar.cpp
+ *  远程桌面被控端的顶部条，说明见 RdControlledBar.h。
  *  balloonwj@qq.com   2026-06-11
  */
 #include "stdafx.h"
 #include "RdControlledBar.h"
 
-#include "RdMessages.h"    // remotedesktop::kMsgRdControlledEndByUser
-#include "../../Source/Common/Log/IULog.h"              // LOG_ERROR
-#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiVBox / DuiHBox / DuiLayout::Hint
-
-#include <memory>
-#include "../../Source/Common/I18n/I18n.h"   // TR：界面文字的多语言查找
+#include "RdMessages.h"             // remotedesktop::kMsgRdControlledBarCommand
 #include "RdControlledStreamer.h"   // LinkPath：「P2P」徽章按推流器的链路路径显隐
-#include "../../Source/UI/BalloonMain/P2PBadge.h"   // 「P2P」徽章（2026-10-04 起）
-#include "../../Source/Common/I18n/I18nLayout.h"   // WidthForText：译文较长时加宽提示条与按钮
+#include "RemoteDesktopProtocolClient.h"   // net::rd_control_state
+#include "../Share/ShareBarButtonArt.h"    // share_bar_control、share_bar_leave 等按钮种类
+#include "../../Source/Common/Log/IULog.h"
+#include "../../Source/Common/I18n/I18n.h"   // TR / TRF：界面文字的多语言查找
+#include "../../Source/UI/BalloonMain/P2PBadge.h"   // ShouldShowP2PBadge
 
-// ---- 外观常量（逻辑像素）----
-static const int kBarWidth    = 380;   //提示条宽
-static const int kBarTitleH   = 18;    //标题栏高（balloonui 最小，仅显示"远程桌面"标题、不放按钮）
-static const int kBarContentH = 48;    //橙色警示内容横条高
-static const int kEndBtnWidth = 96;    //"结束控制"按钮宽
-static const int kTopMargin   = 8;     //距工作区顶部边距
-static const int kRowPadLeft  = 12;    //横条左内边距
-static const int kRowPadRight = 10;    //横条右内边距
-static const int kRowGap      = 10;    //提示文字与按钮的间距
+namespace {
 
-//受控提示条醒目底色（琥珀橙）与提示文字色（深棕，保证对比度可读）。
-static const COLORREF kBarBgColor   = RGB(244, 176, 66);
-static const COLORREF kBarTextColor = RGB(60, 40, 0);
+//刷新「P2P」徽章的定时器 id 与周期（毫秒）：推流器在连接线程上等 P2P 链路（最长 20 秒），顶部条打开时多半还没连上。
+//id 取较大值，避开基类收起 / 隐藏检查用的定时器
+const UINT_PTR kP2PBadgeTimerId = 0x5250;
+const UINT kP2PBadgeTimerMs = 1000;
 
-//生成一张纯色 32 位 DIB（供 DuiFrameWindow::SetBgImage 以 9-grid 拉伸铺满窗口背景，
-//配合透明标题栏让 18px 标题栏与下方内容融成无缝一整条）。调用方持有所有权、用完 DeleteObject。
-static HBITMAP makeSolidBitmap(COLORREF c)
+//控制端显示名为空时状态文字里的称呼
+std::wstring peerOrDefault(const std::wstring& peerName)
 {
-    const int sz = 8;
-    BITMAPINFO bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth       = sz;
-    bi.bmiHeader.biHeight      = -sz;   //top-down
-    bi.bmiHeader.biPlanes      = 1;
-    bi.bmiHeader.biBitCount    = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
+    return peerName.empty() ? std::wstring(TRC(L"远程桌面被控端顶部条里的称呼", L"对方")) : peerName;
+}
 
-    void* bits = NULL;
-    HBITMAP bmp = ::CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-    if (bmp == NULL)
-        return NULL;
+//取主显示器的工作区：被控端只采集主显示器，顶部条放在它的顶部居中
+RECT primaryWorkArea()
+{
+    RECT work = { 0, 0, 0, 0 };
+    const POINT origin = { 0, 0 };
+    HMONITOR mon = ::MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi;
+    memset(&mi, 0, sizeof(mi));
+    mi.cbSize = sizeof(mi);
+    if (::GetMonitorInfo(mon, &mi))
+        work = mi.rcWork;
+    else
+        ::SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0);
+    return work;
+}
 
-    BYTE* p = static_cast<BYTE*>(bits);
-    for (int i = 0; i < sz * sz; ++i)
+} // namespace
+
+std::wstring RdControlledStatusText(int controlState, const std::wstring& peerName)
+{
+    const std::wstring name = peerOrDefault(peerName);
+    switch (controlState)
     {
-        p[i * 4 + 0] = GetBValue(c);
-        p[i * 4 + 1] = GetGValue(c);
-        p[i * 4 + 2] = GetRValue(c);
-        p[i * 4 + 3] = 255;             //不透明（premultiplied 下 alpha=255 即原色）
+    //控制端已申请、等本人同意
+    case net::rd_control_requested:
+        return TRF(L"{0} 申请控制你的电脑", name);
+    //已授权：控制端的键鼠输入会注入本机
+    case net::rd_control_granted:
+        return TRF(L"{0} 正在控制你的电脑", name);
+    //未授权（会话接通后的初始状态）与越界值：对方只能查看
+    default:
+        return TRF(L"{0} 正在查看你的桌面", name);
     }
-    return bmp;
+}
+
+std::vector<screenshare::ViewerBarButtonSpec> RdControlledBarButtons(int controlState)
+{
+    std::vector<screenshare::ViewerBarButtonSpec> out;
+    //「允许控制 / 收回控制」：已授权时蓝底，有人申请时橙底提醒本人处理，其余灰底
+    int state = screenshare::share_bar_tri_off;
+    if (controlState == net::rd_control_granted)
+        state = screenshare::share_bar_tri_on;
+    else if (controlState == net::rd_control_requested)
+        state = screenshare::share_bar_tri_pending;
+    const std::wstring controlTip = (state == screenshare::share_bar_tri_on) ? TR(L"收回控制") : TR(L"允许控制");
+    out.push_back(screenshare::ViewerBarButtonSpec(kRdBarControl, screenshare::share_bar_control, state, controlTip));
+    out.push_back(screenshare::ViewerBarButtonSpec(kRdBarEnd, screenshare::share_bar_leave, screenshare::share_bar_tri_off,
+                                                   TR(L"结束远程桌面")));
+    return out;
+}
+
+screenshare::ShareToastTexts MakeRdControlRequestToastTexts()
+{
+    screenshare::ShareToastTexts texts;
+    texts.m_title = TR(L"控制申请");
+    texts.m_accept = TR(L"同意");
+    texts.m_ignore = TR(L"拒绝");
+    texts.m_message = remotedesktop::kMsgRdControlRequestAnswer;
+    return texts;
+}
+
+std::wstring RdControlRequestToastText(const std::wstring& peerName)
+{
+    return RdControlledStatusText(net::rd_control_requested, peerName);
 }
 
 CRdControlledBar::CRdControlledBar()
     : m_notifyWnd(NULL)
-    , m_tipLabel(NULL)
-    , m_bgBitmap(NULL)
-    , m_p2pBadge(NULL)
+    , m_controlState(net::rd_control_none)
     , m_linkSource(NULL)
 {
+    //没有所有者：置顶才不会被其他窗口挡住；被控方的桌面正被对方看着，本条不进入画面
+    SetTopmost(true);
+    SetCaptureExcluded(true);
 }
 
-namespace {
-
-//刷新「P2P」徽章的定时器 id 与周期（毫秒）：推流器在连接线程上等 P2P 链路（最长 20 秒），提示条显示时多半还没连上
-const UINT_PTR kP2PBadgeTimerId = 0x5250;
-const UINT kP2PBadgeTimerMs = 1000;
-
-} // namespace
+CRdControlledBar::~CRdControlledBar()
+{
+    Close();
+}
 
 void CRdControlledBar::SetLinkPathSource(const remotedesktop::RdControlledStreamer* streamer)
 {
     m_linkSource = streamer;
 }
 
-LRESULT CRdControlledBar::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled)
+void CRdControlledBar::Open(const std::wstring& peerName, HWND notifyWnd)
 {
+    m_notifyWnd = notifyWnd;
+    m_peerName = peerName;
+    m_controlState = net::rd_control_none;
+    SetLinkBadgeVisible(false);
+    SetCaptionText(TR(L"远程桌面"));
+    refresh();
+    Show(NULL, notifyWnd, remotedesktop::kMsgRdControlledBarCommand, primaryWorkArea());
+    if (!IsWindow())
+    {
+        LOG_ERROR("RdControlledBar: create window failed.");
+        return;
+    }
+    if (m_linkSource != NULL)
+        SetTimer(kP2PBadgeTimerId, kP2PBadgeTimerMs, NULL);
+    LOG_INFO("RdControlledBar: opened.");
+}
+
+void CRdControlledBar::Close()
+{
+    if (IsWindow())
+        KillTimer(kP2PBadgeTimerId);
+    m_notifyWnd = NULL;
+    Hide();
+}
+
+void CRdControlledBar::SetControlState(int controlState)
+{
+    if (controlState == m_controlState)
+        return;
+    LOG_INFO("RdControlledBar: control state %d -> %d.", m_controlState, controlState);
+    m_controlState = controlState;
+    refresh();
+}
+
+int CRdControlledBar::ControlState() const
+{
+    return m_controlState;
+}
+
+void CRdControlledBar::refresh()
+{
+    SetStatusText(RdControlledStatusText(m_controlState, m_peerName));
+    SetBarButtons(RdControlledBarButtons(m_controlState));
+}
+
+LRESULT CRdControlledBar::OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+{
+    (void)uMsg;
+    (void)lParam;
     if (wParam != kP2PBadgeTimerId)
     {
         bHandled = FALSE;
         return 0;
     }
     if (m_linkSource != NULL)
-        balloonmain::ApplyP2PBadgeVisibility(m_p2pBadge, m_linkSource->LinkPath());
-    return 0;
-}
-
-CRdControlledBar::~CRdControlledBar()
-{
-    if (m_bgBitmap != NULL)
-    {
-        ::DeleteObject(m_bgBitmap);
-        m_bgBitmap = NULL;
-    }
-}
-
-void CRdControlledBar::EnsureWindow()
-{
-    if (IsWindow())
-        return;
-
-    //WS_POPUP 无边框小窗；置顶 + 不抢焦点（避免从被控端正操作的窗口偷焦点）+ 不进任务栏
-    DWORD exStyle = WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-    if (Create(NULL, CWindow::rcDefault, TR(L"远程桌面"), WS_POPUP, exStyle) == NULL)
-    {
-        LOG_ERROR(_T("远程桌面受控提示条 Create 失败。"));
-        return;
-    }
-    SetTitle(TR(L"远程桌面"));
-    SetTitleBarHeight(kBarTitleH);
-    SetButtons(false, false, false);   //无最小化 / 最大化 / 关闭按钮
-    SetResizable(false);               //固定尺寸
-    SetBorderPx(0);                    //不留 resize 抓握边
-
-    //铺纯色背景图 + 标题栏透明：让 18px 标题栏露出与下方橙色内容条同色的背景，
-    //两段融成无缝一整条（DuiFrameWindow.h 文档明确支持此搭配）。标题文字改成内容同色深棕。
-    if (m_bgBitmap == NULL)
-        m_bgBitmap = makeSolidBitmap(kBarBgColor);
-    if (m_bgBitmap != NULL)
-    {
-        RECT insets = { 0, 0, 0, 0 };   //insets 全 0：整图拉伸铺满（无固定边）
-        SetBgImage(m_bgBitmap, insets);
-        SetTitleBarTransparent(true);
-        SetTitleTextColor(kBarTextColor);
-    }
-}
-
-void CRdControlledBar::BuildUi()
-{
-    //客户区根：用 DuiVBox 的卡片底色铺满醒目橙；其内只放一行横向内容
-    std::unique_ptr<balloonwjui::DuiVBox> root(new balloonwjui::DuiVBox());
-    root->SetBgColor(kBarBgColor);
-    root->SetPadding(0);
-
-    //一行：左侧受控提示文字（占满剩余宽），右侧"结束控制"按钮
-    std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
-    row->SetPadding(kRowPadLeft, 0, kRowPadRight, 0);
-    row->SetGap(kRowGap);
-
-    std::unique_ptr<balloonwjui::DuiLabel> tip(new balloonwjui::DuiLabel());
-    tip->SetTextColor(kBarTextColor);
-    tip->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    tip->SetText(TR(L"您的桌面正在被远程控制"));
-    m_tipLabel = tip.get();
-    row->AddChild(std::move(tip), balloonwjui::DuiLayout::Hint().Weight(1));
-
-    //「P2P」徽章：画面经直连链路发给控制端时显示（2026-10-04 起），默认隐藏，定时器按推流器的链路路径刷新
-    std::unique_ptr<balloonwjui::DuiBadge> badge = balloonmain::MakeP2PBadgeControl();
-    badge->SetVisible(false);
-    m_p2pBadge = badge.get();
-    row->AddChild(std::move(badge), balloonwjui::DuiLayout::Hint()
-                                        .Fixed(balloonmain::kP2PBadgeControlWidth, balloonmain::kP2PBadgeControlHeight)
-                                        .AlignC(balloonwjui::DuiLayout::AlignCenter));
-
-    //"结束控制"：危险红实心按钮，醒目且语义清晰（按钮上下留 9px 让它不顶满条高）
-    std::unique_ptr<balloonwjui::DuiButton> endBtn(new balloonwjui::DuiButton());
-    endBtn->SetButtonType(balloonwjui::DuiButton::StylePushButton);
-    endBtn->SetVariant(balloonwjui::DuiButton::Variant::Danger);
-    endBtn->SetText(TR(L"结束控制"));
-    endBtn->SetCtrlId(kEndBtnId);
-    row->AddChild(std::move(endBtn),
-                  balloonwjui::DuiLayout::Hint().Fixed(i18n::DefaultButtonWidthForText(TR(L"结束控制"), kEndBtnWidth))
-                      .Margin(0, 9, 0, 9));
-
-    root->AddChild(std::move(row), balloonwjui::DuiLayout::Hint().Weight(1));
-    SetClientContent(std::move(root));
-}
-
-void CRdControlledBar::MoveToTopCenter()
-{
-    if (!IsWindow())
-        return;
-
-    //取本窗口所在显示器的工作区（多显示器安全；取不到时退回主显示器工作区）
-    HMONITOR mon = ::MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFO mi;
-    memset(&mi, 0, sizeof(mi));
-    mi.cbSize = sizeof(mi);
-    RECT rcWork;
-    if (::GetMonitorInfo(mon, &mi))
-        rcWork = mi.rcWork;
-    else
-        ::SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWork, 0);
-
-    //非简体中文界面：提示文字较长时提示条按文字宽度只增不减地加宽（多语言第 4 期），但不超过工作区宽度；
-    //简体中文界面恒为设计宽度
-    int barW = kBarWidth;
-    if (m_tipLabel != NULL)
-    {
-        const int endBtnW = i18n::DefaultButtonWidthForText(TR(L"结束控制"), kEndBtnWidth);
-        const CString tipText = m_tipLabel->GetText();
-        barW = i18n::WidthForText((LPCWSTR)tipText, kBarWidth, i18n::DefaultFontPixelHeight(), false,
-                                  kRowPadLeft + kRowGap + endBtnW + kRowPadRight);
-    }
-    if (barW > rcWork.right - rcWork.left)
-        barW = rcWork.right - rcWork.left;
-
-    int barH = kBarTitleH + kBarContentH;
-    int x = rcWork.left + ((rcWork.right - rcWork.left) - barW) / 2;
-    int y = rcWork.top + kTopMargin;
-    //不激活地摆放并显示（HWND_TOPMOST 保证置顶；SWP_NOACTIVATE 不抢焦点）
-    ::SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, barW, barH,
-                   SWP_NOACTIVATE | SWP_SHOWWINDOW);
-}
-
-void CRdControlledBar::Show(const std::wstring& peerName, HWND notifyWnd)
-{
-    m_notifyWnd = notifyWnd;
-    m_peerName  = peerName;
-
-    EnsureWindow();
-    if (!IsWindow())
-        return;
-
-    BuildUi();
-
-    //刷新文案：有昵称则"正在被 XXX 远程控制"，否则退化为通用文案
-    if (m_tipLabel != NULL)
-    {
-        CString tip;
-        if (!m_peerName.empty())
-            tip.Format(TR(L"您的桌面正在被 %s 远程控制"), m_peerName.c_str());
-        else
-            tip = TR(L"您的桌面正在被远程控制");
-        m_tipLabel->SetText(tip);
-    }
-
-    MoveToTopCenter();
-    //SW_SHOWNA：显示但不激活，保持被控端原有输入焦点不被打断
-    ShowWindow(SW_SHOWNA);
-    UpdateWindow();
-    if (m_linkSource != NULL)
-        SetTimer(kP2PBadgeTimerId, kP2PBadgeTimerMs, NULL);
-}
-
-void CRdControlledBar::Hide()
-{
-    if (IsWindow())
-        KillTimer(kP2PBadgeTimerId);
-    m_tipLabel  = NULL;
-    m_p2pBadge  = NULL;
-    m_notifyWnd = NULL;
-    if (IsWindow())
-        DestroyWindow();
-}
-
-LRESULT CRdControlledBar::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled)
-{
-    const balloonwjui::DuiNotify* n = reinterpret_cast<const balloonwjui::DuiNotify*>(lParam);
-    if (n != NULL
-        && n->code == static_cast<UINT>(balloonwjui::DUIN_CLICK)
-        && n->ctrlId == static_cast<UINT>(kEndBtnId))
-    {
-        //用户点"结束控制"：通知宿主统一收尾（发 cmd_rd_close + 停推流 + 关本条）
-        if (m_notifyWnd != NULL && ::IsWindow(m_notifyWnd))
-            ::PostMessage(m_notifyWnd, remotedesktop::kMsgRdControlledEndByUser, 0, 0);
-        return 0;
-    }
-    //其余 DUI 通知交基类处理
-    bHandled = FALSE;
+        SetLinkBadgeVisible(balloonmain::ShouldShowP2PBadge(m_linkSource->LinkPath()));
     return 0;
 }

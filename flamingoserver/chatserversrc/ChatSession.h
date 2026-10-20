@@ -507,6 +507,9 @@ private:
     void onRemoteDesktopCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //远程桌面：任一端结束会话（通知对端、清会话）
     void onRemoteDesktopClose(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //远程桌面：控制权限动作（cmd_rd_control，2026-10-12）。校验角色与状态后回应答（带动作之后的控制状态），
+    //状态有变化时经 cmd_rd_control_notify 转给另一方
+    void onRemoteDesktopControl(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //音视频通话：主叫发起呼叫（校验对端在线 / 不忙 → 建会话 → 回应答 → 推送邀请给被叫）
     void onCallInvite(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //音视频通话：被叫应答（接听则置接通态、给双方签 relay 令牌并下发中转参数；拒绝则通知主叫）

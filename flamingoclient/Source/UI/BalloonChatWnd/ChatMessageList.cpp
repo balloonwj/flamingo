@@ -47,6 +47,7 @@ extern CAppModule _Module;
 #include "ChatMessageList.h"
 #include "ChatScrollThumb.h"   // 滚动条的尺寸与颜色（与群聊窗成员侧栏共用）
 #include "ChatBubble.h"
+#include "ChatBubbleGroup.h"     // ChatBubblesGroupable：排版时判定相邻两行能否合组
 #include "ChatHistoryPaging.h"   // kHistoryLoadTriggerY（滚到多近算"到顶了"）
 #include "ChatTimeSeparator.h"    // 时间分隔行的判定与文案（何时插、插什么字）
 #include "ChatClipboardIo.h"      // Ctrl+C 时写入纯文字 + Flamingo 格式
@@ -87,6 +88,31 @@ const COLORREF kBarDisabledColor = RGB(0xBB, 0xBB, 0xBB); // 选中数为 0 时
 
 // 操作条文字字号。
 const int kBarTextPx = 13;
+
+// 每秒的毫秒数：把 time() 的秒换算成 Unix 毫秒。
+const long long kMsPerSecond = 1000LL;
+
+// 测试替换的取当前时刻函数；NULL 表示读系统时钟（见 ChatMessageList::SetNowProviderForTest）。
+ChatMessageList::NowMsFn g_nowProviderForTest = NULL;
+
+// 本地日期编码 YYYYMMDD 的进位：年乘一万、月乘一百
+const int kDayKeyYearScale = 10000;
+const int kDayKeyMonthScale = 100;
+// struct tm 的年份起点与月份偏移
+const int kTmYearBase = 1900;
+const int kTmMonthOffset = 1;
+
+// 把 Unix 毫秒换算成本地日期编码 YYYYMMDD；时间不可用或转换失败返回 0
+int LocalDayKey(long long ms)
+{
+    if (ms <= 0)
+        return 0;
+    const time_t secs = (time_t)(ms / kMsPerSecond);
+    struct tm t;
+    if (localtime_s(&t, &secs) != 0)
+        return 0;
+    return (t.tm_year + kTmYearBase) * kDayKeyYearScale + (t.tm_mon + kTmMonthOffset) * kDayKeyMonthScale + t.tm_mday;
+}
 
 // 用 GDI 绘制文字（操作条用）。
 void DrawBarText(HDC hdc, LPCWSTR text, const RECT& rc, COLORREF color)
@@ -203,6 +229,7 @@ ChatMessageList::ChatMessageList()
     , m_prependMarkCount(0)
     , m_prependMarkHeight(0)
     , m_lastMsgTimestampMs(0)
+    , m_separatorDayKey(0)
     , m_prependSavedLastMs(0)
 {
     m_scrollAnimToken->m_owner = this;
@@ -479,6 +506,162 @@ bool ChatMessageList::ScrollToMsgid(long long msgid)
     return true;
 }
 
+void ChatMessageList::SetNowProviderForTest(NowMsFn fn)
+{
+    g_nowProviderForTest = fn;
+}
+
+long long ChatMessageList::NowMs()
+{
+    if (g_nowProviderForTest != NULL)
+    {
+        return g_nowProviderForTest();
+    }
+    return (long long)::time(NULL) * kMsPerSecond;
+}
+
+void ChatMessageList::AppendTimeSeparatorRow(long long markMs, long long nowMs)
+{
+    const CString timeText = FormatChatSeparatorTime(markMs, nowMs);
+    // 文案为空说明时间戳不可用，这一行就不插了 —— 插一行空白比不插更费解。
+    if (timeText.IsEmpty())
+        return;
+    ChatMessage sep;
+    sep.kind = kMsgTime;
+    sep.fromMe = false;      // kMsgTime 忽略此项，给个确定值免得读到未初始化
+    sep.text = timeText;
+    // 记下所标注的消息时间，本地日期变了以后 RefreshTimeSeparatorTexts 据此重新格式化
+    sep.isTimeSeparator = true;
+    sep.timestampMs = markMs;
+
+    std::unique_ptr<ChatBubble> sepBubble(new ChatBubble());
+    sepBubble->SetMessage(sep);
+    AddChild(std::unique_ptr<balloonwjui::DuiControl>(sepBubble.release()));
+    // 文字按 nowMs 那一天算好：没格式化过时记下这一天，绘制时日期不同才整体刷新
+    if (m_separatorDayKey == 0)
+        m_separatorDayKey = LocalDayKey(nowMs);
+}
+
+void ChatMessageList::RefreshTimeSeparatorTexts()
+{
+    const long long nowMs = NowMs();
+    const int dayKey = LocalDayKey(nowMs);
+    if (dayKey == 0 || dayKey == m_separatorDayKey)
+        return;
+    m_separatorDayKey = dayKey;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL || !b->GetMessage().isTimeSeparator)
+            continue;
+        const CString text = FormatChatSeparatorTime(b->GetMessage().timestampMs, nowMs);
+        if (text.IsEmpty() || text == b->GetMessage().text)
+            continue;
+        ChatMessage updated = b->GetMessage();
+        updated.text = text;
+        // 时间行按固定行高排版，只换文字、不影响行高，所以只重画、不重排
+        b->SetMessage(updated);
+    }
+}
+
+void ChatMessageList::RemoveOrphanTimeSeparators()
+{
+    //从后往前找孤立的时间分隔行 —— 后面紧跟另一个分隔行、或已到列表末尾。
+    //"纯粹的分隔行"认 kind 为 kMsgTime 且没有 msgid：撤回提示行也是 kMsgTime 样式，
+    //但保留着原消息的 msgid（见 ChatBubble::RecallToTip），属于内容，不算分隔行。
+    //一个分隔行无论保留还是移除，它前面那一行看到的"后一行"都仍是分隔行或末尾，
+    //所以一遍倒序扫描即可，不必反复扫
+    std::vector<ChatBubble*> orphans;
+    {
+        const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+        bool nextIsSeparatorOrEnd = true;
+        for (size_t i = kids.size(); i > 0; --i)
+        {
+            ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i - 1].get());
+            if (b == NULL)
+            {
+                nextIsSeparatorOrEnd = false;
+                continue;
+            }
+            const bool isSeparator = (b->GetMessage().kind == kMsgTime && b->Msgid() <= 0);
+            if (isSeparator)
+            {
+                if (nextIsSeparatorOrEnd)
+                {
+                    orphans.push_back(b);
+                }
+                nextIsSeparatorOrEnd = true;
+            }
+            else
+            {
+                nextIsSeparatorOrEnd = false;
+            }
+        }
+    }
+    for (size_t i = 0; i < orphans.size(); ++i)
+    {
+        RemoveChild(orphans[i]);
+    }
+}
+
+void ChatMessageList::RecomputeLastMsgTimestamp()
+{
+    //从后往前取第一个有时间的行：时间戳已知的真实消息取它的时间；时间分隔行取它所标注的时间（它后面那一串消息
+    //都是回显或与它相距不到 5 分钟，取它会比实际略早，最多多插一行，不会漏插）。回显（时间戳仍为 0）、
+    //撤回提示等其他行跳过。一行都没有时为 0，下一条消息按「没有上一条」处理
+    long long lastMs = 0;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = kids.size(); i > 0; --i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i - 1].get());
+        if (b == NULL)
+            continue;
+        const ChatMessage& msg = b->GetMessage();
+        const bool timedReal = (msg.kind != kMsgTime && msg.timestampMs > 0);
+        const bool separator = (msg.kind == kMsgTime && msg.isTimeSeparator && msg.timestampMs > 0);
+        if (timedReal || separator)
+        {
+            lastMs = msg.timestampMs;
+            break;
+        }
+    }
+    m_lastMsgTimestampMs = lastMs;
+}
+
+bool ChatMessageList::IsLastRealMessage(size_t index) const
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = index + 1; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        // 口径与 ChatBubble::IsRealMessage 相同：kMsgTime 行（时间行、撤回提示等）不是真实消息
+        if (b != NULL && b->GetMessage().kind != kMsgTime)
+            return false;
+    }
+    return true;
+}
+
+bool ChatMessageList::GroupingChangedAt(size_t index) const
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    if (index >= kids.size())
+    {
+        return false;
+    }
+    const ChatBubble* cur = dynamic_cast<const ChatBubble*>(kids[index].get());
+    if (cur == NULL)
+    {
+        return false;
+    }
+    // 与 Layout 里的口径相同：相邻两行都是消息行、且 ChatBubblesGroupable 判定可合组才算同组
+    const ChatBubble* prev = (index > 0) ? dynamic_cast<const ChatBubble*>(kids[index - 1].get()) : NULL;
+    const ChatBubble* next = (index + 1 < kids.size()) ? dynamic_cast<const ChatBubble*>(kids[index + 1].get()) : NULL;
+    const bool withPrev = (prev != NULL && ChatBubblesGroupable(prev->GetMessage(), cur->GetMessage()));
+    const bool withNext = (next != NULL && ChatBubblesGroupable(cur->GetMessage(), next->GetMessage()));
+    return withPrev != cur->IsGroupedWithPrev() || withNext != cur->IsGroupedWithNext();
+}
+
 void ChatMessageList::AppendMessage(const ChatMessage& msg)
 {
     // 需要的话，先插一行居中的时间分隔（形态与口径见 docs/聊天消息时间显示方案.md）。
@@ -489,29 +672,22 @@ void ChatMessageList::AppendMessage(const ChatMessage& msg)
     // 分隔行自身是 kMsgTime，不参与判定，否则会被自己的时间反复触发。
     if (msg.kind != kMsgTime)
     {
-        const long long nowMs = (long long)::time(NULL) * 1000LL;
-        if (ShouldInsertTimeSeparator(m_lastMsgTimestampMs, msg.timestampMs,
-                                      kChatTimeSeparatorThresholdMs))
-        {
-            const CString timeText = FormatChatSeparatorTime(msg.timestampMs, nowMs);
-            // 文案为空说明时间戳不可用，这一行就不插了 —— 插一行空白比不插更费解。
-            if (!timeText.IsEmpty())
-            {
-                ChatMessage sep;
-                sep.kind   = kMsgTime;
-                sep.fromMe = false;      // kMsgTime 忽略此项，给个确定值免得读到未初始化
-                sep.text   = timeText;
-
-                std::unique_ptr<ChatBubble> sepBubble(new ChatBubble());
-                sepBubble->SetMessage(sep);
-                AddChild(std::unique_ptr<balloonwjui::DuiControl>(sepBubble.release()));
-            }
-        }
-        // 时间未知（0）的消息不更新基准：否则后面一条正常消息会与 0 相比，
+        const long long nowMs = NowMs();
+        // 参与判定的时间：本人刚发出、还没有回执的回显（时间戳为 0）按本机当前时间算，服务端时间要等回执回填
+        // （docs/聊天消息时间显示方案.md 第 7 节，2026-10-14）。回显以带客户端消息 ID 为准：密聊邀请卡片、
+        // 文件夹行等本地行没有这个 ID，也不会有回执，照旧不插时间行，否则卡片移除后时间行会留在原处。
+        // 翻页加载历史期间不这样做：那批是旧消息，按「现在」算会在旧消息中间插出一行今天的时间
+        long long markMs = msg.timestampMs;
+        const bool sentEcho = msg.fromMe && (!msg.clientMsgId.empty() || !msg.fileClientMsgId.empty());
+        if (markMs <= 0 && sentEcho && !m_prependActive)
+            markMs = nowMs;
+        if (ShouldInsertTimeSeparator(m_lastMsgTimestampMs, markMs, kChatTimeSeparatorThresholdMs))
+            AppendTimeSeparatorRow(markMs, nowMs);
+        // 时间仍未知（0）的消息不更新基准：否则后面一条正常消息会与 0 相比，
         // 被判成"没有上一条"而多插一行。
-        if (msg.timestampMs > 0)
+        if (markMs > 0)
         {
-            m_lastMsgTimestampMs = msg.timestampMs;
+            m_lastMsgTimestampMs = markMs;
         }
     }
 
@@ -684,19 +860,7 @@ void ChatMessageList::EndPrependBatch()
             if (ShouldInsertTimeSeparator(m_lastMsgTimestampMs, oldHeadMs,
                                           kChatTimeSeparatorThresholdMs))
             {
-                const long long nowMs = (long long)::time(NULL) * 1000LL;
-                const CString timeText = FormatChatSeparatorTime(oldHeadMs, nowMs);
-                if (!timeText.IsEmpty())
-                {
-                    ChatMessage sep;
-                    sep.kind   = kMsgTime;
-                    sep.fromMe = false;
-                    sep.text   = timeText;
-
-                    std::unique_ptr<ChatBubble> sepBubble(new ChatBubble());
-                    sepBubble->SetMessage(sep);
-                    AddChild(std::unique_ptr<balloonwjui::DuiControl>(sepBubble.release()));
-                }
+                AppendTimeSeparatorRow(oldHeadMs, NowMs());
             }
         }
     }
@@ -1760,6 +1924,9 @@ bool ChatMessageList::RequestDeleteBubble(ChatBubble* bubble)
     //发送中 / 发送失败的行服务器上没有，只存在于本窗口，直接移除。
     //RemoveChild 会立即销毁 bubble；调用方其后不得再访问它。
     RemoveChild(bubble);
+    //回显前面也有时间行（docs/聊天消息时间显示方案.md 第 7 节）：一并移除因此孤立的时间行，并重新确定判定基准
+    RemoveOrphanTimeSeparators();
+    RecomputeLastMsgTimestamp();
     ForceLayout(GetRect());
     Invalidate();
     return true;
@@ -1795,6 +1962,12 @@ std::vector<long long> ChatMessageList::DeleteSelected()
     for (size_t i = 0; i < localOnly.size(); ++i)
     {
         RemoveChild(localOnly[i]);
+    }
+    //与 RequestDeleteBubble 相同：移除因此孤立的时间行，并重新确定判定基准
+    if (!localOnly.empty())
+    {
+        RemoveOrphanTimeSeparators();
+        RecomputeLastMsgTimestamp();
     }
 
     //退出多选并重排（SetMultiSelectMode 内含 ForceLayout），留下的行一并清掉选中态
@@ -2255,14 +2428,38 @@ bool ChatMessageList::BackfillSentMessage(const std::string& clientMsgId, long l
         }
 
         //只回填这两个字段，其余原样保留（文本 / 字体 / 头像等已在发送时填好）。
-        //回填不改行高、也不改外观，故无需重排重绘 —— 正因如此这里<u>不能</u>走
-        //SetMessage：它会清空选区模型并令折行测量缓存失效，而本处又不触发重排，
+        //回填本身不改行高、也不改外观，一般无需重排重绘（例外是合组，见下文）—— 正因如此这里<u>不能</u>走
+        //SetMessage：它会清空选区模型并令折行测量缓存失效，而本处通常不触发重排，
         //于是这一行在下次重排前都选不中文字。改用只动 msgid / 时间的轻量回填。
         b->BackfillServerIds(msgid, timestampMs);
         // 发送回执晚于对方的已读推送到达时，回填的 msgid 可能已经在位点之内。
         if (cur.fromMe && msgid > 0 && msgid <= m_peerReadMsgid)
         {
             b->MarkPeerRead();
+        }
+        // 回显时按本机时间记的基准换成服务端时间（docs/聊天消息时间显示方案.md 7.2 第 1 条）：只在这条仍是列表里
+        // 最后一条真实消息时换，它后面已经有别的消息时基准属于那一条，不能改回去。翻页加载期间基准是临时值，也不动
+        if (!m_prependActive && timestampMs > 0 && IsLastRealMessage(i))
+        {
+            m_lastMsgTimestampMs = timestampMs;
+        }
+        // 合组判定要用消息时间，时间为 0 的回显不合组（ChatBubbleGroup.cpp）。回执补上服务端时间后，本行与前后两行的
+        // 合组可能改变：改变时重排一次，头像、发送者名与行距才会立即更新，否则要等下一次增删消息或改窗口大小
+        // （2026-10-15 实机检查发现，用例 [bubblestyle] BS14）。合组不变时仍不重排，理由见上。
+        // 重排只改行高；回执前停在底部的列表（刚发完消息时通常如此）重排后仍停在底部
+        if (GroupingChangedAt(i))
+        {
+            int maxScroll = m_contentHeight - m_viewHeight;
+            if (maxScroll < 0)
+            {
+                maxScroll = 0;
+            }
+            if (!m_prependActive && m_scrollY >= maxScroll)
+            {
+                RequestScrollToBottom();
+            }
+            ForceLayout(GetRect());
+            Invalidate();
         }
         return true;
     }
@@ -2401,42 +2598,9 @@ int ChatMessageList::RemoveMessagesByMsgid(const std::vector<long long>& msgids)
         RemoveChild(doomed[i]);
     }
 
-    //第二遍：从后往前找孤立的时间分隔行 —— 后面紧跟另一个分隔行、或已到列表末尾。
-    //"纯粹的分隔行"认 kind 为 kMsgTime 且没有 msgid：撤回提示行也是 kMsgTime 样式，
-    //但保留着原消息的 msgid（见 ChatBubble::RecallToTip），属于内容，不算分隔行。
-    //一个分隔行无论保留还是移除，它前面那一行看到的"后一行"都仍是分隔行或末尾，
-    //所以一遍倒序扫描即可，不必反复扫
-    std::vector<ChatBubble*> orphans;
-    {
-        const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
-        bool nextIsSeparatorOrEnd = true;
-        for (size_t i = kids.size(); i > 0; --i)
-        {
-            ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i - 1].get());
-            if (b == NULL)
-            {
-                nextIsSeparatorOrEnd = false;
-                continue;
-            }
-            const bool isSeparator = (b->GetMessage().kind == kMsgTime && b->Msgid() <= 0);
-            if (isSeparator)
-            {
-                if (nextIsSeparatorOrEnd)
-                {
-                    orphans.push_back(b);
-                }
-                nextIsSeparatorOrEnd = true;
-            }
-            else
-            {
-                nextIsSeparatorOrEnd = false;
-            }
-        }
-    }
-    for (size_t i = 0; i < orphans.size(); ++i)
-    {
-        RemoveChild(orphans[i]);
-    }
+    //第二遍：移除因此孤立的时间分隔行，并按剩下的行重新确定时间行的判定基准
+    RemoveOrphanTimeSeparators();
+    RecomputeLastMsgTimestamp();
 
     //全部移除完只重排、重绘一次，下方各行补上空出来的位置
     ForceLayout(GetRect());
@@ -2678,6 +2842,25 @@ void ChatMessageList::Layout(const RECT& rcAvail)
     const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
     const int availWidth = rcAvail.right - rcAvail.left;
 
+    // 同一人连续的消息合成一组（docs/聊天气泡美化方案.md 第 1 节第 1 条）：按相邻两行判定，在测量之前设置，
+    // 行高要按合组后的外边距与是否画发送者名来算。每次增删改都会重排，合组因此总与当前内容一致，不必在各个修改入口分别重算
+    std::vector<bool> groupedWithPrev(kids.size(), false);
+    for (size_t i = 1; i < kids.size(); ++i)
+    {
+        const ChatBubble* prev = dynamic_cast<const ChatBubble*>(kids[i - 1].get());
+        const ChatBubble* cur = dynamic_cast<const ChatBubble*>(kids[i].get());
+        groupedWithPrev[i] = (prev != NULL && cur != NULL && ChatBubblesGroupable(prev->GetMessage(), cur->GetMessage()));
+    }
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL)
+        {
+            const bool withNext = (i + 1 < kids.size()) && groupedWithPrev[i + 1];
+            b->SetGroupPosition(groupedWithPrev[i], withNext);
+        }
+    }
+
     // 先对每行按可用宽度测量折行布局，再累加行高得到内容总高。
     int total = 0;
     for (size_t i = 0; i < kids.size(); ++i)
@@ -2712,6 +2895,9 @@ void ChatMessageList::Layout(const RECT& rcAvail)
 
 void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 {
+    // 聊天窗开着过了零点：先把时间行的文字按新的日期重算（如「21:30」变为「昨天 21:30」），再绘制
+    RefreshTimeSeparatorTexts();
+
     PerfStopWatch sw;
     int paintedRows = 0;   // 本帧实际绘制的消息行数（与可视区相交的行）
     const RECT rowsRect = RowsViewRect();

@@ -228,6 +228,10 @@ public:
         return media_cloud_exit_keep;
     }
 
+    virtual void SetShareQuality(int /*quality*/) override
+    {
+    }
+
     virtual bool Init(IMediaHost* host, const MediaInitParams* params) override
     {
         (void)host;

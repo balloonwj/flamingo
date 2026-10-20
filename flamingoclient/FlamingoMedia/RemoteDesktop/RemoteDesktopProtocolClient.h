@@ -11,7 +11,8 @@
  *
  *  覆盖第一期"看屏 + 鼠标键盘控制"所需的全部信令：
  *    - chatserver：邀请(1710) / 邀请推送(1711) / 应答(1712) / 取消(1713) /
- *                  结束(1714) / 状态推送(1715) / 中转参数下发(1716)
+ *                  结束(1714) / 状态推送(1715) / 中转参数下发(1716) /
+ *                  控制动作(1718) 与控制动作推送(1719)（2026-10-12 起接通后默认只能查看）
  *    - imgserver ：中转握手(1853) 及其应答
  *  中转数据帧(1854)承载的屏幕帧 / 控制命令为不透明二进制，由引擎层定义其内部
  *  格式、imgserver 不解析，故不在本协议模块内编解码。
@@ -44,6 +45,35 @@ enum rd_state
     rd_state_timeout      = 5,   //超时：邀请在限定时间内无人应答，自动结束
     rd_state_disconnected = 6,   //已断开：会话已结束（任一端挂断或连接中断）
 };
+
+//远程桌面控制动作，cmd_rd_control（1718）的 action 字段，也随 1719 推送收到。与服务端取值一致（2026-10-12）
+enum rd_control_action
+{
+    rd_control_request = 1,   //申请控制：控制端发起，服务端转给被控端，被控端在右下角提示里同意或拒绝
+    rd_control_cancel  = 2,   //撤回申请：控制端在被控端处理之前撤回，被控端据此关掉申请提示
+    rd_control_grant   = 3,   //授予控制：被控端同意申请，或没人申请时直接允许
+    rd_control_deny    = 4,   //拒绝申请：被控端拒绝，申请提示超时也按拒绝处理
+    rd_control_revoke  = 5,   //收回控制：被控端在控制进行中收回
+    rd_control_release = 6,   //放弃控制：控制端自己结束控制
+};
+
+//远程桌面的控制状态，随 1718 应答与 1719 推送的 control 字段收到。与服务端取值一致
+enum rd_control_state
+{
+    rd_control_none      = 0,   //未授权：控制端只能查看，被控端丢弃收到的键鼠输入；会话接通后的初始状态
+    rd_control_requested = 1,   //申请中：控制端已申请，等待被控端同意或拒绝
+    rd_control_granted   = 2,   //已授权：被控端注入控制端发来的键鼠输入
+};
+
+/**
+ *  判断一个数是否是 rd_control_state 的有效取值（2026-10-14）。服务端应答与推送里的状态在使用前都要经过这项判断。
+ *  @param control 待判断的值
+ *  @return 在 rd_control_none ~ rd_control_granted 之间返回 true
+ */
+inline bool IsRdControlState(int control)
+{
+    return control >= rd_control_none && control <= rd_control_granted;
+}
 
 //邀请应答（cmd_rd_invite=1710 的应答）解析结果。
 //成功（m_code==0）时 m_sessionId 有效，控制端据此与后续中转参数对应起来；
@@ -119,6 +149,41 @@ struct RDRelayHelloAck
     }
 };
 
+//控制动作应答（cmd_rd_control=1718 的应答）解析结果。成功与失败都带回会话 id、动作与控制状态，
+//失败时 m_control 是服务端当前记录的状态，客户端可据此纠正本地显示
+struct RDControlResponse
+{
+    int         m_code;        //结果码，0 成功；740 会话不存在、741 角色不对、742 状态不允许，见 enum error_code
+    std::string m_msg;         //结果描述
+    std::string m_sessionId;   //会话 id
+    int         m_action;      //请求里的动作，见 enum rd_control_action
+    int         m_control;     //动作之后（失败时为当前）的控制状态，见 enum rd_control_state
+
+    RDControlResponse()
+        : m_code(-1)           //-1：尚未解析出有效结果码，避免被误判为成功
+        , m_action(0)
+        , m_control(rd_control_none)
+    {
+    }
+};
+
+//控制动作推送（cmd_rd_control_notify=1719）解析结果：对方做了一个控制动作
+struct RDControlNotify
+{
+    std::string m_sessionId;   //会话 id
+    int         m_action;      //对方做的动作，见 enum rd_control_action
+    int         m_control;     //动作之后的控制状态，见 enum rd_control_state
+    int64_t     m_fromId;      //做动作的人的 userid
+    std::string m_fromName;    //做动作的人的昵称（UTF-8），被控端的申请提示里显示
+
+    RDControlNotify()
+        : m_action(0)
+        , m_control(rd_control_none)
+        , m_fromId(0)
+    {
+    }
+};
+
 //远程桌面信令编解码工具类；全部为静态方法，不可实例化。
 class RemoteDesktopProtocolClient
 {
@@ -155,6 +220,15 @@ public:
      *  @return 紧凑格式的请求 JSON 文本
      */
     static std::string buildClose(const std::string& sessionId);
+
+    /**
+     *  构造控制动作请求 JSON 包体（cmd_rd_control=1718，紧凑 UTF-8）。
+     *  控制端发申请 / 撤回 / 放弃，被控端发授予 / 拒绝 / 收回；角色与状态由服务端校验。
+     *  @param sessionId 本次会话 id（非空）
+     *  @param action    控制动作，见 enum rd_control_action
+     *  @return 紧凑格式的请求 JSON 文本
+     */
+    static std::string buildControl(const std::string& sessionId, int action);
 
     //==== 客户端 → imgserver 中转通道的握手构造 ====
 
@@ -212,6 +286,24 @@ public:
      *  @return JSON 合法且含 code 返回 true，否则 false
      */
     static bool parseRelayHelloAck(const std::string& jsonbody, RDRelayHelloAck& out);
+
+    /**
+     *  解析控制动作应答 JSON 包体（cmd_rd_control=1718 的应答）。
+     *  只要 JSON 合法且含整型 code 字段即返回 true。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 返回 true 时各字段有效
+     *  @return JSON 合法且含 code 返回 true，否则 false
+     */
+    static bool parseControlResponse(const std::string& jsonbody, RDControlResponse& out);
+
+    /**
+     *  解析控制动作推送 JSON 包体（cmd_rd_control_notify=1719）。
+     *  缺 sessionid、动作不在 1~6 或 JSON 非法时返回 false。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 返回 true 时各字段有效
+     *  @return 解析成功返回 true，否则 false
+     */
+    static bool parseControlNotify(const std::string& jsonbody, RDControlNotify& out);
 
 private:
     RemoteDesktopProtocolClient() = delete;

@@ -25,6 +25,7 @@
 #include "../Share/ShareImageExport.h"    // RenderBoardImage：云端录像里的白板（2026-10-07）
 #include "../Share/ShareScreenDecoders.h"
 #include "../Share/ShareScreens.h"
+#include "../Share/ShareFrameDrawer.h"    // BgraDownscaler：2K、4K 画面缩小进画布（2026-10-15）
 #include "../Share/ShareWhiteboard.h"     // wb_bg_grid：白板没有收到视野时的默认背景
 #include "../../Source/Common/Log/IULog.h"
 #include "../../Source/net/Protocol.h"
@@ -236,6 +237,14 @@ public:
             CloudCopyFrameRows(m_bits, m_width, m_height, bgra, w, h, dst.left, dst.top);
             return dst;
         }
+        //缩小（2K、4K 画面，或多人共享时缩进小格子）：改用 BgraDownscaler 直接写进画布（2026-10-15，方案 A7）。HALFTONE 的
+        //StretchDIBits 在 2560×1440、3840×2160 缩到 1080p 时每帧约 32、49 毫秒，4K 录像合成得比实时还慢（CCB2 实测）
+        if (CloudFitUsesFastScale(w, h, dst))
+        {
+            ::GdiFlush();
+            if (CloudScaleFrameInto(m_scaler, m_bits, m_width, m_height, bgra, w, h, dst))
+                return dst;
+        }
         BITMAPINFO bi;
         ZeroMemory(&bi, sizeof(bi));
         bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
@@ -289,6 +298,7 @@ private:
     HFONT    m_font;     //名字标签的字体
     int      m_width;    //宽
     int      m_height;   //高
+    screenshare::BgraDownscaler m_scaler;   //2K、4K 画面缩小进画布时用的快速缩放（2026-10-15），列映射表与中间缓冲按尺寸复用
 };
 
 } // namespace

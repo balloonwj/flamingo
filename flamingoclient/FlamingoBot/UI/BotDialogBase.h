@@ -1,6 +1,6 @@
 /**
  *  机器人管理界面各窗口的共同基类 CBotDialogBase（DuiFrameWindow 的子类，只补几个建窗与摆放的辅助方法，不改消息处理）：
- *    - CreateFramed：按 UI 约定建窗——有所有者的弹窗用 WS_OVERLAPPEDWINDOW（第 11 条），标题栏左侧放程序图标（第 10 条），
+ *    - CreateFramed：按 UI 约定建窗——用 WS_OVERLAPPEDWINDOW，有无所有者控件通知都发回本窗口（第 11 条），标题栏左侧放程序图标（第 10 条），
  *      固定尺寸；之后取窗口 DPI 对应的界面字体，子类据此建控件树；
  *    - FinishFramed：装上控件树，按整窗尺寸 ResizeClient（第 7 条：尺寸含标题栏），摆在所有者窗口中央；
  *    - DisableOwner / RestoreOwner：编辑窗、规则编辑窗打开期间禁用所有者窗口（效果与模态对话框相同，但不嵌套消息循环），

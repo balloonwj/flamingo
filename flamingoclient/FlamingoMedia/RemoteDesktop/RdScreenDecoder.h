@@ -17,10 +17,12 @@
 #include <windows.h>
 #include <vector>
 #include <stdint.h>
+#include "RdPicture.h"   // IRdPicture：观看窗与画布只认画面接口（2026-10-15）
 
 namespace remotedesktop {
 
-class RdScreenDecoder
+//旧格式的画面解码；2026-10-15 起实现 IRdPicture，与 H.264 的 RdVideoPicture 可在会话中途互换
+class RdScreenDecoder : public IRdPicture
 {
 public:
     RdScreenDecoder();
@@ -39,16 +41,16 @@ public:
      *  @param hdc  目标设备上下文
      *  @param dest 目标矩形（窗口客户区坐标）
      */
-    void drawTo(HDC hdc, const RECT& dest) const;
+    virtual void drawTo(HDC hdc, const RECT& dest) const override;
 
     //是否已收到 BITMAPINFO 与首屏、可以绘制
-    bool ready() const;
+    virtual bool ready() const override;
     //当前画面宽 / 高（像素）
-    int width() const;
-    int height() const;
+    virtual int width() const override;
+    virtual int height() const override;
     //对端最近一次上报的光标位置（被控端屏幕坐标）与光标类型索引
-    POINT cursorPos() const;
-    BYTE cursorType() const;
+    virtual POINT cursorPos() const override;
+    virtual BYTE cursorType() const override;
     //当前整屏 DIB 缓冲（供单测 / 调试只读访问）
     const std::vector<BYTE>& screen() const;
 

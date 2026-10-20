@@ -404,25 +404,16 @@ void AuthBanner::SetPillHover(bool hover, POINT pt)
         return;
     }
     m_pillHover = hover;
-    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
-    if (hover)
+    // 提示只在胶囊上登记：本控件是整块 Banner，按控件登记会在整块 Banner 上都弹提示。
+    // 宿主只在鼠标进入本控件时通知提示管理器开始计时，进入胶囊时由这里补一次通知；
+    // 离开胶囊时收起提示并取消登记。两种情况都由 Retarget 完成
+    POINT screen = pt;
+    balloonwjui::DuiHost* host = GetHost();
+    if (host != NULL && ::IsWindow(host->m_hWnd))
     {
-        // 提示只在胶囊上登记：本控件是整块 Banner，按控件登记会在整块 Banner 上都弹提示。
-        // 宿主只在鼠标进入本控件时通知提示管理器开始计时，进入胶囊时由这里补一次通知。
-        tips.Register(this, TR(kPillTipText));
-        balloonwjui::DuiHost* host = GetHost();
-        if (host != NULL && ::IsWindow(host->m_hWnd))
-        {
-            POINT screen = pt;
-            ::ClientToScreen(host->m_hWnd, &screen);
-            tips.OnHover(this, screen);
-        }
+        ::ClientToScreen(host->m_hWnd, &screen);
     }
-    else
-    {
-        tips.OnLeave(this);
-        tips.Unregister(this);
-    }
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(this, hover ? TR(kPillTipText) : NULL, screen);
     Invalidate();
 }
 

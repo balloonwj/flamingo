@@ -25,29 +25,42 @@ bool FileManager::init(const char* basepath)
     m_basepath = basepath;
 
 #ifdef WIN32
-    //Windows下创建目录
+    //缓存目录不存在是正常情况（首次部署或改了缓存目录配置），记 INFO 后新建；只有新建失败才记 ERROR
     if (!PathFileExistsA(basepath))
     {
-        LOGE("basepath %s doesnot exist.", basepath);
+        LOGI("cache dir %s does not exist, creating it.", basepath);
 
         if (!CreateDirectoryA(basepath, NULL))
         {
-            LOGE("create base dir error, %s", basepath);
+            LOGE("failed to create cache dir %s, error: %lu", basepath, GetLastError());
             return false;
         }
+
+        LOGI("cache dir %s created.", basepath);
     }
 
-    return true;    
+    return true;
 #else
     DIR* dp = opendir(basepath);
     if (dp == NULL)
     {
-        LOGE("open base dir error, errno: %d, %s",  errno, strerror(errno));
+        //opendir 失败不一定是目录不存在：只有 ENOENT 才表示「不存在、需要新建」，记 INFO；
+        //其它原因（无权限、路径中某一段不是目录等）本身就是错误，记 ERROR。
+        //两种情况都沿用原有流程尝试新建一次，新建失败再记 ERROR
+        const int openErrno = errno;
+        if (openErrno == ENOENT)
+            LOGI("cache dir %s does not exist, creating it.", basepath);
+        else
+            LOGE("cannot open cache dir %s, errno: %d, %s", basepath, openErrno, strerror(openErrno));
 
         if (mkdir(basepath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0)
+        {
+            LOGI("cache dir %s created.", basepath);
             return true;
+        }
 
-        LOGE("create base dir error, %s , errno: %d, %s", basepath, errno, strerror(errno));
+        const int mkdirErrno = errno;
+        LOGE("failed to create cache dir %s, errno: %d, %s", basepath, mkdirErrno, strerror(mkdirErrno));
 
         return false;
     }

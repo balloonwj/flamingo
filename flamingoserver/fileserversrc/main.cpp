@@ -166,8 +166,17 @@ int main(int argc, char* argv[])
     //relaytokenkey 是单聊文件夹传输中转令牌的 HMAC 校验密钥，须与 chatserver.conf 的同名项
     //一致：令牌由 chatserver 在接收端同意之后签发，由 fileserver 本地验签。
     //它是可选项而不是必需项——老部署的配置文件里没有这一行，此时本服务照常提供上传下载，
-    //只是不承载文件夹中转（FileServer::init 会为此记一条日志）
+    //只是不承载文件夹中转。缺失时记一条 WARN 并写明要修改的配置文件路径，否则客户端做中转握手被拒时，
+    //服务端这边看不出是配置没配
     const char* relaytokenkey = config.getConfigName("relaytokenkey");
+    if (relaytokenkey == NULL || relaytokenkey[0] == '\0')
+    {
+        LOGW("folder relay is disabled: relaytokenkey is missing or empty in %s, "
+             "cmd_folder_relay_hello will be rejected and one-to-one folder transfer will fail. "
+             "to enable it, add the line relaytokenkey=<key> to %s (the key must equal "
+             "relaytokenkey in chatserver.conf) and restart fileserver.",
+             config.getFilePath().c_str(), config.getFilePath().c_str());
+    }
 
     //文件端口的网络 I/O 工作线程数。可选配置项：缺失或取值非法时回落到
     //FileServer::kDefaultIoThreadCount（即改造前写死的 6）并记一条告警日志。

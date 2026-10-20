@@ -23,6 +23,7 @@
 #include "FramePayload.h"        // net::decodeFramePayload（收包时的解密与解压）
 #include "HandshakeRunner.h"     // net::performClientHandshake / IHandshakeChannel
 #include "IUSocket.h"            // CIUSocket::GetServerPublicKey（连到三个服务的各条链路共用同一把公钥）
+#include "TcpConnectWait.h"      // ConnectWithTimeout / DescribeTcpConnect：带超时的非阻塞 connect
 #include "../Common/Log/IULog.h"            // LOG_INFO / LOG_ERROR
 
 #include <string>
@@ -47,8 +48,8 @@ public:
         Close();
     }
 
-    //连到 fileserver（地址 / 端口取自 CIUSocket）。非阻塞 connect + select 等待，
-    //语义与 CIUSocket::ConnectToFileServer 一致。成功返回 true。
+    //连到 fileserver（地址 / 端口取自 CIUSocket）。非阻塞 connect，用 ConnectWithTimeout 同时等可写与异常，
+    //语义与 CIUSocket::ConnectToFileServer 一致，连上后仍为非阻塞模式。成功返回 true。
     bool Connect(const std::string& addr, short port, int timeoutSec)
     {
         Close();
@@ -88,23 +89,14 @@ public:
         addrSrv.sin_family = AF_INET;
         addrSrv.sin_port   = htons((u_short)port);
 
-        int ret = ::connect(m_sock, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
-        if (ret == 0)
-            return PerformHandshake(timeoutSec);
-        if (ret == SOCKET_ERROR && ::WSAGetLastError() != WSAEWOULDBLOCK)
+        //被拒绝、不可达时立即返回，失败原因与超时分开写进日志（2026-10-14 起，原来只等「可写」，被拒绝也要等满超时）
+        const int timeoutMs = timeoutSec * kTcpConnectMsPerSecond;
+        int connectError = 0;
+        const tcp_connect_result connectResult = ConnectWithTimeout(m_sock, addrSrv, timeoutMs, connectError);
+        if (connectResult != tcp_connect_ok)
         {
-            LOG_ERROR("FileServerConn: connect fileserver %s:%d failed.", addr.c_str(), (int)port);
-            Close();
-            return false;
-        }
-
-        fd_set writeset;
-        FD_ZERO(&writeset);
-        FD_SET(m_sock, &writeset);
-        struct timeval tv = { timeoutSec, 0 };
-        if (::select((int)m_sock + 1, NULL, &writeset, NULL, &tv) != 1)
-        {
-            LOG_ERROR("FileServerConn: connect fileserver %s:%d timeout.", addr.c_str(), (int)port);
+            LOG_ERROR("FileServerConn: connect fileserver %s:%d %s.", addr.c_str(), (int)port,
+                      DescribeTcpConnect(connectResult, connectError, timeoutMs).c_str());
             Close();
             return false;
         }

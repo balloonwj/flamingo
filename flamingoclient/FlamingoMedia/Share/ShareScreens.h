@@ -7,7 +7,8 @@
  *    - ComputeScreenTiles：多画面布局。默认按块数平分：1 块铺满、2 块左右、3～4 块田字格（更多时按近似正方形的网格）；
  *      放大某一块时它占上方，其余缩成底部居中的一排小图（高为区域的 kScreenStripPercent%，宽按 16:9 且不超过平分）；
  *    - HitScreenTile：点中哪一块（双击放大、还原用）；
- *    - CollectOtherScreens：本人要看的画面（去掉本人自己的那一块）；PickScreenRect：某块画面的矩形（控制键鼠换算坐标）；
+ *    - CountOtherScreens：清单里别人的画面块数（2026-10-12 起每个人都看到全部画面，含自己那一块）；
+ *      PickScreenRect：某块画面的矩形（控制键鼠换算坐标）；
  *    - SyncPublishPhase / ShareMineStateForPhase：本人作为共享者的阶段校正与按钮状态；ShareRequestQueue：主持人一侧的申请队列。
  *  单元测试见 Source/Tests/ShareMultiTests.cpp（SSMC2、SSMC3、SSMC5～SSMC8）。
  *
@@ -77,6 +78,18 @@ int FindScreenBySeat(const std::vector<ShareScreenInfo>& screens, int screenSeat
 std::vector<RECT> ComputeScreenTiles(const RECT& area, int count, int enlarged, int gapPx);
 
 /**
+ *  多画面里一块的名字标签放在哪里（2026-10-13）：默认在这一块的左上角；与要避开的矩形（浮在画面上方的浮动工具条）重叠时，
+ *  移到它的下方；移下去会超出这一块时留在原处。
+ *  @param tile     这一块的矩形
+ *  @param labelW   标签宽（像素）
+ *  @param labelH   标签高（像素）
+ *  @param margin   标签离这一块左边、上边的距离，以及移到下方时离要避开的矩形的距离（像素）
+ *  @param obstacle 要避开的矩形，与 tile 同一坐标系；空矩形表示没有
+ *  @return 标签的矩形
+ */
+RECT ComputeTileLabelRect(const RECT& tile, int labelW, int labelH, int margin, const RECT& obstacle);
+
+/**
  *  主持人退出时可以把主持人移交给谁（第 22 期，第 30 条）：除自己以外正在共享屏幕的人，按画面座位升序。为空时直接结束整个共享。
  *  @param state  房间状态
  *  @param selfId 本人（主持人）
@@ -110,12 +123,22 @@ enum share_publish_phase
 int SyncPublishPhase(int phase, const ShareStateNotify& state, int64_t selfId);
 
 /**
- *  本人要看的画面（观看窗与主持人的「其他人的屏幕」窗口共用）：画面清单去掉本人自己的那一块，顺序同 CollectShareScreens。
- *  本人共享的画面经中转也会送到本人的观看连接，显示出来没有用处，共享整块屏幕时还会出现画面里套着画面。
- *  @param state  房间快照
- *  @param selfId 本人 userid
+ *  画面清单里别人的画面块数（2026-10-12，取代原来的 CollectOtherScreens）：每个人都看到全部画面，本人的那一块也在清单里，
+ *  但只有自己在共享时主持人的「共享画面」窗口不打开、控制条「更多」菜单里也没有这一项，所以要单独数出别人的块数。
+ *  本人建的白板算本人的。
+ *  @param screens 画面清单（CollectShareScreens 的结果）
+ *  @param selfId  本人 userid
  */
-std::vector<ShareScreenInfo> CollectOtherScreens(const ShareStateNotify& state, int64_t selfId);
+int CountOtherScreens(const std::vector<ShareScreenInfo>& screens, int64_t selfId);
+
+/**
+ *  本人共享的屏幕在清单里的画面座位（2026-10-12）：这一块取本机预览（ShareLocalPreview），不取中转转回来的画面。
+ *  本人建的白板不算（白板没有视频）。
+ *  @param screens 画面清单（CollectShareScreens 的结果）
+ *  @param selfId  本人 userid
+ *  @return 画面座位；本人没在共享屏幕时返回 -1
+ */
+int FindOwnScreenSeat(const std::vector<ShareScreenInfo>& screens, int64_t selfId);
 
 /**
  *  某块画面实际所占的矩形（第 22 期，控制键鼠按被控制的那一块换算坐标）。

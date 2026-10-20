@@ -540,7 +540,7 @@ TEST_CASE("IC8 inviteconfirm 开关：登录应答、1013 推送与邀请对话�
           == L"本群已设置为新成员不可查看入群前的聊天记录\n对方同意后才会加入群聊");
 }
 
-TEST_CASE("IC9 卡片布局：窄宽度下行高不变，名字很长时不换行，按钮行计入卡片高度", "[groupinvite]")
+TEST_CASE("IC9 卡片布局：窄宽度下行高不变，名字很长时不换行，有没有按钮行高都一样", "[groupinvite]")
 {
     ULONG_PTR gdipToken = 0;
     Gdiplus::GdiplusStartupInput gdipInput;
@@ -556,8 +556,8 @@ TEST_CASE("IC9 卡片布局：窄宽度下行高不变，名字很长时不换�
         REQUIRE(wide > 0);
         //卡片固定宽度，文字单行省略：窄宽度下不会被压扁或撑高
         CHECK(narrow == wide);
-        //按钮行计入卡片高度：有按钮比没按钮高
-        CHECK(wide > CardRowHeight(noButton, kWideListW));
+        //卡片底部一行常驻（左边是类型标签「群聊邀请」，docs/聊天卡片美化方案.md 3.6、第 9 节）：有没有按钮行高都一样
+        CHECK(wide == CardRowHeight(noButton, kWideListW));
 
         //名字与群名都很长：标题、副标题以省略号收尾，行高与普通卡片相同，按钮仍在卡片内
         ChatMessage longCard = withButton;

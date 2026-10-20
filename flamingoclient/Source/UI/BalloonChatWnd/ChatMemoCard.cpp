@@ -7,6 +7,8 @@
 #include "stdafx.h"
 #include "ChatMemoCard.h"
 
+#include "ChatCardModel.h"   // SetCardChip / ChatCardChipTone：卡片的状态标签
+
 #include <stdlib.h>
 
 #include "../../third-party/jsoncpp-1.9.0/json.h"
@@ -168,6 +170,7 @@ void ApplyMemoCard(ChatMessage& msg, const std::string& contentJson, const CStri
         msg.screenShareStatus = TR(L"备忘内容不可用");
         msg.screenShareHasButton = false;
         msg.screenShareButtonEnabled = false;
+        SetCardChip(msg, msg.screenShareStatus, kCardChipEnded);
         return;
     }
 
@@ -188,6 +191,8 @@ void ApplyMemoCard(ChatMessage& msg, const std::string& contentJson, const CStri
     msg.screenShareStatus = MemoCardTargetsText(info);
     msg.screenShareHasButton = true;
     msg.screenShareButtonEnabled = true;
+    //提醒对象用蓝色的中性标签（docs/聊天卡片美化方案.md 5.2）
+    SetCardChip(msg, msg.screenShareStatus, kCardChipNeutral);
 }
 
 bool IsMemoCardAvailable(bool bookLoaded, bool inBook)
@@ -207,10 +212,12 @@ bool SetMemoCardAvailable(ChatMessage& msg, bool available)
     {
         //本机的备忘簿里没有这一条：备忘被删除，与本人被移出提醒对象在客户端分不出来，合用一句
         msg.screenShareStatus = TR(L"备忘已删除，或你已不在提醒对象中");
+        SetCardChip(msg, msg.screenShareStatus, kCardChipEnded);
         return true;
     }
     MemoCardInfo info;
     msg.screenShareStatus = ParseMemoCard(msg.screenShareContent, info) ? MemoCardTargetsText(info) : CString();
+    SetCardChip(msg, msg.screenShareStatus, kCardChipNeutral);
     return true;
 }
 

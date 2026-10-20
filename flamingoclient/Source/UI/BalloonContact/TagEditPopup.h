@@ -64,7 +64,7 @@ public:
      *    anchorScreen：要盖住的目标矩形（屏幕坐标）。调用方把控件的 host
      *                  客户区矩形 ClientToScreen 之后传进来。
      *    owner：调用方（资料对话框）的窗口句柄，仅用于标识来源；本弹层实际以
-     *           NULL 作 owner 创建，理由见 .cpp 里 Show 处的注释（通知路由）。
+     *           NULL 作 owner 创建（历史原因，见 .cpp 里 Show 处的注释）。
      *    currentText：带入输入框的初始文本并全选（新增时传空串）；nullptr 视为空串。
      */
     void OpenAt(const RECT& anchorScreen, HWND owner, LPCTSTR currentText);

@@ -67,7 +67,8 @@ namespace flamingomedia {
 // 17：屏幕共享第 14 节（docs/屏幕共享与录制方案.md 第 14.1、14.4 节，2026-10-07）：宿主新增 SendImageToConversation
 //     （标注「保存为图片」后以图片消息发到本会话）；模块新增 ConfirmCloudRecordExit（退出、登出、关机前询问未完成的
 //     云端录像），新增枚举 MediaCloudExitKind、MediaCloudExitChoice。
-const uint32_t kApiVersion = 17;
+// 18：屏幕共享清晰度（docs/远程桌面H264与共享画质提升方案.md 4.2，2026-10-15）：模块新增 SetShareQuality。
+const uint32_t kApiVersion = 18;
 
 //DLL 文件名，与 exe 放在同一目录。
 #define FLAMINGO_MEDIA_DLL_NAME     L"FlamingoMedia.dll"
@@ -897,6 +898,13 @@ public:
      *  @return 用户的选择，取值见 MediaCloudExitChoice
      */
     virtual int ConfirmCloudRecordExit(int kind) = 0;
+
+    /**
+     *  屏幕共享清晰度（第 18 版）：发起人在系统设置「音视频」页选的档位。exe 登录后与改了设置后在 UI 线程上调用；
+     *  共享进行中修改时，下一帧按新的长边上限重建编码器。
+     *  @param quality 0 为 1080p、1 为 2K（默认）、2 为 4K（即 screenshare::ShareQualityLevel）；未知取值按 2K
+     */
+    virtual void SetShareQuality(int quality) = 0;
 
 protected:
     ~IMediaModule()

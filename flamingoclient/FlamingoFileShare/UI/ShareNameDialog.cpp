@@ -77,8 +77,8 @@ bool CShareNameDialog::Open(HWND owner, int purpose, const wchar_t* title, const
         return false;
     Close();
 
-    //带所有者创建：始终在所有者之上；父窗口参数给的是所有者，WS_OVERLAPPEDWINDOW 下 GetParent 仍为空，
-    //控件通知因此发给本窗口
+    //带所有者创建（Create 的父窗口参数给的是所有者）：始终在所有者之上。控件通知发回本窗口，与有无所有者无关
+    //（2026-10-14 起，见开发约定文档 UI 约定第 11 条）
     HWND parent = (owner != NULL && ::IsWindow(owner)) ? owner : NULL;
     if (Create(parent, CWindow::rcDefault, title, WS_OVERLAPPEDWINDOW, 0) == NULL)
     {

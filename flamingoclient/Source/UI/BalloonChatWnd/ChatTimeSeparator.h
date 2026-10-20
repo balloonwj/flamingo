@@ -41,6 +41,8 @@ const long long kChatTimeSeparatorThresholdMs = 5LL * 60LL * 1000LL;
  *  @return 要插返回 true。判定用 >= ：正好满阈值就算"隔了一会儿"。
  *          两条消息时间倒挂（本条早于上一条，服务器时间回拨或乱序时可能出现）也返回
  *          true —— 时间倒着走本身就该让用户看见，闷着不显示只会更费解。
+ *          两条不在同一个本地日期时也返回 true，不论间隔长短（2026-10-14 起，跨天必插，
+ *          保证每天的第一条消息前面都有日期）。
  */
 bool ShouldInsertTimeSeparator(long long prevMs, long long curMs, long long thresholdMs);
 

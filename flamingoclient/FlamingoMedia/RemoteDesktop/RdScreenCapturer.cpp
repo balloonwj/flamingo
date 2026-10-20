@@ -7,8 +7,10 @@
 #include "DxgiScreenCapturer.h"
 #include "GdiScreenCapturer.h"
 #include "RdScreenDecoder.h"      // DebugPipelineToBmp 闭环解码
+#include "RdVideoNegotiation.h"   // RdStoreFrameIfChanged：存画面并判断是否与上一帧相同（2026-10-17）
 #include "../../Source/Common/Log/IULog.h"            // LOG_INFO / LOG_ERROR
 #include <stdio.h>
+#include <string.h>
 #include "../../Source/Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 namespace remotedesktop {
@@ -20,6 +22,14 @@ static const int kFirstFrameTries = 30;
 
 RdScreenCapturer::RdScreenCapturer(int /*bitCount*/, bool preferGdi)
     : m_capturer(NULL)
+    , m_bgraW(0)
+    , m_bgraH(0)
+    , m_hasFrame(false)
+    , m_lastNew(false)
+    , m_legacyPending(false)
+    , m_timeoutMs(kCaptureTimeoutMs)
+    , m_capturedFrames(0)
+    , m_identicalFrames(0)
 {
     //非强制 GDI 时优先 DXGI Desktop Duplication；初始化失败（老显卡 / 虚拟机 / RDP 等不支持）降级 GDI
     if (!preferGdi)
@@ -42,6 +52,9 @@ RdScreenCapturer::RdScreenCapturer(int /*bitCount*/, bool preferGdi)
     {
         m_capturer = gdi;
         m_policy.Reset(kBackendGdi);
+        //DXGI 不可用而降级时（例如会话开始时正停在 UAC 提示上）之后定期重试 DXGI；调试时强制 GDI 不重试（2026-10-17）
+        if (!preferGdi)
+            m_policy.OnFellBackToGdi(RdStreamClockMs());
         LOG_INFO("RdScreenCapturer: 抓取后端 = GDI%s，%dx%d。",
                  preferGdi ? "（强制）" : "（DXGI 不可用降级）",
                  gdi->ScreenWidth(), gdi->ScreenHeight());
@@ -70,6 +83,10 @@ bool RdScreenCapturer::isReady() const
 
 bool RdScreenCapturer::captureOneFrame(bool needFrame)
 {
+    //因故障降级到 GDI 之后，到了安排的时刻就试着回到 DXGI（2026-10-17；此前一旦降级，本次会话就一直用 GDI）
+    if (m_capturer != NULL && m_policy.ShouldRetryDxgi(RdStreamClockMs()))
+        retryDxgi();
+
     //首帧多给尝试（含屏幕静止重试 + 可能的重建 / 切换）；非首帧少给（超时即沿用上一帧，
     //但留出一次额外尝试，让 AccessLost 触发的重建 / 切换后能在本轮重抓一帧）
     int maxAttempts = needFrame ? kFirstFrameTries : 2;
@@ -83,12 +100,24 @@ bool RdScreenCapturer::captureOneFrame(bool needFrame)
         }
 
         FrameView fv;
-        CaptureResult r = m_capturer->CaptureFrame(kCaptureTimeoutMs, fv);
+        CaptureResult r = m_capturer->CaptureFrame(m_timeoutMs, fv);
         FallbackAction act = m_policy.OnResult(r);
 
-        if (r == kCaptureOk)
+        if (r == kCaptureOk && fv.m_data != NULL && fv.m_width > 0 && fv.m_height > 0)
         {
-            m_encoder.Feed(fv);
+            //存一份紧密排列的 BGRA（抓取后端的画面只在下一次抓取之前有效）；旧格式编码器在组帧之前才喂入
+            const bool changed = RdStoreFrameIfChanged(fv, m_bgra, m_bgraW, m_bgraH);
+            ++m_capturedFrames;
+            if (!changed)
+            {
+                //与上一帧完全相同：当作没有新画面，沿用上一帧（2026-10-17）。DXGI 在可见画面没有变化时也会报告新帧
+                //（联调实测：整屏被静止窗口盖住时仍约每秒 20 帧，逐字节相同），原先都当作新画面编码，静止时仍有约 2 Mbps。
+                //还没有画面时不会走到这里（RdStoreFrameIfChanged 对空的 m_bgra 总是返回 true）
+                ++m_identicalFrames;
+                return false;
+            }
+            m_hasFrame = true;
+            m_legacyPending = true;
             return true;
         }
         if (act == kActionRebuildDxgi)
@@ -146,6 +175,8 @@ bool RdScreenCapturer::fallbackToGdi()
     {
         m_capturer = gdi;
         m_policy.Reset(kBackendGdi);
+        //之后定期重试 DXGI（2026-10-17）：分辨率变化、锁屏与 UAC 提示结束后能回到 DXGI
+        m_policy.OnFellBackToGdi(RdStreamClockMs());
         LOG_INFO("RdScreenCapturer: 已降级到 GDI 抓取，%dx%d。",
                  gdi->ScreenWidth(), gdi->ScreenHeight());
         return true;
@@ -155,34 +186,114 @@ bool RdScreenCapturer::fallbackToGdi()
     return false;
 }
 
-void RdScreenCapturer::captureBitmapInfo(std::vector<BYTE>& out)
+bool RdScreenCapturer::retryDxgi()
 {
-    //首次产 BITMAPINFO 前确保已抓到一帧以建立画面尺寸
-    if (!m_encoder.HasFrame())
-        captureOneFrame(true);
-    m_encoder.GetBitmapInfo(out);
+    const int64_t now = RdStreamClockMs();
+    CDxgiScreenCapturer* dxgi = new CDxgiScreenCapturer();
+    if (!dxgi->Init())
+    {
+        delete dxgi;
+        m_policy.OnDxgiRetryFailed(now);
+        LOG_INFO("RdScreenCapturer: DXGI retry failed, keep using GDI.");
+        return false;
+    }
+    delete m_capturer;
+    m_capturer = dxgi;
+    m_policy.Reset(kBackendDxgi);
+    LOG_INFO("RdScreenCapturer: back to DXGI Desktop Duplication, %dx%d.", dxgi->ScreenWidth(), dxgi->ScreenHeight());
+    return true;
 }
 
-void RdScreenCapturer::captureFirst(std::vector<BYTE>& out)
+bool RdScreenCapturer::captureFrame()
 {
-    //抓最新一帧作为首屏（无帧时强制抓到）
-    captureOneFrame(!m_encoder.HasFrame());
-    m_encoder.GetFirstFrame(out);
+    //还没抓到过画面时强制抓到（多次重试）；之后单次抓取，超时则沿用上一帧
+    m_lastNew = captureOneFrame(!m_hasFrame);
+    return m_hasFrame;
 }
 
-void RdScreenCapturer::captureNext(std::vector<BYTE>& out)
+bool RdScreenCapturer::lastCaptureNew() const
 {
-    //抓最新一帧（超时则沿用上一帧）
-    captureOneFrame(false);
+    return m_lastNew;
+}
 
+unsigned int RdScreenCapturer::capturedFrames() const
+{
+    return m_capturedFrames;
+}
+
+unsigned int RdScreenCapturer::identicalFrames() const
+{
+    return m_identicalFrames;
+}
+
+void RdScreenCapturer::setCaptureTimeout(UINT timeoutMs)
+{
+    if (timeoutMs > 0)
+        m_timeoutMs = timeoutMs;
+}
+
+void RdScreenCapturer::feedLegacy()
+{
+    if (!m_legacyPending || m_bgra.empty())
+        return;
+    FrameView v;
+    v.m_data = &m_bgra[0];
+    v.m_width = m_bgraW;
+    v.m_height = m_bgraH;
+    v.m_stride = m_bgraW * 4;
+    m_encoder.Feed(v);
+    m_legacyPending = false;
+}
+
+bool RdScreenCapturer::needsKeyframe()
+{
+    feedLegacy();
+    return m_encoder.NeedsKeyframe();
+}
+
+void RdScreenCapturer::buildKeyframe(std::vector<BYTE>& bitmapInfo, std::vector<BYTE>& first)
+{
+    feedLegacy();
+    m_encoder.GetBitmapInfo(bitmapInfo);
+    m_encoder.GetFirstFrame(first);
+}
+
+void RdScreenCapturer::buildNext(std::vector<BYTE>& out)
+{
+    feedLegacy();
     //光标位置 + 类型索引：与旧引擎一致，单独写进增量帧，画面本身不含光标
     POINT cursorPos;
-    cursorPos.x = 0;
-    cursorPos.y = 0;
-    ::GetCursorPos(&cursorPos);
-    BYTE cursorType = (BYTE)m_cursorInfo.getCurrentCursorIndex();
-
+    BYTE cursorType = 0;
+    cursor(cursorPos, cursorType);
     m_encoder.GetNextFrame(out, cursorPos, cursorType);
+}
+
+void RdScreenCapturer::cursor(POINT& pos, BYTE& type)
+{
+    pos.x = 0;
+    pos.y = 0;
+    ::GetCursorPos(&pos);
+    type = static_cast<BYTE>(m_cursorInfo.getCurrentCursorIndex());
+}
+
+const BYTE* RdScreenCapturer::frameData() const
+{
+    return m_bgra.empty() ? NULL : &m_bgra[0];
+}
+
+int RdScreenCapturer::frameStride() const
+{
+    return m_bgraW * 4;
+}
+
+int RdScreenCapturer::frameWidth() const
+{
+    return m_bgraW;
+}
+
+int RdScreenCapturer::frameHeight() const
+{
+    return m_bgraH;
 }
 
 int RdScreenCapturer::screenWidth() const
@@ -250,11 +361,11 @@ bool RdScreenCapturer::DebugPipelineToBmp(const wchar_t* path, std::wstring& msg
         return false;
     }
 
-    //走通编码链路：BITMAPINFO + 首屏
+    //走通编码链路：抓一帧，组 BITMAPINFO + 首屏
     std::vector<BYTE> bmi;
     std::vector<BYTE> first;
-    cap.captureBitmapInfo(bmi);
-    cap.captureFirst(first);
+    cap.captureFrame();
+    cap.buildKeyframe(bmi, first);
 
     //喂给解码器还原
     RdScreenDecoder dec;

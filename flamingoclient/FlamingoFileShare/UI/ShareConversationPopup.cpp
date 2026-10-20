@@ -218,7 +218,8 @@ bool CShareConversationPopup::CreatePopupWindow()
             return false;
     }
 
-    //不设所有者：带所有者的 WS_POPUP 经 ::GetParent 取到的是所有者，控件通知会被投给聊天窗。WS_EX_TOOLWINDOW 不进任务栏
+    //不设所有者（原为不让控件通知发给聊天窗；2026-10-14 起有无所有者，控件通知都发回本窗口，见头文件说明）。
+    //WS_EX_TOOLWINDOW 不进任务栏
     HWND hWnd = ::CreateWindowExW(WS_EX_TOOLWINDOW, kPopupClass, TR(kTitleText), WS_POPUP, 0, 0, kPopupWidth, kPopupHeight,
                                   NULL, NULL, instance, NULL);
     if (hWnd == NULL)

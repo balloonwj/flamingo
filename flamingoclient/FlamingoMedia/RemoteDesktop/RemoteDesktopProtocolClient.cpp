@@ -69,6 +69,14 @@ std::string RemoteDesktopProtocolClient::buildClose(const std::string& sessionId
     return writeCompact(root);
 }
 
+std::string RemoteDesktopProtocolClient::buildControl(const std::string& sessionId, int action)
+{
+    Json::Value root;
+    root["sessionid"] = sessionId;
+    root["action"]    = action;
+    return writeCompact(root);
+}
+
 std::string RemoteDesktopProtocolClient::buildRelayHello(const std::string& token)
 {
     Json::Value root;
@@ -158,6 +166,42 @@ bool RemoteDesktopProtocolClient::parseRelayHelloAck(const std::string& jsonbody
 
     out.m_code = root["code"].asInt();
     out.m_msg  = root["msg"].asString();
+    return true;
+}
+
+bool RemoteDesktopProtocolClient::parseControlResponse(const std::string& jsonbody, RDControlResponse& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+
+    //没有整型 code 视为非法应答
+    if (!root["code"].isIntegral())
+        return false;
+
+    out.m_code      = root["code"].asInt();
+    out.m_msg       = root["msg"].asString();
+    out.m_sessionId = root["sessionid"].asString();
+    out.m_action    = static_cast<int>(jsonToInt64(root["action"]));
+    out.m_control   = static_cast<int>(jsonToInt64(root["control"]));
+    return true;
+}
+
+bool RemoteDesktopProtocolClient::parseControlNotify(const std::string& jsonbody, RDControlNotify& out)
+{
+    Json::Value root;
+    if (!parseObject(jsonbody, root))
+        return false;
+
+    out.m_sessionId = root["sessionid"].asString();
+    out.m_action    = static_cast<int>(jsonToInt64(root["action"]));
+    out.m_control   = static_cast<int>(jsonToInt64(root["control"]));
+    out.m_fromId    = jsonToInt64(root["fromid"]);
+    out.m_fromName  = root["fromname"].asString();
+
+    //缺会话 id、动作不在 enum rd_control_action 范围内都视为非法推送
+    if (out.m_sessionId.empty() || out.m_action < rd_control_request || out.m_action > rd_control_release)
+        return false;
     return true;
 }
 

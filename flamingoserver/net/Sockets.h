@@ -25,6 +25,13 @@ namespace net
 
         void shutdownWrite();
         void setTcpNoDelay(bool on);
+
+        /**
+         *  读取本 socket 当前是否关闭了 Nagle 算法（TCP_NODELAY），供测试与日志核对 setTcpNoDelay 是否生效。
+         *  @return 已关闭 Nagle（小包立即发出）返回 true；未关闭或读取失败返回 false
+         */
+        bool getTcpNoDelay() const;
+
         void setReuseAddr(bool on);
         void setReusePort(bool on);
         void setKeepAlive(bool on);

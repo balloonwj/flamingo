@@ -13,21 +13,10 @@
 
 #include "ChatMarkdownCard.h"     // 卡片宽度、高度与内容绘制（与聊天气泡共用）
 #include "ChatMessageList.h"      // WM_CHAT_OPEN_MARKDOWN_PREVIEW / MarkdownPreviewOpenRequest
-#include "ChatPaintUtil.h"        // AddRoundRect
 #include "../../Common/Log/IULog.h"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
 
 namespace balloonchatwnd {
-
-using chatpaint::AddRoundRect;
-
-namespace {
-
-//卡片底色与圆角：与聊天窗里「别人发的消息」气泡相同（ChatBubble.cpp 的 kBubbleOther、kBubbleRadius）
-const Gdiplus::Color kCardBack(255, 0xF3, 0xF2, 0xEF);
-const Gdiplus::REAL kCardRadius = 12.0f;
-
-} // namespace
 
 ChatMarkdownCardControl::ChatMarkdownCardControl()
     : m_summaryH(-1)
@@ -73,16 +62,7 @@ void ChatMarkdownCardControl::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         m_summaryH = MeasureMarkdownCardSummary(hdc, m_info.m_summary, width);
         m_measuredWidth = width;
     }
-    //底色：圆角矩形。画完先释放 Graphics，再用 GDI 画文字
-    {
-        Gdiplus::Graphics g(hdc);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        Gdiplus::GraphicsPath path;
-        AddRoundRect(path, (Gdiplus::REAL)m_rcItem.left, (Gdiplus::REAL)m_rcItem.top, (Gdiplus::REAL)width,
-                     (Gdiplus::REAL)height, kCardRadius);
-        Gdiplus::SolidBrush brush(kCardBack);
-        g.FillPath(&brush, &path);
-    }
+    //白色底板由卡片自己画（docs/聊天卡片美化方案.md 3.2，2026-10-14 起与聊天窗同一套样式）
     PaintMarkdownCardContent(hdc, m_rcItem, m_info.m_title, m_info.m_summary, m_summaryH);
 }
 

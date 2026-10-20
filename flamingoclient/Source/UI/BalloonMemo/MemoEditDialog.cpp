@@ -184,8 +184,8 @@ bool CMemoEditDialog::Open(HWND owner, const net::MemoItem& item, balloonmemo::M
 
 bool CMemoEditDialog::BuildWindow(HWND owner, bool groupMode)
 {
-    //以发起打开的窗口为 owner：本窗口恒在它之上。控件通知仍回到本窗口：WS_OVERLAPPEDWINDOW 的顶层窗口
-    //即便带 owner，::GetParent 也返回 NULL（与「发起接龙」窗口同一做法）
+    //以发起打开的窗口为 owner：本窗口恒在它之上（与「发起接龙」窗口同一做法）。控件通知发回本窗口
+    //（开发约定文档 UI 约定第 11 条：只有 WS_CHILD 宿主的控件通知发给父窗口）
     LPCTSTR title = WindowTitleFor(m_mode, groupMode);
     if (Create(owner, CWindow::rcDefault, title, WS_OVERLAPPEDWINDOW, 0) == NULL)
     {

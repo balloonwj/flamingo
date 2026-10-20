@@ -119,7 +119,8 @@ void CAnnouncePopupWindow::ShowAnnouncement(HWND ownerPanel, int64_t announcemen
 
     if (!IsWindow())
     {
-        //owner 传 NULL：让子控件通知自路由回本窗口（与群公告提示窗同处理）。
+        //owner 传 NULL，与群公告提示窗相同（原为让子控件通知发回本窗口；2026-10-14 起有无所有者，控件通知都
+        //发回本窗口，见开发约定文档 UI 约定第 11 条）。
         if (Create(NULL, CWindow::rcDefault, TR(L"新公告"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {

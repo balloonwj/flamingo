@@ -23,6 +23,7 @@
 #include <time.h>
 
 #include "ChatRelayCard.h"
+#include "ChatCardModel.h"   // SetCardChip / ChatCardChipTone：卡片的状态标签
 #include "../../net/Protocol.h"   // relay_state、group_member_role 的具体取值
 #include "../../Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
@@ -327,6 +328,32 @@ void FillRelayFields(ChatMessage& msg, const net::RelayCardContent& card, bool c
     msg.relayButton   = contentValid ? preview.m_button : (int)kRelayButtonNone;
     msg.relayDeadline = (long long)card.m_deadline;
     msg.relayCopyBody = BuildRelayCopyBody(card, names);
+
+    //卡片的状态标签、信息行与副标题（docs/聊天卡片美化方案.md 5.3）：进行中为绿，已结束、已截止、名额已满且本人未参与为灰；
+    //信息行写人数，副标题写截止时间。原来的状态行 relayStatus 照旧保留（复制等处仍在用）
+    const bool full = !IsRelayJoinedBy(card, selfId) && card.m_items.size() >= net::kRelayMaxParticipants;
+    CString chip = TR(L"进行中");
+    int tone = kCardChipLive;
+    if (preview.m_state == relay_state_closed)
+    {
+        chip = TR(L"已结束");
+        tone = kCardChipEnded;
+    }
+    else if (preview.m_state == relay_state_expired)
+    {
+        chip = TR(L"已截止");
+        tone = kCardChipEnded;
+    }
+    else if (full)
+    {
+        chip = TR(L"已满");
+        tone = kCardChipEnded;
+    }
+    CString count;
+    count.Format(TR(L"共 %d 人参与"), preview.m_count);
+    SetCardChip(msg, chip, tone, count);
+    msg.relayDeadlineText = (card.m_deadline > 0)
+                          ? CString(TRF(L"截止 {0}", FormatRelayTime(card.m_deadline, nowMs)).c_str()) : CString();
 
     //摘要与服务端会话摘要同一写法；标题为空的旧数据只写「[接龙]」
     msg.text = TR(L"[接龙]");

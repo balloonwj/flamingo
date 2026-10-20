@@ -9,7 +9,8 @@
  *    - RRP4 开始丢帧时向这路视频的发送者请求关键帧，同一路视频 2 秒内至多一次；顺带检查关键帧请求的字节格式；
  *    - RRP5 新成员加入时向所有已知的视频发送者请求关键帧，不受限频约束，但刷新限频计时；
  *    - RRP6 状态按接收者 × 发送者 × 视频轨分别记，互不影响；成员离开后其状态清空；
- *    - RRP7 发送者独自在房间时发的视频也算已知视频流（2026-10-02 联调用例 SSRC1 查出漏洞后补的用例）。
+ *    - RRP7 发送者独自在房间时发的视频也算已知视频流（2026-10-02 联调用例 SSRC1 查出漏洞后补的用例）；
+ *    - RRP8 积压上限的默认值为 4 MiB（2026-10-15 由 1 MiB 调大），构造时传 0 按默认值。
  *
  *  典型用法：Tests.exe --test-case="RRP*"
  *
@@ -241,4 +242,16 @@ TEST_CASE("RRP7 发送者独自在房间时发的视频也算已知视频流，�
     p.onMemberLeft(kRrpHost);
     p.onMemberJoined(kRrpT0 + kRrpOneSecond, requests);
     CHECK(requests.empty());
+}
+
+TEST_CASE("RRP8 积压上限默认 4 MiB；构造时传 0 按默认值")
+{
+    //2026-10-15 由 1 MiB 调到 4 MiB（docs/远程桌面H264与共享画质提升方案.md 4.8，用户定的 Q3）：编码长边提到 2560 / 3840 后
+    //单个关键帧更大，1 MiB 的余量下慢一点的观看者几乎每个关键帧之后都会进入「等关键帧」
+    const size_t kFourMiB = 4u * 1024u * 1024u;
+    CHECK(RoomForwardPolicy::kDefaultViewerBufferCapBytes == kFourMiB);
+    RoomForwardPolicy p(0);
+    //积压正好是 4 MiB 时不丢（与 RRP1 相同的规则：超过上限才丢）
+    CHECK(rrpSend(p, kRrpViewer1, screenshare_track_screen, kRrpHost, kRrpWhole, kFourMiB, kRrpT0));
+    CHECK_FALSE(rrpSend(p, kRrpViewer1, screenshare_track_screen, kRrpHost, kRrpWhole, kFourMiB + 1, kRrpT0));
 }

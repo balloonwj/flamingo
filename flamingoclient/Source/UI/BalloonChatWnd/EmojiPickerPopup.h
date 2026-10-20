@@ -44,7 +44,7 @@ public:
     /**
      *  在 anchor 屏幕矩形上方打开 emoji 面板（工具栏在窗口底部，故优先朝上）。
      *    anchorScreen：锚矩形（一般取表情按钮的屏幕矩形）。
-     *    owner：owner 窗口句柄（单聊窗）；仅用于生命周期归属，通知路由见 .cpp。
+     *    owner：owner 窗口句柄（单聊窗）；目前未使用，浮层显示时不设所有者，原因见 .cpp。
      */
     void OpenAt(const RECT& anchorScreen, HWND owner);
 

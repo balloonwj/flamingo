@@ -52,8 +52,8 @@ const UINT kMsgShareInfoEditResult = WM_APP + 0x95;
 const UINT kMsgShareControlToast = WM_APP + 0x97;
 //收到一帧键鼠输入（第 18 期，来自中转接收线程）：lParam = 堆上的 ShareInputFrameMsg*，由控制器释放
 const UINT kMsgShareInputFrame = WM_APP + 0x98;
-//画面主人本机有动静（第 18 期，低级鼠标、键盘钩子里判定），控制器据此收回控制；wParam / lParam 不用
-const UINT kMsgShareLocalActivity = WM_APP + 0x99;
+//WM_APP + 0x99 已作废、不得复用：原为「画面主人本机有动静」（第 18 期，低级鼠标、键盘钩子里判定后收回控制），
+//2026-10-12 起被控制期间画面主人可以照常操作，不再自动收回，钩子与这条消息一起删除
 //共享申请提示的按钮（第 22 期，主持人右下角「某某申请共享屏幕」）：wParam = CShareCornerToast::Command（加入即「同意」、
 //忽略即「拒绝」，超时也按拒绝），lParam = 申请人的 userid（截成 LPARAM；userid 不超过 32 位）
 const UINT kMsgShareSharingToast = WM_APP + 0x9A;

@@ -17,7 +17,9 @@
  *    - REC16 「高清」画质（2026-10-07）：长边上限 2560，2K 屏不缩小、4K 屏缩到 2560，「标准」仍是 1920；码率按像素数提高，
  *            同一尺寸下「高清」是「标准」的 2 倍；
  *    - REC17 「高清」录 2K 画面：经真实的录制管线与本机 H.264 编码器（允许硬件编码器）写出 2560×1440 的 MP4，读回有画面。
- *    - REC18 同一个录制会话连录两段：第一段用画笔画过的笔迹，不带进第二段（第二段没有交过笔迹）。
+ *    - REC18 同一个录制会话连录两段：第一段用画笔画过的笔迹，不带进第二段（第二段没有交过笔迹）；
+ *    - REC19（2026-10-15，A7）画面合成缩小时用 BgraDownscaler（与它逐字节一致）、原尺寸时逐行复制（含行跨度大于宽度），
+ *            画中画照常叠加；放大仍走 HALFTONE（REC7）。
  *  框架 Catch2 v3。REC8、REC9 写临时文件（系统临时目录），用完删除。
  *  balloonwj@qq.com   2026-10-03
  */
@@ -37,6 +39,7 @@
 #include "../../FlamingoMedia/Record/RecordFrameComposer.h"
 #include "../../FlamingoMedia/Record/RecordPolicy.h"
 #include "../../FlamingoMedia/Record/RecordSession.h"
+#include "../../FlamingoMedia/Share/ShareFrameDrawer.h"   // BgraDownscaler：REC19 的对照结果
 
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "mfreadwrite.lib")
@@ -828,4 +831,91 @@ TEST_CASE("REC18 同一个录制会话连录两段，第一段的笔迹不带进
     CHECK(b < 100);
     ::DeleteFileW(first.c_str());
     ::DeleteFileW(second.c_str());
+}
+
+namespace {
+
+//REC19 的源画面：每个字节按位置取不同的值（相邻像素有差别，缩放错位能被看出来），alpha 为 255
+std::vector<uint8_t> rec19Source(int w, int h, int stride)
+{
+    const uint8_t kOpaque = 255;
+    std::vector<uint8_t> src(static_cast<size_t>(stride) * h, 0);
+    for (int y = 0; y < h; ++y)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            uint8_t* p = &src[static_cast<size_t>(y) * stride + static_cast<size_t>(x) * 4];
+            p[0] = static_cast<uint8_t>((x * 7 + y * 3) & 0xFF);
+            p[1] = static_cast<uint8_t>((x * 5 + y * 11) & 0xFF);
+            p[2] = static_cast<uint8_t>((x * 13 + y) & 0xFF);
+            p[3] = kOpaque;
+        }
+    }
+    return src;
+}
+
+//合成结果在 rc 里的 B、G、R 是否与 expect（行跨度 expectStride）逐字节相同
+bool rec19RegionSame(const RecordFrameComposer& c, const RECT& rc, const uint8_t* expect, int expectStride)
+{
+    const int kColorBytes = 3;
+    for (int y = rc.top; y < rc.bottom; ++y)
+    {
+        for (int x = rc.left; x < rc.right; ++x)
+        {
+            const uint8_t* got = c.Pixels() + static_cast<size_t>(y) * c.Stride() + static_cast<size_t>(x) * 4;
+            const uint8_t* want = expect + static_cast<size_t>(y - rc.top) * expectStride
+                                  + static_cast<size_t>(x - rc.left) * 4;
+            for (int b = 0; b < kColorBytes; ++b)
+            {
+                if (got[b] != want[b])
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("REC19 画面合成缩小时用 BgraDownscaler、原尺寸时逐行复制，不再一律走 HALFTONE", "[record]")
+{
+    //docs/远程桌面H264与共享画质提升方案.md A7（2026-10-15）：2560×1440 合成进 1920×1080 的画布（「标准」画质录 2K 屏，
+    //或观看者录制 2K 的共享），结果与 BgraDownscaler 直接缩放逐字节一致（只比较 B、G、R）
+    const int srcW = 2560;
+    const int srcH = 1440;
+    const int outW = 1920;
+    const int outH = 1080;
+    const std::vector<uint8_t> src = rec19Source(srcW, srcH, srcW * 4);
+    RecordFrameComposer c;
+    REQUIRE(c.Init(outW, outH));
+    c.Compose(&src[0], srcW, srcH, srcW * 4, NULL, NULL, 0, 0);
+    const RECT full = { 0, 0, outW, outH };
+    CHECK(c.ContentRect().left == 0);
+    CHECK(c.ContentRect().right == outW);
+    std::vector<uint8_t> expect(static_cast<size_t>(outW) * outH * 4, 0);
+    screenshare::BgraDownscaler down;
+    down.Scale(&src[0], srcW * 4, srcW, srcH, &expect[0], outW * 4, outW, outH);
+    CHECK(rec19RegionSame(c, full, &expect[0], outW * 4));
+
+    //原尺寸、源行跨度大于宽度（采集到的画面常有对齐的行跨度）：逐字节复制
+    const int padStride = (outW + 16) * 4;
+    const std::vector<uint8_t> padded = rec19Source(outW, outH, padStride);
+    c.Compose(&padded[0], outW, outH, padStride, NULL, NULL, 0, 0);
+    CHECK(rec19RegionSame(c, full, &padded[0], padStride));
+
+    //缩小时画中画与标注照常叠加：画中画（绿色）出现在右下角
+    std::vector<uint8_t> green(static_cast<size_t>(64) * 36 * 4, 0);
+    for (size_t i = 0; i < green.size(); i += 4)
+    {
+        green[i + 1] = 255;
+        green[i + 3] = 255;
+    }
+    c.Compose(&src[0], srcW, srcH, srcW * 4, NULL, &green[0], 64, 36);
+    const RECT pip = ComputePipRect(outW, outH);
+    int r = 0;
+    int g = 0;
+    int b = 0;
+    pixelAt(c, (pip.left + pip.right) / 2, (pip.top + pip.bottom) / 2, r, g, b);
+    CHECK(g > 200);
+    CHECK(r < 50);
 }

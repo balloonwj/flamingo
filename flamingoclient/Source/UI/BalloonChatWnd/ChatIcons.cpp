@@ -860,6 +860,111 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
         }
         break;
 
+    // 合并转发的聊天记录卡片：一个带尖角的对话气泡，右侧再画一道弧线，表示后面还叠着一条（docs/聊天卡片美化方案.md 3.1）
+    case kChatIconChatRecord:
+        {
+            const Gdiplus::REAL kBubbleLeft   = 2.5f;    // 气泡左边 x
+            const Gdiplus::REAL kBubbleTop    = 5.0f;    // 气泡顶边 y
+            const Gdiplus::REAL kBubbleRight  = 17.5f;   // 气泡右边 x
+            const Gdiplus::REAL kBubbleBottom = 15.0f;   // 气泡底边 y
+            const Gdiplus::REAL kBubbleCorner = 4.0f;    // 气泡圆角直径
+            const Gdiplus::REAL kTailRight    = 10.0f;   // 尖角在底边上的右端 x
+            const Gdiplus::REAL kTailLeft     = 6.0f;    // 尖角在底边上的左端 x，也是尖角竖边的 x
+            const Gdiplus::REAL kTailTipY     = 18.0f;   // 尖角下端 y
+            const Gdiplus::REAL kBackX        = 20.5f;   // 后面那一条的竖线 x
+            const Gdiplus::REAL kBackTop      = 9.5f;    // 竖线上端 y
+            const Gdiplus::REAL kBackBottom   = 15.0f;   // 竖线下端 y（从这里转成圆角）
+            const Gdiplus::REAL kBackCorner   = 4.0f;    // 竖线转角的圆角直径
+            const Gdiplus::REAL kArc90        = 90.0f;   // 圆角弧扫过的角度（度）
+
+            Gdiplus::GraphicsPath bubble;
+            bubble.AddArc(kBubbleLeft, kBubbleTop, kBubbleCorner, kBubbleCorner, 2.0f * kArc90, kArc90);
+            bubble.AddArc(kBubbleRight - kBubbleCorner, kBubbleTop, kBubbleCorner, kBubbleCorner, 3.0f * kArc90, kArc90);
+            bubble.AddArc(kBubbleRight - kBubbleCorner, kBubbleBottom - kBubbleCorner, kBubbleCorner, kBubbleCorner, 0.0f,
+                          kArc90);
+            bubble.AddLine(kBubbleRight - kBubbleCorner / 2.0f, kBubbleBottom, kTailRight, kBubbleBottom);
+            bubble.AddLine(kTailRight, kBubbleBottom, kTailLeft, kTailTipY);
+            bubble.AddLine(kTailLeft, kTailTipY, kTailLeft, kBubbleBottom);
+            bubble.AddArc(kBubbleLeft, kBubbleBottom - kBubbleCorner, kBubbleCorner, kBubbleCorner, kArc90, kArc90);
+            bubble.CloseFigure();
+            g.DrawPath(&pen, &bubble);
+
+            g.DrawLine(&pen, kBackX, kBackTop, kBackX, kBackBottom);
+            g.DrawArc(&pen, kBackX - kBackCorner, kBackBottom - kBackCorner / 2.0f, kBackCorner, kBackCorner, 0.0f, kArc90);
+        }
+        break;
+
+    // 云端录像卡片：圆角外框，框内一个向右的播放三角（同上）
+    case kChatIconCloudRecord:
+        {
+            const Gdiplus::REAL kBoxLeft    = 3.0f;    // 外框左边 x
+            const Gdiplus::REAL kBoxTop     = 5.0f;    // 外框顶边 y
+            const Gdiplus::REAL kBoxRight   = 21.0f;   // 外框右边 x
+            const Gdiplus::REAL kBoxBottom  = 19.0f;   // 外框底边 y
+            const Gdiplus::REAL kBoxRadius  = 2.5f;    // 外框圆角半径
+            const Gdiplus::REAL kPlayLeft   = 10.2f;   // 播放三角左边 x
+            const Gdiplus::REAL kPlayTop    = 9.3f;    // 播放三角上顶点 y
+            const Gdiplus::REAL kPlayBottom = 14.7f;   // 播放三角下顶点 y
+            const Gdiplus::REAL kPlayTipX   = 14.8f;   // 播放三角尖端 x
+            const Gdiplus::REAL kPlayTipY   = 12.0f;   // 播放三角尖端 y
+
+            DrawRoundBox(g, pen, kBoxLeft, kBoxTop, kBoxRight, kBoxBottom, kBoxRadius);
+            Gdiplus::GraphicsPath play;
+            play.AddLine(kPlayLeft, kPlayTop, kPlayTipX, kPlayTipY);
+            play.AddLine(kPlayTipX, kPlayTipY, kPlayLeft, kPlayBottom);
+            play.CloseFigure();
+            g.DrawPath(&pen, &play);
+        }
+        break;
+
+    // 语音通话卡片：电话听筒的轮廓线。几何取自卡片效果图（tmp/chatstyle/cards/卡片对比.html 的 i-phone）：
+    // 上端听筒、下端话筒各是一段折线，两者之间是一条略向左下弯的内弧与一条向左下鼓出的外弧，圆弧用贝塞尔曲线逼近
+    case kChatIconPhoneLine:
+        {
+            Gdiplus::GraphicsPath path;
+            path.AddLine(6.6f, 3.5f, 9.4f, 3.5f);       // 听筒顶边
+            path.AddLine(9.4f, 3.5f, 10.9f, 7.7f);      // 听筒右侧斜边
+            path.AddLine(10.9f, 7.7f, 8.9f, 9.0f);      // 听筒下沿
+            path.AddBezier(8.9f, 9.0f, 10.07f, 11.9f, 12.1f, 13.93f, 15.0f, 15.1f);   // 内弧（半径 10.5）
+            path.AddLine(15.0f, 15.1f, 16.3f, 13.1f);   // 话筒上沿
+            path.AddLine(16.3f, 13.1f, 20.5f, 14.6f);   // 话筒右上斜边
+            path.AddLine(20.5f, 14.6f, 20.5f, 17.4f);   // 话筒右边
+            path.AddBezier(20.5f, 17.4f, 20.5f, 18.5f, 19.5f, 19.4f, 18.4f, 19.4f);   // 话筒右下圆角
+            path.AddBezier(18.4f, 19.4f, 11.29f, 18.31f, 5.69f, 12.71f, 4.6f, 5.6f);  // 外弧（半径 16.5）
+            path.AddBezier(4.6f, 5.6f, 4.6f, 4.5f, 5.5f, 3.5f, 6.6f, 3.5f);           // 听筒左上圆角
+            path.CloseFigure();
+            g.DrawPath(&pen, &path);
+        }
+        break;
+
+    // 复制：前面一张完整的圆角纸，后面一张只露出左上角的两条边（几何取自卡片效果图的 i-copy）
+    case kChatIconCopy:
+        {
+            const Gdiplus::REAL kFrontLeft  = 8.0f;    // 前面那张的左边 x
+            const Gdiplus::REAL kFrontTop   = 8.0f;    // 前面那张的顶边 y
+            const Gdiplus::REAL kFrontRight = 20.0f;   // 前面那张的右边 x
+            const Gdiplus::REAL kFrontBot   = 20.0f;   // 前面那张的底边 y
+            const Gdiplus::REAL kRadius     = 2.0f;    // 圆角半径
+            const Gdiplus::REAL kBackLeft   = 4.0f;    // 后面那张的左边 x
+            const Gdiplus::REAL kBackTop    = 4.0f;    // 后面那张的顶边 y
+            const Gdiplus::REAL kBackRight  = 16.0f;   // 后面那张的右边 x（只画到前面那张的顶边）
+            const Gdiplus::REAL kBackBot    = 16.0f;   // 后面那张的底边 y（只画到前面那张的左边）
+            const Gdiplus::REAL kArc90      = 90.0f;   // 圆角弧扫过的角度（度）
+            const Gdiplus::REAL d = kRadius * 2.0f;
+
+            DrawRoundBox(g, pen, kFrontLeft, kFrontTop, kFrontRight, kFrontBot, kRadius);
+            Gdiplus::GraphicsPath back;
+            back.AddLine(kBackRight, kFrontTop, kBackRight, kBackTop + kRadius);
+            back.AddArc(kBackRight - d, kBackTop, d, d, 0.0f, -kArc90);
+            back.AddLine(kBackRight - kRadius, kBackTop, kBackLeft + kRadius, kBackTop);
+            back.AddArc(kBackLeft, kBackTop, d, d, -kArc90, -kArc90);
+            back.AddLine(kBackLeft, kBackTop + kRadius, kBackLeft, kBackBot - kRadius);
+            back.AddArc(kBackLeft, kBackBot - d, d, d, 2.0f * kArc90, -kArc90);
+            back.AddLine(kBackLeft + kRadius, kBackBot, kFrontLeft, kBackBot);
+            g.DrawPath(&pen, &back);
+        }
+        break;
+
     // Markdown 编辑器按钮与格式按钮的图标（kChatIconMarkdown 起的一段），绘制在 ChatMarkdownIcons.cpp
     default:
         DrawMarkdownChatIcon(g, kind, pen, color);

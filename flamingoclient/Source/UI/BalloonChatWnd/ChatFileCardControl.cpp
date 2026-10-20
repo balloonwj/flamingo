@@ -41,15 +41,6 @@ extern CAppModule _Module;
 
 namespace balloonchatwnd {
 
-namespace {
-
-//卡片底色与圆角，与聊天窗里对方发来的文件气泡一致；已删除 / 失效的文件整张置灰
-const Gdiplus::Color kCardBg(255, 0xF3, 0xF2, 0xEF);
-const Gdiplus::Color kCardDeletedBg(255, 0xED, 0xEA, 0xE8);
-const Gdiplus::REAL  kCardRadius = 12.0f;
-
-} // anonymous namespace
-
 ChatFileCardControl::ChatFileCardControl()
     : m_hoverIdx(-1)
 {
@@ -79,15 +70,7 @@ void ChatFileCardControl::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     Gdiplus::Graphics g(hdc);
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
-    //卡片底：与聊天气泡同色同圆角
-    {
-        Gdiplus::GraphicsPath bg;
-        chatpaint::AddRoundRect(bg, (Gdiplus::REAL)card.left, (Gdiplus::REAL)card.top,
-                                (Gdiplus::REAL)(card.right - card.left),
-                                (Gdiplus::REAL)(card.bottom - card.top), kCardRadius);
-        Gdiplus::SolidBrush brush(m_msg.fileState == kFileDeleted ? kCardDeletedBg : kCardBg);
-        g.FillPath(&brush, &bg);
-    }
+    //白色底板由文件卡片自己画（docs/聊天卡片美化方案.md 3.2，2026-10-14 起与聊天窗同一套样式）
     PaintFileCardShapes(g, card, m_msg);
     PaintFileCardText(hdc, g, card, m_msg, m_hoverIdx, m_links);
 }

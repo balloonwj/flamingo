@@ -169,20 +169,14 @@ bool ActionTable::OnMouseMove(POINT pt, UINT mkFlags)
     if (text == m_tooltipText)
         return handled;
 
-    //DuiToolTipMgr 按控件登记，同一控件内换了位置宿主不会再报告悬停变化；而且同一控件已在计时或
-    //显示时它不会换文字。所以先取消登记（同时停掉计时、关掉已显示的提示），再按新文字登记并重新开始计时
-    balloonwjui::DuiToolTipMgr& tips = balloonwjui::DuiToolTipMgr::Inst();
-    tips.HideNow();
-    tips.Unregister(this);
+    //DuiToolTipMgr 按控件登记，同一控件内换了位置宿主不会再报告悬停变化；Retarget 先收起本控件
+    //正在计时或已显示的提示，再按新文字登记并重新开始计时；新文字为空时只取消登记
     m_tooltipText = text;
-    if (text.IsEmpty())
-        return handled;
-    tips.Register(this, text);
     POINT screenPt = pt;
     balloonwjui::DuiHost* host = GetHost();
     if (host != nullptr && ::IsWindow(host->m_hWnd))
         ::ClientToScreen(host->m_hWnd, &screenPt);
-    tips.OnHover(this, screenPt);
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(this, text, screenPt);
     return handled;
 }
 

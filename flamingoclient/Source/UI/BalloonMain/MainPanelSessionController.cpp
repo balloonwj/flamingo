@@ -684,6 +684,8 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         balloonscreenshot::ApplyScreenshotHotkey(m_hHost, balloonscreenshot::LoadGlobalScreenshotPrefs().m_hotkey);
         balloonscreenshare::PushRecordSettings((int)m_lpFMGClient->m_UserConfig.GetRecordQuality(),
                                                m_lpFMGClient->m_UserConfig.GetRecordFolder());
+        // 屏幕共享清晰度（2026-10-15，docs/远程桌面H264与共享画质提升方案.md 4.2）：没有设过时为 2K
+        balloonscreenshare::PushShareQuality((int)m_lpFMGClient->m_UserConfig.GetShareQuality());
         // 屏幕共享与录屏的鼠标效果设置（第 16 期）：没有改过时为空，模块按默认设置（只开光圈）
         balloonscreenshare::PushMouseEffectSettings(m_lpFMGClient->m_UserConfig.GetMouseEffects());
         // 把该账号的「自动识别链接」设置灌进进程级开关：气泡在测量阶段读它决定

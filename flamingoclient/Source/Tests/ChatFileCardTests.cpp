@@ -213,11 +213,12 @@ TEST_CASE("FCSNAP 各状态文件气泡的像素截图（重构前后比对用�
 
 namespace {
 
-// 卡片各部分的高度（逻辑像素），与 ChatFileCard.cpp 的几何常量对应：头部区 60，进度条 5，
-// 按钮行 = 上间距 10 + 按钮高 34 + 下边距 12
-const int kCardHeaderH   = 60;
-const int kCardProgressH = 5;
-const int kCardButtonRow = 10 + 34 + 12;
+// 卡片各部分的高度（逻辑像素），与 ChatFileCard.cpp 的几何常量对应（docs/聊天卡片美化方案.md 第 3 节，2026-10-14 起）：
+// 头部区 = 上内边距 14 + 文档图标高 44；进度块 = 间距 12 + 进度条 4 + 间距 6 + 一行文字 18；
+// 卡片底部 = 下内边距 12 + 分隔线 1 + 底部一行 40。底部一行常驻（左边是类型标签「文件」），没有按钮的卡片也有
+const int kCardHeaderH   = 14 + 44;
+const int kCardProgressH = 12 + 4 + 6 + 18;
+const int kCardButtonRow = 12 + 1 + 40;
 
 // 卡片在画布上的位置（像素）与画布尺寸
 const int kCardLeft   = 10;
@@ -229,14 +230,14 @@ const int kCanvasH    = 300;
 
 TEST_CASE("FWD-C18c 共用文件卡片：各状态的高度、操作链接与点中判断", "[forward][filecard]")
 {
-    // 高度：头部区固定，有进度的状态加进度条，有操作的状态加按钮行
+    // 高度：头部区与卡片底部固定，有进度的状态加进度块
     CHECK(FileCardHeight(MakeSnapFile(false, kFilePendingAccept, 0, true)) == kCardHeaderH + kCardButtonRow);
     CHECK(FileCardHeight(MakeSnapFile(false, kFileDownloading, kSnapDownloadPct, true))
           == kCardHeaderH + kCardProgressH + kCardButtonRow);
     CHECK(FileCardHeight(MakeSnapFile(false, kFileNormal, 0, true)) == kCardHeaderH + kCardButtonRow);
     CHECK(FileCardHeight(MakeSnapFile(false, kFileFailed, kSnapDownloadPct, true))
           == kCardHeaderH + kCardProgressH + kCardButtonRow);
-    CHECK(FileCardHeight(MakeSnapFile(false, kFileDeleted, 0, true)) == kCardHeaderH);
+    CHECK(FileCardHeight(MakeSnapFile(false, kFileDeleted, 0, true)) == kCardHeaderH + kCardButtonRow);
 
     // 待接收：聊天记录 / 群聊里的文件只有「下载」，单聊里对方发来的有「接收 / 拒绝」
     CHECK(FileCardSkipsReject(MakeSnapFile(false, kFilePendingAccept, 0, true)));
@@ -253,7 +254,7 @@ TEST_CASE("FWD-C18c 共用文件卡片：各状态的高度、操作链接与点
     REQUIRE(bmp != NULL);
     HGDIOBJ oldBmp = ::SelectObject(memDC, bmp);
 
-    // 完成态：三个链接，依次为打开文件 / 打开所在文件夹 / 另存为，自左向右排在卡片内
+    // 完成态：三个按钮，自左向右依次为另存为 / 打开所在文件夹 / 打开文件（底部一行的按钮从右往左排，最重要的在最右）
     const ChatMessage done = MakeSnapFile(false, kFileNormal, 0, true);
     const RECT card = { kCardLeft, kCardTop, kCardLeft + kFileCardWidth, kCardTop + FileCardHeight(done) };
     FileCardLinks links;
@@ -262,9 +263,9 @@ TEST_CASE("FWD-C18c 共用文件卡片：各状态的高度、操作链接与点
         PaintFileCardText(memDC, g, card, done, -1, links);
     }
     REQUIRE(links.m_count == 3);
-    CHECK(links.m_action[0] == kChatFileOpen);
+    CHECK(links.m_action[0] == kChatFileSaveAs);
     CHECK(links.m_action[1] == kChatFileOpenFolder);
-    CHECK(links.m_action[2] == kChatFileSaveAs);
+    CHECK(links.m_action[2] == kChatFileOpen);
     for (int i = 0; i < links.m_count; ++i)
     {
         INFO("link " << i);
@@ -372,7 +373,7 @@ bool ColumnHasInk(const std::vector<unsigned char>& px, int x, int top, int bott
 
 } // anonymous namespace
 
-TEST_CASE("DFC9 在线直传等待接收的卡片：链接依次为「发送离线文件」「取消」", "[directfilechat][filecard]")
+TEST_CASE("DFC9 在线直传等待接收的卡片：按钮依次为「取消」「发送离线文件」", "[directfilechat][filecard]")
 {
     ScopedGdiplusForCard gdiplus;
     REQUIRE(gdiplus.Ok());
@@ -384,8 +385,9 @@ TEST_CASE("DFC9 在线直传等待接收的卡片：链接依次为「发送离�
     const std::vector<unsigned char> pixels = PaintCardPixels(waiting, card, links);
     REQUIRE_FALSE(pixels.empty());
     REQUIRE(links.m_count == 2);
-    CHECK(links.m_action[0] == kChatFileSendOffline);
-    CHECK(links.m_action[1] == kChatFileCancel);
+    //底部一行的按钮从右往左排：主要按钮「发送离线文件」在最右（docs/聊天卡片美化方案.md 第 9 节）
+    CHECK(links.m_action[0] == kChatFileCancel);
+    CHECK(links.m_action[1] == kChatFileSendOffline);
     CHECK(FileCardLinkLabel(waiting, kChatFileSendOffline) == CString(L"发送离线文件"));
     CHECK(FileCardLinkLabel(waiting, kChatFileCancel) == CString(L"取消"));
 
@@ -463,7 +465,7 @@ TEST_CASE("DFC13 发送方取消的直传文件卡片：没有进度条，只有
                                            _T("C:\\data\\季度报告-最终版.xlsx"), "cmid-dfc13", kFileCancelled);
     canceled.fileDirect = true;
     canceled.fileDirectEnd = folder_state_canceled;
-    //高度：头部区 + 按钮行，没有进度条那一截；普通文件的已取消照旧带进度条
+    //高度：头部区 + 卡片底部，没有进度块那一截；普通文件的已取消照旧带进度块
     CHECK(FileCardHeight(canceled) == kCardHeaderH + kCardButtonRow);
     ChatMessage normal = canceled;
     normal.fileDirect = false;
@@ -478,7 +480,7 @@ TEST_CASE("DFC13 发送方取消的直传文件卡片：没有进度条，只有
     REQUIRE(links.m_count == 1);
     CHECK(links.m_action[0] == kChatFileRetry);
     CHECK(FileCardLinkLabel(canceled, kChatFileRetry) == CString(L"\x21BB 重新发送"));
-    //链接行不留进度条的位置：比普通文件已取消的那张卡片正好高出一个进度条的高度
+    //底部一行不留进度块的位置：比普通文件已取消的那张卡片正好高出一个进度块的高度
     const RECT normalCard = { kCardLeft, kCardTop, kCardLeft + kFileCardWidth, kCardTop + FileCardHeight(normal) };
     FileCardLinks normalLinks;
     const std::vector<unsigned char> normalPixels = PaintCardPixels(normal, normalCard, normalLinks);

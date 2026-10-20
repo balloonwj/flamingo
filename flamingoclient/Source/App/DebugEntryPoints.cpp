@@ -416,7 +416,7 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
     // 已迁入 FlamingoMedia.dll 的调试入口先交给媒体模块：一对一通话的 --callrelayselftest /
     // --callaudioloop / --camerapreview / --cameratest / --h264selftest / --videoloop / --callvideoui，
     // 各入口的说明见 FlamingoMedia/Call/CallDebugEntries.h；远程桌面的 --rddlg / --rdpselftest / --rdrelayselftest /
-    // --rdbar / --rdtoolbar / --dxgicap / --dxgipipe / --dxgipipegdi，说明见 FlamingoMedia/RemoteDesktop/RdDebugEntries.h。
+    // --rdbar / --dxgicap / --dxgipipe / --dxgipipegdi，说明见 FlamingoMedia/RemoteDesktop/RdDebugEntries.h。
     // 模块未命中再检查下面本类自己的开关。
     if (ctx.m_pMediaModule != NULL)
     {

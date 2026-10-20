@@ -7,7 +7,9 @@
  *      parseRelayInfo、parseStateNotify、parseRelayHelloAck 的字段还原；
  *    - RD10 parseRelayInfo 的可选字段 p2psessionid（P2P 方案第 6 期）：有就取出，没有时为空串；
  *    - 64 位 userid 经字符串编码 round-trip 不丢精度；
- *    - 畸形输入（非法 JSON / 缺关键字段）一律安全失败返回 false。
+ *    - 畸形输入（非法 JSON / 缺关键字段）一律安全失败返回 false；
+ *    - RD11~12 控制权限（2026-10-12，标签 [rdctl]）：1718 请求构造、1718 应答与 1719 推送解析，
+ *      动作与状态取值和服务端一致。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-06-08
  */
@@ -275,4 +277,73 @@ TEST_CASE("RD9c 缺关键字段返回 false")
         CHECK_FALSE(RemoteDesktopProtocolClient::parseRelayHelloAck(
             "{\"msg\":\"ok\"}", ack));
     }
+}
+
+TEST_CASE("RD11 控制权限：构造 1718 请求，解析 1718 应答与 1719 推送", "[rdctl]")
+{
+    //请求只带 sessionid 与整型 action
+    {
+        std::string json = RemoteDesktopProtocolClient::buildControl("s-1", rd_control_request);
+        Json::Value root;
+        REQUIRE(parseJsonText(json, root));
+        CHECK(root.size() == 2);
+        CHECK(root["sessionid"].asString() == "s-1");
+        REQUIRE(root["action"].isInt());
+        CHECK(root["action"].asInt() == rd_control_request);
+    }
+    //应答：成功与失败都带回 sessionid、动作与控制状态
+    {
+        RDControlResponse resp;
+        REQUIRE(RemoteDesktopProtocolClient::parseControlResponse(
+            "{\"code\":0,\"msg\":\"ok\",\"sessionid\":\"s-1\",\"action\":3,\"control\":2}", resp));
+        CHECK(resp.m_code == 0);
+        CHECK(resp.m_sessionId == "s-1");
+        CHECK(resp.m_action == rd_control_grant);
+        CHECK(resp.m_control == rd_control_granted);
+
+        REQUIRE(RemoteDesktopProtocolClient::parseControlResponse(
+            "{\"code\":742,\"msg\":\"rejected\",\"sessionid\":\"s-1\",\"action\":4,\"control\":0}", resp));
+        CHECK(resp.m_code == 742);
+        CHECK(resp.m_action == rd_control_deny);
+        CHECK(resp.m_control == rd_control_none);
+
+        //缺整型 code 视为非法应答
+        CHECK_FALSE(RemoteDesktopProtocolClient::parseControlResponse("{\"sessionid\":\"s-1\"}", resp));
+        CHECK_FALSE(RemoteDesktopProtocolClient::parseControlResponse("not json", resp));
+    }
+    //推送：64 位 fromid 以字符串编码，还原后不丢精度
+    {
+        Json::Value v;
+        v["sessionid"] = "s-2";
+        v["action"] = 1;
+        v["control"] = 1;
+        v["fromid"] = "9000000000001";
+        v["fromname"] = "tom";
+        RDControlNotify n;
+        REQUIRE(RemoteDesktopProtocolClient::parseControlNotify(writeCompact(v), n));
+        CHECK(n.m_sessionId == "s-2");
+        CHECK(n.m_action == rd_control_request);
+        CHECK(n.m_control == rd_control_requested);
+        CHECK(n.m_fromId == 9000000000001LL);
+        CHECK(n.m_fromName == "tom");
+
+        //缺 sessionid、动作不在 1~6 时视为非法推送
+        CHECK_FALSE(RemoteDesktopProtocolClient::parseControlNotify("{\"action\":1,\"control\":1}", n));
+        CHECK_FALSE(RemoteDesktopProtocolClient::parseControlNotify(
+            "{\"sessionid\":\"s-2\",\"action\":9,\"control\":1}", n));
+    }
+}
+
+TEST_CASE("RD12 控制动作与控制状态的取值和服务端一致", "[rdctl]")
+{
+    //与 flamingoserver/chatserversrc/RemoteDesktopProtocol.h 的 rd_control_action / rd_control_state 逐个对照
+    CHECK(rd_control_request == 1);
+    CHECK(rd_control_cancel == 2);
+    CHECK(rd_control_grant == 3);
+    CHECK(rd_control_deny == 4);
+    CHECK(rd_control_revoke == 5);
+    CHECK(rd_control_release == 6);
+    CHECK(rd_control_none == 0);
+    CHECK(rd_control_requested == 1);
+    CHECK(rd_control_granted == 2);
 }

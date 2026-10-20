@@ -6,6 +6,7 @@
  */
 #include "ShareVideoPolicy.h"
 
+#include "ShareBitrateController.h"   // kShareMinBitrateBps：屏幕画面码率的下限
 #include <string.h>
 #include <emmintrin.h>   //SSE2：颜色转换一次处理 4 列 × 2 行
 #include <vector>
@@ -54,62 +55,38 @@ uint8_t clampByte(int v)
     return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v));
 }
 
-//把源画面缩放成 dstW × dstH 的 BGRA（双线性；尺寸相同时直接拷贝）
-void scaleBgra(const uint8_t* src, int stride, int srcW, int srcH, std::vector<uint8_t>& dst, int dstW, int dstH)
+//缩放权重的位数与 1.0 对应的值（7 位定点，0~128）：纵向混合后的中间值不超过 255 × 128，放得进有符号 16 位整数
+const int kScaleWeightBits = 7;
+const int kScaleWeightOne = 1 << kScaleWeightBits;
+//16.16 定点的小数部分换成 7 位权重时右移的位数与舍入值
+const int kScaleWeightShift = kFixedShift - kScaleWeightBits;
+const int kScaleWeightRound = 1 << (kScaleWeightShift - 1);
+//纵横两次加权之后右移的位数与舍入值（两次权重各 7 位）
+const int kScaleFinalShift = 2 * kScaleWeightBits;
+const int kScaleFinalRound = 1 << (kScaleFinalShift - 1);
+//SSE2 纵向混合一次处理的字节数（一个寄存器）与横向混合一次处理的像素数（两个像素的结果收窄成 8 个字节）
+const int kScaleSimdBytes = 16;
+const int kScaleSimdPixels = 2;
+
+/**
+ *  目标坐标 d 对应的源坐标（像素中心对齐：源坐标 = (目标坐标 + 0.5) × 源长 / 目标长 - 0.5，先按 16.16 定点算）。
+ *  @param i0 / i1 [出参] 取样的两个源坐标；在源的最后一个位置时 i1 与 i0 相同
+ *  @param w       [出参] i1 的权重（0~128），i0 的权重为 128 - w
+ */
+void mapScaleCoord(int d, int srcLen, int dstLen, int& i0, int& i1, int& w)
 {
-    dst.resize(static_cast<size_t>(dstW) * dstH * kBytesPerPixel);
-    if (srcW == dstW && srcH == dstH)
+    long long f = (static_cast<long long>(2 * d + 1) * srcLen * kFixedOne) / (2LL * dstLen) - kFixedOne / 2;
+    if (f < 0)
+        f = 0;
+    i0 = static_cast<int>(f >> kFixedShift);
+    int frac = static_cast<int>(f & (kFixedOne - 1));
+    if (i0 >= srcLen - 1)
     {
-        for (int y = 0; y < dstH; ++y)
-        {
-            const uint8_t* s = src + static_cast<size_t>(y) * stride;
-            uint8_t* d = &dst[static_cast<size_t>(y) * dstW * kBytesPerPixel];
-            for (int i = 0; i < dstW * kBytesPerPixel; ++i)
-                d[i] = s[i];
-        }
-        return;
+        i0 = srcLen - 1;
+        frac = 0;
     }
-    //像素中心对齐：源坐标 = (目标坐标 + 0.5) × 源 / 目标 - 0.5，用 16.16 定点计算
-    for (int dy = 0; dy < dstH; ++dy)
-    {
-        long long fy = (static_cast<long long>(2 * dy + 1) * srcH * kFixedOne) / (2LL * dstH) - kFixedOne / 2;
-        if (fy < 0)
-            fy = 0;
-        int y0 = static_cast<int>(fy >> kFixedShift);
-        int wy = static_cast<int>(fy & (kFixedOne - 1));
-        if (y0 >= srcH - 1)
-        {
-            y0 = srcH - 1;
-            wy = 0;
-        }
-        const int y1 = (y0 + 1 < srcH) ? y0 + 1 : y0;
-        const uint8_t* row0 = src + static_cast<size_t>(y0) * stride;
-        const uint8_t* row1 = src + static_cast<size_t>(y1) * stride;
-        uint8_t* out = &dst[static_cast<size_t>(dy) * dstW * kBytesPerPixel];
-        for (int dx = 0; dx < dstW; ++dx)
-        {
-            long long fx = (static_cast<long long>(2 * dx + 1) * srcW * kFixedOne) / (2LL * dstW) - kFixedOne / 2;
-            if (fx < 0)
-                fx = 0;
-            int x0 = static_cast<int>(fx >> kFixedShift);
-            int wx = static_cast<int>(fx & (kFixedOne - 1));
-            if (x0 >= srcW - 1)
-            {
-                x0 = srcW - 1;
-                wx = 0;
-            }
-            const int x1 = (x0 + 1 < srcW) ? x0 + 1 : x0;
-            for (int c = 0; c < kBytesPerPixel; ++c)
-            {
-                const long long top = static_cast<long long>(row0[x0 * kBytesPerPixel + c]) * (kFixedOne - wx) +
-                                      static_cast<long long>(row0[x1 * kBytesPerPixel + c]) * wx;
-                const long long bottom = static_cast<long long>(row1[x0 * kBytesPerPixel + c]) * (kFixedOne - wx) +
-                                         static_cast<long long>(row1[x1 * kBytesPerPixel + c]) * wx;
-                const long long v = (top * (kFixedOne - wy) + bottom * wy) >> (2 * kFixedShift);
-                out[dx * kBytesPerPixel + c] = clampByte(static_cast<int>(v));
-            }
-        }
-    }
+    i1 = (i0 + 1 < srcLen) ? i0 + 1 : i0;
+    w = (frac + kScaleWeightRound) >> kScaleWeightShift;
 }
 
 } // namespace
@@ -138,6 +115,112 @@ void ComputeShareEncodeSize(int srcW, int srcH, int maxLongSide, int& outW, int&
     }
     outW = roundDownEven(w);
     outH = roundDownEven(h);
+}
+
+ScreenVideoParams::ScreenVideoParams()
+    : m_maxLongSide(kShareMaxLongSide)
+    , m_fps(kShareMaxFps)
+    , m_baseBps(kShareBitrateBps)
+    , m_floorBps(kShareMinBitrateBps)
+{
+}
+
+ScreenVideoProfile::ScreenVideoProfile()
+    : m_encW(0)
+    , m_encH(0)
+    , m_maxBps(0)
+    , m_minBps(0)
+{
+}
+
+namespace {
+
+//按编码像素数换算码率：不超过基准像素数时取原值，否则按比例放大并按 kScreenBitrateRoundBps 四舍五入
+int scaleBitrateByPixels(int baseBps, int64_t pixels)
+{
+    if (pixels <= kScreenRefPixels)
+        return baseBps;
+    const int64_t scaled = static_cast<int64_t>(baseBps) * pixels / kScreenRefPixels;
+    const int64_t rounded = (scaled + kScreenBitrateRoundBps / 2) / kScreenBitrateRoundBps * kScreenBitrateRoundBps;
+    return static_cast<int>(rounded);
+}
+
+} // namespace
+
+void ComputeScreenVideoProfile(int srcW, int srcH, const ScreenVideoParams& params, ScreenVideoProfile& out)
+{
+    out = ScreenVideoProfile();
+    int w = 0;
+    int h = 0;
+    ComputeShareEncodeSize(srcW, srcH, params.m_maxLongSide, w, h);
+    if (w <= 0 || h <= 0)
+        return;
+    const int64_t pixels = static_cast<int64_t>(w) * h;
+    out.m_encW = w;
+    out.m_encH = h;
+    out.m_maxBps = scaleBitrateByPixels(params.m_baseBps, pixels);
+    out.m_minBps = scaleBitrateByPixels(params.m_floorBps, pixels);
+    if (out.m_minBps > out.m_maxBps)
+        out.m_minBps = out.m_maxBps;
+}
+
+int ScaleBitrateToRange(int currentBps, int oldMaxBps, int newMaxBps, int newMinBps)
+{
+    const int minBps = (newMinBps > newMaxBps) ? newMaxBps : newMinBps;
+    int64_t target = newMaxBps;
+    if (oldMaxBps > 0)
+        target = static_cast<int64_t>(currentBps) * newMaxBps / oldMaxBps;
+    if (target > newMaxBps)
+        target = newMaxBps;
+    if (target < minBps)
+        target = minBps;
+    return static_cast<int>(target);
+}
+
+int ShareMaxLongSideForQuality(int quality)
+{
+    switch (quality)
+    {
+    //1080p 档：与 2026-10-15 之前相同
+    case share_quality_1080p:
+        return kShareMaxLongSide;
+    //4K 档：4K 屏原尺寸编码
+    case share_quality_4k:
+        return kShare4kLongSide;
+    //2K 档与未知取值（配置损坏、旧配置没有这一项）：默认档
+    case share_quality_2k:
+    default:
+        return kShare2kLongSide;
+    }
+}
+
+ScreenVideoParams ShareVideoParamsForQuality(int quality)
+{
+    ScreenVideoParams p;
+    p.m_maxLongSide = ShareMaxLongSideForQuality(quality);
+    p.m_fps = kShareMaxFps;
+    p.m_baseBps = kShareBitrateBps;
+    p.m_floorBps = kShareMinBitrateBps;
+    return p;
+}
+
+ScreenVideoParams ShareVideoParamsForControl(int quality, bool controlled)
+{
+    ScreenVideoParams p = ShareVideoParamsForQuality(quality);
+    //被控制期间只提高帧率：长边与码率不变，码率自适应的范围也就不变
+    if (controlled)
+        p.m_fps = kShareControlledFps;
+    return p;
+}
+
+ScreenVideoParams RdScreenVideoParams()
+{
+    ScreenVideoParams p;
+    p.m_maxLongSide = kRdVideoMaxLongSide;
+    p.m_fps = kRdVideoMaxFps;
+    p.m_baseBps = kRdVideoBitrateBps;
+    p.m_floorBps = kShareMinBitrateBps;
+    return p;
 }
 
 namespace {
@@ -270,9 +353,13 @@ void convertSameSizeSse2(const uint8_t* bgra, int stride, uint8_t* nv12, int w, 
 //同尺寸转换函数的类型（向量化实现与参考实现共用缩放流程）
 typedef void (*SameSizeConvertFn)(const uint8_t* bgra, int stride, uint8_t* nv12, int w, int h);
 
-//带缩放的转换：尺寸相同时直接转换，否则先双线性缩放成 BGRA 再转换
-void convertWith(SameSizeConvertFn convert, const uint8_t* bgra, int stride, int srcW, int srcH, uint8_t* nv12,
-                 int dstW, int dstH)
+//缩放函数的类型（BgraScaler 的两种实现，与同尺寸转换配对使用）
+typedef void (BgraScaler::*ScaleFn)(const uint8_t* src, int srcStride, int srcW, int srcH, uint8_t* dst,
+                                    int dstStride, int dstW, int dstH);
+
+//带缩放的转换：尺寸相同时直接转换，否则先双线性缩放成 BGRA 再转换。scaler 与 scaled 由调用方持有，可以跨帧复用
+void convertWith(SameSizeConvertFn convert, ScaleFn scale, BgraScaler& scaler, std::vector<uint8_t>& scaled,
+                 const uint8_t* bgra, int stride, int srcW, int srcH, uint8_t* nv12, int dstW, int dstH)
 {
     if (bgra == NULL || nv12 == NULL || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0)
         return;
@@ -282,8 +369,8 @@ void convertWith(SameSizeConvertFn convert, const uint8_t* bgra, int stride, int
         convert(bgra, stride, nv12, dstW, dstH);
         return;
     }
-    std::vector<uint8_t> scaled;
-    scaleBgra(bgra, stride, srcW, srcH, scaled, dstW, dstH);
+    scaled.resize(static_cast<size_t>(dstW) * dstH * kBytesPerPixel);
+    (scaler.*scale)(bgra, stride, srcW, srcH, &scaled[0], dstW * kBytesPerPixel, dstW, dstH);
     convert(&scaled[0], dstW * kBytesPerPixel, nv12, dstW, dstH);
 }
 
@@ -291,23 +378,183 @@ void convertWith(SameSizeConvertFn convert, const uint8_t* bgra, int stride, int
 
 void ConvertBgraToNv12(const uint8_t* bgra, int stride, int srcW, int srcH, uint8_t* nv12, int dstW, int dstH)
 {
-    //Debug 版不优化向量指令，SSE2 实现比逐像素实现慢约一倍，所以只在 Release 版使用（实测数据见头文件）
-#ifdef _DEBUG
-    convertWith(convertSameSizeScalar, bgra, stride, srcW, srcH, nv12, dstW, dstH);
-#else
-    convertWith(convertSameSizeSse2, bgra, stride, srcW, srcH, nv12, dstW, dstH);
-#endif
+    Nv12FrameConverter converter;
+    converter.Convert(bgra, stride, srcW, srcH, nv12, dstW, dstH);
 }
 
 void ConvertBgraToNv12Sse2(const uint8_t* bgra, int stride, int srcW, int srcH, uint8_t* nv12, int dstW, int dstH)
 {
-    convertWith(convertSameSizeSse2, bgra, stride, srcW, srcH, nv12, dstW, dstH);
+    BgraScaler scaler;
+    std::vector<uint8_t> scaled;
+    convertWith(convertSameSizeSse2, &BgraScaler::ScaleSse2, scaler, scaled, bgra, stride, srcW, srcH, nv12, dstW,
+                dstH);
 }
 
 void ConvertBgraToNv12Reference(const uint8_t* bgra, int stride, int srcW, int srcH, uint8_t* nv12, int dstW,
                                 int dstH)
 {
-    convertWith(convertSameSizeScalar, bgra, stride, srcW, srcH, nv12, dstW, dstH);
+    BgraScaler scaler;
+    std::vector<uint8_t> scaled;
+    convertWith(convertSameSizeScalar, &BgraScaler::ScaleReference, scaler, scaled, bgra, stride, srcW, srcH, nv12,
+                dstW, dstH);
+}
+
+void Nv12FrameConverter::Convert(const uint8_t* bgra, int stride, int srcW, int srcH, uint8_t* nv12, int dstW,
+                                 int dstH)
+{
+    //Debug 版不优化向量指令，SSE2 实现比逐像素实现慢约一倍，所以只在 Release 版使用（实测数据见头文件）
+#ifdef _DEBUG
+    convertWith(convertSameSizeScalar, &BgraScaler::ScaleReference, m_scaler, m_scaled, bgra, stride, srcW, srcH,
+                nv12, dstW, dstH);
+#else
+    convertWith(convertSameSizeSse2, &BgraScaler::ScaleSse2, m_scaler, m_scaled, bgra, stride, srcW, srcH, nv12, dstW,
+                dstH);
+#endif
+}
+
+BgraScaler::BgraScaler()
+    : m_tableSrcW(0)
+    , m_tableDstW(0)
+{
+}
+
+void BgraScaler::prepare(int srcW, int dstW)
+{
+    m_row.resize(static_cast<size_t>(srcW) * kBytesPerPixel);
+    if (srcW == m_tableSrcW && dstW == m_tableDstW)
+        return;
+    m_x0.resize(dstW);
+    m_x1.resize(dstW);
+    m_wx.resize(dstW);
+    m_wpair.resize(dstW);
+    for (int dx = 0; dx < dstW; ++dx)
+    {
+        int x0 = 0;
+        int x1 = 0;
+        int w = 0;
+        mapScaleCoord(dx, srcW, dstW, x0, x1, w);
+        m_x0[dx] = x0;
+        m_x1[dx] = x1;
+        m_wx[dx] = w;
+        //低 16 位乘左边的中间值、高 16 位乘右边的中间值（_mm_madd_epi16 的成对乘加）
+        m_wpair[dx] = static_cast<int32_t>((static_cast<uint32_t>(w) << 16) | static_cast<uint32_t>(kScaleWeightOne - w));
+    }
+    m_tableSrcW = srcW;
+    m_tableDstW = dstW;
+}
+
+void BgraScaler::Scale(const uint8_t* src, int srcStride, int srcW, int srcH, uint8_t* dst, int dstStride, int dstW,
+                       int dstH)
+{
+#ifdef _DEBUG
+    ScaleReference(src, srcStride, srcW, srcH, dst, dstStride, dstW, dstH);
+#else
+    ScaleSse2(src, srcStride, srcW, srcH, dst, dstStride, dstW, dstH);
+#endif
+}
+
+void BgraScaler::ScaleReference(const uint8_t* src, int srcStride, int srcW, int srcH, uint8_t* dst, int dstStride,
+                                int dstW, int dstH)
+{
+    if (src == NULL || dst == NULL || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0)
+        return;
+    prepare(srcW, dstW);
+    const int rowValues = srcW * kBytesPerPixel;
+    for (int dy = 0; dy < dstH; ++dy)
+    {
+        int y0 = 0;
+        int y1 = 0;
+        int wy = 0;
+        mapScaleCoord(dy, srcH, dstH, y0, y1, wy);
+        const uint8_t* r0 = src + static_cast<size_t>(y0) * srcStride;
+        const uint8_t* r1 = src + static_cast<size_t>(y1) * srcStride;
+        //纵向：两个源行按权重混合成中间行
+        for (int k = 0; k < rowValues; ++k)
+            m_row[k] = static_cast<int16_t>(r0[k] * (kScaleWeightOne - wy) + r1[k] * wy);
+        //横向：每个目标像素取两个中间值按权重混合
+        uint8_t* out = dst + static_cast<size_t>(dy) * dstStride;
+        for (int dx = 0; dx < dstW; ++dx)
+        {
+            const int16_t* t0 = &m_row[static_cast<size_t>(m_x0[dx]) * kBytesPerPixel];
+            const int16_t* t1 = &m_row[static_cast<size_t>(m_x1[dx]) * kBytesPerPixel];
+            const int wx = m_wx[dx];
+            for (int c = 0; c < kBytesPerPixel; ++c)
+            {
+                const int v = (t0[c] * (kScaleWeightOne - wx) + t1[c] * wx + kScaleFinalRound) >> kScaleFinalShift;
+                out[dx * kBytesPerPixel + c] = static_cast<uint8_t>(v);
+            }
+        }
+    }
+}
+
+void BgraScaler::ScaleSse2(const uint8_t* src, int srcStride, int srcW, int srcH, uint8_t* dst, int dstStride,
+                           int dstW, int dstH)
+{
+    if (src == NULL || dst == NULL || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0)
+        return;
+    prepare(srcW, dstW);
+    const int rowValues = srcW * kBytesPerPixel;
+    const __m128i zero = _mm_setzero_si128();
+    const __m128i finalRound = _mm_set1_epi32(kScaleFinalRound);
+    for (int dy = 0; dy < dstH; ++dy)
+    {
+        int y0 = 0;
+        int y1 = 0;
+        int wy = 0;
+        mapScaleCoord(dy, srcH, dstH, y0, y1, wy);
+        const uint8_t* r0 = src + static_cast<size_t>(y0) * srcStride;
+        const uint8_t* r1 = src + static_cast<size_t>(y1) * srcStride;
+        //纵向：一次 16 个字节，展开成 16 位后乘权重相加（结果不超过 255 × 128，16 位乘法不会溢出）
+        const __m128i w0 = _mm_set1_epi16(static_cast<short>(kScaleWeightOne - wy));
+        const __m128i w1 = _mm_set1_epi16(static_cast<short>(wy));
+        int k = 0;
+        for (; k + kScaleSimdBytes <= rowValues; k += kScaleSimdBytes)
+        {
+            const __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(r0 + k));
+            const __m128i b = _mm_loadu_si128(reinterpret_cast<const __m128i*>(r1 + k));
+            const __m128i lo = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(a, zero), w0),
+                                             _mm_mullo_epi16(_mm_unpacklo_epi8(b, zero), w1));
+            const __m128i hi = _mm_add_epi16(_mm_mullo_epi16(_mm_unpackhi_epi8(a, zero), w0),
+                                             _mm_mullo_epi16(_mm_unpackhi_epi8(b, zero), w1));
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&m_row[k]), lo);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&m_row[k + kScaleSimdBytes / 2]), hi);
+        }
+        for (; k < rowValues; ++k)
+            m_row[k] = static_cast<int16_t>(r0[k] * (kScaleWeightOne - wy) + r1[k] * wy);
+
+        //横向：一次两个像素。左右两个中间值按通道交错，madd 一步得到「左 × (128 - wx) + 右 × wx」的四个 32 位和
+        uint8_t* out = dst + static_cast<size_t>(dy) * dstStride;
+        int dx = 0;
+        for (; dx + kScaleSimdPixels <= dstW; dx += kScaleSimdPixels)
+        {
+            const __m128i p0 = _mm_unpacklo_epi16(
+                _mm_loadl_epi64(reinterpret_cast<const __m128i*>(&m_row[static_cast<size_t>(m_x0[dx]) * kBytesPerPixel])),
+                _mm_loadl_epi64(reinterpret_cast<const __m128i*>(&m_row[static_cast<size_t>(m_x1[dx]) * kBytesPerPixel])));
+            const __m128i p1 = _mm_unpacklo_epi16(
+                _mm_loadl_epi64(
+                    reinterpret_cast<const __m128i*>(&m_row[static_cast<size_t>(m_x0[dx + 1]) * kBytesPerPixel])),
+                _mm_loadl_epi64(
+                    reinterpret_cast<const __m128i*>(&m_row[static_cast<size_t>(m_x1[dx + 1]) * kBytesPerPixel])));
+            const __m128i s0 = _mm_srai_epi32(
+                _mm_add_epi32(_mm_madd_epi16(p0, _mm_set1_epi32(m_wpair[dx])), finalRound), kScaleFinalShift);
+            const __m128i s1 = _mm_srai_epi32(
+                _mm_add_epi32(_mm_madd_epi16(p1, _mm_set1_epi32(m_wpair[dx + 1])), finalRound), kScaleFinalShift);
+            const __m128i v16 = _mm_packs_epi32(s0, s1);
+            const __m128i v8 = _mm_packus_epi16(v16, v16);
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(out + static_cast<size_t>(dx) * kBytesPerPixel), v8);
+        }
+        for (; dx < dstW; ++dx)
+        {
+            const int16_t* t0 = &m_row[static_cast<size_t>(m_x0[dx]) * kBytesPerPixel];
+            const int16_t* t1 = &m_row[static_cast<size_t>(m_x1[dx]) * kBytesPerPixel];
+            const int wx = m_wx[dx];
+            for (int c = 0; c < kBytesPerPixel; ++c)
+            {
+                const int v = (t0[c] * (kScaleWeightOne - wx) + t1[c] * wx + kScaleFinalRound) >> kScaleFinalShift;
+                out[dx * kBytesPerPixel + c] = static_cast<uint8_t>(v);
+            }
+        }
+    }
 }
 
 ShareFramePacer::Decision::Decision()
@@ -356,6 +603,11 @@ void ShareFramePacer::onEncoded(int64_t nowMs, bool keyframe)
     m_lastEncodeMs = nowMs;
     if (keyframe)
         m_lastKeyFrameMs = nowMs;
+}
+
+void ShareFramePacer::SetMaxFps(int maxFps)
+{
+    m_minIntervalMs = kMsPerSecond / (maxFps > 0 ? maxFps : kShareMaxFps);
 }
 
 int64_t ShareFramePacer::minIntervalMs() const

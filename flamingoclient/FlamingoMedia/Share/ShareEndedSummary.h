@@ -44,6 +44,14 @@ public:
     bool InCall() const;
 
     /**
+     *  记下发起人（本人开始主持、发起成功时调用，2026-10-15）。服务端发起成功时不给发起人推 1725，没人加入的共享
+     *  一条推送都收不到，不记的话结束提示的分享人一行是空的（2026-10-15 实机检查发现）。与 Observe 的口径相同：
+     *  以第一次记下的为准，已经有发起人时不改；之后的 1725 也不会重复记他。
+     *  @param hostId 发起人 userid；为 0 时忽略
+     */
+    void SetInitiator(int64_t hostId);
+
+    /**
      *  记下一次成员状态推送里的人：房间号与当前记录的不同时忽略。发起人与 m_sharing 为真的成员记为分享人。
      *  @param n 解析好的 1725
      */
@@ -58,7 +66,7 @@ public:
 private:
     std::string          m_roomId;    //当前记录的房间号
     bool                 m_inCall;    //是否通话里的共享
-    int64_t              m_hostId;    //发起人 userid；还没收到 1725 时为 0
+    int64_t              m_hostId;    //发起人 userid（第一次看到的主持人，主持人移交后不变）；还没收到 1725 时为 0
     std::vector<int64_t> m_people;    //出现过的人，按第一次出现的先后
     std::vector<int64_t> m_sharers;   //共享过屏幕的人（不含发起人），按第一次共享的先后
 };

@@ -4,6 +4,8 @@
  */
 #include "DxgiScreenCapturer.h"
 #include <stdio.h>
+#include "../../Source/Common/Log/IULog.h"   // LOG_WARNING：不可恢复的失败记下错误码
+#include "CaptureFallbackPolicy.h"           // ClassifyAcquireResult：AcquireNextFrame 返回值的归类
 #include "../../Source/Common/I18n/I18n.h"   // TR：界面文字的多语言查找
 
 #pragma comment(lib, "d3d11.lib")
@@ -98,12 +100,18 @@ bool CDxgiScreenCapturer::Init()
     hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, NULL, 0, NULL, 0,
                            D3D11_SDK_VERSION, &m_device, &fl, &m_context);
     if (FAILED(hr))
+    {
+        LOG_WARNING("CDxgiScreenCapturer: D3D11CreateDevice failed, hr=0x%08x.", static_cast<unsigned>(hr));
         return false;
+    }
 
     //6) 拿到桌面复制对象
     hr = output1->DuplicateOutput(m_device, &m_dupl);
     if (FAILED(hr))
+    {
+        LOG_WARNING("CDxgiScreenCapturer: DuplicateOutput failed, hr=0x%08x.", static_cast<unsigned>(hr));
         return false;
+    }
 
     //7) 读 desc：桌面镜像是否已在系统内存（fastlane 可免 staging 拷贝）
     DXGI_OUTDUPL_DESC dd;
@@ -185,12 +193,16 @@ CaptureResult CDxgiScreenCapturer::CaptureFrame(UINT timeoutMs, FrameView& out)
     memset(&info, 0, sizeof(info));
     CComPtr<IDXGIResource> res;
     HRESULT hr = m_dupl->AcquireNextFrame(timeoutMs, &info, &res);
-    if (hr == DXGI_ERROR_WAIT_TIMEOUT)
-        return kCaptureTimeout;
-    if (hr == DXGI_ERROR_ACCESS_LOST)
-        return kCaptureAccessLost;
-    if (FAILED(hr))
-        return kCaptureFatal;
+    //超时以外的失败都按「需要重建」交给降级策略（2026-10-17）：分辨率变化时实测返回 DXGI_ERROR_INVALID_CALL，
+    //原先当作不可恢复、直接降级 GDI，本次会话从此只用 GDI
+    const CaptureResult acquired = CCaptureFallbackPolicy::ClassifyAcquireResult(hr);
+    if (acquired != kCaptureOk)
+    {
+        if (acquired == kCaptureAccessLost && hr != DXGI_ERROR_ACCESS_LOST)
+            LOG_WARNING("CDxgiScreenCapturer: AcquireNextFrame failed, hr=0x%08x, rebuild the duplication.",
+                        static_cast<unsigned>(hr));
+        return acquired;
+    }
     m_holdingFrame = true;
 
     //LastPresentTime==0：本次只有鼠标移动等元数据、无新画面，当无新帧（持帧下次释放）
@@ -205,7 +217,10 @@ CaptureResult CDxgiScreenCapturer::CaptureFrame(UINT timeoutMs, FrameView& out)
         //桌面镜像在系统内存：直接映射，零 GPU→CPU 拷贝
         hr = m_dupl->MapDesktopSurface(&mapped);
         if (FAILED(hr))
+        {
+            LOG_WARNING("CDxgiScreenCapturer: MapDesktopSurface failed, hr=0x%08x.", static_cast<unsigned>(hr));
             return kCaptureFatal;
+        }
         m_mapped = true;
         m_mappedFastlane = true;
     }
@@ -215,13 +230,23 @@ CaptureResult CDxgiScreenCapturer::CaptureFrame(UINT timeoutMs, FrameView& out)
         CComPtr<ID3D11Texture2D> frameTex;
         hr = res->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&frameTex);
         if (FAILED(hr))
+        {
+            LOG_WARNING("CDxgiScreenCapturer: frame QueryInterface(ID3D11Texture2D) failed, hr=0x%08x.",
+                        static_cast<unsigned>(hr));
             return kCaptureFatal;
+        }
         if (!ensureStaging(frameTex))
+        {
+            LOG_WARNING("CDxgiScreenCapturer: create staging texture failed, frame %dx%d.", m_stagingW, m_stagingH);
             return kCaptureFatal;
+        }
         m_context->CopyResource(m_staging, frameTex);
         hr = m_stagingSurf->Map(&mapped, DXGI_MAP_READ);
         if (FAILED(hr))
+        {
+            LOG_WARNING("CDxgiScreenCapturer: staging Map failed, hr=0x%08x.", static_cast<unsigned>(hr));
             return kCaptureFatal;
+        }
         m_mapped = true;
         m_mappedFastlane = false;
     }

@@ -32,8 +32,8 @@ class CMarkdownDocument;
 
 namespace balloonchatwnd {
 
-//卡片宽度（像素），与合并转发卡片相同；所在位置放不下时由调用方收窄
-const int kMarkdownCardWidth = 280;
+//卡片宽度（像素），与其他聊天卡片相同（docs/聊天卡片美化方案.md 3.2，2026-10-14 起由 280 改为 300）；所在位置放不下时由调用方收窄
+const int kMarkdownCardWidth = 300;
 
 /**
  *  独立卡片控件（ChatMarkdownCardControl）显示与打开预览所需的全部内容。消息记录窗与聊天记录查看窗建行时由
@@ -97,7 +97,8 @@ int MeasureMarkdownCardSummary(HDC hdc, const std::wstring& summary, int cardWid
 int MarkdownCardHeight(int summaryH);
 
 /**
- *  画卡片的内容：标题、摘要、分隔线、底部「M↓ Markdown 文档」。不画底色。
+ *  画整张卡片（docs/聊天卡片美化方案.md 5.5）：白色底板、图标块与标题、最多三行摘要、底部一行「Markdown 文档」（没有按钮，
+ *  点整张卡片打开预览）。2026-10-14 起卡片自己画底板，调用方不再画底色。
  *  @param hdc      目标设备上下文
  *  @param rcCard   卡片矩形（宽为卡片宽度，高为 MarkdownCardHeight 的结果）
  *  @param title    标题

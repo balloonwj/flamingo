@@ -17,8 +17,8 @@
  *  与查询词无关的预处理结果（显示名、小写形式、首字母串、音节序列）保存在
  *  SearchCandidateCache 里，每次按键只做比对与匹配，不再逐个现算。
  *
- *  通知路由：建窗时 owner 传 NULL，故 DuiHost::SendNotify 的目标 GetParent 为空、
- *  自路由回本窗口，结果行 / 标签点击在本类 OnChildNotify 内自行处理（命中行 →
+ *  通知路由：本窗口不是 WS_CHILD 宿主，DuiHost::SendNotify 把控件通知发回本窗口（开发约定
+ *  文档 UI 约定第 11 条），结果行 / 标签点击在本类 OnChildNotify 内自行处理（命中行 →
  *  回调对端 / 群 id 并隐藏；标签 → 切筛选刷新）。
  *
  *  宿主经 SetLocateCallback 提供「定位」回调后，联系人结果行会在鼠标悬停时于行右侧
@@ -151,7 +151,7 @@ public:
     /**
      *  创建本下拉浮窗（幂等，仅首次真正创建）。须在调用方 HWND 就绪后调。
      *    owner：归属窗口（主面板）HWND，仅用于记录 / 屏幕换算基准；窗口本身以
-     *           无 owner 的顶层 WS_POPUP 创建（让通知自路由回本窗口）。
+     *           无 owner 的顶层 WS_POPUP 创建（历史原因，见 .cpp）。
      *  @return 创建成功（或已创建）返回 true；失败返回 false。
      */
     bool EnsureCreated(HWND owner);
@@ -405,7 +405,7 @@ private:
         kFilterFiles    = 4,   // 仅文件（本地的聊天文件 + 服务端搜出的群文件）
     };
 
-    // 自路由的 DUI 通知处理：结果行点击 → 回调对端 / 群 id 并隐藏；筛选标签点击 →
+    // 本窗口控件发出的 DUI 通知处理：结果行点击 → 回调对端 / 群 id 并隐藏；筛选标签点击 →
     // 切换筛选并刷新；其余通知放行（bHandled=FALSE 交回 DuiHost 链）。
     LRESULT OnChildNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 

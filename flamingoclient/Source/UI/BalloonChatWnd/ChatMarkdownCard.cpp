@@ -1,6 +1,6 @@
 /**
- *  Markdown 消息卡片共用部分的实现，说明见 ChatMarkdownCard.h。尺寸、颜色与绘制取自 ChatBubble.cpp 原来的 Markdown
- *  卡片分支（2026-10-07 抽出），数值与合并转发卡片（ChatBubble.cpp 的 kMerged*）相同。
+ *  Markdown 消息卡片共用部分的实现，说明见 ChatMarkdownCard.h。2026-10-07 从 ChatBubble.cpp 抽出；2026-10-14 起按聊天卡片
+ *  美化方案换成新版式（docs/聊天卡片美化方案.md 5.5）：白色底板、图标块、标题、摘要与底部一行，样式常量取自 ChatCardStyle.h。
  *
  *  balloonwj@qq.com   2026-10-07
  */
@@ -12,7 +12,9 @@
 
 #include <memory>
 
-#include "ChatIcons.h"                                 // DrawChatIcon / kChatIconMarkdown
+#include "ChatCardModel.h"                             // ChatCardTypeStyleOf / ChatCardTypeLabel：图标块与底部类型标签
+#include "ChatCardPaint.h"                             // 卡片底板、图标块与底部一行的绘制
+#include "ChatCardStyle.h"                             // 卡片样式常量
 #include "ChatMarkdown.h"                              // MarkdownSourceFromBody / MarkdownImageLinkPrefix / net::kTextFormatMarkdownValue
 #include "ChatPaintUtil.h"                             // DrawGdiText
 #include "../../net/Protocol.h"                        // ::message_type_text
@@ -29,22 +31,20 @@ namespace {
 //本地库 content 列里表示文字格式的键，以及 Markdown 的取值（与 V2MsgQuery::BuildContentJson 写入的一致）
 const char* const kContentFormatKey = "format";
 
-const int kCardPadH            = 14;   // 水平内边距（每侧）
-const int kCardTitleTop        = 10;   // 标题距卡片顶
-const int kCardTitleH          = 22;   // 标题行高
-const int kCardTitlePx         = 14;   // 标题字号
-const int kCardLinesGap        = 4;    // 标题与摘要之间的间距
-const int kCardLinePx          = 12;   // 摘要字号
-const int kCardFooterGap       = 8;    // 摘要与分隔线之间的间距
-const int kCardFooterH         = 28;   // 分隔线下方底部文字行的高度
-const int kCardFooterPx        = 11;   // 底部文字字号
-const int kCardSummaryMaxLines = 3;    // 摘要最多显示几行
-const int kCardIconSize        = 14;   // 底部「M↓」图标的边长
-const int kCardIconGap         = 6;    // 底部图标与文字之间的间距
-const Gdiplus::REAL kCardIconStroke = 2.0f;                      // 底部图标的描边宽度（以 viewBox 24 为基准）
-const COLORREF kCardTitleColor = RGB(0x2A, 0x2A, 0x2A);           // 标题颜色，与气泡文字相同
-const COLORREF kCardLineColor  = RGB(0x8A, 0x8A, 0x8A);           // 摘要与底部文字的灰色
-const Gdiplus::Color kCardDivider(255, 0xE2, 0xDE, 0xDA);        // 分隔线颜色
+const int kCardSummaryGap       = 8;    // 头部与摘要之间的间距
+const int kCardSummaryPx        = 12;   // 摘要字号
+const int kCardSummaryMaxLines  = 3;    // 摘要最多显示几行
+// 头部高：图标块与单行标题取较高者，两者在其中垂直居中
+const int kCardHeaderH = (cardstyle::kTileSize > cardstyle::kTitleLineH) ? cardstyle::kTileSize : cardstyle::kTitleLineH;
+
+// 一条 Markdown 消息的样子，用来取图标块与底部类型标签的样式（Markdown 卡片的类型样式只看这两个字段）
+ChatMessage MarkdownStyleMessage()
+{
+    ChatMessage m;
+    m.kind = kMsgText;
+    m.isMarkdown = true;
+    return m;
+}
 
 //按界面字体量一段文字在宽度 width 内自动折行后的高度（像素），超过 maxLines 行时按 maxLines 行计。文字为空时返回 0
 int MeasureWrappedTextHeight(HDC hdc, const std::wstring& text, int width, int pixelHeight, int maxLines)
@@ -132,52 +132,47 @@ bool MakeMarkdownCardInfo(const CString& body, const std::wstring& sender, bool 
 
 int MeasureMarkdownCardSummary(HDC hdc, const std::wstring& summary, int cardWidth)
 {
-    return MeasureWrappedTextHeight(hdc, summary, cardWidth - kCardPadH * 2, kCardLinePx, kCardSummaryMaxLines);
+    return MeasureWrappedTextHeight(hdc, summary, cardWidth - cardstyle::kCardPadH * 2, kCardSummaryPx, kCardSummaryMaxLines);
 }
 
 int MarkdownCardHeight(int summaryH)
 {
-    return kCardTitleTop + kCardTitleH + (summaryH > 0 ? kCardLinesGap + summaryH : 0) + kCardFooterGap + kCardFooterH;
+    //头部、摘要（有的话）、下内边距，以及常驻的底部一行（左边是类型标签「Markdown 文档」）
+    return cardstyle::kCardPadTop + kCardHeaderH + (summaryH > 0 ? kCardSummaryGap + summaryH : 0) + cardstyle::kCardPadBottom
+         + cardstyle::kFooterDividerH + cardstyle::kFooterH;
 }
 
 void PaintMarkdownCardContent(HDC hdc, const RECT& rcCard, const std::wstring& title, const std::wstring& summary,
                               int summaryH)
 {
-    const int textL = rcCard.left + kCardPadH;
-    const int textR = rcCard.right - kCardPadH;
+    const ChatMessage styleMsg = MarkdownStyleMessage();
+    const ChatCardTypeStyle style = ChatCardTypeStyleOf(styleMsg);
+    const int left = rcCard.left + cardstyle::kCardPadH;
+    const int right = rcCard.right - cardstyle::kCardPadH;
+    const int headerTop = rcCard.top + cardstyle::kCardPadTop;
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    cardpaint::PaintCardFrame(g, rcCard);
+    cardpaint::PaintCardTile(g, left, headerTop + (kCardHeaderH - cardstyle::kTileSize) / 2, style);
 
-    //标题：一行，过长以省略号收尾
-    int lineTop = rcCard.top + kCardTitleTop;
-    RECT titleRc = { textL, lineTop, textR, lineTop + kCardTitleH };
-    DrawGdiText(hdc, title.c_str(), titleRc, kCardTitlePx, true, kCardTitleColor,
+    //标题：一行，在头部里垂直居中，过长以省略号收尾
+    const int titleLeft = left + cardstyle::kTileSize + cardstyle::kTileTextGap;
+    const int titleTop = headerTop + (kCardHeaderH - cardstyle::kTitleLineH) / 2;
+    const RECT titleRc = { titleLeft, titleTop, right, titleTop + cardstyle::kTitleLineH };
+    DrawGdiText(hdc, title.c_str(), titleRc, cardstyle::kTitlePx, true, cardstyle::kTitleColor,
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 
-    //摘要：自动折行，高度已在测量时按最多三行算好，最后一行超出时以省略号收尾
-    lineTop += kCardTitleH;
+    //摘要：卡片内宽自动折行，高度已在测量时按最多三行算好，最后一行超出时以省略号收尾
     if (summaryH > 0)
     {
-        lineTop += kCardLinesGap;
-        RECT sumRc = { textL, lineTop, textR, lineTop + summaryH };
-        DrawGdiText(hdc, summary.c_str(), sumRc, kCardLinePx, false, kCardLineColor,
+        const int sumTop = headerTop + kCardHeaderH + kCardSummaryGap;
+        const RECT sumRc = { left, sumTop, right, sumTop + summaryH };
+        DrawGdiText(hdc, summary.c_str(), sumRc, kCardSummaryPx, false, cardstyle::kDescText,
                     DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 
-    //分隔线与底部图标用 GDI+ 画，画完先释放 Graphics 再画 GDI 文字
-    const int footTop = rcCard.bottom - kCardFooterH;
-    const int iconTop = footTop + (kCardFooterH - kCardIconSize) / 2;
-    {
-        Gdiplus::Graphics g(hdc);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        Gdiplus::Pen divider(kCardDivider, 1.0f);
-        g.DrawLine(&divider, (Gdiplus::REAL)textL, (Gdiplus::REAL)footTop, (Gdiplus::REAL)textR, (Gdiplus::REAL)footTop);
-        const Gdiplus::Color iconColor(255, GetRValue(kCardLineColor), GetGValue(kCardLineColor),
-                                       GetBValue(kCardLineColor));
-        DrawChatIcon(g, kChatIconMarkdown, (Gdiplus::REAL)textL, (Gdiplus::REAL)iconTop, (Gdiplus::REAL)kCardIconSize,
-                     iconColor, kCardIconStroke);
-    }
-    RECT footRc = { textL + kCardIconSize + kCardIconGap, footTop, textR, rcCard.bottom };
-    DrawGdiText(hdc, TR(L"Markdown 文档"), footRc, kCardFooterPx, false, kCardLineColor,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    //底部一行：只有类型标签，没有按钮（方案第 1 节第 5 条：点整张卡片打开预览）
+    const RECT footer = { rcCard.left, rcCard.bottom - cardstyle::kFooterH, rcCard.right, rcCard.bottom };
+    cardpaint::PaintCardFooter(hdc, g, footer, style, ChatCardTypeLabel(styleMsg), std::vector<ChatCardButton>(), -1);
 }
-
 } // namespace balloonchatwnd

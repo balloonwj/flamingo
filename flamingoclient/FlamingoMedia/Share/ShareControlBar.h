@@ -15,7 +15,8 @@
  *  的任意按钮也先关菜单。修正前菜单会一直留在屏幕上，再次发起共享时 atlwin.h 断言 m_hWnd == 0。
  *
  *  形态与远程桌面受控提示条（CRdControlledBar）同款：基于 balloonui DuiFrameWindow 的 WS_POPUP 无边框小窗，
- *  置顶、不抢焦点、不进任务栏；另外排除在屏幕采集之外，不会被采进共享画面。
+ *  置顶、不抢焦点、不进任务栏；另外排除在屏幕采集之外，不会被采进共享画面。2026-10-14 起建窗、摆位与收起 / 隐藏由
+ *  公共基类 CShareTopBar（ShareTopBar.h）负责，与共享者控制条、观看端浮动条一致。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（即在 .cpp 里先 #include "stdafx.h"）。
  *
@@ -27,7 +28,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
-#include "ShareTopBarCollapse.h"   // TopBarCollapse（收起 / 悬停展开，第 10 期 10c）
+#include "ShareTopBar.h"           // CShareTopBar：顶部浮动条的公共基类（建窗、摆位、收起 / 隐藏，2026-10-14）
 #include "ShareMouseEffects.h"     // ShareMouseEffectSettings（「更多」菜单里的鼠标效果，第 16 期）
 #include "ShareBarPopupGuard.h"    // CShareBarPopupGuard：菜单开着时被隐藏的处理（2026-10-07）
 #include "ShareBarButtonArt.h"     // ShareBarButtonArtCache：图标按钮与闪烁的录制红点（2026-10-07）
@@ -44,7 +45,7 @@ namespace balloonwjui
 namespace screenshare {
 
 //屏幕共享发起人的控制条
-class CShareControlBar : public balloonwjui::DuiFrameWindow
+class CShareControlBar : public CShareTopBar
 {
 public:
     //按钮命令：随 kMsgShareBarCommand 的 wParam 发给控制器
@@ -234,7 +235,8 @@ public:
     void SetMineStopped(bool stopped);
 
     /**
-     *  其他人正在共享的画面数（第 22 期）：大于 0 时「更多」菜单里出现「其他人的屏幕（N）」。
+     *  其他人正在共享的画面数（第 22 期）：大于 0 时「更多」菜单里出现「共享画面」（2026-10-12 前为「其他人的屏幕（N）」；
+     *  窗口里也有主持人自己的那一块，不再写人数）。
      *  @param count 主持人以外正在共享的人数
      */
     void SetOtherScreenCount(int count);
@@ -273,25 +275,11 @@ public:
      */
     void TickBlink(int64_t nowMs);
 
-    //控制条展开时的整条宽（像素，单元测试用）：BuildUi 按有哪些按钮算出
-    int BarWidthForTest() const;
-
-    //收起 / 隐藏的当前状态，取值见 TopBarState（单元测试用）
-    int CollapseState() const;
-
-    /**
-     *  按给定的时刻与光标位置做一次收起 / 隐藏的周期检查（定时器传 GetTickCount64 与 GetCursorPos；单元测试直接传，
-     *  不移动真实鼠标）。状态变了就重新摆放窗口。
-     *  @param nowMs  当前时刻（毫秒）
-     *  @param cursor 光标位置（屏幕坐标）
-     */
-    void TickCollapseAt(int64_t nowMs, POINT cursor);
-
     BEGIN_MSG_MAP(CShareControlBar)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_TIMER, OnTimerMsg)
         MESSAGE_HANDLER(kMsgShowMoreMenu, OnShowMoreMenu)
-        CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
+        CHAIN_MSG_MAP(CShareTopBar)
     END_MSG_MAP()
 
     //按钮的控件 id（对外可见，单元测试按它找按钮）：避开 DuiFrameWindow 标题栏保留的 1 / 2 / 3
@@ -341,22 +329,13 @@ private:
     };
 
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //收起 / 临时展开状态下每 kTopBarTickMs 检查一次鼠标是否在控制条（或小把手）上；其余定时器交给基类
+    //录制红点的闪烁定时器；收起检查的定时器与其余定时器交给基类
     LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     //kMsgShowMoreMenu：弹出「更多」菜单；菜单期间被要求隐藏时，菜单返回后在这里销毁窗口
     LRESULT OnShowMoreMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    //按 m_collapse 的状态摆放窗口：展开时为 m_expandedRect，收起时缩成顶部的小把手；同时刷新按钮文字与定时器
-    void applyCollapse();
     void EnsureWindow();
     void BuildUi();
     void refreshText();
-    /**
-     *  在横条里加一个方形图标按钮（外观由 refreshText 装上）。
-     *  @param row 放进哪一行（不拥有）
-     *  @param id  控件 id
-     *  @return 按钮（控件树持有，仅引用）
-     */
-    balloonwjui::DuiButton* addIconButton(balloonwjui::DuiHBox* row, UINT id);
     /**
      *  按按钮种类与开关状态装上外观与悬停提示；按钮为 NULL 时什么也不做。
      *  @param button 按钮（不拥有）
@@ -364,8 +343,6 @@ private:
      *  @param on     开关状态
      */
     void applyArt(balloonwjui::DuiButton* button, int action, bool on);
-    //控制条展开时的整条宽（2026-10-07 起按有哪些按钮累加，见 m_barWidth）
-    int barWidth() const;
     //弹出「更多」菜单（在按钮下方）
     void showMoreMenu();
 
@@ -387,11 +364,6 @@ private:
     std::wstring            m_recordDuration;   //录下这场共享的已录时长文字（2026-10-07）；没在录制时为空
     bool                    m_recordAllowed; //他人能否录制
     balloonwjui::DuiButton* m_moreButton;    //「更多」按钮（控件树持有，本指针仅引用）
-    balloonwjui::DuiButton*      m_toggleBtn;    //「收起 / 固定」按钮（控件树持有，本指针仅引用）
-    balloonwjui::DuiButton*      m_hideBtn;      //「隐藏」按钮（控件树持有，本指针仅引用，2026-10-07）
-    screenshare::TopBarCollapse  m_collapse;     //收起 / 隐藏的状态；每次 Show 回到一直展开
-    RECT                         m_expandedRect; //展开时的窗口矩形（屏幕坐标），收起时据此算小把手的位置
-    RECT                         m_monitorRect;  //控制条所在显示器的整块矩形（屏幕坐标），隐藏后的边缘感应区据此计算
     std::wstring            m_speaking;      //说话人提示；为空表示没有人在说话
     std::wstring            m_password;      //加入密码（第 12 期）；为空表示没设密码
     std::wstring            m_duration;      //共享时长文字（第 13 期）；为空表示还没开始计时
@@ -401,9 +373,7 @@ private:
     balloonwjui::DuiButton* m_viewersButton; //「N 人观看 ▾」按钮（第 13 期，控件树持有，本指针仅引用）
     int                     m_viewerCount;   //观看人数
     bool                    m_paused;        //是否已暂停
-    HBITMAP                 m_bgBitmap;      //纯色背景图（本类生成、析构释放）
     RECT                    m_sourceRect;    //被共享内容的矩形
-    int                     m_barWidth;      //控制条展开时的整条宽（像素），BuildUi 按各按钮宽度算出；简体中文界面恒为 kBarWidth
     balloonwjui::DuiButton* m_revokeButton;  //「收回控制」按钮（第 18 期，控件树持有，本指针仅引用）；没人控制时隐藏
     std::wstring            m_controllerName;   //正在控制本人屏幕的人的显示名（第 18 期）；为空表示没人在控制
     bool                    m_mineStopped;   //发起人是否停掉了自己的画面（第 22 期），「更多」菜单据此显示停止或恢复
@@ -429,7 +399,6 @@ private:
     balloonwjui::DuiButton* m_switchButton;       //「切换内容」按钮（同上）
     balloonwjui::DuiButton* m_stopButton;         //「结束共享」按钮（同上）
     HBITMAP                 m_peopleIcon;         //观看者按钮前面的人形图标（本类生成、析构释放）
-    ShareBarButtonArtCache  m_art;                //图标按钮的四态位图（按钮随窗口销毁，析构时它们已不再引用这些位图）
 };
 
 } // namespace screenshare

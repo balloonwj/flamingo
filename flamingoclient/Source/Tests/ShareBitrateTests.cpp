@@ -6,7 +6,11 @@
  *    - SSBR2 发送阻塞达到周期的四分之一时降到 70%，反复拥塞时停在下限；
  *    - SSBR3 拥塞之后连续 3 个周期不拥塞才开始回升，之后每个周期加最高码率的 10%，不超过最高码率；
  *    - SSBR4 一个周期里关键帧请求达到 3 次才算拥塞，1~2 次（新成员加入）不降；
- *    - SSBR5 编码器运行中把码率从 2 Mbps 改到 200 kbps 后，同样的画面编出来的数据量明显变小。
+ *    - SSBR5 编码器运行中把码率从 2 Mbps 改到 200 kbps 后，同样的画面编出来的数据量明显变小；
+ *    - SSBR6 SetRange 换码率范围（源分辨率变了，docs/远程桌面H264与共享画质提升方案.md 4.2，2026-10-15）：当前码率取给定值并
+ *            夹在新范围内，连续不拥塞计数清零，之后的回升按新上限的 10%、降到新下限为止；
+ *    - SSBR7 回执延迟（远程桌面用，方案 4.5）：周期内最大延迟超过门限算拥塞，启用后超过 3 秒没有回执也算；
+ *            从不调用 OnFeedbackDelay 时（屏幕共享）行为与原来完全相同。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-10-03
  */
@@ -209,6 +213,84 @@ TEST_CASE("SSBR4 一个周期里关键帧请求达到 3 次才算拥塞", "[shar
     ctl.OnFrameSent(-100);
     now += kBrWindow;
     CHECK_FALSE(ctl.Evaluate(now, bps));
+}
+
+TEST_CASE("SSBR7 回执延迟：周期内最大延迟超过门限算拥塞，超过 3 秒没有回执也算，从不调用时行为不变", "[sharebitrate]")
+{
+    //远程桌面用（docs/远程桌面H264与共享画质提升方案.md 4.5）：控制端每 500 毫秒回送一次发送时刻
+    const int64_t kAckEveryMs = 500;
+    ShareBitrateController ctl(kBrMax, kBrMin);
+    int64_t now = 0;
+    int bps = 0;
+    ctl.Evaluate(now, bps);
+    //延迟都低于门限：不拥塞；也不影响原有两种信号（这里都没有）
+    for (int64_t t = kAckEveryMs; t <= kBrWindow; t += kAckEveryMs)
+        ctl.OnFeedbackDelay(kShareFeedbackCongestedDelayMs - 1, now + t);
+    now += kBrWindow;
+    CHECK_FALSE(ctl.Evaluate(now, bps));
+    //一个周期里有一次超过门限：拥塞，降到 70%
+    ctl.OnFeedbackDelay(100, now + kAckEveryMs);
+    ctl.OnFeedbackDelay(kShareFeedbackCongestedDelayMs + 1, now + 2 * kAckEveryMs);
+    now += kBrWindow;
+    REQUIRE(ctl.Evaluate(now, bps));
+    CHECK(bps == kBrAfterOneDrop);
+    //回执中断：距最近一次回执超过 3 秒的周期算拥塞
+    const int64_t lastAck = now;
+    ctl.OnFeedbackDelay(100, lastAck);
+    now += kBrWindow;
+    CHECK_FALSE(ctl.Evaluate(now, bps));
+    //超时之后再过一个完整的评估周期，保证这一次确实评估
+    now = lastAck + kShareFeedbackTimeoutMs + kBrWindow;
+    REQUIRE(ctl.Evaluate(now, bps));
+    CHECK(bps < kBrAfterOneDrop);
+
+    //从不调用 OnFeedbackDelay（屏幕共享）：长时间没有回执也不算拥塞，与原来完全相同
+    ShareBitrateController share(kBrMax, kBrMin);
+    int64_t t2 = 0;
+    share.Evaluate(t2, bps);
+    for (int i = 0; i < 5; ++i)
+        CHECK_FALSE(brCalmWindow(share, t2, bps));
+    CHECK(share.CurrentBps() == kBrMax);
+}
+
+TEST_CASE("SSBR6 SetRange 换码率范围：当前码率取给定值，之后的升降以新范围为准", "[sharebitrate]")
+{
+    //换到 2K 的范围（3.6 Mbps ~ 0.5 Mbps），当前码率按比例换算后由调用方给出
+    const int kNewMax = 3600000;
+    const int kNewMin = 500000;
+    const int kNewCurrent = 2520000;
+    ShareBitrateController ctl(kBrMax, kBrMin);
+    int64_t now = 0;
+    int bps = 0;
+    ctl.Evaluate(now, bps);
+    //先攒两个不拥塞的周期，验证换范围后计数清零
+    CHECK_FALSE(brCalmWindow(ctl, now, bps));
+    CHECK_FALSE(brCalmWindow(ctl, now, bps));
+    ctl.SetRange(kNewMax, kNewMin, kNewCurrent);
+    CHECK(ctl.CurrentBps() == kNewCurrent);
+    CHECK(ctl.MaxBps() == kNewMax);
+    CHECK(ctl.MinBps() == kNewMin);
+    //连续不拥塞计数清零：要再过 3 个周期才回升，每步加新上限的 10%
+    CHECK_FALSE(brCalmWindow(ctl, now, bps));
+    CHECK_FALSE(brCalmWindow(ctl, now, bps));
+    REQUIRE(brCalmWindow(ctl, now, bps));
+    CHECK(bps == kNewCurrent + kNewMax / 10);
+    //一直不拥塞：回到新上限
+    for (int i = 0; i < 20; ++i)
+        brCalmWindow(ctl, now, bps);
+    CHECK(ctl.CurrentBps() == kNewMax);
+    //反复拥塞：停在新下限
+    for (int i = 0; i < 20; ++i)
+        brCongestedWindow(ctl, now, bps);
+    CHECK(ctl.CurrentBps() == kNewMin);
+    //给定的当前码率超出范围：夹到范围内；下限大于上限时按上限
+    ctl.SetRange(kBrMax, kBrMin, kNewMax);
+    CHECK(ctl.CurrentBps() == kBrMax);
+    ctl.SetRange(kBrMax, kBrMin, 1);
+    CHECK(ctl.CurrentBps() == kBrMin);
+    ctl.SetRange(kBrMin, kBrMax, kBrMax);
+    CHECK(ctl.MinBps() == kBrMin);
+    CHECK(ctl.CurrentBps() == kBrMin);
 }
 
 TEST_CASE("SSBR5 编码器运行中改码率后输出明显变小", "[sharebitrate]")

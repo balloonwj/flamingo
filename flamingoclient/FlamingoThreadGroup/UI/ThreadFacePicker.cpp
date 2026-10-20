@@ -125,7 +125,9 @@ void CThreadFacePicker::OpenAt(const RECT& anchorScreen, const std::vector<Threa
     BuildOnce(faces);
     if (m_faceIds.empty())
         LOG_WARNING("thread face picker has no face (library empty or all images failed to load).");
-    //所有者传 NULL：面板的选中回调直达本浮层，不把子控件通知路由到帖子群窗口
+    //所有者传 NULL，浮层内容的控件通知不会发到帖子群窗口：这些通知先到本浮层，本类不处理；DuiPopupHost 只在有所有者时
+    //把没处理的通知转给所有者（2026-10-14 起，见 DuiPopupHost::OnPopupNotify 与开发约定文档 UI 约定第 11 条；此前按
+    //GetParent 直接发给所有者）。表情的选中经 DuiEmojiPanel 的回调交给本浮层，与所有者无关
     Show(anchorScreen, NULL);
 }
 
@@ -178,15 +180,13 @@ LRESULT CThreadFacePicker::OnPanelMouseMove(UINT /*uMsg*/, WPARAM /*wParam*/, LP
     if (idx == m_lastTipIdx)
         return 0;
     m_lastTipIdx = idx;
-    balloonwjui::DuiToolTipMgr& mgr = balloonwjui::DuiToolTipMgr::Inst();
-    mgr.OnLeave(m_panel);
+    //关旧格提示、取消未弹出的计时，再按新格的文字登记并重新计时；新格没有文字（空白处）时只取消登记
+    const wchar_t* tip = NULL;
     if (idx >= 0 && idx < static_cast<int>(m_faceNames.size()) && !m_faceNames[idx].empty())
-    {
-        POINT screenPt = pt;
-        ::ClientToScreen(m_hWnd, &screenPt);
-        mgr.Register(m_panel, m_faceNames[idx].c_str());
-        mgr.OnHover(m_panel, screenPt);
-    }
+        tip = m_faceNames[idx].c_str();
+    POINT screenPt = pt;
+    ::ClientToScreen(m_hWnd, &screenPt);
+    balloonwjui::DuiToolTipMgr::Inst().Retarget(m_panel, tip, screenPt);
     return 0;
 }
 

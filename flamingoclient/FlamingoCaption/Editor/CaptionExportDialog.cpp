@@ -121,9 +121,10 @@ void CaptionExportDialog::Run(HWND owner, const CaptionDraft& draft, const std::
     m_modalDone = false;
     //录音（14.13）没有画面：只提供 SRT 与纯文本
     m_audioOnly = IsAudioOnlyMediaPath(videoPath);
-    //有所有者的弹窗用 WS_OVERLAPPEDWINDOW，不能用 WS_POPUP：balloonui 按 GetParent 决定控件通知发给谁，有所有者的
-    //WS_POPUP 窗口 GetParent 返回所有者，按钮的点击通知（含标题栏关闭按钮）会全部发到编辑器窗口，本窗口一条都收不到
-    //（2026-10-06 导出窗口点「开始导出」没反应、也关不掉，即由此而来；外观由 DuiFrameWindow 自绘，不受影响）
+    //有所有者的弹窗，用 WS_OVERLAPPEDWINDOW 建窗，控件通知（含标题栏关闭按钮）发回本窗口（开发约定文档 UI 约定第 11 条）。
+    //2026-10-14 之前 balloonui 按 GetParent 决定通知目标，有所有者的 WS_POPUP 窗口的通知会全部发到编辑器窗口（2026-10-06
+    //本窗口点「开始导出」没反应、也关不掉，即由此而来），当时为此选用重叠窗口；现在两种样式的通知都发回本窗口。
+    //外观由 DuiFrameWindow 自绘，不受窗口样式影响
     if (Create(owner, CWindow::rcDefault, TR(kTitle), WS_OVERLAPPEDWINDOW, WS_EX_DLGMODALFRAME) == NULL)
         return;
     SetTitle(TR(kTitle));

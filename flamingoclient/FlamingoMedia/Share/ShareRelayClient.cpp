@@ -13,6 +13,7 @@
 #include "../../Source/net/FrameCodec.h"        // net::encodeFrame / decodeFrame
 #include "../../Source/net/FramePayload.h"      // encodeFramePayload / decodeFramePayload
 #include "../../Source/net/HandshakeRunner.h"   // performClientHandshake / IHandshakeChannel
+#include "../../Source/net/TcpConnectWait.h"    // ConnectBlockingSocket / SendAllBlocking
 #include "../../Source/Common/Log/IULog.h"      // LOG_INFO / LOG_ERROR
 
 #pragma comment(lib, "ws2_32.lib")
@@ -86,74 +87,22 @@ ShareRelayClient::~ShareRelayClient()
 
 bool ShareRelayClient::DoConnect(const std::string& ip, int port, int timeoutSec)
 {
-    m_sock = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (m_sock == INVALID_SOCKET)
-        return false;
-
-    //画面帧是一串连续的分片，关掉 Nagle 避免小分片被攒着不发
-    long noDelay = 1;
-    ::setsockopt(m_sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&noDelay), sizeof(long));
-
-    //先用非阻塞模式做带超时的 connect
-    unsigned long on = 1;
-    if (::ioctlsocket(m_sock, FIONBIO, &on) == SOCKET_ERROR)
-        return false;
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(static_cast<u_short>(port));
-    addr.sin_addr.s_addr = ::inet_addr(ip.c_str());
-    if (addr.sin_addr.s_addr == INADDR_NONE)
+    //解析地址、建连（被拒绝、不可达时立即返回）、连上后切回阻塞模式并设收发超时：四个中转客户端共用
+    //net::ConnectBlockingSocket（2026-10-14）。接收线程据 SO_RCVTIMEO 周期返回以检查停止标志；
+    //失败时 m_sock 可能已建好，由 Close 关闭
+    std::string failure;
+    if (!net::ConnectBlockingSocket(m_sock, ip, port, timeoutSec * net::kTcpConnectMsPerSecond, kRecvTimeoutMs,
+                                    kSendTimeoutMs, failure))
     {
-        struct hostent* he = ::gethostbyname(ip.c_str());
-        if (he == NULL)
-            return false;
-        addr.sin_addr.s_addr = *reinterpret_cast<unsigned long*>(he->h_addr);
-    }
-
-    int ret = ::connect(m_sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
-    if (ret == SOCKET_ERROR && ::WSAGetLastError() != WSAEWOULDBLOCK)
+        LOG_ERROR("ShareRelayClient: connect %s:%d %s.", ip.c_str(), port, failure.c_str());
         return false;
-    if (ret != 0)
-    {
-        fd_set writeset;
-        FD_ZERO(&writeset);
-        FD_SET(m_sock, &writeset);
-        struct timeval tv;
-        tv.tv_sec = timeoutSec;
-        tv.tv_usec = 0;
-        if (::select(static_cast<int>(m_sock) + 1, NULL, &writeset, NULL, &tv) != 1)
-            return false;
     }
-
-    //连上后切回阻塞模式，并设收发超时：接收线程据 SO_RCVTIMEO 周期返回以检查停止标志
-    unsigned long off = 0;
-    ::ioctlsocket(m_sock, FIONBIO, &off);
-    int tmRecv = kRecvTimeoutMs;
-    int tmSend = kSendTimeoutMs;
-    ::setsockopt(m_sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tmRecv), sizeof(int));
-    ::setsockopt(m_sock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tmSend), sizeof(int));
     return true;
 }
 
 bool ShareRelayClient::SendAll(const char* data, size_t len)
 {
-    size_t sent = 0;
-    while (sent < len)
-    {
-        const int n = ::send(m_sock, data + sent, static_cast<int>(len - sent), 0);
-        if (n > 0)
-        {
-            sent += static_cast<size_t>(n);
-            continue;
-        }
-        //阻塞模式下 WSAEWOULDBLOCK 罕见，出现则重试；其余按断开处理
-        if (n == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
-            continue;
-        return false;
-    }
-    return true;
+    return net::SendAllBlocking(m_sock, data, len);
 }
 
 bool ShareRelayClient::PerformHandshake(const unsigned char* serverPubKey)

@@ -7,6 +7,8 @@
 #include "stdafx.h"
 #include "ChatCloudRecordCard.h"
 
+#include "ChatCardModel.h"   // SetCardChip / ChatCardChipTone：卡片的状态标签
+
 #include <stdlib.h>
 #include <memory>
 
@@ -136,6 +138,7 @@ void ApplyCloudRecordCard(ChatMessage& msg, const std::string& contentJson, cons
         msg.screenShareStatus = TR(L"录像内容不可用");
         msg.screenShareHasButton = false;
         msg.screenShareButtonEnabled = false;
+        SetCardChip(msg, msg.screenShareStatus, kCardChipEnded);
         return;
     }
 
@@ -145,6 +148,8 @@ void ApplyCloudRecordCard(ChatMessage& msg, const std::string& contentJson, cons
     msg.screenShareHostName = senderName;
     msg.screenShareSubtitle = CloudRecordCardSubtitle(senderName, msg.fromMe);
     msg.screenShareStatus = CloudRecordCardStatusText(info);
+    //录像没有状态可言，不画标签，时长与大小写在信息行（docs/聊天卡片美化方案.md 5.2）
+    SetCardChip(msg, CString(), kCardChipNone, msg.screenShareStatus);
     //本人发的卡片同样可以播放：开启者在别的设备上也可能想直接从聊天里打开
     msg.screenShareHasButton = true;
     msg.screenShareButtonEnabled = true;

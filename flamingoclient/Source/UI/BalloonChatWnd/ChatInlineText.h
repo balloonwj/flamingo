@@ -24,6 +24,9 @@
  *  同一套排版必须两处共用，不能各写一份：折行规则、表情与文字的基线对齐、扁平文本
  *  的字符口径三者是咬合的，一旦两份实现漂移，"气泡里选中复制拿到的文字"与"消息记录
  *  里看到的文字"就会对不上。
+ *
+ *  2026-10-14 起聊天窗的气泡改用带选项的 LayoutInlineContentEx（逐行行高、折行避头尾，见 InlineLayoutOptions），
+ *  消息记录窗等其余调用方仍走 LayoutInlineContent 的原有规则。
  *  ------------------------------------------------------------------
  *
  *  字符口径：全文按 UTF-16 字符计数，<u>一个内联表情占一个字符位</u>，在扁平文本里
@@ -129,6 +132,35 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                          int maxLines = 0, bool* outTruncated = NULL);
 
 /**
+ *  排版选项（docs/聊天气泡美化方案.md 第 1 节第 4 条，2026-10-14 起聊天窗的气泡使用）。缺省值就是 LayoutInlineContent
+ *  的原有规则：每行的行高都取字体行高与表情格边长中较大的一个，折行时不处理标点。
+ */
+struct InlineLayoutOptions
+{
+    // 没有表情的行的行高（像素）。<= 0 表示按原有规则；大于 0 时逐行计算：没有表情的行取它与字体行高中较大的一个，
+    // 含表情的行再与表情格边长比较取较大的一个
+    int  m_textLineH;
+    // 折行时是否避头尾：为 true 时句号、逗号、右引号、右括号等不放在行首（连同前一个字换到下一行），
+    // 左引号、左括号不留在行尾（提前换行）
+    bool m_kinsoku;
+
+    InlineLayoutOptions()
+        : m_textLineH(0)
+        , m_kinsoku(false)
+    {
+    }
+};
+
+/**
+ *  按选项把消息段序列折行排版。参数与返回值同 LayoutInlineContent，多一个 opts；opts 取缺省值时结果与
+ *  LayoutInlineContent 完全相同。
+ *    opts：排版选项，见 InlineLayoutOptions。
+ */
+SIZE LayoutInlineContentEx(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                           int maxW, int faceSize, const InlineLayoutOptions& opts,
+                           std::vector<InlinePlaced>* outPlaced, int maxLines = 0, bool* outTruncated = NULL);
+
+/**
  *  在 rc 内绘制「文字 + 内联表情」。内部自建字体、排版、绘制，用完还原设备上下文。
  *    hdc：      目标设备上下文。
  *    segs：     正文解析出的段序列。
@@ -155,6 +187,15 @@ void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& seg
  */
 SIZE LayoutInlineContentForStyle(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
                                  int maxW, int faceSize, const InlineTextStyle& st,
+                                 std::vector<InlinePlaced>* outPlaced, int maxLines = 0);
+
+/**
+ *  同上，按选项排版（见 InlineLayoutOptions）。聊天窗的气泡测量与绘制都走这一个，两处的选项必须相同。
+ *    opts：排版选项。
+ */
+SIZE LayoutInlineContentForStyle(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                                 int maxW, int faceSize, const InlineTextStyle& st,
+                                 const InlineLayoutOptions& opts,
                                  std::vector<InlinePlaced>* outPlaced, int maxLines = 0);
 
 /**

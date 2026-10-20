@@ -48,6 +48,7 @@ enum share_viewer_event
     share_viewer_relay_failed  = 1,   //连不上房间中转（报到被拒或网络不通）
     share_viewer_relay_lost    = 2,   //收流途中房间中转断开
     share_viewer_source_state  = 3,   //发起人的共享内容状态变了，value 取值见 screenshare_source_state
+    share_viewer_undecodable   = 4,   //有一路画面判为超出本机系统的解码能力（value 为 1）或判定清除（value 为 0），2026-10-15
 };
 
 //单聊共享登记的 P2P 用途：与服务端 ChatSession 的 ChatSessionShareP2PLinker 建会话时的 purpose 一致
@@ -100,7 +101,7 @@ public:
 
     /**
      *  @param event 事件，取值见 enum share_viewer_event
-     *  @param value 附加值：share_viewer_source_state 时为新状态，其余为 0
+     *  @param value 附加值：share_viewer_source_state 时为新状态，share_viewer_undecodable 时为 1 / 0，其余为 0
      */
     virtual void OnViewerEvent(int event, int value) = 0;
 };
@@ -194,6 +195,7 @@ public:
     //IShareScreenFeed（第 22 期）：按画面座位取最新一帧、列出有画面的座位、取某一路的共享内容状态
     virtual bool GetScreenFrame(int seat, std::vector<uint8_t>& bgra, int& width, int& height,
                                 uint64_t& serial) const override;
+    virtual bool GetScreenSerial(int seat, uint64_t& serial) const override;
     virtual std::vector<int> ScreenSeats() const override;
     virtual int ScreenSourceState(int seat) const override;
 
@@ -204,6 +206,8 @@ private:
     virtual void OnRelayThreadExit();
     //ShareScreenDecodersListener（第 22 期）：某一路解出新帧，通知观看窗取画面
     virtual void OnScreenDecoded(int seat) override;
+    //ShareScreenDecodersListener（2026-10-15）：某一路「超出本机解码能力」的判定变了，以 share_viewer_undecodable 事件告诉观看窗
+    virtual void OnScreenUndecodable(int seat, bool undecodable) override;
 
     //以下为 IP2PStreamHandler 的实现，在 P2P 帧通道的转交线程上被调用（这条线程代替中转的接收线程）
 

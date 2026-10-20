@@ -4,7 +4,8 @@
  *  覆盖 FlamingoMedia/Share/ShareP2PRoute.h（docs/P2P通信方案.md 第 6 期）：
  *    - SHP2P1 视频丢帧规则：积压不超过上限时照发；超过上限进入等关键帧，非关键帧丢弃并请求关键帧，间隔内不重复请求、
  *             过了间隔再请求；关键帧一律照发并结束等关键帧；结束后积压回落时照常发送；Reset 回到初始状态；
- *    - SHP2P2 改写发送者座位号：只改第 2 个字节，其余不变；不足一个帧头、座位号越界时不改并返回 false。
+ *    - SHP2P2 改写发送者座位号：只改第 2 个字节，其余不变；不足一个帧头、座位号越界时不改并返回 false；
+ *    - SHP2P3 积压上限为 4 MiB，与服务端 screenshareviewerbufferbytes 的默认值相同（2026-10-15 一起由 1 MiB 调大）。
  *
  *  框架 Catch2 v3。
  *
@@ -66,6 +67,13 @@ TEST_CASE("SHP2P1 发给 P2P 观看者的视频：积压超过上限时只发关
     gate.Reset();
     CHECK(gate.DroppedFrames() == 0);
     CHECK_FALSE(gate.WaitingKeyframe());
+}
+
+TEST_CASE("SHP2P3 P2P 观看者的积压上限与服务端默认值同为 4 MiB", "[sharep2p]")
+{
+    //2026-10-15 与 imgserver 的 screenshareviewerbufferbytes 默认值一起由 1 MiB 调到 4 MiB（用户定的 Q3）
+    const uint64_t kFourMiB = 4ULL * 1024 * 1024;
+    CHECK(kShareP2PViewerBacklogBytes == kFourMiB);
 }
 
 TEST_CASE("SHP2P2 改写发送者座位号：只改第 2 个字节", "[sharep2p]")

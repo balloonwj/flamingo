@@ -228,6 +228,8 @@
     <ClCompile Include="..\tests\test_relayhellopolicy.cpp" />
     <ClCompile Include="..\imgserversrc\RelayHelloPolicy.cpp" />
     <ClCompile Include="..\chatserversrc\P2PServerSetup.cpp" />
+    <ClCompile Include="..\tests\test_confighostcheck.cpp" />
+    <ClCompile Include="..\utils\ConfigHostCheck.cpp" />
     <ClCompile Include="..\tests\test_filesharesessionmanager.cpp" />
     <ClCompile Include="..\chatserversrc\FileShareSessionManager.cpp" />
     <ClCompile Include="..\tests\test_filesharemanager.cpp" />
@@ -294,6 +296,8 @@
     <!-- PRV 套用例（Poller 事件位口径）同样是端到端复现，用的是上面这批 reactor 源文件，
          不需要再额外补实现文件 -->
     <ClCompile Include="..\tests\test_pollerrevents.cpp" />
+    <!-- NDL 套用例（连接关闭 Nagle）：一条本机回环连接交给 TcpConnection，用的也是上面这批 reactor 源文件 -->
+    <ClCompile Include="..\tests\test_tcpnodelay.cpp" />
     <ClCompile Include="..\chatserversrc\TcpSession.cpp" />
     <ClCompile Include="..\net\ByteBuffer.cpp" />
     <ClCompile Include="..\net\Channel.cpp" />

@@ -41,6 +41,13 @@ namespace net
 
         void setTcpNoDelay(bool on);
 
+        /**
+         *  读取本连接的 socket 当前是否关闭了 Nagle 算法（TCP_NODELAY），供测试与日志核对 setTcpNoDelay 是否生效。
+         *  任何线程都可以调用（只读取 socket 选项，不改动连接状态）。
+         *  @return 已关闭 Nagle 返回 true；未关闭或读取失败返回 false
+         */
+        bool isTcpNoDelay() const;
+
         void setConnectionCallback(const ConnectionCallback& cb)
         {
             m_connectionCallback = cb;

@@ -232,7 +232,7 @@ private:
     void cancel();
 
     HWND                        m_notifyWnd;     //结果通知窗口（不拥有）
-    bool                        m_switchMode;    //是否切换模式
+    bool                        m_switchMode;    //是否按切换内容的样子显示（SharePickerIsSwitchLayout：切换内容，或多人共享里经主持人同意后的第一次选择）
     int                         m_mode;          //用途，取值见 SharePickerMode
     std::wstring                m_hint;          //顶部提示
     std::vector<Item>           m_items;         //全部可选项：先显示器后窗口

@@ -82,7 +82,7 @@ public:
 
     // 在 anchor 屏幕矩形上方打开面板（toolbar 在窗口底部，优先朝上弹）。
     //   anchorScreen：锚矩形（一般取「AF」按钮的屏幕矩形）。
-    //   owner：owner 窗口句柄（聊天窗）；生命周期归属，通知路由见 .cpp。
+    //   owner：owner 窗口句柄（聊天窗）；目前未使用，浮层显示时不设所有者，原因见 .cpp。
     void OpenAt(const RECT& anchorScreen, HWND owner);
 
     BEGIN_MSG_MAP(CFontSettingPopup)

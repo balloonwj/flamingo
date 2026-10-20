@@ -89,7 +89,8 @@ void CShareInfoPopup::Show(const RECT& anchor, const std::wstring& title, const 
     m_desc = desc;
     if (!IsWindow())
     {
-        //置顶、不抢焦点、不进任务栏；不设所有者，关闭按钮的通知才会发回本窗口
+        //置顶、不抢焦点、不进任务栏；不设所有者（原为让关闭按钮的通知发回本窗口；2026-10-14 起有无所有者，
+        //控件通知都发回本窗口，见开发约定文档 UI 约定第 11 条）
         const DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
         if (Create(NULL, CWindow::rcDefault, TR(L"共享说明"), WS_POPUP, exStyle) == NULL)
         {

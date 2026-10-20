@@ -10,6 +10,7 @@
 #include <gdiplus.h>
 
 #include "ChatVoiceStrip.h"
+#include "ChatBubbleStyle.h"               // kPeerBubbleFill：与聊天窗对方气泡同一个底色
 #include "ChatVoicePaint.h"                // PaintVoiceBarShapes / PaintVoiceBarText / 红点几何
 #include "ChatPaintUtil.h"                 // AddRoundRect
 #include "ChatMessageList.h"               // WM_CHAT_VOICE_ACTION
@@ -19,8 +20,9 @@ namespace balloonchatwnd {
 
 namespace {
 
-//语音条底色与圆角，与聊天窗里对方发来的气泡一致
-const Gdiplus::Color kStripBg(255, 0xF3, 0xF2, 0xEF);
+//语音条底色与圆角，与聊天窗里对方发来的气泡一致：底色直接引用气泡的同一个常量（docs/聊天气泡美化方案.md 第 1 节第 2 条）
+const Gdiplus::Color kStripBg(255, GetRValue(bubblestyle::kPeerBubbleFill), GetGValue(bubblestyle::kPeerBubbleFill),
+                              GetBValue(bubblestyle::kPeerBubbleFill));
 const Gdiplus::REAL  kStripRadius = 12.0f;
 
 } // namespace

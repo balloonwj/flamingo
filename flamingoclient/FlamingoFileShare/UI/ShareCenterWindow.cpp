@@ -514,7 +514,8 @@ bool CShareCenterWindow::Open(HWND owner, CShareService* service, IFileShareHost
         m_visible.clear();
         m_filter.clear();
         m_convNames.clear();
-        //父窗口传 NULL：作为独立的顶层窗口，子控件的通知路由回本窗口；owner 只用来居中
+        //父窗口传 NULL：作为没有所有者的独立顶层窗口；owner 只用来居中。控件通知发回本窗口，与有无所有者无关
+        //（2026-10-14 起，见开发约定文档 UI 约定第 11 条）
         if (Create(NULL, CWindow::rcDefault, TR(kWindowTitle), WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
             LOG_ERROR("share center window: Create failed, error: %lu.", ::GetLastError());

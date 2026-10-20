@@ -340,7 +340,9 @@ chatserversrc/MemoManager.cpp
 # 管理控制台长连接（2501~2504，管理端口，见 docs/FlamingoLink方案.md）
 chatserversrc/AdminLinkProtocol.cpp
 chatserversrc/AdminLinkSession.cpp
-chatserversrc/AdminLinkServer.cpp)
+chatserversrc/AdminLinkServer.cpp
+# 启动时检查实际下发给客户端的主机地址是否只有本机才能访问（见 utils/ConfigHostCheck.h）
+utils/ConfigHostCheck.cpp)
 
 set(fileserver_srcs
 fileserversrc/main.cpp
@@ -549,6 +551,8 @@ tests/test_sendthreadaffinity.cpp
 # 不需要再额外补实现文件。缺陷本身只在 Windows 的 SelectPoller 上成立，Linux 走 epoll
 # 不会复现，这里编进来是为了守住「两个平台的判定口径一致」
 tests/test_pollerrevents.cpp
+# 连接关闭 Nagle 的用例（Suite NDL）：一条本机回环连接交给 TcpConnection，用的也是下面这批 reactor 实现文件
+tests/test_tcpnodelay.cpp
 chatserversrc/TcpSession.cpp
 net/ByteBuffer.cpp
 net/Channel.cpp
@@ -704,6 +708,9 @@ imgserversrc/P2PProbeCore.cpp
 tests/test_relayhellopolicy.cpp
 imgserversrc/RelayHelloPolicy.cpp
 chatserversrc/P2PServerSetup.cpp
+# 配置里的主机地址是否只有本机才能访问（Suite HAC）
+tests/test_confighostcheck.cpp
+utils/ConfigHostCheck.cpp
 chatserversrc/P2PSignalService.cpp
 chatserversrc/P2PSessionManager.cpp
 chatserversrc/P2PProtocol.cpp

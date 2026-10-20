@@ -9,13 +9,50 @@ namespace remotedesktop {
 CCaptureFallbackPolicy::CCaptureFallbackPolicy()
     : m_backend(kBackendNone)
     , m_rebuildAttempts(0)
+    , m_retryArmed(false)
+    , m_retryAtMs(0)
+    , m_retryIntervalMs(kDxgiRetryFirstMs)
 {
+}
+
+CaptureResult CCaptureFallbackPolicy::ClassifyAcquireResult(HRESULT hr)
+{
+    if (hr == DXGI_ERROR_WAIT_TIMEOUT)
+        return kCaptureTimeout;
+    //除超时以外的失败都先重建：DXGI_ERROR_ACCESS_LOST 之外，分辨率变化时实测还会返回 DXGI_ERROR_INVALID_CALL，
+    //复制对象此时已不可用，重建即可恢复；重建失败由降级策略照常切到 GDI
+    if (FAILED(hr))
+        return kCaptureAccessLost;
+    return kCaptureOk;
 }
 
 void CCaptureFallbackPolicy::Reset(CaptureBackend backend)
 {
     m_backend = backend;
     m_rebuildAttempts = 0;
+    m_retryArmed = false;
+    m_retryIntervalMs = kDxgiRetryFirstMs;
+}
+
+void CCaptureFallbackPolicy::OnFellBackToGdi(int64_t nowMs)
+{
+    m_retryArmed = true;
+    m_retryIntervalMs = kDxgiRetryFirstMs;
+    m_retryAtMs = nowMs + m_retryIntervalMs;
+}
+
+bool CCaptureFallbackPolicy::ShouldRetryDxgi(int64_t nowMs) const
+{
+    return m_backend == kBackendGdi && m_retryArmed && nowMs >= m_retryAtMs;
+}
+
+void CCaptureFallbackPolicy::OnDxgiRetryFailed(int64_t nowMs)
+{
+    //间隔加倍，不超过上限；锁屏、UAC 提示可能持续很久，避免每隔几秒就建一次 D3D 设备
+    m_retryIntervalMs *= 2;
+    if (m_retryIntervalMs > kDxgiRetryMaxMs)
+        m_retryIntervalMs = kDxgiRetryMaxMs;
+    m_retryAtMs = nowMs + m_retryIntervalMs;
 }
 
 FallbackAction CCaptureFallbackPolicy::OnResult(CaptureResult r)

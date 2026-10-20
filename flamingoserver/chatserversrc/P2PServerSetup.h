@@ -4,6 +4,8 @@
  *  docs/P2P通信方案.md 第 2 期 2c-2a。把两件与网络无关、可以单独测试的事从 main.cpp 与 ChatSession 里拿出来：
  *    - P2PServerSetup::loadConfig：从 chatserver.conf 生成 P2PSessionManager 的配置（第 9.3 节的配置项）；
  *    - P2PFeatureGate：按「用户 → 所属企业 → 企业的 p2p 开关」实现 IP2PEnterpriseGate，供 P2PSignalService 查询。
+ *  另有 appendPublishedHosts（2026-10-14）：按 loadConfig 的结果列出要下发给客户端的中转与探测地址，
+ *  供启动时的地址检查（utils/ConfigHostCheck.h）使用，探测地址的回落规则因此只在 loadConfig 里写一份。
  *
  *  配置项（chatserver.conf）：
  *    relaytokenkey / imgserverhost / relayport   回落中转的令牌密钥、地址与端口，与远程桌面、通话共用，不另配
@@ -27,9 +29,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <vector>
 
 #include "P2PSessionManager.h"
 #include "P2PSignalService.h"
+#include "../utils/ConfigHostCheck.h"   // PublishedHost：appendPublishedHosts 的输出
 
 class CConfigFileReader;
 class FeatureSwitchManager;
@@ -50,6 +54,19 @@ public:
      *  @return 会话管理器配置；缺项与非法值按文件头的规则取默认值，探测主机为空时不下发探测地址
      */
     static P2PSessionConfig loadConfig(CConfigFileReader& config);
+
+    /**
+     *  列出这份配置要下发给客户端的地址，追加到 out 末尾：
+     *    - 中转：m_relayHost + m_relayPort，配置项 imgserverhost。通话、远程桌面、屏幕共享、群通话与 P2P 回落
+     *      共用这一组（各模块都从 imgserverhost / relayport 读取，见 main.cpp），所以一并写进用途；
+     *    - 地址探测：m_probes 里的每个地址；探测主机来自 p2pprobehost，不配时来自 imgserverhost。
+     *  端口为 0、主机为空的项照样追加，是否下发由 ConfigHostCheck::findLocalOnly 判断。
+     *  @param cfg                 loadConfig 的结果（P2PSessionManager 实际使用的配置）
+     *  @param probeHostConfigured 配置里是否写了非空的 p2pprobehost；决定探测地址在告警里记为哪个配置项
+     *  @param out                 [出参] 追加的地址
+     */
+    static void appendPublishedHosts(const P2PSessionConfig& cfg, bool probeHostConfigured,
+                                     std::vector<PublishedHost>& out);
 };
 
 /**

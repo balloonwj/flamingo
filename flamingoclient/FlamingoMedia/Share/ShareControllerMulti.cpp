@@ -276,10 +276,11 @@ void CShareController::onSharingNotify(const std::string& json)
             m_viewer.SetShareMineState(ShareMineStateForPhase(m_publishPhase));
             break;
         }
+        //本人还没开始共享：选择窗按切换模式打开，但确认按钮为「开始共享」（2026-10-13）
         if (m_host != NULL && n.m_actor == m_host->GetSelfUserId())
-            openPicker(true, TR(L"请选择要共享的内容；取消则不共享。"));
+            openPicker(true, TR(L"请选择要共享的内容；取消则不共享。"), true);
         else
-            openPicker(true, TRF(L"{0} 已同意你共享屏幕，请选择要共享的内容；取消则不共享。", actorName));
+            openPicker(true, TRF(L"{0} 已同意你共享屏幕，请选择要共享的内容；取消则不共享。", actorName), true);
         break;
 
     //申请人：主持人拒绝
@@ -352,7 +353,15 @@ void CShareController::applyMultiState(const ShareStateNotify& n, bool asHost)
         return;
     const int64_t self = m_host->GetSelfUserId();
     const std::vector<ShareScreenInfo> before = m_screens;
-    m_screens = CollectOtherScreens(n, self);
+    //2026-10-12 起每个人都看到全部画面（含本人自己的那一块，docs/远程桌面控制权限与观看工具条方案.md 第 2.2 节 C）
+    m_screens = CollectShareScreens(n);
+    //本人那一块取本机预览（2026-10-12）：原主持人的画面在自己的推流管线里，其他共享者（含经移交成为主持人的人）的在
+    //共享者推流管线里；另一条管线关闭预览。本人没在共享屏幕时两条都关闭
+    const int ownSeat = FindOwnScreenSeat(m_screens, self);
+    m_streamer.SetLocalPreviewSeat(asHost ? ownSeat : -1);
+    m_publisher.SetLocalPreviewSeat(asHost ? -1 : ownSeat);
+    //看画面的窗口要不要排除在屏幕采集之外（2026-10-12）：在打开「共享画面」窗口之前设好
+    applyViewCaptureState();
     //已不在共享的画面：本地清掉它的标注（第 22 期 22e），那个座位以后可能分给别人的画面
     for (size_t i = 0; i < before.size(); ++i)
     {
@@ -377,20 +386,19 @@ void CShareController::applyMultiState(const ShareStateNotify& n, bool asHost)
         for (size_t i = 0; i < m_screens.size(); ++i)
         {
             seats.push_back(m_screens[i].m_screenSeat);
-            //白板（第 23 期）的名字写成「某某 的白板」
+            //白板（第 23 期）的名字写成「某某 的白板」，本人的那一块后面加「（我）」
+            names.push_back(MakeShareTileName(displayName(m_screens[i].m_ownerId), m_screens[i].m_isWhiteboard,
+                                              m_screens[i].m_ownerId == self));
             if (m_screens[i].m_isWhiteboard)
             {
-                names.push_back(TRF(L"{0} 的白板", displayName(m_screens[i].m_ownerId)));
                 boardSeats.push_back(m_screens[i].m_screenSeat);
                 boardOwners.push_back(m_screens[i].m_ownerSeat);
-            }
-            else
-            {
-                names.push_back(displayName(m_screens[i].m_ownerId));
             }
         }
         m_viewer.SetScreens(seats, names);
         m_viewer.SetBoards(boardSeats, boardOwners);
+        //本人那一块取共享者推流管线留下的本机画面（2026-10-12）
+        m_viewer.SetLocalScreen(ownSeat, &m_publisher);
         //本人作为共享者：快照里已不在共享（被主持人停掉）时收尾；1738 的停止推送通常先到，这里兜底
         const int phase = SyncPublishPhase(m_publishPhase, n, self);
         if (phase == share_publish_idle && m_publishPhase != share_publish_idle)
@@ -508,6 +516,8 @@ void CShareController::setHostScreenStopped(bool stopped)
     if (m_hostPhase != host_streaming || stopped == m_hostScreenStopped)
         return;
     m_hostScreenStopped = stopped;
+    //停掉自己的画面期间「共享画面」窗口可以截图，恢复后按「允许截图」重新排除（2026-10-12）
+    applyViewCaptureState();
     //停掉期间不推新画面；恢复时回到停掉之前的暂停状态
     m_streamer.SetPaused(stopped || m_hostPaused);
     m_bar.SetMineStopped(stopped);
@@ -539,38 +549,39 @@ void CShareController::setHostScreenStopped(bool stopped)
 }
 
 void CShareController::refreshScreensWindow(const std::vector<ShareScreenInfo>& before,
-                                            const std::vector<ShareScreenInfo>& others)
+                                            const std::vector<ShareScreenInfo>& screens)
 {
+    const int64_t self = (m_host != NULL) ? m_host->GetSelfUserId() : 0;
     std::vector<int> seats;
     std::vector<std::wstring> names;
     std::vector<int> boardSeats;
     std::vector<int> boardOwners;
     bool added = false;
-    for (size_t i = 0; i < others.size(); ++i)
+    for (size_t i = 0; i < screens.size(); ++i)
     {
-        seats.push_back(others[i].m_screenSeat);
-        //白板（第 23 期）的名字写成「某某 的白板」
-        if (others[i].m_isWhiteboard)
+        seats.push_back(screens[i].m_screenSeat);
+        //白板（第 23 期）的名字写成「某某 的白板」，本人的那一块后面加「（我）」（2026-10-12）
+        names.push_back(MakeShareTileName(displayName(screens[i].m_ownerId), screens[i].m_isWhiteboard,
+                                          screens[i].m_ownerId == self));
+        if (screens[i].m_isWhiteboard)
         {
-            names.push_back(TRF(L"{0} 的白板", displayName(others[i].m_ownerId)));
-            boardSeats.push_back(others[i].m_screenSeat);
-            boardOwners.push_back(others[i].m_ownerSeat);
+            boardSeats.push_back(screens[i].m_screenSeat);
+            boardOwners.push_back(screens[i].m_ownerSeat);
         }
-        else
-        {
-            names.push_back(displayName(others[i].m_ownerId));
-        }
-        if (FindScreenBySeat(before, others[i].m_screenSeat) < 0)
+        //新加入的是别人的画面才重新显示窗口；本人恢复自己的画面不弹出
+        if (screens[i].m_ownerId != self && FindScreenBySeat(before, screens[i].m_screenSeat) < 0)
             added = true;
     }
     //已不在共享的画面：推流管线丢掉它的解码器与最新一帧
     for (size_t i = 0; i < before.size(); ++i)
     {
-        if (FindScreenBySeat(others, before[i].m_screenSeat) < 0)
+        if (FindScreenBySeat(screens, before[i].m_screenSeat) < 0)
             m_streamer.RemoveRemoteScreen(before[i].m_screenSeat);
     }
-    m_bar.SetOtherScreenCount(static_cast<int>(others.size()));
-    if (others.empty())
+    //只有本人在共享时没有别人的画面可看：不显示窗口，「更多」菜单里也没有这一项（2026-10-12，MSC3）
+    const int others = CountOtherScreens(screens, self);
+    m_bar.SetOtherScreenCount(others);
+    if (others <= 0)
     {
         //正在那个窗口里标注（2026-10-07）：窗口要关了，先退出标注
         if (m_annotMode && m_annotOnScreens)
@@ -580,6 +591,7 @@ void CShareController::refreshScreensWindow(const std::vector<ShareScreenInfo>& 
     }
     m_screensWindow.SetScreens(seats, names);
     m_screensWindow.SetBoards(boardSeats, boardOwners);
+    m_screensWindow.SetOwnScreen(FindOwnScreenSeat(screens, self));
     m_screensWindow.SetAnnotation(&m_annot);
     //有人新开始共享：打开（或重新显示被关掉的）窗口；顶部按钮的命令发回本控制器，控制中的键鼠交给本控制器
     if (added)
@@ -727,6 +739,8 @@ void CShareController::startPublishing()
     //控制键鼠（第 18 期）：控制者发给本人这块画面的输入经这条中转连接收到
     m_publisher.SetInputSink(this);
     m_publishPhase = share_publish_streaming;
+    //开始共享自己的屏幕：观看窗按「允许截图」排除在屏幕采集之外（2026-10-12）
+    applyViewCaptureState();
     const bool monitor = (m_publishSource.m_kind == share_source_monitor);
     const RECT rect = ownSourceRect();
     m_publishBorder.Show(rect, monitor);
@@ -779,6 +793,8 @@ void CShareController::stopPublisherLocal(bool notifyServer)
     m_publishRelay = ShareRelayInfo();
     m_publishSource = ShareSourceSpec();
     m_viewer.SetShareMineState(ShareMineStateForPhase(m_publishPhase));
+    //不再共享自己的屏幕：观看窗恢复为可以截图（2026-10-12）
+    applyViewCaptureState();
 }
 
 void CShareController::switchPublishSource(const ShareSourceSpec& spec)
@@ -801,24 +817,6 @@ void CShareController::switchPublishSource(const ShareSourceSpec& spec)
         m_annotBar.MoveTo(annotAnchorRect());
     LOG_INFO("screenshare multi: publisher switched source, kind=%d, screen board %d.", m_publishSource.m_kind,
              m_publishScreenBoard ? 1 : 0);
-}
-
-void CShareController::followPublishedSource()
-{
-    if (m_publishPhase != share_publish_streaming || m_publishSource.m_kind != share_source_window)
-        return;
-    const HWND hwnd = m_publishSource.m_hwnd;
-    const bool hidden = !::IsWindow(hwnd) || ::IsIconic(hwnd);
-    m_publishBorder.Follow(hidden ? RECT() : GetShareWindowBounds(hwnd), hidden);
-    //标注层与工具条跟着被共享的窗口移动、缩放（第 22 期 22e）
-    const RECT bounds = hidden ? RECT() : GetShareWindowBounds(hwnd);
-    const RECT& old = m_publishOverlay.Rect();
-    if (hidden || !::EqualRect(&bounds, &old))
-    {
-        m_publishOverlay.Place(hidden ? old : bounds, !hidden);
-        if (m_annotMode && m_annotOwnScreen && !hidden)
-            m_annotBar.MoveTo(bounds);
-    }
 }
 
 LRESULT CShareController::OnPublisherEventMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -853,6 +851,11 @@ LRESULT CShareController::OnPublisherEventMsg(UINT uMsg, WPARAM wParam, LPARAM l
         }
         break;
 
+    //本机预览留下了新的一帧（2026-10-12）：观看窗里本人那一块随之刷新
+    case share_host_remote_screen:
+        m_viewer.OnLocalScreenFrame();
+        break;
+
     //连上了中转、关键帧请求等其余事件：不需要处理
     default:
         break;
@@ -883,6 +886,11 @@ LRESULT CShareController::OnSharerCommandMsg(UINT uMsg, WPARAM wParam, LPARAM lP
     //共享者控制条「更多」菜单的「允许截图」（2026-10-08）
     case share_sharer_allow_capture:
         setBarCapture(lParam != 0);
+        break;
+
+    //共享者控制条的「收回控制」（2026-10-12）：有人在控制本人屏幕时才有这个按钮
+    case share_sharer_revoke_control:
+        revokeControlNow();
         break;
 
     //主持人退出选择框的「结束共享」
